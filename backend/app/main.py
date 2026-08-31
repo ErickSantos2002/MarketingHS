@@ -9,6 +9,7 @@ from app.config import settings
 from app.auth.router import router as auth_router
 from app.database import close_db, init_db
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
+from app.routers.contatos import router as contatos_router
 from app.routers.usuarios import router as usuarios_router
 
 logging.basicConfig(level=logging.INFO)
@@ -57,3 +58,4 @@ async def health():
 
 app.include_router(auth_router)
 app.include_router(usuarios_router)
+app.include_router(contatos_router)

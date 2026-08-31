@@ -73,6 +73,25 @@ def _vazio(valor) -> bool:
     return valor is None or valor == ""
 
 
+def combinar_duplicadas(a: LinhaCsv, b: LinhaCsv) -> LinhaCsv:
+    """Funde duas linhas do MESMO arquivo com o mesmo e-mail.
+
+    ⚠️ O primeiro valor de cada campo vence; `b` só preenche o que `a` deixou
+    vazio. A function de origem percorria as linhas em ordem — a primeira
+    criava o contato, as seguintes enriqueciam —, e este é o mesmo resultado.
+
+    Sem isto, uma planilha com "ana@empresa.com" completa numa linha e
+    "ANA@EMPRESA.COM" só com o nome em outra perde a linha completa: um
+    dicionário indexado por e-mail fica com a última. O dado some sem erro
+    nenhum, e a importação reporta sucesso.
+    """
+    campos = {}
+    for nome in a.__dataclass_fields__:
+        valor_a = getattr(a, nome)
+        campos[nome] = valor_a if not _vazio(valor_a) else getattr(b, nome)
+    return LinhaCsv(**campos)
+
+
 def campos_para_gravar(linha: LinhaCsv, existente: dict, modo: str) -> dict:
     """Decide o que gravar num contato que já existe.
 

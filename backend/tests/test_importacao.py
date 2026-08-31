@@ -6,7 +6,7 @@ sucesso" nos dois casos.
 """
 import pytest
 
-from app.dominio.importacao import LinhaCsv, campos_para_gravar
+from app.dominio.importacao import LinhaCsv, campos_para_gravar, combinar_duplicadas
 
 
 def _existente(**kw):
@@ -60,3 +60,31 @@ def test_whatsapp_aceita_o_telefone_completo_como_alternativa():
 def test_modo_desconhecido_e_erro_e_nao_silencio():
     with pytest.raises(ValueError):
         campos_para_gravar(LinhaCsv(email="a@b.c"), _existente(), "mesclar")
+
+
+def test_duplicada_no_mesmo_arquivo_nao_descarta_a_linha_completa():
+    # O caso real que quebrou: planilha com o e-mail duas vezes, a primeira
+    # linha completa e a segunda só com o nome. Indexar por e-mail sem combinar
+    # ficava com a última e perdia cargo, empresa e origem — sem erro nenhum.
+    completa = LinhaCsv(email="ana@x.com", nome="Ana Lima", cargo="Gerente de SESMT",
+                        empresa="Transportes Lima", source="site")
+    pobre = LinhaCsv(email="ana@x.com", nome="Ana L.")
+
+    fundida = combinar_duplicadas(completa, pobre)
+
+    assert fundida.cargo == "Gerente de SESMT"
+    assert fundida.empresa == "Transportes Lima"
+    assert fundida.source == "site"
+    # o primeiro nome vence
+    assert fundida.nome == "Ana Lima"
+
+
+def test_duplicada_preenche_lacuna_da_primeira_linha():
+    primeira = LinhaCsv(email="ana@x.com", nome="Ana Lima")
+    segunda = LinhaCsv(email="ana@x.com", cargo="Diretora", whatsapp="11999998888")
+
+    fundida = combinar_duplicadas(primeira, segunda)
+
+    assert fundida.nome == "Ana Lima"
+    assert fundida.cargo == "Diretora"
+    assert fundida.whatsapp == "11999998888"
