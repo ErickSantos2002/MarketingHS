@@ -9,16 +9,14 @@ Não há recuperação de senha por e-mail: sistema interno, senha definida pelo
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth.schemas import (
     BootstrapIn, LoginIn, StatusInstalacaoOut, TokenOut, UsuarioOut,
 )
 from app.auth.security import conferir_senha, emitir_token, gerar_hash
 from app.database import sessao
-
-# ⚠️ `/auth/eu` NÃO entra aqui: ele depende de app.dependencies, que só nasce
-# na tarefa 5. Importá-lo agora quebra o boot com ImportError.
+from app.dependencies import Usuario, usuario_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -87,3 +85,8 @@ async def login(dados: LoginIn):
     return TokenOut(token=token, expira_em=expira,
                     usuario=UsuarioOut(id=linha["id"], email=linha["email"],
                                        papel=linha["papel"]))
+
+
+@router.get("/eu", response_model=UsuarioOut)
+async def eu(usuario: Usuario = Depends(usuario_atual)):
+    return UsuarioOut(id=usuario.id, email=usuario.email, papel=usuario.papel)
