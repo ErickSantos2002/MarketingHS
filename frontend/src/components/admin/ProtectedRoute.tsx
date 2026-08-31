@@ -9,9 +9,11 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = true }: ProtectedRouteProps) {
-  const { user, isAdmin, isLoading, isRoleLoading } = useAuth();
+  const { user, isAdmin, isLoading } = useAuth();
 
-  if (isLoading || (requireAdmin && !isAdmin && isRoleLoading)) {
+  // O papel chega junto com o usuário em /auth/eu, então não há mais um
+  // segundo carregamento só para descobri-lo.
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">

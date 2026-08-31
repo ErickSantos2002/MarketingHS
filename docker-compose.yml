@@ -1,7 +1,9 @@
 services:
   backend:
     build: ./backend
-    ports: ["8000:8000"]
+    # 8100 no host porque a 8000 é do TaskHS nesta máquina; dentro do
+    # contêiner o uvicorn continua na 8000.
+    ports: ["8100:8000"]
     env_file: [./backend/.env]
     restart: unless-stopped
 

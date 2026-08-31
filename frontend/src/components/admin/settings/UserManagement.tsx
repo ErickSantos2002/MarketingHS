@@ -8,12 +8,23 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { UserPlus, KeyRound, Trash2, Loader2, Shield, User, Mail, ShieldCheck, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 
 interface AppUser {
   id: string;
   email: string;
   role: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+}
+
+// O backend responde em português (`papel`); a tela fala `role`. A tradução
+// mora aqui e em nenhum outro lugar.
+interface UsuarioApi {
+  id: string;
+  email: string;
+  papel: string;
+  is_active: boolean;
   created_at: string;
   last_sign_in_at: string | null;
 }
@@ -32,12 +43,14 @@ export default function UserManagement() {
   // Reset password dialog
   const [resetOpen, setResetOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const [resetUserId, setResetUserId] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetting, setResetting] = useState(false);
 
   // Delete confirm dialog
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteEmail, setDeleteEmail] = useState('');
+  const [deleteUserId, setDeleteUserId] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   // Change email dialog
@@ -51,9 +64,11 @@ export default function UserManagement() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('list-users');
-      if (error) throw error;
-      setUsers(data.users || []);
+      const lista = await api.get<UsuarioApi[]>('/usuarios');
+      setUsers(lista.map((u) => ({
+        id: u.id, email: u.email, role: u.papel,
+        created_at: u.created_at, last_sign_in_at: u.last_sign_in_at,
+      })));
     } catch {
       toast.error('Erro ao carregar usuários');
     } finally {
@@ -70,17 +85,15 @@ export default function UserManagement() {
       toast.error('Preencha email e senha');
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error('Senha deve ter no mínimo 6 caracteres');
+    if (newPassword.length < 8) {
+      toast.error('Senha deve ter no mínimo 8 caracteres');
       return;
     }
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: { email: newEmail, password: newPassword, role: newIsAdmin ? 'admin' : 'user' },
+      await api.post('/usuarios', {
+        email: newEmail, senha: newPassword, papel: newIsAdmin ? 'admin' : 'user',
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
       toast.success('Usuário criado com sucesso');
       setCreateOpen(false);
       setNewEmail('');
@@ -95,17 +108,13 @@ export default function UserManagement() {
   };
 
   const handleResetPassword = async () => {
-    if (!resetPassword || resetPassword.length < 6) {
-      toast.error('Senha deve ter no mínimo 6 caracteres');
+    if (!resetPassword || resetPassword.length < 8) {
+      toast.error('Senha deve ter no mínimo 8 caracteres');
       return;
     }
     setResetting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('reset-user-password', {
-        body: { email: resetEmail, newPassword: resetPassword },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      await api.post(`/usuarios/${resetUserId}/senha`, { senha: resetPassword });
       toast.success('Senha alterada com sucesso');
       setResetOpen(false);
       setResetPassword('');
@@ -119,11 +128,7 @@ export default function UserManagement() {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('delete-user', {
-        body: { email: deleteEmail },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      await api.delete(`/usuarios/${deleteUserId}`);
       toast.success('Usuário excluído');
       setDeleteOpen(false);
       fetchUsers();
@@ -141,11 +146,7 @@ export default function UserManagement() {
     }
     setChangingEmail(true);
     try {
-      const { data, error } = await supabase.functions.invoke('update-user-email', {
-        body: { userId: changeEmailUserId, newEmail: changeEmailNew },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      await api.patch(`/usuarios/${changeEmailUserId}/email`, { email: changeEmailNew });
       toast.success('Email alterado com sucesso');
       setChangeEmailOpen(false);
       setChangeEmailNew('');
@@ -161,12 +162,8 @@ export default function UserManagement() {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     setTogglingRole(userId);
     try {
-      const { data, error } = await supabase.functions.invoke('update-user-role', {
-        body: { userId, newRole },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(`Role alterado para ${newRole}`);
+      await api.patch(`/usuarios/${userId}/papel`, { papel: newRole });
+      toast.success(`Papel alterado para ${newRole}`);
       fetchUsers();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erro ao alterar role');
@@ -259,6 +256,7 @@ export default function UserManagement() {
                           title="Resetar senha"
                           onClick={() => {
                             setResetEmail(u.email);
+                            setResetUserId(u.id);
                             setResetPassword('');
                             setResetOpen(true);
                           }}
@@ -272,6 +270,7 @@ export default function UserManagement() {
                           title="Excluir usuário"
                           onClick={() => {
                             setDeleteEmail(u.email);
+                            setDeleteUserId(u.id);
                             setDeleteOpen(true);
                           }}
                         >
@@ -315,7 +314,7 @@ export default function UserManagement() {
               <label className="text-xs font-medium mb-1 block">Senha</label>
               <Input
                 type="password"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
@@ -352,7 +351,7 @@ export default function UserManagement() {
             <label className="text-xs font-medium mb-1 block">Nova senha</label>
             <Input
               type="password"
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
             />

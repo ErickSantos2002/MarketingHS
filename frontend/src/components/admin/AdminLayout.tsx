@@ -5,6 +5,7 @@ import { AIDataChat } from './AIDataChat';
 import { AdminDataProvider } from '@/hooks/useAdminData';
 import { GlobalFilters } from '@/components/admin/dashboard/GlobalFilters';
 import { useAdminData } from '@/hooks/useAdminData';
+import { LimiteDeErro } from './LimiteDeErro';
 
 function AdminLayoutInner() {
   const { allLeads, filteredLeads, dashboardFilters } = useAdminData();
@@ -53,10 +54,15 @@ function AdminLayoutInner() {
 
         {/* Page Content */}
         <main className="flex-1 p-4 lg:p-6">
-          <Outlet />
+          {/* Cada tela quebra sozinha, sem levar a casca junto. */}
+          <LimiteDeErro area={location.pathname}>
+            <Outlet />
+          </LimiteDeErro>
         </main>
       </div>
-      <AIDataChat />
+      <LimiteDeErro area="AIDataChat">
+        <AIDataChat />
+      </LimiteDeErro>
     </div>
   );
 }
