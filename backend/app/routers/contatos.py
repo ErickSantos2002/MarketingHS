@@ -145,6 +145,64 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
                          erros=erros, contatos=contatos)
 
 
+class RecalculoOut(BaseModel):
+    atualizados: int
+
+
+@router.post("/recalcular-scores", response_model=RecalculoOut)
+async def recalcular_scores(_: Usuario = Depends(admin_atual)):
+    """Reaplica a régua a toda a base.
+
+    O original percorria os leads em Deno e recalculava em TypeScript. Aqui não
+    há laço: o score é um trigger BEFORE UPDATE, então basta um UPDATE que toque
+    uma coluna vigiada. Uma fonte de verdade a menos para divergir.
+    """
+    async with sessao(role="service_role") as conn:
+        # ⚠️ Tem de tocar uma das colunas da lista do trigger:
+        #   BEFORE INSERT OR UPDATE OF cargo, faturamento, funcionarios,
+        #                              desafios, whatsapp, utm_source, source
+        # Um UPDATE em qualquer outra coluna NÃO dispara o scoring, e a rota
+        # responderia "atualizados: N" sem ter recalculado nada — o pior tipo
+        # de erro, o que se reporta como sucesso.
+        resultado = await conn.execute("UPDATE leads SET cargo = cargo")
+    return RecalculoOut(atualizados=int(resultado.rsplit(" ", 1)[-1]))
+
+
+class EtiquetaIn(BaseModel):
+    tag: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/{lead_id}/tags", status_code=status.HTTP_204_NO_CONTENT)
+async def aplicar_tag(lead_id: str, dados: EtiquetaIn,
+                      _: Usuario = Depends(admin_atual)):
+    """Cria a tag se ainda não existir e associa ao contato.
+
+    Idempotente: aplicar a mesma tag duas vezes não é erro, é ausência de
+    mudança. A importação aplica tags em lote e reprocessar um arquivo é
+    normal — falhar aí seria hostil sem motivo. Quem garante isso é a chave
+    primária (lead_id, tag_id) de lead_tags; não relaxe.
+    """
+    nome = dados.tag.strip()
+    if not nome:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tag vazia.")
+
+    async with sessao(role="service_role") as conn:
+        existe = await conn.fetchval("SELECT 1 FROM leads WHERE id = $1::uuid", lead_id)
+        if not existe:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
+
+        tag_id = await conn.fetchval(
+            "SELECT id FROM tags WHERE lower(name) = lower($1)", nome)
+        if tag_id is None:
+            tag_id = await conn.fetchval(
+                "INSERT INTO tags (name) VALUES ($1) RETURNING id", nome)
+
+        await conn.execute(
+            """INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2)
+               ON CONFLICT DO NOTHING""",
+            lead_id, tag_id)
+
+
 async def _resolver_identidade(conn, lead_id, linha: LinhaCsv, email: str) -> None:
     """Amarra o contato novo à identidade do ecossistema.
 
