@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # Limite de taxa da borda pública (lead-capture e afins não têm auth).
     LIMITE_PUBLICO_POR_MINUTO: int = 30
 
+    # Credencial alternativa à chave de API, para chamador máquina que não
+    # tem chave própria. ⚠️ É global: vale tudo, não tem escopo nem expiração.
+    # Herdado da origem; ver a pendência no ROADMAP.
+    WEBHOOK_SECRET: str = ""
+
     # ⚠️ Toda chave lida do ambiente PRECISA ser declarada aqui, mesmo que outro
     # módulo é que a leia: o pydantic-settings recusa chave desconhecida no .env
     # e derruba o boot inteiro. Isso já derrubou o HS.OS duas vezes.
