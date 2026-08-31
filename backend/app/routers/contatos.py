@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual
 from app.dominio.importacao import (
-    MODOS, LinhaCsv, campos_para_gravar, combinar_duplicadas, normalizar_status,
+    MODOS, LinhaCsv, campos_para_gravar, campos_preenchidos_no_csv,
+    combinar_duplicadas, normalizar_status,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,11 @@ class ImportacaoOut(BaseModel):
     inalterados: int
     sem_email: int
     erros: list[str]
+    # Quantos campos foram de fato preenchidos e quantos o CSV trazia mas não
+    # entraram por já haver valor. É o que a tela mostra para quem importa
+    # entender o efeito do modo "enriquecer".
+    campos_enriquecidos: int
+    campos_pulados: int
     # A tela aplica tags logo depois de importar, e as rotas de tag são
     # chaveadas por id. Sem isto ela teria de buscar cada contato de novo.
     contatos: list[ContatoImportado]
@@ -62,6 +68,7 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Modo de importação inválido.")
 
     criados = atualizados = inalterados = sem_email = 0
+    campos_enriquecidos = campos_pulados = 0
     erros: list[str] = []
     contatos: list[ContatoImportado] = []
 
@@ -82,7 +89,8 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
 
     if not por_email:
         return ImportacaoOut(criados=0, atualizados=0, inalterados=0,
-                             sem_email=sem_email, erros=[], contatos=[])
+                             sem_email=sem_email, erros=[], contatos=[],
+                             campos_enriquecidos=0, campos_pulados=0)
 
     emails = list(por_email)
 
@@ -123,6 +131,8 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
 
                 contatos.append(ContatoImportado(email=email, id=existente["id"]))
                 campos = campos_para_gravar(linha, existente, dados.modo)
+                campos_enriquecidos += len(campos)
+                campos_pulados += campos_preenchidos_no_csv(linha) - len(campos)
                 if not campos:
                     inalterados += 1
                     continue
@@ -142,7 +152,9 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
 
     return ImportacaoOut(criados=criados, atualizados=atualizados,
                          inalterados=inalterados, sem_email=sem_email,
-                         erros=erros, contatos=contatos)
+                         erros=erros, contatos=contatos,
+                         campos_enriquecidos=campos_enriquecidos,
+                         campos_pulados=campos_pulados)
 
 
 class RecalculoOut(BaseModel):
@@ -191,11 +203,24 @@ async def aplicar_tag(lead_id: str, dados: EtiquetaIn,
         if not existe:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
 
+        # Casa sem diferenciar maiúscula, para "Importado" e "importado" não
+        # virarem duas tags.
         tag_id = await conn.fetchval(
             "SELECT id FROM tags WHERE lower(name) = lower($1)", nome)
         if tag_id is None:
+            # ⚠️ Upsert, não INSERT. A tela aplica tags em PARALELO depois de
+            # importar: várias requisições fazem o SELECT acima ao mesmo tempo,
+            # todas erram, e todas tentam inserir a mesma tag — o índice único
+            # tags_name_key derruba as perdedoras com 500. Aconteceu na primeira
+            # importação feita pela tela.
+            #
+            # DO UPDATE e não DO NOTHING: só o UPDATE faz o RETURNING devolver a
+            # linha também no caso de conflito.
             tag_id = await conn.fetchval(
-                "INSERT INTO tags (name) VALUES ($1) RETURNING id", nome)
+                """INSERT INTO tags (name) VALUES ($1)
+                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                   RETURNING id""",
+                nome)
 
         await conn.execute(
             """INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2)

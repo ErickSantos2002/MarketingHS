@@ -73,6 +73,16 @@ def _vazio(valor) -> bool:
     return valor is None or valor == ""
 
 
+def campos_preenchidos_no_csv(linha: LinhaCsv) -> int:
+    """Quantas colunas de `leads` esta linha do CSV traz com valor.
+
+    Serve para o contador que a tela mostra: pulados = trazidos - gravados.
+    Derivar assim evita repetir a regra de mesclagem só para contar — se a
+    regra mudar, o contador acompanha sozinho.
+    """
+    return sum(1 for origem, _ in _CAMPOS if not _vazio(_valor(linha, origem)))
+
+
 def combinar_duplicadas(a: LinhaCsv, b: LinhaCsv) -> LinhaCsv:
     """Funde duas linhas do MESMO arquivo com o mesmo e-mail.
 

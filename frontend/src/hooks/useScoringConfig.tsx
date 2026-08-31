@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { lerScoring, gravarScoring, recalcularScores } from '@/lib/contatos';
 import { toast } from 'sonner';
 import type { ScoringConfig, ScoringCriteria, ScoringThresholds } from '@/lib/leadScoring';
 
@@ -10,21 +10,21 @@ export function useScoringConfig() {
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('scoring_config')
-      .select('*')
-      .limit(1)
-      .single();
-
-    if (!error && data) {
+    try {
+      const data = await lerScoring();
       setConfig({
-        id: data.id,
+        // A régua é uma linha só; o id deixou de ser necessário para gravar,
+        // mas o tipo da tela ainda o pede.
+        id: 'unica',
         criteria: data.criteria as unknown as ScoringCriteria,
         thresholds: data.thresholds as unknown as ScoringThresholds,
         updated_at: data.updated_at,
       });
+    } catch {
+      toast.error('Não foi possível carregar a régua de scoring');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
@@ -32,36 +32,24 @@ export function useScoringConfig() {
   const save = async (criteria: ScoringCriteria, thresholds: ScoringThresholds) => {
     if (!config) return;
     setSaving(true);
-    const { error } = await supabase
-      .from('scoring_config')
-      .update({ criteria: criteria as any, thresholds: thresholds as any, updated_at: new Date().toISOString() })
-      .eq('id', config.id);
-
-    if (error) {
-      toast.error('Erro ao salvar configuração');
-    } else {
-      toast.success('Configuração salva!');
+    try {
+      await gravarScoring({
+        criteria: criteria as unknown as Record<string, unknown>,
+        thresholds: thresholds as unknown as Record<string, unknown>,
+      });
+      // ⚠️ Salvar NÃO repontua a base: o scoring é um trigger, e mudar a régua
+      // não toca em linha nenhuma de `leads`. Quem quiser aplicar a régua nova
+      // ao que já existe precisa recalcular.
+      toast.success('Régua salva. Para aplicá-la à base, use "Recalcular".');
       setConfig({ ...config, criteria, thresholds });
+    } catch {
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
-  const recalculateAll = async () => {
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
-    const { data: session } = await supabase.auth.getSession();
-    const token = session?.session?.access_token;
-
-    const res = await globalThis.fetch(`https://${projectId}.supabase.co/functions/v1/recalculate-all-scores`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-
-    if (!res.ok) throw new Error('Falha ao recalcular');
-    return res.json();
-  };
+  const recalculateAll = async () => recalcularScores();
 
   return { config, loading, saving, save, recalculateAll, refetch: loadConfig };
 }

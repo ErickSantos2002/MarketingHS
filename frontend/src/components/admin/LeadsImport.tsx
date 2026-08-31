@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, AlertTriangle, Sparkles, Download, Tag, X } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { supabase } from '@/integrations/supabase/client';
+import { importarContatos, aplicarTag, listarTags } from '@/lib/contatos';
 import { toast } from 'sonner';
 
 const CHUNK_SIZE = 500;
@@ -105,13 +105,9 @@ export function LeadsImport() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    supabase
-      .from('tags')
-      .select('name')
-      .order('name')
-      .then(({ data }) => {
-        if (data) setExistingTags(data.map((t: { name: string }) => t.name));
-      });
+    listarTags()
+      .then((tags) => setExistingTags(tags.map((t) => t.nome)))
+      .catch(() => setExistingTags([]));
   }, []);
 
   const headerMap: Record<string, string> = {
@@ -254,24 +250,24 @@ export function LeadsImport() {
         const chunk = csvData.slice(chunkIdx * CHUNK_SIZE, (chunkIdx + 1) * CHUNK_SIZE);
 
         try {
-          const { data, error } = await supabase.functions.invoke('import-leads-csv', {
-            body: { leads: chunk, mergeMode },
-          });
+          // A API própria responde em português. A tradução para os nomes que
+          // esta tela usa acontece aqui, num lugar só.
+          const data = await importarContatos(
+            chunk,
+            mergeMode === 'overwrite' ? 'sobrescrever' : 'enriquecer',
+          );
 
-          if (error) throw error;
-
-          agg.updated += data.updated ?? 0;
-          agg.created = (agg.created ?? 0) + (data.created ?? 0);
-          agg.notFound += data.notFound ?? 0;
-          agg.fieldsEnriched = (agg.fieldsEnriched ?? 0) + (data.fieldsEnriched ?? 0);
-          agg.fieldsSkipped = (agg.fieldsSkipped ?? 0) + (data.fieldsSkipped ?? 0);
-          agg.unchanged = (agg.unchanged ?? 0) + (data.unchanged ?? 0);
-          agg.skippedNoEmail = (agg.skippedNoEmail ?? 0) + (data.skippedNoEmail ?? 0);
-          if (Array.isArray(data.errors)) agg.errors.push(...data.errors);
-          if (Array.isArray(data.notFoundEmails)) {
-            agg.notFoundEmails = [...(agg.notFoundEmails ?? []), ...data.notFoundEmails].slice(0, 10);
-          }
-          if (Array.isArray(data.processedLeadIds)) allProcessedIds.push(...data.processedLeadIds);
+          agg.updated += data.atualizados;
+          agg.created = (agg.created ?? 0) + data.criados;
+          agg.fieldsEnriched = (agg.fieldsEnriched ?? 0) + data.campos_enriquecidos;
+          agg.fieldsSkipped = (agg.fieldsSkipped ?? 0) + data.campos_pulados;
+          agg.unchanged = (agg.unchanged ?? 0) + data.inalterados;
+          agg.skippedNoEmail = (agg.skippedNoEmail ?? 0) + data.sem_email;
+          agg.errors.push(...data.erros);
+          // `notFound` era o contador de falha de insert da function antiga;
+          // aqui toda falha vira uma entrada em `erros`, que é mais útil.
+          agg.notFound += data.erros.length;
+          allProcessedIds.push(...data.contatos.map((c) => c.id));
         } catch (chunkErr) {
           const msg = chunkErr instanceof Error ? chunkErr.message : 'Erro desconhecido';
           agg.errors.push(`lote ${chunkIdx + 1}/${totalChunks}: ${msg}`);
@@ -301,10 +297,7 @@ export function LeadsImport() {
             allProcessedIds,
             TAG_CONCURRENCY,
             async (leadId) => {
-              const { error } = await supabase.functions.invoke('apply-lead-tag', {
-                body: { lead_id: leadId, tag: tagToApply },
-              });
-              if (error) throw error;
+              await aplicarTag(leadId, tagToApply);
               return true;
             },
             (done, total) => {
@@ -323,8 +316,8 @@ export function LeadsImport() {
             agg.tagError = `${tagFailed} contato(s) não receberam a tag`;
           }
 
-          const { data: tagsRefreshed } = await supabase.from('tags').select('name').order('name');
-          if (tagsRefreshed) setExistingTags(tagsRefreshed.map((t: { name: string }) => t.name));
+          const tagsRefreshed = await listarTags();
+          setExistingTags(tagsRefreshed.map((t) => t.nome));
         } catch (tagErr) {
           const msg = tagErr instanceof Error ? tagErr.message : 'Erro desconhecido';
           agg.tagError = msg;

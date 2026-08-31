@@ -59,6 +59,7 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
 export const api = {
   get: <T>(c: string) => pedir<T>('GET', c),
   post: <T>(c: string, corpo?: unknown) => pedir<T>('POST', c, corpo),
+  put: <T>(c: string, corpo?: unknown) => pedir<T>('PUT', c, corpo),
   patch: <T>(c: string, corpo?: unknown) => pedir<T>('PATCH', c, corpo),
   delete: <T>(c: string) => pedir<T>('DELETE', c),
 };
