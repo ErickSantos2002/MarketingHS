@@ -11,6 +11,7 @@ from app.database import close_db, init_db
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
 from app.routers.configuracao import router as configuracao_router
 from app.routers.contatos import router as contatos_router
+from app.routers.escrita_contatos import router as escrita_contatos_router
 from app.routers.leitura_contatos import router as leitura_contatos_router
 from app.routers.usuarios import router as usuarios_router
 
@@ -63,3 +64,4 @@ app.include_router(usuarios_router)
 app.include_router(contatos_router)
 app.include_router(configuracao_router)
 app.include_router(leitura_contatos_router)
+app.include_router(escrita_contatos_router)
