@@ -39,28 +39,44 @@ disputam a coluna `etiqueta`.
 
 ## O que você precisa saber antes de começar
 
-### Os dois triggers que brigam pela mesma coluna
+### O classificador cravado já estava desligado
 
-`public.leads` tem dois triggers `BEFORE INSERT OR UPDATE` que **ambos escrevem
-`NEW.etiqueta`**:
+`public.leads` tem dois triggers que escreveriam `NEW.etiqueta`, mas **só um
+está ativo**. Verificado no banco com `pg_trigger.tgenabled`:
 
-| Trigger | Função | O que faz |
+| Trigger | Função | Estado |
 |---|---|---|
-| `trg_score_lead_on_change` | `score_lead_from_config` | Lê a tabela `scoring_config` e calcula `lead_score` e `etiqueta` |
-| `trigger_classify_lead_etiqueta` | `classify_lead_etiqueta` | Regras **cravadas no corpo**, escreve só `etiqueta` |
+| `trg_score_lead_on_change` | `score_lead_from_config` | **ativo** — lê `scoring_config` |
+| `trigger_classify_lead_etiqueta` | `classify_lead_etiqueta` | **DESABILITADO** (`tgenabled = 'D'`) |
 
-O Postgres dispara `BEFORE` em ordem alfabética do nome do trigger, e
-`trg_...` < `trigger_...`. Então **o cravado roda por último e sobrescreve o
-configurável**. Na prática, a `etiqueta` de hoje vem de um regex de faturamento
-de infoproduto (`'entre 100k'`, `'de r\$ 1 milhão'`, `'acima de 5mm'`) e de uma
-lista de cargos (`ceo|fundador|empresário|sócio|diretor|…`) — a régua de quem
-compra imersão de R$47, não de quem compra bafômetro e contrato de calibração.
+A dn.ia já tinha desligado o classificador de regras cravadas, e o dump
+preservou o estado. Não há conflito ao vivo para resolver.
 
-Some a isso que **`scoring_config` veio vazia no dump**, e o
-`score_lead_from_config` começa com `IF v_criteria IS NULL THEN RETURN NEW`.
-Ou seja: **hoje nada é pontuado, e a etiqueta sai de uma regra que não é nossa.**
+O que sobra é mais simples e ainda assim bloqueia tudo: **`scoring_config` veio
+vazia**, e `score_lead_from_config` começa com
+`IF v_criteria IS NULL THEN RETURN NEW`. Hoje **nada é pontuado** — verificado
+inserindo um lead com cargo e faturamento que casariam com qualquer régua:
+`etiqueta` volta NULL e `lead_score` volta 0.
 
-A tarefa 1 resolve as duas coisas de uma vez.
+A função desligada continua no schema com o ICP da dn.ia dentro — regex de
+faturamento de infoproduto (`'entre 100k'`, `'de r\$ 1 milhão'`) e lista de
+cargos de quem compra imersão. Trigger desabilitado é uma armadilha: alguém o
+reativa daqui a seis meses achando que está "ligando o scoring", e a base
+inteira recebe a régua errada. A tarefa 1 remove os dois.
+
+### O gatilho tem lista de colunas — e isso muda o recálculo
+
+```
+CREATE TRIGGER trg_score_lead_on_change
+  BEFORE INSERT OR UPDATE OF cargo, faturamento, funcionarios, desafios,
+                             whatsapp, utm_source, source
+  ON public.leads FOR EACH ROW EXECUTE FUNCTION score_lead_from_config()
+```
+
+⚠️ **Um `UPDATE` que toque qualquer outra coluna NÃO dispara o scoring.** Um
+recálculo escrito como `UPDATE leads SET updated_at = updated_at` responderia
+"atualizados: N" sem ter recalculado nada — o pior tipo de erro, o que se
+reporta como sucesso. O recálculo tem de tocar uma das sete colunas da lista.
 
 ### Onde a importação encosta
 
@@ -117,132 +133,113 @@ psql "$U" -tAc "SELECT tgname FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrel
                 WHERE c.relname='leads' AND NOT t.tgisinternal ORDER BY tgname;"
 ```
 
-Esperado: `0` linhas em `scoring_config`, e os dois triggers na ordem
-`trg_score_lead_on_change` antes de `trigger_classify_lead_etiqueta`.
+```bash
+psql "$U" -tAc "SELECT tgname, tgenabled::text FROM pg_trigger t
+                JOIN pg_class c ON c.oid=t.tgrelid
+                WHERE c.relname='leads' AND NOT t.tgisinternal ORDER BY tgname;"
+```
 
-- [ ] **Passo 2: `backend/migrations/004_etiqueta_configuravel.sql`**
+Esperado: `0` linhas em `scoring_config`, e `trigger_classify_lead_etiqueta`
+com `tgenabled = D`. Se ele vier `O`, o dump ou a migration 001 mudaram o
+estado — pare e investigue antes de seguir, porque aí existe um conflito ao
+vivo e este plano precisa mudar.
+
+- [ ] **Passo 2: `backend/migrations/004_regua_de_scoring.sql`**
 
 ```sql
--- Duas triggers BEFORE escreviam NEW.etiqueta na mesma tabela, e o Postgres as
--- dispara em ordem alfabética do nome: trg_score_lead_on_change primeiro,
--- trigger_classify_lead_etiqueta depois. A segunda vencia sempre, e as regras
--- dela estavam CRAVADAS no corpo — regex de faturamento de infoproduto e uma
--- lista de cargos que descrevem quem compra imersão, não quem compra bafômetro.
+-- Duas coisas, e a segunda é a que faz o scoring existir.
 --
--- Aqui a segunda passa a ler a mesma tabela que a primeira. O mecanismo continua
--- fiel ao original; o que muda é que a régua vira dado, e trocá-la passa a ser
--- um UPDATE em vez de uma migration.
+-- 1) Remove o classificador de etiqueta com regras cravadas no corpo. Ele já
+--    chegou DESABILITADO no dump — a própria dn.ia o desligou —, mas função e
+--    trigger continuavam no schema com o ICP deles dentro: regex de
+--    faturamento de infoproduto e lista de cargos de quem compra imersão.
+--    Trigger desabilitado é armadilha: alguém o reativa daqui a seis meses
+--    achando que está "ligando o scoring", e a base recebe a régua errada.
+--    A régua passa a ter um lugar só, que é a tabela scoring_config.
+--
+-- 2) Semeia scoring_config, que veio vazia. Sem ela, score_lead_from_config
+--    cai no RETURN NEW e nada é pontuado.
 
-CREATE OR REPLACE FUNCTION public.classify_lead_etiqueta()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_criteria JSONB;
-  v_regex_faturamento TEXT;
-  v_regex_cargo TEXT;
-  atende_faturamento BOOLEAN := FALSE;
-  atende_cargo BOOLEAN := FALSE;
-BEGIN
-  SELECT criteria INTO v_criteria FROM public.scoring_config LIMIT 1;
-
-  -- Sem configuração, não inventa etiqueta. Silêncio é melhor que um rótulo
-  -- errado: um lead marcado "hotlead" por engano entra no funil comercial e
-  -- gasta o tempo de alguém.
-  IF v_criteria IS NULL THEN
-    NEW.etiqueta := NULL;
-    RETURN NEW;
-  END IF;
-
-  v_regex_faturamento := v_criteria->'icp'->>'regex_faturamento';
-  v_regex_cargo       := v_criteria->'icp'->>'regex_cargo';
-
-  IF v_regex_faturamento IS NOT NULL
-     AND LOWER(COALESCE(NEW.faturamento, '')) ~ v_regex_faturamento THEN
-    atende_faturamento := TRUE;
-  END IF;
-
-  IF v_regex_cargo IS NOT NULL
-     AND LOWER(COALESCE(NEW.cargo, '')) ~ v_regex_cargo THEN
-    atende_cargo := TRUE;
-  END IF;
-
-  IF atende_faturamento AND atende_cargo THEN
-    NEW.etiqueta := 'hotlead';
-  ELSE
-    NEW.etiqueta := NULL;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
+DROP TRIGGER IF EXISTS trigger_classify_lead_etiqueta ON public.leads;
+DROP FUNCTION IF EXISTS public.classify_lead_etiqueta();
 
 -- Régua inicial da Health & Safety.
 --
 -- ⚠️ PROVISÓRIA, e de propósito. A régua definitiva é decisão de produto do
--- Erick e do Nicholson, e o lugar certo de tomá-la é com a base real na tela,
--- depois que o lote 1B mostrar os contatos importados. O que esta migration
--- garante é que o MECANISMO esteja certo e que trocar os valores seja um
--- UPDATE nesta linha — nunca mais uma alteração de trigger.
+-- Erick e do Nicholson, e o lugar de tomá-la é com a base real na tela, depois
+-- que o lote 1B mostrar os contatos importados. O que esta migration garante é
+-- que o MECANISMO funcione e que trocar os valores seja um UPDATE nesta linha.
 --
--- O cargo herdou a lista de decisores do original, que é razoável para B2B e
--- não custa nada manter. O faturamento NÃO herdou nada: as faixas do original
--- eram do formulário de um evento de infoproduto e não existem em nenhum
--- formulário da HS.
+-- Os cargos herdam a lista de decisores do original, ampliada com os papéis que
+-- decidem compra de bafômetro e calibração na indústria (SESMT, segurança do
+-- trabalho, RH). O faturamento NÃO herda nada: as faixas do original vinham do
+-- formulário de um evento de infoproduto e não existem em formulário nenhum da
+-- HS. Enquanto não houver faixa definida, o critério fica desligado — nenhum
+-- lead ganha pontos por um campo que ninguém coleta.
 INSERT INTO public.scoring_config (criteria, thresholds)
 VALUES (
   jsonb_build_object(
-    'icp', jsonb_build_object(
-      'regex_cargo',
-        '\y(ceo|fundador|founder|s[óo]cio|s[óo]cia|propriet[áa]rio|propriet[áa]ria|dono|dona|diretor|diretora|gerente|coordenador|coordenadora|respons[áa]vel|t[ée]cnico de seguran[çc]a|engenheiro de seguran[çc]a|sesmt|rh)\y',
-      -- Sem faixas de faturamento definidas ainda: nenhum formulário da HS
-      -- coleta esse campo hoje. Enquanto for '$a', nada casa e nenhuma
-      -- etiqueta é atribuída — que é o comportamento seguro.
-      'regex_faturamento', '$a'
-    ),
-    'cargo_decisor', jsonb_build_object('enabled', true, 'pontos', 30, 'cargos',
-      jsonb_build_array('CEO','Fundador','Sócio','Proprietário','Diretor','Gerente','Coordenador','Responsável')),
-    'origem', jsonb_build_object('enabled', true, 'pontos', 10, 'sources', jsonb_build_array('site','indicacao'))
+    'cargo_decisor', jsonb_build_object(
+      'enabled', true,
+      'pontos', 30,
+      'cargos', jsonb_build_array(
+        'CEO','Fundador','Sócio','Proprietário','Dono','Diretor','Gerente',
+        'Coordenador','Responsável','SESMT','Segurança do Trabalho','RH')),
+    'faturamento', jsonb_build_object('enabled', false, 'pontos', 0, 'faixas', '[]'::jsonb),
+    'origem', jsonb_build_object(
+      'enabled', true, 'pontos', 10,
+      'sources', jsonb_build_array('site','indicacao','csv_import'))
   ),
   jsonb_build_object('hotlead', 60, 'warm', 30)
 );
 ```
 
-- [ ] **Passo 3: aplicar e conferir que a régua manda**
+⚠️ **Leia `score_lead_from_config` antes de rodar** — o corpo dela está no banco
+(`SELECT prosrc FROM pg_proc WHERE proname='score_lead_from_config'`) e é ela
+que define os nomes das chaves de `criteria` que valem. Se o JSON acima usar uma
+chave que a função não lê, o critério é ignorado em silêncio e o score sai
+sempre 0. Confira chave por chave e ajuste o INSERT ao que a função espera.
+
+- [ ] **Passo 3: aplicar e provar que o scoring passou a existir**
 
 ```bash
-psql "$U" -v ON_ERROR_STOP=1 -f backend/migrations/004_etiqueta_configuravel.sql
+psql "$U" -v ON_ERROR_STOP=1 -f backend/migrations/004_regua_de_scoring.sql
 
-# Um lead que casaria com a régua ANTIGA da dn.ia não deve mais virar hotlead.
 psql "$U" -tAc "
-  INSERT INTO leads (email, tipo, cargo, faturamento)
-  VALUES ('teste-regua@exemplo.com', 'teste', 'CEO', 'entre 1mm e 3mm')
-  RETURNING email, cargo, faturamento, etiqueta, lead_score;"
+  INSERT INTO leads (email, tipo, cargo, source)
+  VALUES ('teste-regua@exemplo.com', 'teste', 'Gerente de SESMT', 'site')
+  RETURNING email, cargo, etiqueta, lead_score;"
 psql "$U" -tAc "DELETE FROM leads WHERE email='teste-regua@exemplo.com';"
 ```
 
-Esperado: `etiqueta` vem **NULL**. Se vier `hotlead`, o `CREATE OR REPLACE` não
-pegou — confira se a função foi mesmo substituída
-(`\df+ public.classify_lead_etiqueta`).
+Esperado: `lead_score` **maior que zero** (30 do cargo + 10 da origem = 40, se
+as chaves do JSON casarem com o que a função lê). Se vier 0, o INSERT do passo 2
+usou chave que `score_lead_from_config` não conhece — volte e compare com o
+corpo da função.
+
+`etiqueta` deve vir NULL: 40 está abaixo do limiar `warm` de 30… **confira o que
+a função faz com os thresholds** antes de decidir se NULL é o esperado. Se ela
+atribuir `warm` a partir de 30, o certo aqui é `warm`, não NULL.
 
 - [ ] **Passo 4: commit**
 
 ```bash
-git add backend/migrations/004_etiqueta_configuravel.sql
-git commit -m "fix(scoring): uma régua só para a etiqueta, e ela vira dado
+git add backend/migrations/004_regua_de_scoring.sql
+git commit -m "fix(scoring): o scoring passa a existir, e a régua é da HS
 
-Dois triggers BEFORE escreviam NEW.etiqueta na mesma tabela. O Postgres os
-dispara em ordem alfabética, então trigger_classify_lead_etiqueta rodava por
-último e vencia sempre — e as regras dele estavam cravadas no corpo: regex de
-faturamento de infoproduto e lista de cargos de quem compra imersão.
+scoring_config veio vazia no dump, e score_lead_from_config começa com
+IF v_criteria IS NULL THEN RETURN NEW. Resultado: nada era pontuado.
 
-Agora ele lê a mesma scoring_config que o outro. O mecanismo continua fiel; o
-que muda é que a régua vira dado, e trocá-la é um UPDATE.
+Sai também classify_lead_etiqueta, com trigger e função. Ela já chegou
+DESABILITADA — a própria dn.ia a desligou —, mas continuava no schema com o
+ICP deles dentro. Trigger desabilitado é armadilha: alguém o reativa daqui a
+seis meses achando que liga o scoring, e a base recebe a régua errada.
 
-A régua semeada é provisória de propósito. O regex de faturamento é '\$a', que
-não casa com nada: sem faixa definida, nenhuma etiqueta é atribuída. Silêncio
-é melhor que rótulo errado — um lead marcado hotlead por engano entra no funil
-e gasta o tempo de alguém."
+A régua semeada é provisória de propósito. Os cargos herdam a lista de
+decisores e ganham os papéis que decidem compra de bafômetro e calibração;
+o critério de faturamento fica DESLIGADO, porque as faixas do original vinham
+do formulário de um evento de infoproduto e nenhum formulário da HS coleta
+esse campo."
 ```
 
 ---
@@ -731,9 +728,8 @@ async def recalcular_scores(_: Usuario = Depends(admin_atual)):
     """Reaplica a régua a toda a base.
 
     O original percorria os leads em Deno e recalculava em TypeScript. Aqui não
-    há laço: o score é um trigger BEFORE UPDATE, então um UPDATE que não muda
-    coluna nenhuma já faz o banco recalcular tudo. Menos código e uma fonte de
-    verdade a menos para divergir.
+    há laço: o score é um trigger BEFORE UPDATE, então basta um UPDATE que toque
+    uma coluna vigiada. Menos código e uma fonte de verdade a menos para divergir.
 
     ⚠️ **Consequência que o original também tinha e ninguém documentou:** o
     trigger `update_leads_updated_at` faz `NEW.updated_at = now()` em qualquer
@@ -745,7 +741,13 @@ async def recalcular_scores(_: Usuario = Depends(admin_atual)):
     decidir se a lista passa a ordenar por `created_at`, que é estável.
     """
     async with sessao(role="service_role") as conn:
-        resultado = await conn.execute("UPDATE leads SET updated_at = updated_at")
+        # ⚠️ Tem de tocar uma das colunas da lista do trigger:
+        #   BEFORE INSERT OR UPDATE OF cargo, faturamento, funcionarios,
+        #                              desafios, whatsapp, utm_source, source
+        # Um UPDATE em qualquer outra coluna NÃO dispara o scoring, e a rota
+        # responderia "atualizados: N" sem ter recalculado nada — o pior tipo
+        # de erro, o que se reporta como sucesso.
+        resultado = await conn.execute("UPDATE leads SET cargo = cargo")
     return RecalculoOut(atualizados=int(resultado.rsplit(" ", 1)[-1]))
 ```
 
