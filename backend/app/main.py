@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.auth.router import router as auth_router
 from app.database import close_db, init_db
+from app.middleware.limite_taxa import LimiteTaxaMiddleware
 from app.routers.usuarios import router as usuarios_router
 
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +29,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Prefixos públicos. Cresce conforme os lotes 3 e 7 trouxerem as rotas de
+# captura, descadastro, webhook e A/B.
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=settings.LIMITE_PUBLICO_POR_MINUTO,
+    prefixos=("/publico", "/auth/login"),
 )
 
 
