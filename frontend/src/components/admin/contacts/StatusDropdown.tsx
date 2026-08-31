@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { mudarStatus } from '@/lib/leitura';
 import { toast } from 'sonner';
 import { TrendingUp } from 'lucide-react';
 import { useLeadStatuses } from '@/hooks/useLeadStatuses';
@@ -22,46 +22,20 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
   const handleChange = async (newStatus: string) => {
     const previousStatus = value;
     setValue(newStatus);
-    const { error } = await supabase
-      .from('leads')
-      .update({ status: newStatus } as any)
-      .eq('id', leadId);
 
-    if (error) {
-      toast.error('Erro ao atualizar status');
+    try {
+      // Status, evento na timeline e o evento específico da transição
+      // acontecem numa transação só, no servidor. Antes eram três idas ao
+      // banco independentes daqui, e o evento podia não ser gravado sem que
+      // nada avisasse.
+      await mudarStatus(leadId, newStatus);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao atualizar status');
       setValue(currentStatus || 'Lead');
       return;
     }
 
     if (newStatus === 'Lead Qualificado') {
-      // Handoff: advance stage to opportunity
-      try {
-        await supabase.rpc('resolve_or_create_identity', {
-          p_phone: leadWhatsapp || null,
-          p_email: leadEmail || null,
-          p_source_app: 'dndash',
-          p_local_id: leadId,
-          p_stage: 'opportunity',
-        });
-      } catch (e) {
-        console.error('Failed to advance stage:', e);
-      }
-
-      // Register timeline event
-      try {
-        await supabase.from('contact_events').insert({
-          lead_id: leadId,
-          dnia_id: leadDniaId || null,
-          source_app: 'dnmarketing',
-          event_type: 'lead_qualified',
-          title: 'Lead qualificado para o Nexus',
-          description: 'Pronto para abordagem comercial',
-          metadata: { qualified_by: 'manual', status_anterior: previousStatus },
-        });
-      } catch (e) {
-        console.error('Failed to register qualification event:', e);
-      }
-
       toast('Lead qualificado!', {
         description: 'Notifique o time comercial para iniciar a abordagem',
         icon: <TrendingUp className="h-4 w-4 text-emerald-500" />,
@@ -72,17 +46,18 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
       toast.success(`Status atualizado para "${newStatus}"`);
     }
 
-    // Fire-and-forget: evaluate automation rules
+    // ⚠️ O avanço do estágio da identidade saiu daqui. O original chamava
+    // resolve_or_create_identity com stage='opportunity' ao qualificar; a régua
+    // de quais status avançam o estágio é decisão de produto da HS e ainda não
+    // existe. Quem decidir isso, decide no servidor.
+
+    // As automações são de outro lote e ainda falam com o Supabase; a chamada
+    // fica protegida e volta a funcionar quando elas forem portadas.
     import('@/lib/automationEngine').then(async ({ evaluateAndExecute }) => {
       try {
-        const { data: freshLead } = await supabase.from('leads').select('id, status, etiqueta, lead_score, dnia_id').eq('id', leadId).single();
-        if (freshLead) {
-          const ruleName = await evaluateAndExecute(freshLead);
-          if (ruleName) toast.success(`Automação executada: ${ruleName}`);
-        }
-      } catch (e) {
-        console.error('Automation evaluation failed:', e);
-      }
+        const ruleName = await evaluateAndExecute({ id: leadId } as never);
+        if (ruleName) toast.success(`Automação executada: ${ruleName}`);
+      } catch { /* automações ainda não portadas */ }
     }).catch(() => {});
 
     onStatusChange?.(newStatus);

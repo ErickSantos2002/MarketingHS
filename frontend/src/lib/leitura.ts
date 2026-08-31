@@ -70,3 +70,34 @@ export const gravarPreferencia = <T>(chave: string, valor: T) =>
 // reconversão pergunta quantas vezes o contato converteu.
 export const contarConversoes = (leadId: string) =>
   api.get<{ total: number }>(`/contatos/${leadId}/conversoes`).then((r) => r.total);
+
+// --- escrita (lote 1C) ---
+
+export const mudarStatus = (leadId: string, status: string) =>
+  api.patch<{ status: string; anterior: string | null }>(
+    `/contatos/${leadId}/status`, { status });
+
+export const statusEmLote = (leadIds: string[], status: string) =>
+  api.post<{ atualizados: number; status: string }>(
+    '/contatos/status-em-lote', { lead_ids: leadIds, status });
+
+export const tagsEmLote = (leadIds: string[], tag: string) =>
+  api.post<{ vinculados: number; tag: string }>(
+    '/contatos/tags-em-lote', { lead_ids: leadIds, tag });
+
+// O servidor decide qual dos três casos se aplica e diz qual foi.
+export type CasoFusao = 'leads' | 'identidades' | 'vinculo';
+
+export const fundirContatos = (manter: string, descartar: string) =>
+  api.post<{
+    caso: CasoFusao;
+    mantido?: string;
+    movidos?: Record<string, number>;
+    identidade?: string;
+  }>('/contatos/fundir', { manter, descartar });
+
+export const editarContato = (leadId: string, campos: Record<string, unknown>) =>
+  api.patch<{ atualizados: string[] }>(`/contatos/${leadId}`, campos);
+
+export const excluirContato = (leadId: string) =>
+  api.delete<void>(`/contatos/${leadId}`);

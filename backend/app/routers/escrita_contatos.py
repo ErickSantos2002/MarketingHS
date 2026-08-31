@@ -56,9 +56,14 @@ _TABELAS_FILHAS = ("lead_tags", "segment_contacts", "campaign_sends",
                    "lead_notes", "contact_events", "lead_conversions")
 
 # Campos que o mantido herda do descartado QUANDO estiver vazio.
-_CAMPOS_HERDAVEIS = ("nome", "whatsapp", "empresa", "cargo", "faturamento",
-                     "funcionarios", "desafios", "utm_source", "utm_medium",
-                     "utm_campaign", "utm_term", "utm_content")
+#
+# ⚠️ `email` e `dnia_id` estão aqui porque a origem os herdava. Eu os havia
+# esquecido, e a fusão perderia silenciosamente o e-mail de um contato que só o
+# descartado tinha.
+_CAMPOS_HERDAVEIS = ("nome", "email", "whatsapp", "empresa", "cargo",
+                     "faturamento", "funcionarios", "desafios", "dnia_id",
+                     "utm_source", "utm_medium", "utm_campaign", "utm_term",
+                     "utm_content")
 
 
 async def _resolver_status(conn, bruto: str) -> str:
@@ -89,12 +94,31 @@ async def _resolver_status(conn, bruto: str) -> str:
         + ", ".join(v["name"] for v in validos) + ".")
 
 
+# Status cuja entrada merece um evento do tipo que a listagem conta.
+#
+# ⚠️ `contact_updated` NÃO está entre os sete tipos que o `status_changed_at`
+# soma ('deal_moved', 'lead_qualified', 'meeting_scheduled',
+# 'scheduling_widget_booked', 'deal_won', 'deal_lost', 'onboarding_started').
+# Ele serve à métrica de agendamentos do dia. São coisas diferentes, e as duas
+# precisam existir — por isso a qualificação grava DOIS eventos.
+_EVENTO_POR_STATUS = {
+    "Lead Qualificado": ("lead_qualified", "Lead qualificado"),
+    "MQL - Reunião agendada": ("meeting_scheduled", "Reunião agendada"),
+    "Venda realizada": ("deal_won", "Venda realizada"),
+}
+
+
 async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str) -> None:
-    """Grava o evento de mudança de status na timeline.
+    """Grava os eventos de mudança de status na timeline.
 
     ⚠️ Não é log opcional. A listagem calcula `status_changed_at` a partir
     destes eventos, e a ficha monta o histórico de status com eles. Sem o
     evento, a mudança aconteceu e ninguém consegue dizer quando.
+
+    ⚠️ O original só gravava evento ao qualificar; as outras transições não
+    deixavam rastro nenhum, e o histórico de status ficava com buraco. Aqui
+    toda mudança grava `contact_updated`, e as três transições que a listagem
+    conta gravam também o tipo específico dela.
     """
     await conn.execute(
         """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
@@ -104,6 +128,18 @@ async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str) -> N
                   jsonb_build_object('de', $2::text, 'para', $3::text)
              FROM leads l WHERE l.id = $1::uuid""",
         lead_id, de, para)
+
+    especifico = _EVENTO_POR_STATUS.get(para)
+    if especifico:
+        tipo, titulo = especifico
+        await conn.execute(
+            """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
+                                           title, description, metadata)
+               SELECT $1::uuid, l.dnia_id, 'marketinghs', $2, $3,
+                      'Mudança de status pelo painel',
+                      jsonb_build_object('status_anterior', $4::text, 'origem', 'manual')
+                 FROM leads l WHERE l.id = $1::uuid""",
+            lead_id, tipo, titulo, de)
 
 
 @router.patch("/{lead_id}/status")
@@ -155,6 +191,19 @@ async def status_em_lote(dados: StatusEmLoteIn, _: Usuario = Depends(usuario_atu
                  FROM leads l
                 WHERE l.id = ANY($1::uuid[]) AND l.status IS DISTINCT FROM $2""",
             dados.lead_ids, novo)
+        especifico = _EVENTO_POR_STATUS.get(novo)
+        if especifico:
+            tipo, titulo = especifico
+            await conn.execute(
+                """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
+                                               title, description, metadata)
+                   SELECT l.id, l.dnia_id, 'marketinghs', $2, $3,
+                          'Mudança de status em lote pelo painel',
+                          jsonb_build_object('status_anterior', l.status, 'origem', 'lote')
+                     FROM leads l
+                    WHERE l.id = ANY($1::uuid[]) AND l.status IS DISTINCT FROM $4""",
+                dados.lead_ids, tipo, titulo, novo)
+
         resultado = await conn.execute(
             "UPDATE leads SET status = $2 WHERE id = ANY($1::uuid[])",
             dados.lead_ids, novo)
@@ -191,34 +240,56 @@ async def tags_em_lote(dados: TagEmLoteIn, _: Usuario = Depends(usuario_atual)):
 
 @router.post("/fundir")
 async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atual)):
-    """Funde dois contatos: o descartado entrega tudo ao mantido e some.
+    """Funde dois contatos. São TRÊS casos, e quem decide qual é o servidor.
 
-    ⚠️ A razão de este endpoint existir é a TRANSAÇÃO. Na tela isto eram sete
-    idas ao banco independentes — reatribuir seis tabelas e apagar o descartado
-    —, com try/catch mas sem rollback. Falhar no meio deixava as tags e os
-    segmentos já migrados, o descartado ainda existindo, e os dois contatos
+    A tela original ramificava sozinha, comparando os `dnia_id` no navegador.
+    Isso é regra de negócio, e regra de negócio que mora na tela some quando
+    aparece uma segunda tela.
+
+      1. Mesma identidade, ou nenhum dos dois tem — funde os LEADS de verdade:
+         reatribui as seis tabelas filhas e apaga o descartado.
+      2. Identidades diferentes — não são o mesmo lead ainda; funde as
+         IDENTIDADES pela RPC `merge_identities`, que é transacional e já
+         existia.
+      3. Só um tem identidade — vincula o outro à mesma, sem apagar ninguém.
+
+    ⚠️ A razão de o caso 1 ser um endpoint é a TRANSAÇÃO. Na tela eram sete idas
+    ao banco independentes, com try/catch e sem rollback: falhar no meio deixava
+    tags e segmentos já migrados, o descartado ainda existindo, e os dois
     apontando para os mesmos dados. Fechar o navegador produzia o mesmo estado.
-
-    `sessao()` abre transação; ou os sete passos acontecem, ou nenhum.
-
-    ⚠️ `lead_tags` tem PK (lead_id, tag_id) e `segment_contacts` tem PK
-    (segment_id, lead_id). Se o mantido JÁ tem a mesma tag ou segmento, o UPDATE
-    do descartado viola a chave — por isso a duplicata do descartado é apagada
-    antes de mover.
-
-    ⚠️ `campaign_sends.lead_id` é ON DELETE SET NULL: sem a reatribuição, apagar
-    o descartado deixaria os envios dele órfãos com lead_id nulo, e o histórico
-    de campanha do mantido ficaria incompleto.
     """
     if dados.manter == dados.descartar:
         raise HTTPException(http.HTTP_400_BAD_REQUEST, "Os dois contatos são o mesmo.")
 
     async with sessao(role="service_role") as conn:
-        for rotulo, valor in (("manter", dados.manter), ("descartar", dados.descartar)):
-            if not await conn.fetchval("SELECT 1 FROM leads WHERE id = $1::uuid", valor):
-                raise HTTPException(http.HTTP_404_NOT_FOUND,
-                                    f"Contato a {rotulo} não encontrado.")
+        manter = await conn.fetchrow(
+            "SELECT id::text, dnia_id::text FROM leads WHERE id = $1::uuid", dados.manter)
+        descartar = await conn.fetchrow(
+            "SELECT id::text, dnia_id::text FROM leads WHERE id = $1::uuid", dados.descartar)
+        if manter is None:
+            raise HTTPException(http.HTTP_404_NOT_FOUND, "Contato a manter não encontrado.")
+        if descartar is None:
+            raise HTTPException(http.HTTP_404_NOT_FOUND, "Contato a descartar não encontrado.")
 
+        dm, dd = manter["dnia_id"], descartar["dnia_id"]
+
+        # --- Caso 2: identidades diferentes. Funde as identidades, não os leads.
+        if dm and dd and dm != dd:
+            resultado = await conn.fetchval(
+                "SELECT merge_identities(p_keep => $1::uuid, p_discard => $2::uuid)", dm, dd)
+            return {"caso": "identidades", "resultado": resultado}
+
+        # --- Caso 3: só um tem identidade. Vincula o outro à mesma.
+        if bool(dm) != bool(dd):
+            identidade = dm or dd
+            alvo = dados.manter if not dm else dados.descartar
+            # `leads.dnia_id` não tem índice único (auditado na origem), então
+            # este UPDATE não colide.
+            await conn.execute(
+                "UPDATE leads SET dnia_id = $2::uuid WHERE id = $1::uuid", alvo, identidade)
+            return {"caso": "vinculo", "identidade": identidade}
+
+        # --- Caso 1: mesma identidade ou nenhuma. Funde os leads.
         await conn.execute(
             """DELETE FROM lead_tags d WHERE d.lead_id = $2::uuid
                  AND EXISTS (SELECT 1 FROM lead_tags m
@@ -237,18 +308,30 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
                 dados.manter, dados.descartar)
             movidos[tabela] = int(r.rsplit(" ", 1)[-1])
 
-        # O mantido herda só o que tem vazio. Dado preenchido nunca é
-        # sobrescrito — a mesma regra da importação, pelo mesmo motivo.
-        atribuicoes = ", ".join(
-            f"{c} = COALESCE(m.{c}, d.{c})" for c in _CAMPOS_HERDAVEIS)
-        await conn.execute(
-            f"""UPDATE leads m SET {atribuicoes}
-                  FROM leads d WHERE m.id = $1::uuid AND d.id = $2::uuid""",
-            dados.manter, dados.descartar)
-
+        # ⚠️ A ORDEM AQUI IMPORTA, e a origem aprendeu isso na prática — o
+        # comentário dela documenta o defeito. `leads` tem `leads_email_unique`
+        # UNIQUE (email): copiar o e-mail do descartado para o mantido ENQUANTO
+        # o descartado ainda existe viola a constraint. Na tela antiga o erro
+        # não era checado, o preenchimento falhava em silêncio, e o e-mail era
+        # destruído junto com o descartado no delete seguinte.
+        #
+        # Apaga primeiro (liberando o e-mail), preenche depois. Seguro nesta
+        # ordem porque tudo que o CASCADE levaria junto já foi reatribuído.
+        #
+        # A cópia dos campos é feita numa variável ANTES do delete, porque
+        # depois dele a linha do descartado não existe mais para ser lida.
+        origem = await conn.fetchrow(
+            f"SELECT {', '.join(_CAMPOS_HERDAVEIS)} FROM leads WHERE id = $1::uuid",
+            dados.descartar)
         await conn.execute("DELETE FROM leads WHERE id = $1::uuid", dados.descartar)
 
-    return {"mantido": dados.manter, "movidos": movidos}
+        atribuicoes = ", ".join(
+            f"{c} = COALESCE({c}, ${i + 2})" for i, c in enumerate(_CAMPOS_HERDAVEIS))
+        await conn.execute(
+            f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
+            dados.manter, *[origem[c] for c in _CAMPOS_HERDAVEIS])
+
+    return {"caso": "leads", "mantido": dados.manter, "movidos": movidos}
 
 
 @router.patch("/{lead_id}")

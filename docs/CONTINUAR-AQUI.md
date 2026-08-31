@@ -5,7 +5,15 @@
 
 ## Onde paramos
 
-**Lote 1B (Leitura do admin) concluído**, em cima do 1A e do lote 0.
+**Lote 1C (Escrita) concluído**, em cima do 1B, 1A e do lote 0.
+
+A barra de ações em massa funciona: alterar status, aplicar tag, exportar,
+apagar e mesclar. A fusão acontece numa transação no servidor — provado forçando
+uma falha no meio e conferindo que nada mudou.
+
+O acesso direto ao banco caiu de 153 para **90 pontos**.
+
+### Lote 1B (Leitura do admin), antes disso
 
 A tela de Contatos lista os contatos, com tags, scores e pílulas de ecossistema.
 A ficha abre com timeline de conversões, histórico de interações, notas e tags —
@@ -36,6 +44,17 @@ verdade, conferido no navegador com Playwright e não só por teste:
 - Tela não portada mostra "Tela ainda não portada: `<alvo>`" sem derrubar a casca
 
 ## O próximo passo
+
+**Escrever o plano do lote 1D (Identidade e captura).** As functions são
+`lead-capture`, `identity-lookup`, `identity-upsert`, `receive-contact-event` e
+`validate-email-domain` — a porta de entrada externa do sistema, que é também a
+superfície pública sem autenticação. O limite de taxa do lote 0 já está lá
+esperando pelo prefixo `/publico`.
+
+Depois dele, o **1E**: a API pública por chave (`api_keys`, `contacts-list`,
+`contact-details`), que traz o segundo modelo de autenticação.
+
+### O que o 1C fez, para referência
 
 **Escrever o plano do lote 1C (Escrita).** As duas barras de ação em massa
 somam 34 pontos de acesso direto — é o maior bloco isolado que resta — mais o
