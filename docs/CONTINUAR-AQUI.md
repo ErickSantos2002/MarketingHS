@@ -56,6 +56,14 @@ verdade, conferido no navegador com Playwright e não só por teste:
 
 ## O próximo passo
 
+**Executar o lote 2 (Segmentos).** O plano está escrito e revisado em
+`docs/superpowers/plans/2026-08-31-marketinghs-lote-2-segmentos.md` — 6 tarefas,
+com código real e duas suposições já verificadas contra o banco.
+
+Ele destrava o lote 3 (Campanhas), que é o maior valor de negócio.
+
+### O panorama depois dele
+
 O lote 1 acabou. Com a chave de API existindo, os próximos lotes deixam de
 esbarrar em autenticação — as 23 functions que dependiam dela estão livres.
 
