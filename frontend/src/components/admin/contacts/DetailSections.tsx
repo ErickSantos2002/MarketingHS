@@ -12,7 +12,9 @@ import {
   TrendingUp, FileCheck, Rocket, Heart, Circle,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { supabase } from '@/integrations/supabase/client';
+import { lerFicha, criarNota, removerNota, removerTagDoContato, eventosDoContato } from '@/lib/leitura';
+import { criarTag } from '@/lib/leitura';
+import { aplicarTag } from '@/lib/contatos';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -148,15 +150,19 @@ export function StatusTagsSection({
     !leadTags.some(lt => lt.id === t.id)
   );
 
-  const triggerRescore = () => {
-    import('@/lib/leadScoring').then(({ scoreAndUpdateLead }) =>
-      scoreAndUpdateLead(lead.id)
-    ).catch(() => {});
-  };
+  // `triggerRescore` foi REMOVIDA no lote 1B. Ela chamava scoreAndUpdateLead,
+  // que recalculava em TypeScript e gravava lead_score e etiqueta por cima do
+  // que o banco tinha. E era inútil de qualquer forma: tag NÃO é critério de
+  // scoring — os sete são cargo, faturamento, funcionários, desafios, origem,
+  // reconversão e WhatsApp. Recalcular depois de mexer numa tag nunca mudou
+  // nada; era risco por nada.
 
   const triggerAutomation = () => {
     import('@/lib/automationEngine').then(async ({ evaluateAndExecute }) => {
-      const { data: freshLead } = await supabase.from('leads').select('id, status, etiqueta, lead_score, dnia_id').eq('id', lead.id).single();
+      // Relê o lead do servidor: a etiqueta e o score podem ter mudado pelo
+      // trigger desde que a tela carregou.
+      const { lead: freshLead } = await lerFicha<{ id: string; status: string | null;
+        etiqueta: string | null; lead_score: number | null; dnia_id: string | null }>(lead.id);
       if (freshLead) {
         const ruleName = await evaluateAndExecute(freshLead);
         if (ruleName) toast.success(`Automação executada: ${ruleName}`);
@@ -165,45 +171,40 @@ export function StatusTagsSection({
   };
 
   const handleRemoveTag = async (tagId: string) => {
-    await supabase.from('lead_tags').delete().eq('lead_id', lead.id).eq('tag_id', tagId);
+    await removerTagDoContato(lead.id, tagId);
     setLeadTags(prev => prev.filter(t => t.id !== tagId));
     onTagsChanged();
-    triggerRescore();
     triggerAutomation();
     toast.success('Tag removida');
   };
 
   const handleAddTag = async (tag: TagInfo) => {
-    await supabase.from('lead_tags').insert({ lead_id: lead.id, tag_id: tag.id });
+    await aplicarTag(lead.id, tag.name);
     setLeadTags(prev => [...prev, tag]);
     setTagSearch('');
     setShowTagDropdown(false);
     onTagsChanged();
-    triggerRescore();
     triggerAutomation();
     toast.success(`Tag "${tag.name}" adicionada`);
   };
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) return;
-    const { data, error } = await supabase
-      .from('tags')
-      .insert({ name: newTagName.trim(), color: newTagColor })
-      .select('id, name, color')
-      .single();
-
-    if (error) {
+    let criada;
+    try {
+      criada = await criarTag(newTagName.trim(), newTagColor);
+    } catch {
       toast.error('Erro ao criar tag');
       return;
     }
 
-    if (data) {
-      await supabase.from('lead_tags').insert({ lead_id: lead.id, tag_id: data.id });
+    {
+      const data = { id: criada.id, name: criada.nome, color: criada.cor ?? 'purple' };
+      await aplicarTag(lead.id, data.name);
       setLeadTags(prev => [...prev, data]);
       setNewTagName('');
       setShowCreateTag(false);
       onTagsChanged();
-      triggerRescore();
       toast.success(`Tag "${data.name}" criada e adicionada`);
     }
   };
@@ -328,12 +329,12 @@ export function NotesSection({ leadId }: { leadId: string }) {
 
   const fetchNotes = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('lead_notes')
-      .select('*')
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: false });
-    setNotes(data || []);
+    try {
+      const { notas } = await lerFicha<unknown>(leadId);
+      setNotes(notas.map((n) => ({ id: n.id, content: n.conteudo, created_at: n.created_at })));
+    } catch {
+      setNotes([]);
+    }
     setLoading(false);
   }, [leadId]);
 
@@ -344,21 +345,19 @@ export function NotesSection({ leadId }: { leadId: string }) {
   const handleSave = async () => {
     if (!content.trim()) return;
     setSaving(true);
-    const { error } = await supabase
-      .from('lead_notes')
-      .insert({ lead_id: leadId, content: content.trim() });
-    if (error) {
-      toast.error('Erro ao salvar nota');
-    } else {
+    try {
+      await criarNota(leadId, content.trim());
       toast.success('Nota salva');
       setContent('');
       fetchNotes();
+    } catch {
+      toast.error('Erro ao salvar nota');
     }
     setSaving(false);
   };
 
   const handleDelete = async (noteId: string) => {
-    await supabase.from('lead_notes').delete().eq('id', noteId);
+    await removerNota(noteId);
     toast.success('Nota removida');
     setConfirmDeleteId(null);
     fetchNotes();
@@ -488,20 +487,13 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      let query = supabase
-        .from('contact_events')
-        .select('*')
-        .order('occurred_at', { ascending: false })
-        .limit(200);
-
-      if (dniaId) {
-        query = query.or(`lead_id.eq.${leadId},dnia_id.eq.${dniaId}`);
-      } else {
-        query = query.eq('lead_id', leadId);
+      // O endpoint já casa lead_id OU o dnia_id do contato.
+      try {
+        const data = await eventosDoContato(leadId, 200);
+        setEvents(data as unknown as ContactEvent[]);
+      } catch {
+        setEvents([]);
       }
-
-      const { data } = await query;
-      setEvents(data || []);
       setLoading(false);
     };
     fetchEvents();

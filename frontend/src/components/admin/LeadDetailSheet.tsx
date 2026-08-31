@@ -19,7 +19,7 @@ import {
   getPriorityColor,
   getQualificationColor,
 } from '@/hooks/useLeadQualification';
-import { supabase } from '@/integrations/supabase/client';
+import { conversoesDoContato } from '@/lib/leitura';
 import { DniaIdChip, NexusLink, StatusTagsSection, NotesSection } from './contacts/DetailSections';
 import { EventsTimeline } from './contacts/EventsTimeline';
 import { EcosystemPills } from './contacts/EcosystemPills';
@@ -110,14 +110,8 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
   const fetchConversions = async (leadId: string) => {
     setLoadingConversions(true);
     try {
-      const { data, error } = await supabase
-        .from('lead_conversions')
-        .select('*')
-        .eq('lead_id', leadId)
-        .order('converted_at', { ascending: false });
-
-      if (error) throw error;
-      setConversions(data || []);
+      const data = await conversoesDoContato(leadId);
+      setConversions(data as never[]);
     } catch {
       toast.error('Erro ao carregar histórico');
     } finally {
@@ -223,16 +217,18 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                     variant="outline"
                     size="sm"
                     className="h-6 px-2 text-[10px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                    disabled={sendingToNexus}
+                    // ⚠️ Desativado até o lote 5. O destino era o Nexus, CRM da
+                    // dn.ia; na HS este botão vai empurrar o contato para o
+                    // GrowthHS. Deixá-lo clicável apontando para o lugar errado
+                    // seria pior que desativá-lo.
+                    disabled
+                    title="Disponível quando a integração com o GrowthHS estiver pronta"
                     onClick={async () => {
                       setSendingToNexus(true);
                       try {
-                        const { data, error } = await supabase.functions.invoke('handoff-to-nexus', {
-                          body: { lead_id: lead.id, manual: true },
-                        });
-                        if (error) throw error;
+                        const data: { error?: string } = {};
                         if (data?.error) throw new Error(data.error);
-                        toast.success('Contato enviado para o Nexus!');
+                        toast.success('Contato enviado!');
                         onDataChanged?.();
                       } catch (err: any) {
                         toast.error(err?.message || 'Erro ao enviar para o Nexus');
@@ -248,24 +244,35 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               </div>
             </div>
             <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end items-center">
-              {/* Score circle */}
-              {scoreBreakdown && (
+              {/* Score circle.
+                  ⚠️ Guardado por `lead`, não por `scoreBreakdown`: o número é
+                  do banco, e não pode depender de o cálculo do cliente ter dado
+                  certo. Antes a bolinha sumia quando o detalhamento falhava —
+                  escondendo o dado verdadeiro por causa do acessório. */}
+              {lead && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
+                      {/* ⚠️ O número e a etiqueta vêm do BANCO, não da conta
+                          do navegador. Antes esta bolinha mostrava o total
+                          recalculado em TypeScript, que discordava do valor
+                          gravado: a ficha da Carla exibia 60 no cabeçalho e 22
+                          aqui, ao mesmo tempo. O detalhamento abaixo continua
+                          útil para dizer QUAIS critérios bateram, mas não
+                          reivindica mais o total. */}
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 cursor-default ${
-                        scoreBreakdown.total >= 70
+                        lead.etiqueta === 'hotlead'
                           ? 'border-red-500 text-red-500 bg-red-500/10'
-                          : scoreBreakdown.total >= 40
+                          : lead.etiqueta === 'warm'
                           ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10'
                           : 'border-muted-foreground/40 text-muted-foreground bg-muted/30'
                       }`}>
-                        {scoreBreakdown.total}
+                        {lead.lead_score ?? 0}
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="left" className="max-w-xs">
                       <div className="space-y-1 text-xs">
-                        {scoreBreakdown.details.map((d, i) => (
+                        {(scoreBreakdown?.details ?? []).map((d, i) => (
                           <div key={i} className="flex justify-between gap-4">
                             <span className={d.met ? 'text-foreground' : 'text-muted-foreground line-through'}>{d.label}</span>
                             <span className={d.met ? 'text-emerald-400 font-medium' : 'text-muted-foreground'}>
@@ -274,9 +281,10 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                           </div>
                         ))}
                         <div className="border-t border-border/50 pt-1 mt-1 flex justify-between font-medium">
-                          <span>Total</span>
-                          <span>{scoreBreakdown.total}pts → {
-                            scoreBreakdown.total >= 70 ? 'Hotlead' : scoreBreakdown.total >= 40 ? 'Warm' : 'Raw'
+                          <span>Total (banco)</span>
+                          <span>{lead.lead_score ?? 0}pts → {
+                            lead.etiqueta === 'hotlead' ? 'Hotlead'
+                              : lead.etiqueta === 'warm' ? 'Warm' : 'Raw'
                           }</span>
                         </div>
                       </div>
@@ -328,8 +336,13 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
             {/* Qualification */}
             <Section icon={Target} title="Qualificação">
               <div className="grid grid-cols-3 gap-3">
-                <MetricCard icon={Flame} value={String(Math.round(enriched.priorityScore))} label="Score" color="emerald" />
-                <MetricCard icon={TrendingUp} value={enriched.priorityLevel} label="Prioridade" color="blue" />
+                {/* ⚠️ Isto NÃO é o lead_score. É `priorityScore`, uma
+                    heurística de prioridade do useLeadQualification, com escala
+                    própria. Estava rotulado "Score" ao lado do lead_score do
+                    banco, e a ficha da Carla mostrava 60 na bolinha e 22 aqui —
+                    parecendo contradição, quando são coisas diferentes. */}
+                <MetricCard icon={Flame} value={String(Math.round(enriched.priorityScore))} label="Prioridade (pontos)" color="emerald" />
+                <MetricCard icon={TrendingUp} value={enriched.priorityLevel} label="Faixa" color="blue" />
                 <MetricCard icon={Users} value={enriched.decisionPower} label="Decisão" color="purple" small />
               </div>
             </Section>

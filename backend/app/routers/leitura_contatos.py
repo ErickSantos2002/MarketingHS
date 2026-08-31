@@ -41,6 +41,10 @@ class EnriquecimentoIn(BaseModel):
     dnia_ids: list[str] = Field(min_length=1, max_length=10000)
 
 
+class TagsDeContatosIn(BaseModel):
+    lead_ids: list[str] = Field(min_length=1, max_length=10000)
+
+
 class NotaIn(BaseModel):
     conteudo: str = Field(min_length=1, max_length=5000)
 
@@ -49,7 +53,7 @@ class NotaIn(BaseModel):
 async def listar(
     pagina: int = Query(0, ge=0),
     tamanho: int = Query(1000, ge=1, le=TAMANHO_PAGINA_MAX),
-    incluir_apagados: bool = Query(False),
+    visao: str = Query("ativos", pattern="^(ativos|apagados|todos)$"),
     _: Usuario = Depends(usuario_atual),
 ):
     """Uma página da tabela de leads.
@@ -59,7 +63,14 @@ async def listar(
     empatados não garante ordem estável entre páginas — a paginação passaria a
     pular e repetir contatos, e ninguém notaria olhando uma tela só.
     """
-    filtro = "" if incluir_apagados else "WHERE deleted_at IS NULL"
+    # ⚠️ São três visões, não duas. Um booleano "incluir apagados" colapsaria
+    # `apagados` e `todos` na mesma coisa, e a tela de lixeira passaria a
+    # mostrar contato ativo junto — parecendo que a exclusão não funcionou.
+    filtro = {
+        "ativos": "WHERE deleted_at IS NULL",
+        "apagados": "WHERE deleted_at IS NOT NULL",
+        "todos": "",
+    }[visao]
     async with sessao(role="service_role") as conn:
         linhas = await conn.fetch(
             f"""SELECT {COLUNAS_LEAD} FROM leads {filtro}
@@ -123,6 +134,34 @@ async def duplicatas(_: Usuario = Depends(usuario_atual)):
              ORDER BY r.tipo, r.chave
             """)
     return [dict(l) for l in linhas]
+
+
+class FusaoIn(BaseModel):
+    manter: str
+    descartar: str
+
+
+@router.post("/duplicatas/fundir")
+async def fundir_identidades(dados: FusaoIn, _: Usuario = Depends(usuario_atual)):
+    """Funde duas identidades numa só.
+
+    A RPC `merge_identities` é PL/pgSQL e sobreviveu à portagem do schema — ela
+    mexe em várias tabelas de uma vez e reimplementá-la em Python seria
+    reescrever uma transação que já está certa.
+
+    ⚠️ Isto era do lote 1D. Veio para cá porque o `DuplicatesPanel` chama a
+    detecção e a fusão no mesmo arquivo: portar só a leitura deixaria a tela
+    meio quebrada e o portão do lote não fecharia. São dez linhas; separar
+    custaria mais do que juntar.
+    """
+    if dados.manter == dados.descartar:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "As duas identidades são a mesma.")
+    async with sessao(role="service_role") as conn:
+        resultado = await conn.fetchval(
+            "SELECT merge_identities(p_keep => $1::uuid, p_discard => $2::uuid)",
+            dados.manter, dados.descartar)
+    return resultado
 
 
 @router.post("/enriquecimento")
@@ -190,6 +229,27 @@ async def enriquecimento(dados: EnriquecimentoIn, _: Usuario = Depends(usuario_a
     }
 
 
+@router.post("/tags-por-contato")
+async def tags_por_contato(dados: TagsDeContatosIn, _: Usuario = Depends(usuario_atual)):
+    """Mapa lead_id -> tags, para a coluna de tags da tabela.
+
+    POST pelo mesmo motivo do enriquecimento: a lista de ids não cabe em query
+    string. O original varria em lotes de 200 e montava o mapa no navegador.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            """SELECT lt.lead_id::text, t.id::text AS tag_id, t.name AS nome, t.color AS cor
+                 FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id
+                WHERE lt.lead_id = ANY($1::uuid[])
+                ORDER BY t.name""",
+            dados.lead_ids)
+    mapa: dict[str, list[dict]] = {}
+    for l in linhas:
+        mapa.setdefault(l["lead_id"], []).append(
+            {"id": l["tag_id"], "nome": l["nome"], "cor": l["cor"]})
+    return mapa
+
+
 @router.get("/{lead_id}")
 async def ficha(lead_id: str, _: Usuario = Depends(usuario_atual)):
     """Lead, tags e notas numa volta só.
@@ -215,6 +275,19 @@ async def ficha(lead_id: str, _: Usuario = Depends(usuario_atual)):
             "notas": [dict(n) for n in notas]}
 
 
+@router.get("/{lead_id}/conversoes-lista")
+async def listar_conversoes(lead_id: str, _: Usuario = Depends(usuario_atual)):
+    """As conversões do contato, para a linha do tempo da ficha."""
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            """SELECT id::text, tipo, page_slug, session_id, source,
+                      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+                      converted_at::text
+                 FROM lead_conversions WHERE lead_id = $1::uuid
+                ORDER BY converted_at DESC""", lead_id)
+    return [dict(l) for l in linhas]
+
+
 @router.get("/{lead_id}/eventos")
 async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
                   _: Usuario = Depends(usuario_atual)):
@@ -237,6 +310,19 @@ async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
                 LIMIT $2""",
             lead_id, limite)
     return [dict(l) for l in linhas]
+
+
+@router.get("/{lead_id}/conversoes")
+async def contar_conversoes(lead_id: str, _: Usuario = Depends(usuario_atual)):
+    """Quantas vezes o contato converteu.
+
+    Serve ao critério de reconversão no detalhamento de score da ficha. É
+    contagem, não lista: a tela só precisa do número.
+    """
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            "SELECT count(*) FROM lead_conversions WHERE lead_id = $1::uuid", lead_id)
+    return {"total": total}
 
 
 @router.post("/{lead_id}/notas", status_code=status.HTTP_201_CREATED)

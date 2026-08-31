@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { listarContatos, type VisaoContatos } from '@/lib/leitura';
 import { startVisiblePolling, POLLING_INTERVAL_MS } from '@/lib/visiblePolling';
 
 const PAGE_SIZE = 1000;
@@ -38,6 +38,7 @@ export interface Lead {
   utm_term: string | null;
   utm_content: string | null;
   etiqueta: string | null;
+  lead_score: number | null;
   origem_campanha: string | null;
   presenca: string | null;
   interesse_ecossistema: boolean | null;
@@ -59,10 +60,12 @@ export interface LeadsFilters {
   deletedView?: DeletedView;
 }
 
-const applyDeletedFilter = <T extends { is: any; not: any }>(query: T, view: DeletedView = 'active'): T => {
-  if (view === 'deleted') return query.not('deleted_at', 'is', null);
-  if (view === 'all') return query;
-  return query.is('deleted_at', null);
+// O recorte de apagados é do servidor; o resto (tipo, busca, data) continua
+// sendo aplicado no cliente sobre o mesmo conjunto.
+const VISAO_POR_VIEW: Record<DeletedView, VisaoContatos> = {
+  active: 'ativos',
+  deleted: 'apagados',
+  all: 'todos',
 };
 
 const isLeadInDateRange = (lead: Lead, dateFrom?: string, dateTo?: string) => {
@@ -103,6 +106,9 @@ export function useLeads(filters: LeadsFilters = {}) {
     }
 
     try {
+      const visaoAtual = (): VisaoContatos =>
+        VISAO_POR_VIEW[filtersRef.current.deletedView ?? 'active'];
+
       const collected: Lead[] = [];
       let page = 0;
       let hasMore = true;
@@ -111,18 +117,13 @@ export function useLeads(filters: LeadsFilters = {}) {
         const from = page * PAGE_SIZE;
         const to = Math.min(from + PAGE_SIZE - 1, MAX_LEADS - 1);
 
-        const { data, error: queryError } = await applyDeletedFilter(
-          supabase.from('leads').select(LEAD_COLUMNS),
-          filtersRef.current.deletedView,
-        )
-          .order('updated_at', { ascending: false })
-          .range(from, to);
+        const resposta = await listarContatos<Lead>(page, PAGE_SIZE, visaoAtual());
 
-        if (queryError) throw queryError;
-
-        if (data && data.length > 0) {
-          collected.push(...(data as unknown as Lead[]));
-          hasMore = data.length === PAGE_SIZE && collected.length < MAX_LEADS;
+        if (resposta.itens.length > 0) {
+          collected.push(...resposta.itens);
+          // O teto de MAX_LEADS continua valendo: o painel inteiro filtra em
+          // memória, e trazer mais que isso trava o navegador antes de ajudar.
+          hasMore = resposta.tem_mais && collected.length < MAX_LEADS;
           page++;
         } else {
           hasMore = false;

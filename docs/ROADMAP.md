@@ -10,8 +10,9 @@ A spec que justifica esta ordem:
 |---|---|---|---|
 | **0** | **Fundação** — repo, schema, auth, usuários, limite de taxa | 6 | ✅ **concluído** (31/08/2026) |
 | **1A** | **Entrada** — importar, pontuar, etiquetar | 3 | ✅ **concluído** (31/08/2026) |
-| 1B | Leitura — lista, ficha 360°, e a API pública por chave | 2 | a fazer |
-| 1C | Escrita — editar, status, tags, excluir, ações em massa | 5 | a fazer |
+| **1B** | **Leitura do admin** — lista e ficha 360° inteira | 0 | ✅ **concluído** (31/08/2026) |
+| 1C | Escrita — status e ações em massa | 5 | a fazer |
+| 1E | **A API pública** — `api_keys`, `contacts-list`, `contact-details` | 2 | a fazer |
 | 1D | Identidade e captura — dedupe, fusão, captura externa | 5 | a fazer |
 | 2 | Segmentos — construtor de regras, audiência | 1 | a fazer |
 | 3 | **Campanhas + o motor** — templates, agendamento, fila, worker, Resend | 8 | a fazer |
@@ -29,15 +30,26 @@ Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.
 
 ```
 functions portadas          : 8/48
-telas migradas              : 6  (auth, rota protegida, login, usuários,
-                                  importação, régua de scoring)
-acesso direto ao banco      : 153 pontos em 37 arquivos
+telas migradas              : 15
+acesso direto ao banco      : 128 pontos  (eram 153 antes do 1B)
 ```
 
 ⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
 `grep` de linha única, que perde `supabase\n  .from(`. O comando correto está no
 `CLAUDE.md`. O número não muda nenhuma decisão da spec, mas muda a expectativa
 de quanto trabalho falta: é mais que o dobro.
+
+## O lote 1B entregou
+
+A tela de Contatos lista, e a ficha 360° abre com timeline, notas e tags — tudo
+contra a API própria. A API pública (`contacts-list`, `contact-details`) virou o
+lote 1E: serve chamador externo, e a HS não tem nenhum hoje.
+
+**O scoring do cliente foi arrancado.** Existiam duas implementações — o trigger
+do banco e 75 linhas de TypeScript refazendo a conta no navegador — e a segunda
+gravava `lead_score` e `etiqueta` direto, colunas que o trigger não vigia. O
+valor do navegador vencia o do banco. Agora quem pontua é o banco, e a ficha
+mostra o número dele.
 
 ## O lote 1A entregou
 
@@ -74,6 +86,14 @@ quebra silenciosa em erro visível sem derrubar a casca do admin.
 - [ ] Identidade visual: o `index.html`, os logos e o tema ainda são da dn.ia.
 - [ ] Régua de scoring e funil da HS (`scoring_config`, `lead_statuses` vieram
   vazias) — decisão de produto, melhor tomada com a base real na tela.
+- [ ] **Teto de 10.000 leads na memória do navegador.** O `AdminDataProvider`
+  carrega a base inteira e filtra no cliente. Portado fiel de propósito no 1B;
+  quando a base da HS se aproximar disso, mover o filtro para o servidor deixa
+  de ser opcional — e vai cascatear em toda tela que usa `useAdminData`.
+- [ ] **O detalhamento de score na ficha ainda é calculado no cliente.** Ele não
+  grava mais nada, e o número exibido é o do banco, mas a lista de "quais
+  critérios bateram" repete em TypeScript a conta do PL/pgSQL e pode divergir.
+  O certo é vir do servidor.
 
 ## Decisões de produto que ainda faltam
 

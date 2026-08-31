@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Settings2, GripVertical, RotateCcw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase } from '@/integrations/supabase/client';
+import { lerPreferencia, gravarPreferencia } from '@/lib/leitura';
 
 const STORAGE_KEY = 'leads-table-columns';
 const ORDER_STORAGE_KEY = 'leads-table-column-order';
@@ -101,15 +101,12 @@ export function useColumnSettings() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const settingKey = `column_prefs_${user.id}`;
-        await supabase.from('dashboard_settings').upsert(
-          { setting_key: settingKey, setting_value: { visibleColumns: visible, columnOrder: order } as any },
-          { onConflict: 'setting_key' }
-        );
+        // A chave era composta aqui com o id do usuário. Agora o servidor a
+        // compõe, com o id de quem está autenticado — o cliente não escolhe de
+        // quem é a preferência que está gravando.
+        await gravarPreferencia('column_prefs', { visibleColumns: visible, columnOrder: order });
       } catch (e) {
-        console.error('Failed to persist column prefs:', e);
+        console.error('Falha ao gravar preferência de colunas:', e);
       }
     }, 1000);
   }, []);
@@ -119,18 +116,13 @@ export function useColumnSettings() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
-        const settingKey = `column_prefs_${user.id}`;
-        const { data } = await supabase
-          .from('dashboard_settings')
-          .select('setting_value')
-          .eq('setting_key', settingKey)
-          .maybeSingle();
+        const { valor } = await lerPreferencia<{ visibleColumns?: string[]; columnOrder?: string[] }>(
+          'column_prefs',
+        );
 
         if (cancelled) return;
-        if (data?.setting_value) {
-          const val = data.setting_value as any;
+        if (valor) {
+          const val = valor as any;
           const allKeys = ALL_COLUMNS.map(c => c.key);
           if (Array.isArray(val.visibleColumns) && val.visibleColumns.length > 0) {
             const v = (val.visibleColumns as string[]).filter(k => allKeys.includes(k));

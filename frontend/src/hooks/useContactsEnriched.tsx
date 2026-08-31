@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { enriquecerContatos, tagsPorContato, listarTags } from '@/lib/leitura';
 import type { Lead } from '@/hooks/useLeads';
 
 export interface EcosystemInfo {
@@ -44,135 +44,56 @@ export function useContactsEnriched(leads: Lead[]) {
     hasScheduled: false,
   });
 
-  // Fetch ecosystem data for leads that have dnia_id
+  // O mapa de ecossistema vem pronto do servidor. A regra de "agendamento em
+  // aberto" — que casa activity_created de meeting/demo com os eventos de
+  // fechamento pelo activity_id — foi para SQL: era o único pedaço de lógica de
+  // negócio que morava no navegador aqui.
   const fetchEcosystem = useCallback(async () => {
-    const dniaIds = leads
-      .map(l => (l as any).dnia_id)
-      .filter(Boolean) as string[];
-    
-    if (dniaIds.length === 0) return;
+    const dniaIds = [...new Set(
+      leads.map((l) => (l as unknown as { dnia_id?: string }).dnia_id).filter(Boolean) as string[],
+    )];
+    if (dniaIds.length === 0) { setEcosystemMap({}); return; }
 
-    // Deduplicate
-    const uniqueIds = [...new Set(dniaIds)];
-    
-    // Fetch in batches of 200
-    const map: Record<string, EcosystemInfo> = {};
-    for (let i = 0; i < uniqueIds.length; i += 200) {
-      const batch = uniqueIds.slice(i, i + 200);
-      const { data } = await supabase
-        .from('ecosystem_identities')
-        .select('dnia_id, nexus_contact_id, mentoria_client_id')
-        .in('dnia_id', batch);
-      
-      if (data) {
-        for (const row of data) {
-          map[row.dnia_id] = {
-            nexus_contact_id: row.nexus_contact_id,
-            mentoria_client_id: row.mentoria_client_id,
-            hasNexusEvents: false,
-            hasMentoriaEvents: false,
-          };
-        }
+    try {
+      const sinais = await enriquecerContatos(dniaIds);
+      const map: Record<string, EcosystemInfo> = {};
+      for (const [dnia, s] of Object.entries(sinais)) {
+        map[dnia] = {
+          nexus_contact_id: s.nexus_contact_id,
+          mentoria_client_id: s.mentoria_client_id,
+          hasNexusEvents: s.tem_eventos_nexus,
+          hasMentoriaEvents: s.tem_eventos_mentoria,
+          hasScheduledMeeting: s.tem_agendamento_aberto,
+        };
       }
+      setEcosystemMap(map);
+    } catch {
+      setEcosystemMap({});
     }
-
-    // Check for cross-platform events + open meeting/demo activities
-    // Rule: show scheduled icon when there is at least one activity_created
-    // (type=meeting|demo) WITHOUT a matching close event
-    // (activity_completed/cancelled/no_show/deleted) on the same activity_id.
-    const openByDnia: Record<string, Map<string, boolean>> = {}; // dnia -> activity_id -> open?
-
-    for (let i = 0; i < uniqueIds.length; i += 200) {
-      const batch = uniqueIds.slice(i, i + 200);
-      const { data: events } = await supabase
-        .from('contact_events')
-        .select('dnia_id, source_app, event_type, metadata')
-        .in('dnia_id', batch);
-
-      if (events) {
-        for (const evt of events) {
-          const dnia = evt.dnia_id as string | null;
-          if (!dnia || !map[dnia]) continue;
-
-          if (evt.source_app === 'nexus') map[dnia].hasNexusEvents = true;
-          if (evt.source_app === 'mentoria') map[dnia].hasMentoriaEvents = true;
-
-          // Legacy scheduling events (Cal.com widget etc.) → always counts as open
-          if (evt.event_type === 'scheduling_widget_booked' || evt.event_type === 'meeting_scheduled') {
-            map[dnia].hasScheduledMeeting = true;
-          }
-
-          // Nexus activity lifecycle (meeting/demo only)
-          const md = (evt.metadata || {}) as Record<string, unknown>;
-          const activityId = (md.activity_id as string) || null;
-          const activityType = ((md.type as string) || '').toLowerCase();
-          if (!activityId) continue;
-
-          if (evt.event_type === 'activity_created' && (activityType === 'meeting' || activityType === 'demo')) {
-            if (!openByDnia[dnia]) openByDnia[dnia] = new Map();
-            if (!openByDnia[dnia].has(activityId)) openByDnia[dnia].set(activityId, true);
-          } else if (
-            evt.event_type === 'activity_completed' ||
-            evt.event_type === 'activity_cancelled' ||
-            evt.event_type === 'activity_no_show' ||
-            evt.event_type === 'activity_deleted'
-          ) {
-            if (!openByDnia[dnia]) openByDnia[dnia] = new Map();
-            openByDnia[dnia].set(activityId, false);
-          }
-        }
-      }
-    }
-
-    // Apply open meetings to map
-    for (const dnia of Object.keys(openByDnia)) {
-      if (!map[dnia]) continue;
-      for (const isOpen of openByDnia[dnia].values()) {
-        if (isOpen) { map[dnia].hasScheduledMeeting = true; break; }
-      }
-    }
-
-
-    setEcosystemMap(map);
   }, [leads]);
 
-  // Fetch tags for all leads
   const fetchTags = useCallback(async () => {
-    const leadIds = leads.map(l => l.id);
-    if (leadIds.length === 0) return;
-
-    // Fetch in batches
-    const map: Record<string, TagInfo[]> = {};
-    for (let i = 0; i < leadIds.length; i += 200) {
-      const batch = leadIds.slice(i, i + 200);
-      const { data } = await supabase
-        .from('lead_tags')
-        .select('lead_id, tag_id, tags(id, name, color)')
-        .in('lead_id', batch);
-      
-      if (data) {
-        for (const row of data as any[]) {
-          if (!map[row.lead_id]) map[row.lead_id] = [];
-          if (row.tags) {
-            map[row.lead_id].push({
-              id: row.tags.id,
-              name: row.tags.name,
-              color: row.tags.color,
-            });
-          }
-        }
+    const leadIds = leads.map((l) => l.id);
+    if (leadIds.length === 0) { setTagsMap({}); return; }
+    try {
+      const mapa = await tagsPorContato(leadIds);
+      const map: Record<string, TagInfo[]> = {};
+      for (const [leadId, tags] of Object.entries(mapa)) {
+        map[leadId] = tags.map((t) => ({ id: t.id, name: t.nome, color: t.cor ?? 'purple' }));
       }
+      setTagsMap(map);
+    } catch {
+      setTagsMap({});
     }
-    setTagsMap(map);
   }, [leads]);
 
-  // Fetch all available tags
   const fetchAllTags = useCallback(async () => {
-    const { data } = await supabase
-      .from('tags')
-      .select('id, name, color')
-      .order('name');
-    if (data) setAllTags(data);
+    try {
+      const tags = await listarTags();
+      setAllTags(tags.map((t) => ({ id: t.id, name: t.nome, color: t.cor ?? 'purple' })));
+    } catch {
+      setAllTags([]);
+    }
   }, []);
 
   useEffect(() => {

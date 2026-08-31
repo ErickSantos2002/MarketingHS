@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { duplicatas, fundirIdentidades } from '@/lib/leitura';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,63 +29,35 @@ export function DuplicatesPanel() {
 
   const { data: duplicates, isLoading, refetch } = useQuery({
     queryKey: ['identity-duplicates'],
-    queryFn: async () => {
-      // Find duplicate emails
-      const { data: allIdentities } = await supabase
-        .from('ecosystem_identities')
-        .select('dnia_id, email, phone, nome, stage, created_at, nexus_contact_id, mentoria_client_id, dndash_lead_id')
-        .order('created_at', { ascending: true });
+    queryFn: async (): Promise<DuplicateCluster[]> => {
+      // A detecção (agrupar por e-mail e por telefone repetidos) foi para SQL.
+      const grupos = await duplicatas();
 
-      if (!allIdentities) return [];
+      const clusters: DuplicateCluster[] = grupos.map((g) => ({
+        field: g.tipo === 'email' ? 'email' : 'phone',
+        value: g.chave,
+        identities: g.identidades as DuplicateCluster['identities'],
+      }));
 
-      const clusters: DuplicateCluster[] = [];
-
-      // Group by email
-      const emailMap = new Map<string, typeof allIdentities>();
-      for (const id of allIdentities) {
-        if (!id.email) continue;
-        const key = id.email.toLowerCase().trim();
-        if (!emailMap.has(key)) emailMap.set(key, []);
-        emailMap.get(key)!.push(id);
+      // ⚠️ Regra do original preservada: um agrupamento por telefone é
+      // descartado se já existir um por e-mail com EXATAMENTE as mesmas
+      // identidades — senão a mesma dupla apareceria duas vezes na tela, e
+      // fundir uma faria a outra virar lixo silencioso.
+      const vistos = new Set<string>();
+      const semRepetir: DuplicateCluster[] = [];
+      for (const c of [...clusters].sort((a) => (a.field === 'email' ? -1 : 1))) {
+        const assinatura = c.identities.map((i) => i.dnia_id).sort().join(',');
+        if (vistos.has(assinatura)) continue;
+        vistos.add(assinatura);
+        semRepetir.push(c);
       }
-      for (const [value, identities] of emailMap) {
-        if (identities.length > 1) {
-          clusters.push({ field: 'email', value, identities });
-        }
-      }
-
-      // Group by phone
-      const phoneMap = new Map<string, typeof allIdentities>();
-      for (const id of allIdentities) {
-        if (!id.phone) continue;
-        if (!phoneMap.has(id.phone)) phoneMap.set(id.phone, []);
-        phoneMap.get(id.phone)!.push(id);
-      }
-      for (const [value, identities] of phoneMap) {
-        if (identities.length > 1) {
-          // Avoid adding if already in an email cluster with same identities
-          const dniIds = identities.map(i => i.dnia_id).sort().join(',');
-          const alreadyExists = clusters.some(c => 
-            c.identities.map(i => i.dnia_id).sort().join(',') === dniIds
-          );
-          if (!alreadyExists) {
-            clusters.push({ field: 'phone', value, identities });
-          }
-        }
-      }
-
-      return clusters;
+      return semRepetir;
     },
   });
 
   const mergeMutation = useMutation({
     mutationFn: async ({ keepId, discardId }: { keepId: string; discardId: string }) => {
-      const { data, error } = await supabase.rpc('merge_identities', {
-        p_keep: keepId,
-        p_discard: discardId,
-      });
-      if (error) throw error;
-      return data;
+      return fundirIdentidades(keepId, discardId);
     },
     onSuccess: (data) => {
       toast.success('Identidades mescladas com sucesso');

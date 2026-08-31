@@ -5,6 +5,7 @@ import { ContactsToolbar } from '@/components/admin/contacts/ContactsToolbar';
 import { ContactsFilterPanel, ActiveFilterChips } from '@/components/admin/contacts/ContactsFilterPanel';
 import { ContactsTable } from '@/components/admin/contacts/ContactsTable';
 import { ContactsBulkBar } from '@/components/admin/contacts/ContactsBulkBar';
+import { LimiteDeErro } from '@/components/admin/LimiteDeErro';
 import { DuplicatesPanel } from '@/components/admin/contacts/DuplicatesPanel';
 import { Button } from '@/components/ui/button';
 import { GitMerge, Trash2 } from 'lucide-react';
@@ -175,15 +176,21 @@ export default function Contacts() {
       </div>
 
       {/* Bulk actions bar (above table) */}
-      <ContactsBulkBar
-        selectedLeads={selectedLeads}
-        selectAll={selectAll}
-        allTags={allTags}
-        onClear={() => { setSelectedIds(new Set()); setSelectAll(false); }}
-        onComplete={handleBulkComplete}
-        visibleColumns={visibleColumns}
-        columnOrder={columnOrder}
-      />
+      {/* A barra de ações em massa é do lote 1C e ainda fala com o Supabase.
+          Isolada aqui para que a explosão dela não leve a TABELA junto — sem
+          isto, a tela inteira de Contatos vira um cartão de erro e não dá para
+          conferir a leitura, que é o que este lote entrega. */}
+      <LimiteDeErro area="ações em massa">
+        <ContactsBulkBar
+          selectedLeads={selectedLeads}
+          selectAll={selectAll}
+          allTags={allTags}
+          onClear={() => { setSelectedIds(new Set()); setSelectAll(false); }}
+          onComplete={handleBulkComplete}
+          visibleColumns={visibleColumns}
+          columnOrder={columnOrder}
+        />
+      </LimiteDeErro>
 
       {/* Duplicates */}
       {showDuplicates && <DuplicatesPanel />}

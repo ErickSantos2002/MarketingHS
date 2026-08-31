@@ -1,7 +1,9 @@
 import { api } from '@/lib/api';
 
 export interface LinhaImportacao {
-  email: string;
+  // Opcional: o CSV pode não ter a coluna. O backend conta essas linhas em
+  // `sem_email` e importa o resto.
+  email?: string;
   nome?: string;
   whatsapp?: string;
   telefone_completo?: string;
@@ -35,7 +37,7 @@ export const aplicarTag = (leadId: string, tag: string) =>
   api.post<void>(`/contatos/${leadId}/tags`, { tag });
 
 export const listarTags = () =>
-  api.get<{ id: string; nome: string }[]>('/tags');
+  api.get<{ id: string; nome: string; cor: string | null }[]>('/tags');
 
 export const recalcularScores = () =>
   api.post<{ atualizados: number }>('/contatos/recalcular-scores');

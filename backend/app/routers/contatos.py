@@ -22,7 +22,11 @@ LOTE_CONSULTA = 500
 
 
 class LinhaImportacao(BaseModel):
-    email: str
+    # ⚠️ Opcional de propósito. CSV exportado de outra ferramenta pode não ter a
+    # coluna de e-mail, e um campo obrigatório derrubaria o LOTE INTEIRO com 422
+    # em vez de contar as linhas sem e-mail e importar o resto — que é o que a
+    # tela mostra e o que o original fazia.
+    email: str | None = None
     nome: str | None = None
     whatsapp: str | None = None
     telefone_completo: str | None = None

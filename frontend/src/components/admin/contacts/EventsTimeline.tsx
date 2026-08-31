@@ -10,7 +10,7 @@ import {
   Calendar, TrendingUp, FileCheck, Rocket, Heart, StickyNote, Circle,
   ChevronDown, ChevronUp, Send, ArrowRight, Plus, Trophy, Search, Filter, X,
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { eventosDoContato } from '@/lib/leitura';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDistanceToNow } from 'date-fns';
@@ -116,20 +116,14 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      let query = supabase
-        .from('contact_events')
-        .select('*')
-        .order('occurred_at', { ascending: false })
-        .limit(200);
-
-      if (dniaId) {
-        query = query.or(`lead_id.eq.${leadId},dnia_id.eq.${dniaId}`);
-      } else {
-        query = query.eq('lead_id', leadId);
+      // O endpoint já casa lead_id OU o dnia_id do contato — o `dniaId` que
+      // esta tela recebia era só para montar aquele `.or()`.
+      try {
+        const data = await eventosDoContato(leadId, 200);
+        setEvents(data as unknown as ContactEvent[]);
+      } catch {
+        setEvents([]);
       }
-
-      const { data } = await query;
-      setEvents(data || []);
       setLoading(false);
     };
     fetchEvents();

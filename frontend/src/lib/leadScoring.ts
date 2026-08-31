@@ -1,4 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+import { lerScoring } from '@/lib/contatos';
+import { contarConversoes } from '@/lib/leitura';
 
 export interface ScoringCriteria {
   cargo_decisor: { enabled: boolean; points: number; cargos?: string[] };
@@ -154,11 +155,8 @@ export async function calculateLeadScore(
 
   // 5. Reconversão
   if (c.reconversao.enabled) {
-    const { count } = await supabase
-      .from('lead_conversions')
-      .select('*', { count: 'exact', head: true })
-      .eq('lead_id', lead.id);
-    const met = (count || 0) > 1;
+    const count = await contarConversoes(lead.id);
+    const met = count > 1;
     if (met) total += c.reconversao.points;
     details.push({ label: 'Reconversão', points: c.reconversao.points, met });
   }
@@ -183,40 +181,32 @@ export function scoreToEtiqueta(
 }
 
 export async function fetchScoringConfig(): Promise<ScoringConfig | null> {
-  const { data, error } = await supabase
-    .from('scoring_config')
-    .select('*')
-    .limit(1)
-    .single();
-  if (error || !data) return null;
-  return {
-    id: data.id,
-    criteria: data.criteria as unknown as ScoringCriteria,
-    thresholds: data.thresholds as unknown as ScoringThresholds,
-    updated_at: data.updated_at,
-  };
-}
-
-export async function scoreAndUpdateLead(leadId: string, lead?: LeadForScoring): Promise<void> {
-  const config = await fetchScoringConfig();
-  if (!config) return;
-
-  let leadData = lead;
-  if (!leadData) {
-    const { data } = await supabase
-      .from('leads')
-      .select('id, cargo, faturamento, funcionarios, desafios, utm_source, source, whatsapp')
-      .eq('id', leadId)
-      .single();
-    if (!data) return;
-    leadData = data as LeadForScoring;
+  try {
+    const data = await lerScoring();
+    return {
+      id: 'unica',
+      criteria: data.criteria as unknown as ScoringCriteria,
+      thresholds: data.thresholds as unknown as ScoringThresholds,
+      updated_at: data.updated_at,
+    };
+  } catch {
+    return null;
   }
-
-  const { total } = await calculateLeadScore(leadData, config);
-  const etiqueta = scoreToEtiqueta(total, config.thresholds);
-
-  await supabase.from('leads').update({
-    lead_score: total,
-    etiqueta,
-  }).eq('id', leadId);
 }
+
+// ⚠️ `scoreAndUpdateLead` foi REMOVIDA no lote 1B.
+//
+// Ela calculava o score em TypeScript e gravava `lead_score` e `etiqueta`
+// direto na tabela. Essas duas colunas não estão na lista vigiada pelo trigger
+// `trg_score_lead_on_change` (que só olha cargo, faturamento, funcionarios,
+// desafios, whatsapp, utm_source e source), então o banco NÃO corrigia o valor
+// escrito daqui — o número do navegador vencia o do banco.
+//
+// Quem pontua é o banco. Para reaplicar a régua à base, use
+// POST /contatos/recalcular-scores.
+//
+// ⚠️ `calculateLeadScore` e `fetchScoringConfig` continuam existindo, mas
+// SOMENTE para exibir o detalhamento em LeadDetailSheet — nunca para gravar.
+// Elas repetem em TypeScript a conta que o PL/pgSQL faz, e podem divergir dele
+// se um dos dois mudar sozinho. O certo é o detalhamento vir do servidor; fica
+// registrado como pendência no ROADMAP.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { conversoesUtm } from '@/lib/leitura';
 
 type UtmContentMap = Record<string, string[]>;
 
@@ -12,31 +12,16 @@ let cachedAt = 0;
 let inFlight: Promise<UtmContentMap> | null = null;
 
 async function fetchUtmContentMap(): Promise<UtmContentMap> {
-  const grouped: Record<string, Set<string>> = {};
-  const pageSize = 1000;
-  let from = 0;
-
-  // Paginate to bypass the default 1000-row limit.
-  while (true) {
-    const { data, error } = await supabase
-      .from('lead_conversions')
-      .select('lead_id, utm_content')
-      .not('utm_content', 'is', null)
-      .range(from, from + pageSize - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data as { lead_id: string; utm_content: string | null }[]) {
-      if (!row.lead_id || !row.utm_content) continue;
-      if (!grouped[row.lead_id]) grouped[row.lead_id] = new Set();
-      grouped[row.lead_id].add(row.utm_content);
-    }
-    if (data.length < pageSize) break;
-    from += pageSize;
+  // A paginação de 1000 em 1000 e o agrupamento saíram daqui: isso é agregação,
+  // e o banco faz numa consulta só.
+  const mapa = await conversoesUtm();
+  const grouped: UtmContentMap = {};
+  for (const [leadId, contents] of Object.entries(mapa)) {
+    grouped[leadId] = contents;
   }
-
-  const out: UtmContentMap = {};
-  for (const k of Object.keys(grouped)) out[k] = Array.from(grouped[k]);
-  return out;
+  return grouped;
 }
+
 
 function getUtmContentMap(): Promise<UtmContentMap> {
   const isFresh = cachedMap && Date.now() - cachedAt < CACHE_TTL_MS;

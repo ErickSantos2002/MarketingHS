@@ -5,7 +5,16 @@
 
 ## Onde paramos
 
-**Lote 1A (Entrada) concluído**, em cima do lote 0.
+**Lote 1B (Leitura do admin) concluído**, em cima do 1A e do lote 0.
+
+A tela de Contatos lista os contatos, com tags, scores e pílulas de ecossistema.
+A ficha abre com timeline de conversões, histórico de interações, notas e tags —
+e criar nota pela ficha funciona (conferido clicando, não só pela API).
+
+A barra de ações em massa aparece como "não portada" dentro do próprio limite de
+erro, sem levar a tabela junto. É do lote 1C.
+
+### Lote 1A (Entrada), antes disso
 
 Funciona, conferido no navegador com um CSV real de 5 linhas: a tela de
 Importar sobe o arquivo, deduplica por e-mail (inclusive maiúsculas), funde
@@ -27,6 +36,15 @@ verdade, conferido no navegador com Playwright e não só por teste:
 - Tela não portada mostra "Tela ainda não portada: `<alvo>`" sem derrubar a casca
 
 ## O próximo passo
+
+**Escrever o plano do lote 1C (Escrita).** As duas barras de ação em massa
+somam 34 pontos de acesso direto — é o maior bloco isolado que resta — mais o
+`StatusDropdown`. As functions são `contact-update`, `contact-status-update`,
+`contact-tags-sync`, `apply-lead-tag` (que ficou desde o 1A) e `delete-contact`.
+
+**Pronto quando:** você muda o status de um lote de contatos pela tela.
+
+### O que o 1B fez, para referência
 
 **Escrever o plano do lote 1B (Leitura).** Um plano por lote é o combinado.
 
