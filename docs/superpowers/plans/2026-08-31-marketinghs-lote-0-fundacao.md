@@ -253,8 +253,12 @@ entra no .gitignore."
 cd ~/github/MarketingHS
 pg_restore --schema=public --no-owner --no-privileges \
            -f /tmp/schema-bruto.sql docs/63cb903c-*.backup
-wc -l /tmp/schema-bruto.sql   # esperado: ~5764
+wc -l /tmp/schema-bruto.sql   # esperado: 5764
 ```
+
+⚠️ O arquivo gerado usa `\restrict` / `\unrestrict`, recurso do `psql` 18. A máquina
+do Erick tem 18.3, mas num servidor com `psql` mais antigo a aplicação quebra — se isso
+acontecer, apague as duas linhas (a 5 e a última) antes de aplicar.
 
 - [ ] **Passo 2: `000_compat_supabase.sql`**
 
@@ -310,15 +314,30 @@ t = pathlib.Path('/tmp/schema-bruto.sql').read_text()
 for ext in ('pg_cron', 'pg_net', 'pgmq', 'supabase_vault'):
     t = re.sub(rf'^CREATE EXTENSION[^;]*{ext}[^;]*;\n', '', t, flags=re.M)
 
-# 2. As funções que dependem delas. Somem inteiras — viram Python no lote 3.
+# 2. As 14 funções que dependem delas. Somem inteiras — viram Python no lote 3.
 #    invoke_edge_function some e NÃO volta: é o banco chamando a aplicação por
 #    HTTP, indireção que só existe porque o Supabase separa os dois.
+#
+# ⚠️ A tag de dollar-quote é capturada e reusada por backreference. NÃO troque
+# por `^\$\$;` fixo: nem toda função usa `$$` como delimitador, e a versão fixa
+# atravessa o fim de uma função e engole as vizinhas. Na primeira execução
+# deste plano, `invoke_edge_function` levou junto mais cinco funções do motor
+# de jornadas — um vão de 337 linhas — e só não entrou no banco porque o
+# implementador testou o resultado antes de aplicar.
 mortas = ['email_queue_read', 'email_queue_delete', 'email_queue_send_batch',
-          'journey_queue_read', 'journey_queue_delete', 'invoke_edge_function',
-          'get_integration_secret', 'set_integration_secret',
-          'delete_integration_secret']
+          'journey_queue_read', 'journey_queue_delete', 'journey_enqueue_email',
+          'fn_contact_event_to_journey_queue', 'requeue_orphan_journey_sends',
+          'reset_stuck_campaigns', 'evaluate_automation_on_etiqueta',
+          'invoke_edge_function', 'get_integration_secret',
+          'set_integration_secret', 'delete_integration_secret']
 for f in mortas:
-    t = re.sub(rf'^CREATE FUNCTION public\.{f}\(.*?^\$\$;\n', '', t, flags=re.M | re.S)
+    t = re.sub(rf'^CREATE FUNCTION public\.{f}\(.*?AS (\$[^$]*\$).*?\1;\n',
+               '', t, flags=re.M | re.S)
+
+# 3. Os dois triggers que apontavam para funções da lista. CREATE TRIGGER valida
+#    a função na hora da criação, então eles têm de sair junto.
+for trg in ['trg_automation_on_etiqueta_change', 'trg_contact_event_journey']:
+    t = re.sub(rf'^CREATE TRIGGER {trg}.*?;\n', '', t, flags=re.M | re.S)
 
 pathlib.Path('backend/migrations/001_schema_origem.sql').write_text(t)
 print('escrito')
@@ -343,7 +362,9 @@ grep -c "uniq_campaign_sends_email_campaign_lead\|uniq_campaign_sends_journey_no
      backend/migrations/001_schema_origem.sql
 ```
 
-Esperado: `3`
+Esperado: **`6`** — o `pg_restore` escreve cada índice duas vezes, o comentário
+`-- Name:` e a linha `CREATE UNIQUE INDEX`. Se der 3, um deles sumiu; se der 0, sumiram
+todos e a migração não pode seguir.
 
 - [ ] **Passo 5: `002_permissoes.sql`**
 
@@ -380,7 +401,11 @@ cria o papel do backend. **Pode ser rodado pelo agente**: as credenciais estão 
 ```bash
 #!/usr/bin/env bash
 # Aplica as migrations no Postgres do MarketingHS (serviço próprio no EasyPanel).
-# Idempotente: pode rodar de novo sem estragar o que já existe.
+#
+# ⚠️ NÃO é idempotente. O 001 vem do pg_dump e não usa IF NOT EXISTS nem
+# OR REPLACE, então uma segunda execução aborta em "already exists" na primeira
+# tabela. A falha é limpa — ON_ERROR_STOP=1 e nenhum DROP — mas para reaplicar
+# do zero é preciso recriar o banco. A criação do papel, essa sim, é idempotente.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
