@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    ports: ["8000:8000"]
+    env_file: [./backend/.env]
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports: ["8080:80"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+  # Vazio no lote 0. Ganha corpo no lote 3, junto com o motor de fila.
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    env_file: [./backend/.env]
+    depends_on: [backend]
+    restart: unless-stopped
+    profiles: ["worker"]

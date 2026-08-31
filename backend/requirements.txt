@@ -1,0 +1,13 @@
+asyncpg>=0.30.0
+bcrypt>=4.0.0
+fastapi>=0.115.0
+httpx>=0.26.0
+pydantic[email]>=2.10.0
+pydantic-settings>=2.5.0
+PyJWT>=2.9.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.12
+uvicorn[standard]>=0.30.0
+
+# teste — só app/auth/security.py neste lote (ver Restrições globais)
+pytest>=8.0.0
