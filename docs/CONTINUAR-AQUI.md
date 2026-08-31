@@ -5,7 +5,19 @@
 
 ## Onde paramos
 
-**Lote 0 (Fundação) concluído.** As nove tarefas fecharam. O que funciona de
+**Lote 1A (Entrada) concluído**, em cima do lote 0.
+
+Funciona, conferido no navegador com um CSV real de 5 linhas: a tela de
+Importar sobe o arquivo, deduplica por e-mail (inclusive maiúsculas), funde
+linhas duplicadas do mesmo arquivo sem perder a mais completa, ignora linha sem
+e-mail, normaliza status, aplica tag em lote e grava com score e etiqueta
+calculados pelo trigger. Carla (Gerente de SESMT, site, WhatsApp, desafio
+escrito) sai `hotlead` com 60; Elaine (Auxiliar, csv_import) sai com 0.
+
+A régua de scoring é editável em Configurações → Lead Scoring, e a tela avisa
+que salvar não repontua a base — para isso há o botão de recalcular.
+
+### Lote 0 (Fundação), antes disso As nove tarefas fecharam. O que funciona de
 verdade, conferido no navegador com Playwright e não só por teste:
 
 - Login em `http://127.0.0.1:8080/login` com usuário do banco `marketinghs`
@@ -16,18 +28,19 @@ verdade, conferido no navegador com Playwright e não só por teste:
 
 ## O próximo passo
 
-**Escrever o plano do lote 1 (Contatos).** Um plano por lote é o combinado — o
-do lote 1 deve ser escrito agora, com o que o lote 0 ensinou, e não antes.
+**Escrever o plano do lote 1B (Leitura).** Um plano por lote é o combinado.
 
-O lote 1 é o espinho do sistema: tudo pendura no contato. São 15 functions
-(`lead-capture`, `identity-lookup`, `identity-upsert`, `merge-identities`,
-`receive-contact-event`, `validate-email-domain`, `contacts-list`,
-`contact-details`, `contact-update`, `contact-status-update`,
-`contact-tags-sync`, `apply-lead-tag`, `delete-contact`, `import-leads-csv`,
-`recalculate-all-scores`) e a maior parte dos 68 pontos de acesso direto ao banco.
+O 1B mostra o que o 1A importou: `contacts-list` e `contact-details` como API
+pública (autenticada por chave, não por JWT — é um segundo modelo de auth que o
+backend ainda não tem), mais os endpoints de admin que substituem `useLeads`,
+`useContactsEnriched` e a tabela de Contatos.
 
-**Pronto quando:** você importa um CSV de verdade e a timeline da ficha de um
-contato mostra o histórico.
+**Pronto quando:** a tela de Contatos lista os contatos importados e a ficha
+360° abre com a timeline.
+
+Uma decisão que nasce no 1B: a lista hoje ordena por `updated_at`, e recalcular
+scores carimba esse campo em toda a base de uma vez, embaralhando a ordem.
+Provavelmente deve passar a ordenar por `created_at`.
 
 ## Antes de começar, três coisas do Erick
 

@@ -9,7 +9,10 @@ A spec que justifica esta ordem:
 | # | Lote | Functions | Estado |
 |---|---|---|---|
 | **0** | **Fundação** — repo, schema, auth, usuários, limite de taxa | 6 | ✅ **concluído** (31/08/2026) |
-| 1 | **Contatos** — captura, identidade, ficha 360°, tags, status, import, scoring | 15 | a fazer |
+| **1A** | **Entrada** — importar, pontuar, etiquetar | 3 | ✅ **concluído** (31/08/2026) |
+| 1B | Leitura — lista, ficha 360°, e a API pública por chave | 2 | a fazer |
+| 1C | Escrita — editar, status, tags, excluir, ações em massa | 5 | a fazer |
+| 1D | Identidade e captura — dedupe, fusão, captura externa | 5 | a fazer |
 | 2 | Segmentos — construtor de regras, audiência | 1 | a fazer |
 | 3 | **Campanhas + o motor** — templates, agendamento, fila, worker, Resend | 8 | a fazer |
 | 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
@@ -25,10 +28,26 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas : 6/48
-telas migradas     : 4  (auth, rota protegida, login, usuários)
-                     45 arquivos do frontend ainda falam com o Supabase
+functions portadas          : 8/48
+telas migradas              : 6  (auth, rota protegida, login, usuários,
+                                  importação, régua de scoring)
+acesso direto ao banco      : 153 pontos em 37 arquivos
 ```
+
+⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
+`grep` de linha única, que perde `supabase\n  .from(`. O comando correto está no
+`CLAUDE.md`. O número não muda nenhuma decisão da spec, mas muda a expectativa
+de quanto trabalho falta: é mais que o dobro.
+
+## O lote 1A entregou
+
+O scoring passou a existir: `scoring_config` veio vazia no dump e nada era
+pontuado. A régua agora é da HS, mora numa linha de tabela e trocá-la é um
+`UPDATE`. Sai o `classify_lead_etiqueta`, que já chegou desabilitado mas
+continuava no schema com o ICP da dn.ia dentro.
+
+Importação de CSV pela tela, com deduplicação por e-mail, fusão de linhas
+duplicadas no mesmo arquivo, aplicação de tag em lote e recálculo de scores.
 
 ## O lote 0 entregou
 

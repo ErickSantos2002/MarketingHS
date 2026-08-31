@@ -85,10 +85,32 @@ Uma tela só está portada quando **as duas** condições valem:
 # 1. a tela não fala mais com o Supabase
 grep -rn "supabase" frontend/src/<a tela>
 
-# 2. a tela foi aberta e conferida no navegador (Playwright, Vite em 127.0.0.1)
+# 2. NINGUÉM MAIS chama a function — inclusive de outra tela
+grep -rn "<nome-da-function>" frontend/src
+
+# 3. a tela foi aberta e conferida no navegador (Playwright, Vite em 127.0.0.1)
 
 # só então a function sai da especificação
 git rm -r backend/supabase/functions/<nome>
+```
+
+⚠️ **O passo 2 não é redundante.** No lote 1A a tela de importação estava
+limpa, mas `apply-lead-tag` continuava sendo chamada pelo caminho de conversão
+das landing pages — a function ficou na pasta. Portar a tela que você tinha em
+mente não quer dizer que a function ficou órfã.
+
+⚠️ **Cuidado com `grep` de linha única.** O padrão `supabase.from(` perde
+`supabase\n  .from(`, que é como a maior parte do código herdado escreve. Uma
+contagem por linha única deu 68 pontos de acesso direto ao banco; contando as
+chamadas quebradas, são **153**. Use busca multilinha para medir progresso:
+
+```bash
+python3 -c "
+import pathlib, re
+n = sum(len(re.findall(r'supabase\s*\.?\s*\n?\s*\.(from|rpc)\(', f.read_text()))
+        for f in pathlib.Path('frontend/src').rglob('*.ts*')
+        if 'integrations/supabase' not in str(f))
+print(n, 'pontos de acesso direto')"
 ```
 
 > **A lição do HS.OS, e que já se repetiu aqui.** Ter o substituto pronto não é
