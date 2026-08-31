@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -29,22 +29,16 @@ type ApiKey = {
   created_at: string;
 };
 
-async function generateKeyHash(key: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(key);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// ⚠️ `generateKeyHash` e `generateApiKey` foram REMOVIDAS.
+//
+// A chave era gerada aqui, no navegador, com Math.random() — um xorshift128+
+// cujo estado interno se recupera a partir de algumas saídas observadas. Quem
+// recebesse duas ou três chaves preveria as seguintes, e uma chave dá acesso de
+// leitura ou escrita à base inteira de contatos.
+//
+// Agora quem gera é o servidor, com `secrets`. A chave crua volta UMA vez, na
+// resposta da criação, e nunca mais — o banco guarda só o hash.
 
-function generateApiKey(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = 'dnk_';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
 
 function PermissionBadge({ permissions }: { permissions: string }) {
   if (permissions === 'read') return <Badge className="bg-blue-500/15 text-blue-400 border-blue-500/30 text-[10px]" variant="outline">Leitura</Badge>;
@@ -80,15 +74,11 @@ export default function ApiKeysManagement() {
 
   const fetchKeys = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('api_keys' as any)
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) {
-      console.error('Error fetching keys:', error);
+    try {
+      setKeys(await api.get<ApiKey[]>('/chaves'));
+    } catch (e) {
+      console.error('Erro ao carregar chaves:', e);
       toast.error('Erro ao carregar chaves');
-    } else {
-      setKeys((data as any[]) || []);
     }
     setLoading(false);
   };
@@ -102,24 +92,15 @@ export default function ApiKeysManagement() {
     }
     setCreating(true);
     try {
-      const rawKey = generateApiKey();
-      const keyHash = await generateKeyHash(rawKey);
-      const keyPrefix = rawKey.substring(0, 12);
+      // A chave crua vem do servidor e só existe nesta resposta.
+      const criada = await api.post<ApiKey & { chave: string }>('/chaves', {
+        nome: formName.trim(),
+        descricao: formDesc.trim() || null,
+        permissoes: formPerm,
+        expira_em: noExpiry ? null : expiryDate?.toISOString() || null,
+      });
 
-      const { error } = await supabase
-        .from('api_keys' as any)
-        .insert({
-          name: formName.trim(),
-          description: formDesc.trim() || null,
-          key_hash: keyHash,
-          key_prefix: keyPrefix,
-          permissions: formPerm,
-          expires_at: noExpiry ? null : expiryDate?.toISOString() || null,
-        } as any);
-
-      if (error) throw error;
-
-      setRevealedKey(rawKey);
+      setRevealedKey(criada.chave);
       setCreateOpen(false);
       setRevealOpen(true);
       resetForm();
@@ -135,11 +116,8 @@ export default function ApiKeysManagement() {
   const handleRevoke = async (id: string) => {
     setRevoking(id);
     try {
-      const { error } = await supabase
-        .from('api_keys' as any)
-        .update({ is_active: false } as any)
-        .eq('id', id);
-      if (error) throw error;
+      // Revogar é desativar, não apagar: preserva o histórico de uso.
+      await api.patch(`/chaves/${id}`, { ativa: false });
       toast.success('Chave revogada');
       setConfirmRevoke(null);
       fetchKeys();

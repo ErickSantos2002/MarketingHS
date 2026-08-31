@@ -8,8 +8,10 @@ import { Copy, Check, AlertTriangle, ChevronRight, ExternalLink, Eye, EyeOff, Ke
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID || '[PROJECT_ID]'}.supabase.co`;
-const BASE_URL = `${supabaseUrl}/functions/v1`;
+
+// ⚠️ Era a URL das Edge Functions do Supabase da dn.ia. Agora é a nossa API.
+// VITE_API_URL é resolvida em BUILD TIME.
+const BASE_URL = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api`;
 
 /* ── Copiable Code Block ── */
 function CodeBlock({ code, className = '' }: { code: string; className?: string }) {
@@ -93,7 +95,7 @@ const ENDPOINTS = [
   {
     id: 'identity-lookup',
     method: 'GET',
-    path: '/identity-lookup',
+    path: '/publico/identidade',
     title: 'Buscar identidade',
     description: 'Busca uma identidade unificada por telefone, email ou dnia_id.',
     params: [
@@ -102,7 +104,7 @@ const ENDPOINTS = [
       { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID do ecossistema' },
     ],
     curl: `curl -X GET \\
-  '${BASE_URL}/identity-lookup?phone=+5511999999999' \\
+  '${BASE_URL}/publico/identidade?phone=+5511999999999' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
     response: JSON.stringify({
       dnia_id: "uuid",
@@ -134,7 +136,7 @@ const ENDPOINTS = [
   {
     id: 'contact-details',
     method: 'GET',
-    path: '/contact-details',
+    path: '/publico/contato',
     title: 'Contexto completo do contato',
     description: 'Retorna tudo sobre um contato em uma única chamada: dados, score, tags, notas, timeline, campanhas e presença no ecossistema. Endpoint principal para agentes de IA.',
     params: [
@@ -143,7 +145,7 @@ const ENDPOINTS = [
       { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID do ecossistema' },
     ],
     curl: `curl -X GET \\
-  '${BASE_URL}/contact-details?phone=+5511999999999' \\
+  '${BASE_URL}/publico/contato?phone=+5511999999999' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
     response: JSON.stringify({
       dnia_id: "uuid",
@@ -243,7 +245,7 @@ const ENDPOINTS = [
   {
     id: 'identity-upsert',
     method: 'POST',
-    path: '/identity-upsert',
+    path: '/publico/identidade',
     title: 'Criar ou atualizar identidade',
     description: 'Cria uma nova identidade ou atualiza uma existente. Usado pelo Nexus ao criar contatos.',
     params: [
@@ -266,7 +268,7 @@ const ENDPOINTS = [
       { name: 'metadata', type: 'object', required: 'Não', description: 'Dados extras livres. Pode conter contact_fields (mesma semântica).' },
     ],
     curl: `curl -X POST \\
-  '${BASE_URL}/identity-upsert' \\
+  '${BASE_URL}/publico/identidade' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -318,7 +320,7 @@ const ENDPOINTS = [
   {
     id: 'contacts-list',
     method: 'GET',
-    path: '/contacts-list',
+    path: '/publico/contatos',
     title: 'Listar contatos',
     description: 'Lista leads com filtros, busca e paginação. Inclui dados do ecossistema.',
     params: [
@@ -330,7 +332,7 @@ const ENDPOINTS = [
       { name: 'limit', type: 'number', required: 'Não', description: 'Itens por página (default: 20, max: 100)' },
     ],
     curl: `curl -X GET \\
-  '${BASE_URL}/contacts-list?etiqueta=hotlead&status=Qualificado&limit=20' \\
+  '${BASE_URL}/publico/contatos?etiqueta=hotlead&status=Qualificado&limit=20' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
     response: JSON.stringify({
       data: [{
@@ -357,7 +359,7 @@ const ENDPOINTS = [
   {
     id: 'receive-contact-event',
     method: 'POST',
-    path: '/receive-contact-event',
+    path: '/publico/evento-de-contato',
     title: 'Registrar evento na timeline',
     description: 'Registra um evento na timeline unificada do contato. Usado por Nexus e mentor.ia.',
     params: [
@@ -376,7 +378,7 @@ const ENDPOINTS = [
       { name: 'occurred_at', type: 'ISO 8601', required: 'Não', description: 'Data do evento (default: agora)' },
     ],
     curl: `curl -X POST \\
-  '${BASE_URL}/receive-contact-event' \\
+  '${BASE_URL}/publico/evento-de-contato' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{

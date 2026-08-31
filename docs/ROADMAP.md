@@ -12,8 +12,8 @@ A spec que justifica esta ordem:
 | **1A** | **Entrada** — importar, pontuar, etiquetar | 3 | ✅ **concluído** (31/08/2026) |
 | **1B** | **Leitura do admin** — lista e ficha 360° inteira | 0 | ✅ **concluído** (31/08/2026) |
 | **1C** | **Escrita** — status, tags em lote, fusão, exclusão | 0 | ✅ **concluído** (31/08/2026) |
-| 1E | **A API pública** — `api_keys`, `contacts-list`, `contact-details` | 2 | a fazer |
-| 1D | Identidade e captura — dedupe, fusão, captura externa | 5 | a fazer |
+
+| **1D** | **A porta pública** — chave de API, ingestão e leitura externa | 5 | ✅ **concluído** (31/08/2026) |
 | 2 | Segmentos — construtor de regras, audiência | 1 | a fazer |
 | 3 | **Campanhas + o motor** — templates, agendamento, fila, worker, Resend | 8 | a fazer |
 | 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
@@ -29,15 +29,27 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas          : 8/48
-telas migradas              : 17
-acesso direto ao banco      : 90 pontos  (eram 153 antes do 1B)
+functions portadas          : 13/48
+telas migradas              : 21
+acesso direto ao banco      : 87 pontos  (eram 153 antes do 1B)
 ```
 
 ⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
 `grep` de linha única, que perde `supabase\n  .from(`. O comando correto está no
 `CLAUDE.md`. O número não muda nenhuma decisão da spec, mas muda a expectativa
 de quanto trabalho falta: é mais que o dobro.
+
+## O lote 1D entregou
+
+O segundo modelo de autenticação — chave de API com hash, escopo e expiração —
+que **destrava as 23 functions restantes que dependiam dele**, metade do port
+que falta.
+
+A chave passou a ser gerada no servidor com `secrets`: a tela gerava no
+navegador com `Math.random()`, previsível a partir de algumas saídas.
+
+`lead-capture` e `validate-email-domain` foram para o **lote 7**, com a landing
+page que os chama — hoje não têm chamador nenhum.
 
 ## O lote 1C entregou
 
@@ -105,6 +117,13 @@ quebra silenciosa em erro visível sem derrubar a casca do admin.
 - [ ] **Quais status avançam o estágio da identidade.** O original avançava
   para `opportunity` ao qualificar; a régua da HS não existe, e avançar por
   engano é pior que não avançar.
+- [ ] **O `WEBHOOK_SECRET` não tem escopo nem expiração.** É um segredo global
+  que vale tudo, herdado da origem. Vale decidir se continua.
+- [ ] **A especificação OpenAPI pública** (`public/api/dnmarketing-api.yaml`)
+  descreve os endpoints antigos. Atualizar ou apagar.
+- [ ] **A tela de chaves não foi conferida no navegador.** O código está portado,
+  tipado e compilando, e os endpoints foram verificados por HTTP ponta a ponta —
+  mas um overlay de outra aba impediu o clique, e o portão exige o clique.
 - [ ] **Quem limpa os contatos com `deleted_at` antigo.** A exclusão é lógica e
   nada os remove de vez; a lixeira cresce para sempre.
 - [ ] **Teto de 10.000 leads na memória do navegador.** O `AdminDataProvider`

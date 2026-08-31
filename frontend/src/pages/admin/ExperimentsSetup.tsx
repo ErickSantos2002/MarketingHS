@@ -11,7 +11,10 @@ import { Separator } from "@/components/ui/separator";
 import { getAbBaseUrl, setAbBaseUrl, AB_BASE_DEFAULT, domainOf, isHostInDomain, normalizeProductionDomain } from "@/lib/abConfig";
 import { useAbConfig } from "@/hooks/useAbConfig";
 
-const SUPABASE_FUNCTIONS_URL = "https://kfhojzdcnpuntynodsff.supabase.co/functions/v1";
+// ⚠️ Era a URL das Edge Functions do Supabase da dn.ia. Agora é a nossa API.
+// VITE_API_URL é resolvida em BUILD TIME — trocar a variável no servidor sem
+// rebuildar não muda o que está escrito aqui na tela.
+const API_URL = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api`;
 
 // Código exato do Cloudflare Worker (Opção A). As 3 linhas de `target` usam
 // template literals — por isso os crases e ${...} estão escapados aqui dentro.
@@ -19,7 +22,7 @@ const WORKER_CODE = `// Cloudflare Worker do Teste A/B (Opção A) — ligado ao
 //   https://go.dnia.ai/{slug}  -> redirecionador (Edge Function \`go\`)
 //   https://go.dnia.ai/e       -> coletor de eventos (Edge Function \`ab-events\`)
 
-const SUPABASE_FUNCTIONS = '${SUPABASE_FUNCTIONS_URL}';
+const SUPABASE_FUNCTIONS = '${API_URL}';
 const SUPABASE_ANON_KEY = ''; // vazio: as functions respondem sem apikey
 
 export default {
@@ -92,7 +95,7 @@ export default function ExperimentsSetup() {
   const snippet = `<script src="https://dnmkt.dnia.ai/ab.js" async data-endpoint="${collector}"></script>`;
 
   // Payloads que o Nexus deve enviar ao dnmkt (etapa 1, etapas 2-3, confirmação).
-  const nexusUpsert = `POST ${SUPABASE_FUNCTIONS_URL}/identity-upsert
+  const nexusUpsert = `POST ${API_URL}/publico/identidade
 Authorization: Bearer <API key ou WEBHOOK_SECRET>
 Content-Type: application/json
 
@@ -112,7 +115,7 @@ Content-Type: application/json
   "event_type": "schedule_step", "event_name": "2",
   "metadata": { "step": 2 } }`;
 
-  const nexusConfirm = `POST ${SUPABASE_FUNCTIONS_URL}/receive-contact-event
+  const nexusConfirm = `POST ${API_URL}/publico/evento-de-contato
 Authorization: Bearer <API key ou WEBHOOK_SECRET>
 Content-Type: application/json
 

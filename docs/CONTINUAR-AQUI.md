@@ -5,7 +5,18 @@
 
 ## Onde paramos
 
-**Lote 1C (Escrita) concluído**, em cima do 1B, 1A e do lote 0.
+**Lote 1D (A porta pública) concluído**, em cima do 1C, 1B, 1A e do lote 0.
+
+A autenticação por chave de API existe: criar chave devolve a chave crua uma vez
+e nunca mais, o escopo é aplicado nos dois sentidos, chave inválida e ausente
+dão 401. Isso **destrava as 23 functions restantes** que dependiam dela.
+
+⚠️ **Pendência honesta:** a tela de chaves não foi clicada no navegador. O código
+está portado, tipado e compilando, e os endpoints foram verificados por HTTP —
+mas um overlay de outra aba bloqueou o clique depois de três tentativas, e o
+portão exige o clique. Conferir antes de considerar a tela fechada.
+
+### Lote 1C (Escrita), antes disso
 
 A barra de ações em massa funciona: alterar status, aplicar tag, exportar,
 apagar e mesclar. A fusão acontece numa transação no servidor — provado forçando
@@ -45,14 +56,18 @@ verdade, conferido no navegador com Playwright e não só por teste:
 
 ## O próximo passo
 
-**Escrever o plano do lote 1D (Identidade e captura).** As functions são
-`lead-capture`, `identity-lookup`, `identity-upsert`, `receive-contact-event` e
-`validate-email-domain` — a porta de entrada externa do sistema, que é também a
-superfície pública sem autenticação. O limite de taxa do lote 0 já está lá
-esperando pelo prefixo `/publico`.
+O lote 1 acabou. Com a chave de API existindo, os próximos lotes deixam de
+esbarrar em autenticação — as 23 functions que dependiam dela estão livres.
 
-Depois dele, o **1E**: a API pública por chave (`api_keys`, `contacts-list`,
-`contact-details`), que traz o segundo modelo de autenticação.
+Candidatos, por valor:
+
+- **Lote 2 (Segmentos)** — 1 function, e é o que a campanha precisa para
+  escolher público. Pequeno e destrava o lote 3.
+- **Lote 3 (Campanhas + o motor)** — o maior valor de negócio e a parte que a
+  spec diz nascer com teste automatizado. São 14 funções de banco a
+  reimplementar em Python, não 9 como a spec estimou.
+- **Lote 5 (Integrações HS)** — handoff para o GrowthHS e os 2.077 clientes do
+  DataCore. ⚠️ Exige trocar a senha do superusuário antes.
 
 ### O que o 1C fez, para referência
 

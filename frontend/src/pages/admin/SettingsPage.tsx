@@ -18,10 +18,13 @@ import SuppressionList from '@/components/admin/settings/SuppressionList';
 import SocialLinksSettings from '@/components/admin/settings/SocialLinksSettings';
 
 const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
-const BASE = `https://${projectId}.supabase.co/functions/v1`;
+// ⚠️ Era a URL das Edge Functions do Supabase. Agora é a nossa API — e o
+// endpoint mudou de nome junto: receive-contact-event virou
+// /publico/evento-de-contato.
+const BASE = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api`;
 
 export default function SettingsPage() {
-  const endpointUrl = `${BASE}/receive-contact-event`;
+  const endpointUrl = `${BASE}/publico/evento-de-contato`;
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [tokenRevealed, setTokenRevealed] = useState(false);
   const [testing, setTesting] = useState(false);
