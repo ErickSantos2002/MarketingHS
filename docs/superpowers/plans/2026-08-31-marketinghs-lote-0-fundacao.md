@@ -614,8 +614,9 @@ async def sessao(role: str = "anon", user_id: str | None = None):
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import close_db, init_db
@@ -641,12 +642,39 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RuntimeError)
+async def banco_indisponivel(request: Request, exc: RuntimeError):
+    """A `sessao()` levanta RuntimeError quando o pool não subiu. Sem este
+    handler viraria 500 — e 500 diz "o servidor tem um bug", quando a verdade
+    é "o banco não está de pé". A diferença muda o caminho de quem depura.
+
+    ⚠️ O `raise exc` no fim não é sobra: só o RuntimeError DESSA mensagem vira
+    503. Um handler que engolisse todos transformaria bug de verdade em "banco
+    indisponível", trocando um erro visível por um invisível."""
+    if str(exc) == "banco indisponível":
+        return JSONResponse({"detail": "Banco de dados indisponível."}, status_code=503)
+    raise exc
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}
 ```
 
-- [ ] **Passo 4: `backend/Dockerfile`**
+- [ ] **Passo 4: `backend/Dockerfile` e `backend/.dockerignore`**
+
+O `.dockerignore` não é higiene opcional: sem ele o `COPY . .` leva `backend/.venv`
+(87 MB, específico da máquina de quem construiu) para dentro da imagem.
+
+```
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+tests/
+```
+
 
 ```dockerfile
 FROM python:3.13-slim
@@ -664,7 +692,7 @@ cat > backend/.env.example <<'EOF'
 # Copie para backend/.env e preencha. O .env nunca vai para o git.
 # A senha do marketinghs_app é a que aplicar-migrations.sh gerou e gravou
 # em ~/marketinghs.env.
-DATABASE_URL=postgresql://marketinghs_app:TROCAR@62.72.11.28:5432/marketinghs
+DATABASE_URL=postgresql://marketinghs_app:TROCAR@62.72.11.28:3377/marketinghs
 
 # Gere com: python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 JWT_SECRET=trocar-em-producao
