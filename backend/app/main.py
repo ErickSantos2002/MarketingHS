@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.auth.router import router as auth_router
 from app.database import close_db, init_db
 
 logging.basicConfig(level=logging.INFO)
@@ -42,3 +43,6 @@ async def banco_indisponivel(request: Request, exc: RuntimeError):
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+app.include_router(auth_router)
