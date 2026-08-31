@@ -23,13 +23,27 @@ TanStack Query · Docker Compose
 
 Valores exatos, copiados da spec. Valem para toda tarefa.
 
-- **Banco:** `marketinghs` em `62.72.11.28`. **Esse Postgres não aceita TLS** — backend e
-  banco no mesmo servidor não é escolha, é o que impede tráfego em texto claro.
+- **Banco:** serviço Postgres próprio no EasyPanel, versão **17.11** (o dump é 17.6 — mesma
+  maior, restore sem atrito). Externo `62.72.11.28:3377` para migration e para o cadastro
+  `bancos`; interno pelo nome do serviço, que é o que vai no `DATABASE_URL` de produção.
+- **Backend e banco na mesma rede Docker do EasyPanel.** O tráfego entre eles não sai do
+  host. Substitui, e melhora, a amarra que a spec herdou do HS.OS ("mesmo servidor porque
+  o Postgres não aceita TLS"): aqui a proteção vem da rede interna, não da co-localização.
+- **Nenhuma extensão é necessária.** O schema usa `gen_random_uuid()` 36 vezes, e isso é
+  core no Postgres 13+ — verificado no banco novo com só `plpgsql` instalado. Zero uso de
+  `pgcrypto` e zero de `uuid_generate_v4()`. Não escreva `CREATE EXTENSION`.
 - **Usuário do backend:** `marketinghs_app`, comum, `NOINHERIT`, **sem superpoderes** —
   superusuário ignora RLS por definição e tornaria as 65 políticas decorativas.
-- **DDL e criação de banco não são feitas pelo agente.** Vão num script que lê
-  `~/.config/bancos/admin.toml` sozinho e o Erick roda no Konsole. O agente nunca lê esse
-  arquivo.
+- **DDL é feita pelo agente**, porque a instância é nossa: o EasyPanel entregou banco e
+  superusuário, e as credenciais estão em `~/marketinghs.env` (fora do repositório, `600`).
+  O `~/.config/bancos/admin.toml` continua fora dos limites — ele é dos 9 bancos de
+  produção, não deste.
+- ⚠️ **PENDÊNCIA DE FECHAMENTO, decidida pelo Erick em 31/08/2026:** a senha do
+  superusuário é igual ao nome de usuário, numa porta exposta à internet. Rodar assim
+  durante a construção foi decisão dele, com o risco explicado. **Trocar antes de qualquer
+  dado real entrar no banco** — em especial antes da sincronização dos 2.077 clientes do
+  DataCore (lote 5). A troca é pela interface do EasyPanel, não por `ALTER USER`, para o
+  EasyPanel não ficar com credencial velha guardada.
 - **Papel de admin:** o enum é `public.app_role` e o valor é **`'admin'`** — não
   `'administrador'`, que é o do HS.OS. Confira antes de escrever query.
 - **Sem recuperação de senha por e-mail.** Senha é definida pelo TI; admin reseta a de quem
@@ -65,7 +79,7 @@ Valores exatos, copiados da spec. Valem para toda tarefa.
 | `backend/migrations/002_permissoes.sql` | Grants para `marketinghs_app` |
 | `backend/tests/test_security.py` | Único teste do lote |
 | `backend/requirements.txt` · `backend/Dockerfile` | |
-| `scripts/criar-banco.sh` | **Erick roda no Konsole.** Cria banco, papel, aplica migrations |
+| `scripts/aplicar-migrations.sh` | Cria o `marketinghs_app` e aplica as migrations |
 | `frontend/src/lib/api.ts` | Cliente HTTP com JWT — substitui `supabase.functions.invoke` |
 | `docker-compose.yml` | `backend` · `frontend` · `worker` |
 
@@ -226,7 +240,7 @@ entra no .gitignore."
 
 **Arquivos:**
 - Cria: `backend/migrations/000_compat_supabase.sql`, `001_schema_origem.sql`,
-  `002_permissoes.sql`, `scripts/criar-banco.sh`
+  `002_permissoes.sql`, `scripts/aplicar-migrations.sh`
 
 **Interfaces:**
 - Consome: `docs/63cb903c-ece5-4157-8f7f-e7dc4686df2d_260831.backup`
@@ -314,7 +328,8 @@ EOF
 - [ ] **Passo 4: verificar que nada sobrou apontando para extensão ausente**
 
 ```bash
-grep -nE "pgmq\.|net\.http|vault\.|cron\.schedule" backend/migrations/001_schema_origem.sql
+grep -nE "pgmq\.|net\.http|vault\.|cron\.schedule|CREATE EXTENSION" \
+     backend/migrations/001_schema_origem.sql
 ```
 
 Esperado: **nenhuma linha.** Se sobrar, é função que chama fila e não estava na lista do
@@ -353,74 +368,84 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, auth
 GRANT SELECT, INSERT, UPDATE ON auth.users TO service_role;
 ```
 
-- [ ] **Passo 6: `scripts/criar-banco.sh` — o Erick roda**
+- [ ] **Passo 6: `scripts/aplicar-migrations.sh`**
 
 O `scripts/` da raiz foi para `frontend/` na tarefa 1 (era do build do Vite), então
 recrie o diretório: `mkdir -p scripts`.
 
+O EasyPanel já criou o banco e o superusuário — o script só aplica as migrations e
+cria o papel do backend. **Pode ser rodado pelo agente**: as credenciais estão em
+`~/marketinghs.env`, que é desta instância e não dos 9 bancos de produção.
+
 ```bash
 #!/usr/bin/env bash
-# Cria o banco marketinghs e aplica as migrations.
-#
-# NÃO é rodado pelo agente: exige o superusuário do ~/.config/bancos/admin.toml,
-# que o Claude não lê. Rode no Konsole:
-#     bash scripts/criar-banco.sh
+# Aplica as migrations no Postgres do MarketingHS (serviço próprio no EasyPanel).
+# Idempotente: pode rodar de novo sem estragar o que já existe.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ADMIN=$(python3 -c "
-import tomllib,pathlib
-d=tomllib.loads(pathlib.Path.home().joinpath('.config/bancos/admin.toml').read_text())
-b=d['datacore']   # qualquer bloco serve: o host e o superusuário são os mesmos
-print(f\"postgresql://{b['user']}:{b['password']}@{b['host']}:{b.get('port',5432)}/postgres\")
-")
+set -a; . ~/marketinghs.env; set +a
+export PGPASSWORD="$POSTGRES_PASSWORD"
+URL="postgresql://${POSTGRES_USER}@${POSTGRES_HOST_EXTERNO}:${POSTGRES_PORTA_EXTERNA}/${POSTGRES_DB}"
 
-echo '>> senha para o marketinghs_app (anote, vai no backend/.env):'
-read -rs SENHA_APP; echo
+# Senha do marketinghs_app: gerada uma vez e guardada no mesmo arquivo.
+if [ -z "${MARKETINGHS_APP_PASSWORD:-}" ]; then
+  NOVA=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+  sed -i "s|^MARKETINGHS_APP_PASSWORD=.*|MARKETINGHS_APP_PASSWORD=${NOVA}|" ~/marketinghs.env
+  MARKETINGHS_APP_PASSWORD="$NOVA"
+  echo ">> senha do marketinghs_app gerada e gravada em ~/marketinghs.env"
+fi
 
-psql "$ADMIN" -v ON_ERROR_STOP=1 <<SQL
-CREATE DATABASE marketinghs;
+psql "$URL" -v ON_ERROR_STOP=1 <<SQL
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='marketinghs_app') THEN
-    CREATE ROLE marketinghs_app LOGIN NOINHERIT PASSWORD '${SENHA_APP}';
+    CREATE ROLE marketinghs_app LOGIN NOINHERIT PASSWORD '${MARKETINGHS_APP_PASSWORD}';
+  ELSE
+    ALTER ROLE marketinghs_app PASSWORD '${MARKETINGHS_APP_PASSWORD}';
   END IF;
 END \$\$;
 SQL
 
-DB="${ADMIN%/postgres}/marketinghs"
 for m in backend/migrations/*.sql; do
   echo ">> $m"
-  psql "$DB" -v ON_ERROR_STOP=1 -f "$m"
+  psql "$URL" -v ON_ERROR_STOP=1 -f "$m"
 done
 
 echo
-echo ">> pronto. Confira:"
-psql "$DB" -c "SELECT count(*) AS tabelas FROM information_schema.tables WHERE table_schema='public';"
-psql "$DB" -c "SELECT auth.uid() IS NULL AS uid_ok;"
-echo
-echo ">> ponha no backend/.env:"
-echo "DATABASE_URL=postgresql://marketinghs_app:SENHA@62.72.11.28:5432/marketinghs"
+psql "$URL" -c "SELECT count(*) AS tabelas FROM information_schema.tables WHERE table_schema='public';"
+psql "$URL" -c "SELECT auth.uid() IS NULL AS uid_ok;"
+psql "$URL" -c "SELECT rolname, rolsuper FROM pg_roles WHERE rolname='marketinghs_app';"
 ```
 
-- [ ] **Passo 7: pedir ao Erick que rode e conferir a saída**
+- [ ] **Passo 7: rodar e conferir**
 
-Esperado: `tabelas = 36` e `uid_ok = t`. Se as tabelas vierem menos que 36, alguma função
-do passo 3 levou tabela junto no `re.sub` — confira o diff antes de seguir.
+```bash
+bash scripts/aplicar-migrations.sh
+```
+
+Esperado: `tabelas = 36`, `uid_ok = t`, e `marketinghs_app` com **`rolsuper = f`** — se
+vier `t`, o RLS estaria decorativo e o lote não pode seguir.
+
+Se as tabelas vierem menos que 36, alguma função do passo 3 levou tabela junto no
+`re.sub` — confira o diff antes de seguir.
 
 - [ ] **Passo 8: cadastrar no `bancos`**
 
-Peça ao Erick que preencha o bloco `[marketinghs]` no `~/.config/bancos/admin.toml` e rode
-`python criar_leitura.py marketinghs`. Confira:
+Este passo **é do Erick**: o bloco novo vai no `~/.config/bancos/admin.toml`, que o
+agente não lê. Peça que ele acrescente `[marketinghs]` com host `62.72.11.28`, porta
+`3377`, banco `marketinghs`, e rode `python criar_leitura.py marketinghs`. Confira:
 
 ```bash
 ~/projetos/analises-bancos/.venv/bin/python -c "
 import bancos; print(bancos.consultar('marketinghs', 'select count(*) from leads'))"
 ```
 
+Esperado: `0` — a tabela existe e está vazia.
+
 - [ ] **Passo 9: commit**
 
 ```bash
-git add backend/migrations scripts/criar-banco.sh
+git add backend/migrations scripts/aplicar-migrations.sh
 git commit -m "feat(banco): schema de origem portado para o Postgres da HS
 
 000 entrega a compatibilidade mínima que as 65 políticas de RLS esperam do
@@ -429,7 +454,8 @@ sessão emite. Assim as 69 chamadas a auth.uid() no schema herdado continuam
 valendo sem reescrita.
 
 001 é o dump adaptado — saem as quatro extensões que não temos e as nove
-funções que dependiam delas. invoke_edge_function some e não volta: era o
+funções que dependiam delas. Nenhum CREATE EXTENSION entra: gen_random_uuid()
+é core desde o Postgres 13 e o schema não usa mais nada de pgcrypto. invoke_edge_function some e não volta: era o
 banco chamando a aplicação por HTTP, indireção que só existe porque o
 Supabase separa os dois.
 
@@ -611,7 +637,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```bash
 cat > backend/.env.example <<'EOF'
 # Copie para backend/.env e preencha. O .env nunca vai para o git.
-# A senha do marketinghs_app é a que você digitou em scripts/criar-banco.sh.
+# A senha do marketinghs_app é a que aplicar-migrations.sh gerou e gravou
+# em ~/marketinghs.env.
 DATABASE_URL=postgresql://marketinghs_app:TROCAR@62.72.11.28:5432/marketinghs
 
 # Gere com: python3 -c "import secrets; print(secrets.token_urlsafe(48))"
@@ -1761,3 +1788,13 @@ confirme com o Erick antes de executá-lo.
 - [ ] Tela não portada estoura com `[MarketingHS] não portado: …`
 - [ ] `.env` fora do índice do git
 - [ ] `marketinghs` cadastrado no `bancos` e respondendo a `bancos.consultar`
+- [ ] `marketinghs_app` existe com `rolsuper = f`
+
+## Pendências que atravessam o lote
+
+- [ ] **Trocar a senha do superusuário do Postgres** (hoje igual ao nome de usuário, em
+  porta exposta). Pela interface do EasyPanel, não por `ALTER USER`. Decisão do Erick de
+  rodar assim durante a construção; **obrigatório antes do lote 5**, que traz os 2.077
+  clientes do DataCore para dentro.
+- [ ] Preencher `POSTGRES_HOST_INTERNO` em `~/marketinghs.env` — só é necessário no
+  deploy, mas o `DATABASE_URL` de produção depende dele.
