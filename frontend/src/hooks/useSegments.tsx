@@ -1,106 +1,72 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  adicionarContatos,
+  contatosDoSegmento,
+  criarSegmento,
+  duplicarSegmento,
+  editarSegmento,
+  excluirSegmento,
+  listarSegmentos,
+  type Segment,
+  type SegmentRule,
+} from '@/lib/segmentos';
 
-export interface SegmentRule {
-  field: string;
-  operator: string;
-  value: string;
-}
-
-export interface Segment {
-  id: string;
-  name: string;
-  description: string | null;
-  type: 'static' | 'dynamic';
-  rules: SegmentRule[];
-  logic: 'and' | 'or';
-  created_at: string;
-  updated_at: string;
-  contactCount?: number;
-}
+export type { Segment, SegmentRule };
 
 export function useSegments() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
+  // A contagem vem dentro da própria lista: o servidor resolve estático e
+  // dinâmico numa consulta só. Antes eram N+1 idas ao banco — dez segmentos,
+  // onze consultas. `counts` continua existindo porque cinco telas o
+  // consomem; o que mudou é de onde ele sai.
   const fetchSegments = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('segments')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
+    try {
+      const lista = await listarSegmentos();
+      setSegments(lista);
+      setCounts(Object.fromEntries(lista.map(s => [s.id, s.contactCount ?? 0])));
+    } catch {
       toast.error('Erro ao carregar segmentos');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const parsed: Segment[] = (data || []).map((s: any) => ({
-      ...s,
-      rules: Array.isArray(s.rules) ? s.rules : JSON.parse(s.rules || '[]'),
-      // types.ts ainda não conhece a coluna `logic` (Fase 5) — default 'and'
-      // preserva o comportamento de segmentos criados antes desta migration.
-      logic: s.logic === 'or' ? 'or' : 'and',
-    }));
-    setSegments(parsed);
-
-    // Fetch counts for each segment
-    const countsMap: Record<string, number> = {};
-    for (const seg of parsed) {
-      if (seg.type === 'dynamic') {
-        const { data: rpcData } = await supabase.rpc('evaluate_segment_rules', { p_segment_id: seg.id });
-        countsMap[seg.id] = rpcData?.length || 0;
-      } else {
-        const { count } = await supabase
-          .from('segment_contacts')
-          .select('lead_id', { count: 'exact', head: true })
-          .eq('segment_id', seg.id);
-        countsMap[seg.id] = count || 0;
-      }
-    }
-    setCounts(countsMap);
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchSegments(); }, [fetchSegments]);
 
+  // ⚠️ As mutações NÃO recarregam a lista sozinhas. Quem as chama de dentro do
+  // modal usa uma instância própria do hook, cuja lista ninguém mostra: o
+  // recarregamento interno era trabalho jogado fora, e somado ao `onSaved` da
+  // página virava duas buscas seguidas a cada gravação. Quem precisa da lista
+  // atualizada chama `refetch`.
   const createSegment = async (
     name: string,
     description: string,
     type: 'static' | 'dynamic',
     rules: SegmentRule[],
     staticLeadIds: string[],
-    logic: 'and' | 'or' = 'and'
+    logic: 'and' | 'or' = 'and',
   ) => {
-    const { data, error } = await supabase
-      .from('segments')
-      // `logic` (Fase 5) ainda não está em types.ts — cast sancionado.
-      .insert({ name, description: description || null, type, rules: rules as any, logic } as any)
-      .select()
-      .single();
-
-    if (error || !data) {
-      toast.error('Erro ao criar segmento');
+    try {
+      const { id } = await criarSegmento({
+        nome: name,
+        descricao: description || null,
+        tipo: type,
+        regras: rules,
+        logica: logic,
+        lead_ids: type === 'static' ? staticLeadIds : null,
+      });
+      const n = type === 'static' ? staticLeadIds.length : 0;
+      toast.success(`Segmento criado com ${n > 0 ? n + ' contatos' : 'sucesso'}`);
+      return { id };
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao criar segmento');
       return null;
     }
-
-    if (type === 'static' && staticLeadIds.length > 0) {
-      const rows = staticLeadIds.map(lid => ({
-        segment_id: (data as any).id,
-        lead_id: lid,
-      }));
-      for (let i = 0; i < rows.length; i += 100) {
-        await supabase.from('segment_contacts').insert(rows.slice(i, i + 100) as any);
-      }
-    }
-
-    const count = type === 'static' ? staticLeadIds.length : 0;
-    toast.success(`Segmento criado com ${count > 0 ? count + ' contatos' : 'sucesso'}`);
-    fetchSegments();
-    return data;
   };
 
   const updateSegment = async (
@@ -110,84 +76,71 @@ export function useSegments() {
     type: 'static' | 'dynamic',
     rules: SegmentRule[],
     staticLeadIds?: string[],
-    logic: 'and' | 'or' = 'and'
+    logic: 'and' | 'or' = 'and',
   ) => {
-    const { error } = await supabase
-      .from('segments')
-      // `logic` (Fase 5) ainda não está em types.ts — cast sancionado.
-      .update({ name, description: description || null, type, rules: rules as any, logic, updated_at: new Date().toISOString() } as any)
-      .eq('id', id);
-
-    if (error) {
-      toast.error('Erro ao atualizar segmento');
+    try {
+      await editarSegmento(id, {
+        nome: name,
+        descricao: description || null,
+        tipo: type,
+        regras: rules,
+        logica: logic,
+        // undefined preserva os membros; lista vazia esvazia de propósito.
+        lead_ids: type === 'static' ? (staticLeadIds ?? null) : null,
+      });
+      toast.success('Segmento atualizado');
+      return true;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao atualizar segmento');
       return false;
     }
-
-    if (type === 'static' && staticLeadIds) {
-      await supabase.from('segment_contacts').delete().eq('segment_id', id);
-      const rows = staticLeadIds.map(lid => ({ segment_id: id, lead_id: lid }));
-      for (let i = 0; i < rows.length; i += 100) {
-        await supabase.from('segment_contacts').insert(rows.slice(i, i + 100) as any);
-      }
-    }
-
-    toast.success('Segmento atualizado');
-    fetchSegments();
-    return true;
   };
 
   const duplicateSegment = async (segment: Segment) => {
-    await createSegment(
-      segment.name + ' (cópia)',
-      segment.description || '',
-      segment.type,
-      segment.rules,
-      [],
-      segment.logic
-    );
+    try {
+      await duplicarSegmento(segment.id);
+      toast.success('Segmento duplicado');
+      await fetchSegments();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao duplicar segmento');
+    }
   };
 
   const deleteSegment = async (id: string) => {
-    const { error } = await supabase.from('segments').delete().eq('id', id);
-    if (error) {
+    try {
+      await excluirSegmento(id);
+      toast.success('Segmento excluído');
+      await fetchSegments();
+    } catch (e) {
       // A guarda do banco (guard_segment_delete) recusa apagar um segmento usado
       // por campanha não enviada ou fluxo ativo, e a mensagem dela já nomeia quem
-      // está usando -- é a única informação acionável que o admin recebe.
-      toast.error(error.message || 'Erro ao excluir segmento');
-      return;
-    }
-    toast.success('Segmento excluído');
-    fetchSegments();
-  };
-
-  const getSegmentContacts = async (segmentId: string, segmentType: string) => {
-    if (segmentType === 'dynamic') {
-      const { data } = await supabase.rpc('evaluate_segment_rules', { p_segment_id: segmentId });
-      if (!data || data.length === 0) return [];
-      const ids = data.map((r: any) => r.lead_id);
-      const allLeads: any[] = [];
-      for (let i = 0; i < ids.length; i += 200) {
-        const batch = ids.slice(i, i + 200);
-        const { data: leads } = await supabase.from('leads').select('*').in('id', batch);
-        if (leads) allLeads.push(...leads);
-      }
-      return allLeads;
-    } else {
-      const { data } = await supabase
-        .from('segment_contacts')
-        .select('lead_id, leads(*)')
-        .eq('segment_id', segmentId);
-      return (data || []).map((r: any) => r.leads).filter(Boolean);
+      // está usando -- é a única informação acionável que o admin recebe. O
+      // backend a devolve como 409, e a ErroApi traz o texto inteiro.
+      toast.error(e instanceof Error ? e.message : 'Erro ao excluir segmento');
     }
   };
 
-  const addLeadsToSegment = async (segmentId: string, leadIds: string[], segmentName: string) => {
-    const rows = leadIds.map(lid => ({ segment_id: segmentId, lead_id: lid }));
-    for (let i = 0; i < rows.length; i += 100) {
-      await supabase.from('segment_contacts').upsert(rows.slice(i, i + 100) as any, { onConflict: 'segment_id,lead_id' });
+  // A assinatura mantém `segmentType` porque cinco chamadas a passam; hoje o
+  // servidor resolve o tipo sozinho e o parâmetro não é mais usado.
+  const getSegmentContacts = async (segmentId: string, _segmentType?: string) => {
+    try {
+      return await contatosDoSegmento(segmentId);
+    } catch {
+      toast.error('Erro ao carregar contatos do segmento');
+      return [];
     }
-    toast.success(`${leadIds.length} contatos adicionados ao segmento "${segmentName}"`);
-    fetchSegments();
+  };
+
+  const addLeadsToSegment = async (
+    segmentId: string, leadIds: string[], segmentName: string,
+  ) => {
+    try {
+      await adicionarContatos(segmentId, leadIds);
+      toast.success(`${leadIds.length} contatos adicionados ao segmento "${segmentName}"`);
+      await fetchSegments();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao adicionar contatos');
+    }
   };
 
   return {

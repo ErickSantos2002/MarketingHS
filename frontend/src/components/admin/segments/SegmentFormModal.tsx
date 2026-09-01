@@ -14,8 +14,9 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
-import { supabase } from '@/integrations/supabase/client';
 import { useSegments, type Segment, type SegmentRule } from '@/hooks/useSegments';
+import { buscarContatos, previaDeRegras } from '@/lib/segmentos';
+import { listarTags } from '@/lib/contatos';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { STATUS_OPTIONS } from '@/components/admin/contacts/StatusBadge';
 
@@ -206,11 +207,9 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
 
   useEffect(() => {
     if (!open) return;
-    supabase
-      .from('tags')
-      .select('id, name')
-      .order('name')
-      .then(({ data }) => setTags(data || []));
+    listarTags()
+      .then(lista => setTags(lista.map(t => ({ id: t.id, name: t.nome }))))
+      .catch(() => setTags([]));
   }, [open]);
 
   useEffect(() => {
@@ -220,14 +219,13 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
     }
     const timer = setTimeout(async () => {
       setSearching(true);
-      const q = `%${searchQuery}%`;
-      const { data } = await supabase
-        .from('leads')
-        .select('id, nome, email, whatsapp, cargo, etiqueta')
-        .or(`nome.ilike.${q},email.ilike.${q},whatsapp.ilike.${q}`)
-        .limit(20);
-      setSearchResults(data || []);
-      setSearching(false);
+      try {
+        setSearchResults(await buscarContatos(searchQuery));
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery, type]);
@@ -261,34 +259,21 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
     // preview client-side aplicava um filtro diferente). preview_segment_rules
     // reusa o MESMO helper (build_segment_condition) que evaluate_segment_rules,
     // então o preview agora é exatamente o que o envio (send-campaign) resolve.
-    // RPC ainda não está em types.ts (Fase 5) — cast sancionado.
-    const { data, error } = await (supabase.rpc as any)('preview_segment_rules', {
-      p_rules: validRules,
-      p_logic: logicOperator,
-    });
-
-    if (error) {
-      console.error('preview_segment_rules error:', error);
+    // Uma chamada: o servidor devolve a contagem exata e a amostra de 5 nomes
+    // juntas. Antes eram a RPC e depois uma consulta em `leads` para resolver
+    // a amostra. A lista completa de leads continua sem trafegar, nem em
+    // segmentos grandes.
+    try {
+      const { total, amostra } = await previaDeRegras(validRules, logicOperator);
+      setPreviewLeads(amostra);
+      setPreviewCount(total);
+    } catch (e) {
+      console.error('prévia de segmento:', e);
       setPreviewLeads([]);
       setPreviewCount(0);
+    } finally {
       setPreviewing(false);
-      return;
     }
-
-    // A RPC devolve só os lead_ids (é deles que sai a contagem exata, mesmo
-    // padrão de evaluate_segment_rules em useSegments). Só as 5 primeiras
-    // linhas de `leads` são de fato buscadas — a lista completa de leads nunca
-    // trafega, nem em segmentos grandes.
-    const rows = (data || []) as { lead_id: string }[];
-    const ids = rows.map(r => r.lead_id).slice(0, 5);
-    if (ids.length > 0) {
-      const { data: leads } = await supabase.from('leads').select('id, nome, etiqueta').in('id', ids);
-      setPreviewLeads(leads || []);
-    } else {
-      setPreviewLeads([]);
-    }
-    setPreviewCount(rows.length);
-    setPreviewing(false);
   }, [type, rules, logicOperator]);
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import {
 import { X, ChevronDown, Download, Tag, Users, GitMerge, Trash2 } from 'lucide-react';
 import { statusEmLote, tagsEmLote, fundirContatos, excluirContato } from '@/lib/leitura';
 import { toast } from 'sonner';
+import { adicionarContatos, listarSegmentos } from '@/lib/segmentos';
 import { STATUS_OPTIONS, STATUS_COLORS } from './StatusBadge';
 import type { TagInfo, EnrichedLead } from '@/hooks/useContactsEnriched';
 import { getTagColor } from './TagsCell';
@@ -49,10 +50,14 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
-    // Segmentos são de outro lote e ainda não têm endpoint. A lista fica
-    // vazia e a ação "adicionar a segmento" some da barra até lá — melhor que
-    // um botão que estoura ao ser clicado.
-    setStaticSegments([]);
+    // Só segmento estático entra aqui: no dinâmico quem entra é decidido pelas
+    // regras, e o servidor recusa a inserção com 409. Oferecer o dinâmico na
+    // lista seria convidar para um erro.
+    listarSegmentos()
+      .then(lista => setStaticSegments(
+        lista.filter(s => s.type === 'static').map(s => ({ id: s.id, name: s.name })),
+      ))
+      .catch(() => setStaticSegments([]));
   }, []);
 
   if (selectedLeads.length === 0) return null;
@@ -206,12 +211,13 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
                   key={seg.id}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-sm text-left"
                   onClick={async () => {
-                    const rows = selectedLeads.map(l => ({ segment_id: seg.id, lead_id: l.id }));
-                    for (let i = 0; i < rows.length; i += 100) {
-                      throw new Error('Adicionar a segmento ainda não foi portado (lote de segmentos).');
+                    try {
+                      await adicionarContatos(seg.id, selectedLeads.map(l => l.id));
+                      toast.success(`${selectedLeads.length} contatos adicionados ao segmento "${seg.name}"`);
+                      onComplete();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : 'Erro ao adicionar ao segmento');
                     }
-                    toast.success(`${selectedLeads.length} contatos adicionados ao segmento "${seg.name}"`);
-                    onComplete();
                   }}
                 >
                   {seg.name}
