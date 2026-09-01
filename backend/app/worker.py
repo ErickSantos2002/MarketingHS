@@ -87,16 +87,23 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
     # (d) Montar e enviar.
     url = url_de_descadastro(settings.FRONTEND_URL, m.lead_id, email,
                              segredo_descadastro)
-    html = aplicar_merge_tags(
-        envio["body"] or "",
-        {"nome": envio["nome"], "empresa": envio["empresa"], "email": email},
-        url)
-    html = garantir_rodape(html, url)
+    contato = {"nome": envio["nome"], "empresa": envio["empresa"], "email": email}
+    html = garantir_rodape(aplicar_merge_tags(envio["body"] or "", contato, url), url)
+    # ⚠️ O ASSUNTO também leva merge tags. O campo da tela sugere isso
+    # explicitamente ("Ex: {{nome}}, confira esta novidade!"), e sem esta linha o
+    # contato recebe um e-mail com "Oi {{nome}}" na caixa de entrada — o
+    # esqueleto do template, no lugar mais visível que existe.
+    assunto = aplicar_merge_tags(envio["subject"] or "(sem assunto)", contato, url)
     resend_id = await resend.enviar(
         chave=chave, de=de, para=email,
-        assunto=envio["subject"] or "(sem assunto)",
+        assunto=assunto,
         html=html, texto=html_para_texto(html),
-        cabecalhos=cabecalhos_rfc8058(url))
+        cabecalhos=cabecalhos_rfc8058(url),
+        # Estes três nomes exatos são os que o webhook procura. Qualquer outro
+        # deixa a correlação no fallback do resend_email_id.
+        tags=[{"name": "send_id", "value": m.send_id},
+              {"name": "campaign_id", "value": m.campaign_id},
+              {"name": "lead_id", "value": m.lead_id}])
 
     # (e) Só agora sai da fila.
     await conn.execute(

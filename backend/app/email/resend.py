@@ -11,7 +11,8 @@ TIMEOUT = 30
 
 
 async def enviar(chave: str, de: str, para: str, assunto: str,
-                 html: str, texto: str, cabecalhos: dict) -> str:
+                 html: str, texto: str, cabecalhos: dict,
+                 tags: list[dict] | None = None) -> str:
     """Devolve o id do e-mail no Resend. Levanta em qualquer falha.
 
     ⚠️ Levantar é o certo aqui: quem chama é o worker, que sabe transformar
@@ -22,6 +23,16 @@ async def enviar(chave: str, de: str, para: str, assunto: str,
              "headers": cabecalhos}
     if texto:
         corpo["text"] = texto
+    if tags:
+        # As tags voltam nos eventos do webhook e são o que correlaciona o
+        # evento ao envio de forma EXATA. Sem elas a correlação depende do
+        # `resend_email_id`, que é o caminho mais fraco: ele não existe se o
+        # processo morrer entre o POST aqui e o UPDATE em campaign_sends.
+        #
+        # ⚠️ O Resend só aceita [a-zA-Z0-9_-] em nome e valor. UUID passa;
+        # qualquer coisa com ponto ou arroba, não — e a API recusa o ENVIO
+        # inteiro, não só a tag.
+        corpo["tags"] = tags
     async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
         resposta = await cliente.post(
             API, headers={"Authorization": f"Bearer {chave}"}, json=corpo)
