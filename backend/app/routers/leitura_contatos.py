@@ -250,6 +250,35 @@ async def tags_por_contato(dados: TagsDeContatosIn, _: Usuario = Depends(usuario
     return mapa
 
 
+@router.get("/busca")
+async def busca(
+    q: str = Query(min_length=2, max_length=100),
+    limite: int = Query(20, ge=1, le=100),
+    _: Usuario = Depends(usuario_atual),
+):
+    """Busca por nome, e-mail ou WhatsApp — o campo de procurar contato do
+    construtor de segmento estático.
+
+    ⚠️ Rota literal, declarada ANTES de `/{lead_id}`: na ordem inversa o
+    FastAPI casaria "busca" como se fosse um id e esta rota nunca seria
+    alcançada.
+
+    O `%` vai por parâmetro, não concatenado na query — e `ILIKE` com curinga
+    dos dois lados não usa índice, daí o limite obrigatório.
+    """
+    padrao = f"%{q}%"
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            """SELECT id::text, nome, email, whatsapp, cargo, etiqueta
+                 FROM leads
+                WHERE deleted_at IS NULL
+                  AND (nome ILIKE $1 OR email ILIKE $1 OR whatsapp ILIKE $1)
+                ORDER BY nome NULLS LAST
+                LIMIT $2""",
+            padrao, limite)
+    return [dict(l) for l in linhas]
+
+
 @router.get("/{lead_id}")
 async def ficha(lead_id: str, _: Usuario = Depends(usuario_atual)):
     """Lead, tags e notas numa volta só.

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
+from app.routers.leitura_contatos import COLUNAS_LEAD
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/segmentos", tags=["segmentos"])
@@ -31,6 +32,20 @@ class RegraIn(BaseModel):
     field: str
     operator: str
     value: str
+
+
+class PreviaIn(BaseModel):
+    regras: list[RegraIn] = Field(min_length=1)
+    logica: str = Field(default="and", pattern="^(and|or)$")
+
+
+class AudienciaIn(BaseModel):
+    incluir: list[str] = Field(default_factory=list)
+    excluir: list[str] = Field(default_factory=list)
+
+
+class ContatosEmLoteIn(BaseModel):
+    lead_ids: list[str] = Field(min_length=1, max_length=10000)
 
 
 class SegmentoIn(BaseModel):
@@ -184,3 +199,119 @@ async def excluir(segmento_id: str, _: Usuario = Depends(usuario_atual)):
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     if r.endswith(" 0"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Segmento não encontrado.")
+
+
+# ⚠️ As rotas literais (/previa, /audiencia) precisam ser declaradas antes das
+# paramétricas de mesma forma, ou o FastAPI casaria "previa" como se fosse um
+# id. Aqui não há colisão — /{segmento_id}/contatos tem outra profundidade —
+# mas a ordem segue a convenção do leitura_contatos para não virar armadilha
+# quando alguém acrescentar POST /{segmento_id}.
+@router.post("/previa")
+async def previa(dados: PreviaIn, _: Usuario = Depends(usuario_atual)):
+    """Quantos contatos batem com regras AINDA NÃO SALVAS, mais uma amostra.
+
+    `preview_segment_rules` reusa o MESMO `build_segment_condition` que
+    `evaluate_segment_rules` — é isso que faz o número mostrado no construtor
+    ser o número que a campanha vai enviar. Reimplementar a avaliação aqui
+    reabriria a divergência que já causou o defeito do campo `qualificacao`.
+
+    Uma chamada, não duas: a tela pedia a RPC e depois buscava os leads da
+    amostra. O JOIN abaixo devolve as duas coisas juntas, e a lista completa de
+    leads continua sem trafegar — só a amostra sai do banco.
+    """
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            "SELECT count(*) FROM preview_segment_rules($1::jsonb, $2)",
+            [r.model_dump() for r in dados.regras], dados.logica)
+        amostra = await conn.fetch(
+            """SELECT l.id::text, l.nome, l.etiqueta
+                 FROM preview_segment_rules($1::jsonb, $2) p
+                 JOIN leads l ON l.id = p.lead_id
+                WHERE l.deleted_at IS NULL
+                LIMIT 5""",
+            [r.model_dump() for r in dados.regras], dados.logica)
+    return {"total": total, "amostra": [dict(a) for a in amostra]}
+
+
+@router.post("/audiencia")
+async def audiencia(dados: AudienciaIn, _: Usuario = Depends(usuario_atual)):
+    """Tamanho e amostra do público de vários segmentos, com exclusões.
+
+    `count_segment_audience` e `resolve_segment_audience` são as MESMAS funções
+    que o envio de campanha usa. É o que garante que o número exibido no
+    assistente seja o número enviado — trocar por uma contagem própria aqui
+    seria criar duas verdades.
+    """
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            "SELECT count_segment_audience($1::uuid[], $2::uuid[])",
+            dados.incluir, dados.excluir)
+        amostra = await conn.fetch(
+            """SELECT COALESCE(l.nome, 'Sem nome') AS nome
+                 FROM resolve_segment_audience($1::uuid[], $2::uuid[], 3) a
+                 JOIN leads l ON l.id = a.lead_id""",
+            dados.incluir, dados.excluir)
+    return {"total": total or 0, "amostra_nomes": [a["nome"] for a in amostra]}
+
+
+@router.get("/{segmento_id}/contatos")
+async def contatos(segmento_id: str, _: Usuario = Depends(usuario_atual)):
+    """Os contatos do segmento, resolvendo os dois tipos no banco.
+
+    ⚠️ Para segmento dinâmico a tela chamava a RPC, recebia os ids e buscava os
+    leads em lotes de 200 — RPC mais N consultas. Um JOIN faz tudo.
+
+    ⚠️ O filtro `deleted_at IS NULL` é NOVO. A tela não filtrava, então um
+    contato excluído continuava aparecendo no segmento — e entraria numa
+    campanha. Para o segmento dinâmico isso já valia (as regras filtram), mas o
+    estático guarda o vínculo em segment_contacts, que a exclusão não apaga.
+    """
+    async with sessao(role="service_role") as conn:
+        tipo = await conn.fetchval(
+            "SELECT type FROM segments WHERE id = $1::uuid", segmento_id)
+        if tipo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Segmento não encontrado.")
+
+        if tipo == "dynamic":
+            linhas = await conn.fetch(
+                f"""SELECT {COLUNAS_LEAD} FROM evaluate_segment_rules($1::uuid) r
+                      JOIN leads l ON l.id = r.lead_id
+                     WHERE l.deleted_at IS NULL
+                     ORDER BY l.created_at DESC""", segmento_id)
+        else:
+            linhas = await conn.fetch(
+                f"""SELECT {COLUNAS_LEAD} FROM segment_contacts sc
+                      JOIN leads l ON l.id = sc.lead_id
+                     WHERE sc.segment_id = $1::uuid AND l.deleted_at IS NULL
+                     ORDER BY l.created_at DESC""", segmento_id)
+    return [dict(l) for l in linhas]
+
+
+@router.post("/{segmento_id}/contatos", status_code=status.HTTP_204_NO_CONTENT)
+async def adicionar_contatos(segmento_id: str, dados: ContatosEmLoteIn,
+                             _: Usuario = Depends(usuario_atual)):
+    """Adiciona contatos a um segmento estático — o que a barra de ações em
+    massa da tela de Contatos precisa.
+
+    ⚠️ Só faz sentido em segmento estático: o dinâmico não guarda membros, e
+    inserir em segment_contacts não mudaria nada do que ele devolve. Aceitar
+    calado seria mentir para quem clicou.
+    """
+    try:
+        async with sessao(role="service_role") as conn:
+            tipo = await conn.fetchval(
+                "SELECT type FROM segments WHERE id = $1::uuid", segmento_id)
+            if tipo is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                    "Segmento não encontrado.")
+            if tipo != "static":
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Este segmento é dinâmico: quem entra nele é decidido pelas "
+                    "regras, não na mão. Edite as regras do segmento.")
+            await conn.execute(
+                """INSERT INTO segment_contacts (segment_id, lead_id)
+                   SELECT $1::uuid, unnest($2::uuid[]) ON CONFLICT DO NOTHING""",
+                segmento_id, dados.lead_ids)
+    except asyncpg.exceptions.ForeignKeyViolationError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, CONTATO_INEXISTENTE)
