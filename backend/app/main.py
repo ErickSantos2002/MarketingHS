@@ -9,6 +9,7 @@ from app.config import settings
 from app.auth.router import router as auth_router
 from app.database import close_db, init_db
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
+from app.routers.campanhas import router as campanhas_router
 from app.routers.chaves import router as chaves_router
 from app.routers.configuracao import router as configuracao_router
 from app.routers.contatos import router as contatos_router
@@ -72,4 +73,5 @@ app.include_router(escrita_contatos_router)
 app.include_router(chaves_router)
 app.include_router(segmentos_router)
 app.include_router(templates_router)
+app.include_router(campanhas_router)
 app.include_router(publico_router)
