@@ -244,3 +244,39 @@ async def excluir(campanha_id: str, _: Usuario = Depends(usuario_atual)):
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     if r.endswith(" 0"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+
+
+@router.get("/{campanha_id}/audiencia")
+async def audiencia(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+    """Quantos contatos esta campanha atingiria hoje.
+
+    ⚠️ Chama `count_segment_audience` e `resolve_segment_audience` — as MESMAS
+    funções que o envio do 3B vai usar. É isso que faz o número do card ser o
+    número que sai. Uma contagem própria aqui viraria "o card dizia 500 e
+    saíram 480".
+
+    ⚠️ Sem segmento de inclusão, a audiência é a base inteira — e o enfileirador
+    aplica um teto de 5.000 nesse caminho. `teto_aplicado` avisa a tela para que
+    ela não prometa um número maior do que o envio entregaria.
+    """
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            """SELECT segment_ids::text[] AS incluir,
+                      excluded_segment_ids::text[] AS excluir
+                 FROM campaigns WHERE id = $1::uuid""", campanha_id)
+        if linha is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+
+        incluir, excluir = linha["incluir"] or [], linha["excluir"] or []
+        total = await conn.fetchval(
+            "SELECT count_segment_audience($1::uuid[], $2::uuid[])",
+            incluir, excluir)
+        amostra = await conn.fetch(
+            """SELECT COALESCE(l.nome, 'Sem nome') AS nome
+                 FROM resolve_segment_audience($1::uuid[], $2::uuid[], 3) a
+                 JOIN leads l ON l.id = a.lead_id""",
+            incluir, excluir)
+
+    return {"total": total or 0,
+            "amostra_nomes": [a["nome"] for a in amostra],
+            "teto_aplicado": len(incluir) == 0}
