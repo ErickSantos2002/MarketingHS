@@ -16,6 +16,7 @@ from app.routers.escrita_contatos import router as escrita_contatos_router
 from app.routers.leitura_contatos import router as leitura_contatos_router
 from app.routers.publico import router as publico_router
 from app.routers.segmentos import router as segmentos_router
+from app.routers.templates import router as templates_router
 from app.routers.usuarios import router as usuarios_router
 
 logging.basicConfig(level=logging.INFO)
@@ -70,4 +71,5 @@ app.include_router(leitura_contatos_router)
 app.include_router(escrita_contatos_router)
 app.include_router(chaves_router)
 app.include_router(segmentos_router)
+app.include_router(templates_router)
 app.include_router(publico_router)
