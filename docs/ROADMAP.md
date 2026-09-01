@@ -16,7 +16,7 @@ A spec que justifica esta ordem:
 | **1D** | **A porta pública** — chave de API, ingestão e leitura externa | 5 | ✅ **concluído** (31/08/2026) |
 | **2** | **Segmentos** — construtor de regras, audiência | 1 | ✅ **concluído** (01/09/2026) |
 | **3A** | **Campanhas e templates** — CRUD, audiência, acompanhamento (sem envio) | 0 | ✅ **concluído** (01/09/2026) |
-| **3B** | **O motor** — filas, worker, Resend, descadastro | 2 | 🟡 **código pronto** (01/09/2026), falta o primeiro envio real |
+| **3B** | **O motor** — filas, worker, Resend, descadastro | 2 | ✅ **concluído** (01/09/2026) — envio real adiado por decisão |
 | 3C | Retorno — webhook do Resend, métricas, agendamento, config do Resend, supressão na tela, metade pública de campaigns/templates-api | 6 | a fazer |
 | 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
 | 5 | Integrações HS — GrowthHS, DataCore, identidade, Meta CAPI | 6 | a fazer |
@@ -76,8 +76,15 @@ portão pegou. Foi criada, pública, e conferida no navegador: valida, descadast
 ao confirmar, e um token adulterado mostra "Link inválido" sem jogar o visitante
 no login.
 
-🟡 **Falta o primeiro envio real**, que depende de uma chave do Resend e de um
-domínio verificado. Script pronto em `~/marketinghs-configurar-resend.sh`.
+**O primeiro envio real foi ADIADO, por decisão do Erick** (01/09/2026): o
+sistema ainda não tem usuário, e configurar domínio e chave agora não paga o
+trabalho. Não é pendência do lote — é uma decisão consciente de quando ligar.
+
+Quando for a hora: `bash ~/marketinghs-configurar-resend.sh`, subir o worker
+(`python -m app.worker`) e mandar uma campanha para um contato de teste.
+
+⚠️ Enquanto a chave não existir, o worker **não consome a fila** — de propósito.
+Campanha enfileirada fica esperando, e nada é perdido.
 
 ## O lote 3A entregou
 

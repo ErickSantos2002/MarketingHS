@@ -5,24 +5,23 @@
 
 ## Onde paramos
 
-**Lote 3B — o motor — com o código pronto e conferido, faltando UMA coisa: o
-primeiro envio real.** Ele depende de uma chave do Resend e de um domínio
-verificado, e o script está pronto.
+**Lote 3B (O motor) concluído.** O envio de e-mail existe de ponta a ponta:
+enfileirador, fila com visibility timeout e fila-morta, worker que drena,
+montagem por destinatário, supressão respeitada e descadastro assinado
+funcionando na tela.
 
-### O que fazer agora, em três passos
+**O primeiro envio real foi adiado por decisão** (01/09/2026): o sistema ainda
+não tem usuário, e configurar domínio e chave do Resend agora não paga o
+trabalho. ⚠️ Enquanto a chave não existir, o worker **não consome a fila** — de
+propósito. Campanha enfileirada fica esperando, nada é perdido, nada mente.
+
+Quando for a hora, são três passos:
 
 ```bash
-# 1. gravar a chave do Resend e o remetente (pede os dois, não mostra na tela)
-bash ~/marketinghs-configurar-resend.sh
-
-# 2. subir o worker
+bash ~/marketinghs-configurar-resend.sh          # pede chave e remetente
 cd ~/github/MarketingHS/backend && ./.venv/bin/python -m app.worker
-
-# 3. na tela, criar uma campanha para UM contato de teste e enviar
+# na tela: campanha para UM contato de teste, enviar
 ```
-
-Confira que o e-mail chega, que as merge tags foram trocadas, que existe link de
-descadastro e que ele funciona. **Só então o 3B fecha.**
 
 ### O que já está de pé
 
