@@ -54,3 +54,72 @@ async def semear(conexao):
         return mensagens
 
     return _semear
+
+
+@pytest_asyncio.fixture
+async def cliente():
+    """Cliente ASGI, falando com o app de verdade — sem rede.
+
+    ⚠️ Diferente da fixture `conexao`, o que passa por aqui é GRAVADO: o app
+    pega a própria conexão do pool e comita. Quem usar este cliente limpa o que
+    escreveu, e a fixture `envio` abaixo faz isso.
+    """
+    import httpx
+    from app.main import app
+
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL — os testes de webhook exigem banco")
+    transporte = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transporte,
+                                 base_url="http://teste") as c:
+        yield c
+    await db.close_db()
+
+
+@pytest_asyncio.fixture
+async def segredo():
+    """Grava um RESEND_WEBHOOK_SECRET de teste e o devolve no formato whsec_."""
+    import base64
+    from app import integracoes
+
+    valor = "whsec_" + base64.b64encode(b"segredo-de-teste-do-webhook").decode()
+    await db.init_db()
+    anterior = await integracoes.ler_segredo("RESEND_WEBHOOK_SECRET")
+    await integracoes.gravar_segredo("RESEND_WEBHOOK_SECRET", valor)
+    yield valor
+    async with db.sessao(role="service_role") as conn:
+        if anterior:
+            await conn.execute(
+                "UPDATE integration_secrets SET value = $1 WHERE name = $2",
+                anterior, "RESEND_WEBHOOK_SECRET")
+        else:
+            await conn.execute(
+                "DELETE FROM integration_secrets WHERE name = $1",
+                "RESEND_WEBHOOK_SECRET")
+    integracoes.esquecer("RESEND_WEBHOOK_SECRET")
+
+
+@pytest_asyncio.fixture
+async def envio():
+    """Um `campaign_sends` de verdade, apagado no fim junto com tudo que os
+    testes escreveram a partir dele."""
+    await db.init_db()
+    async with db.sessao(role="service_role") as conn:
+        campanha = await conn.fetchval(
+            "INSERT INTO campaigns (name, channel, status) "
+            "VALUES ('teste de webhook', 'email', 'sending') RETURNING id")
+        lead = await conn.fetchval(
+            "INSERT INTO leads (nome, email, tipo) "
+            "VALUES ('Webhook', 'a@b.c', 'teste') RETURNING id")
+        send = await conn.fetchval(
+            "INSERT INTO campaign_sends (campaign_id, lead_id, channel, status, "
+            "resend_email_id) VALUES ($1, $2, 'email', 'sent', 're_abc') "
+            "RETURNING id", campanha, lead)
+    yield str(send)
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM email_events WHERE svix_id LIKE 'msg_%'")
+        await conn.execute("DELETE FROM email_suppressions WHERE email = 'a@b.c'")
+        await conn.execute("UPDATE campaigns SET status='failed' WHERE id=$1", campanha)
+        await conn.execute("DELETE FROM campaigns WHERE id = $1", campanha)
+        await conn.execute("DELETE FROM leads WHERE id = $1", lead)

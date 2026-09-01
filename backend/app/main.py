@@ -17,6 +17,7 @@ from app.routers.contatos import router as contatos_router
 from app.routers.escrita_contatos import router as escrita_contatos_router
 from app.routers.leitura_contatos import router as leitura_contatos_router
 from app.routers.publico import router as publico_router
+from app.routers.webhook import router as webhook_router
 from app.routers.segmentos import router as segmentos_router
 from app.routers.templates import router as templates_router
 from app.routers.usuarios import router as usuarios_router
@@ -77,3 +78,4 @@ app.include_router(templates_router)
 app.include_router(campanhas_router)
 app.include_router(envio_router)
 app.include_router(publico_router)
+app.include_router(webhook_router)
