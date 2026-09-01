@@ -1,4 +1,5 @@
-"""O worker: drena a fila de e-mail e promove as campanhas agendadas.
+"""O worker: drena a fila de e-mail, promove campanhas agendadas e roda as
+jornadas.
 
 Substitui o `pg_cron` por um laço `asyncio`, no padrão do `guardiao_crons.py` do
 HS.OS. Roda como processo separado (`python -m app.worker`) porque reiniciar a
@@ -36,6 +37,13 @@ REMETENTE_PADRAO = "MarketingHS <noreply@localhost>"
 # cada dois segundos, e a granularidade útil do agendamento é o minuto.
 AGENDADOR_INTERVALO = 60
 
+# As jornadas têm ritmo próprio: um `delay` de um minuto é a menor unidade que
+# o construtor oferece, então varrer com mais frequência que isso não adianta.
+JORNADAS_INTERVALO = 20
+JORNADAS_LOTE = 25
+JORNADAS_LEASE = 300
+EVENTOS_LOTE = 50
+
 _parar = asyncio.Event()
 
 
@@ -53,11 +61,22 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
     # É o que torna o reprocessamento inofensivo.
     # `campaigns.body` guarda o HTML exportado do Unlayer (o `design` é o JSON
     # do editor, que não se envia). Ver CampaignWizard: body = emailHtml.
+    #
+    # ⚠️ LEFT JOIN, não JOIN. E-mail de JORNADA não tem campanha — o nó
+    # `send_email` do fluxo cria a linha com `journey_run_id` e `campaign_id`
+    # nulo. Com JOIN a linha simplesmente não voltaria, o envio seria concluído
+    # como se já tivesse saído, e o fluxo pareceria funcionar enquanto ninguém
+    # recebia nada.
+    #
+    # O assunto e o corpo do e-mail de fluxo vêm do TEMPLATE que o nó aponta.
     envio = await conn.fetchrow(
-        """SELECT cs.status, c.status AS campanha, c.subject, c.body,
+        """SELECT cs.status, cs.journey_node_id, cs.journey_run_id::text,
+                  c.status AS campanha,
+                  COALESCE(c.subject, '')  AS subject,
+                  COALESCE(c.body, '')     AS body,
                   l.email, l.nome, l.empresa
              FROM campaign_sends cs
-             JOIN campaigns c ON c.id = cs.campaign_id
+             LEFT JOIN campaigns c ON c.id = cs.campaign_id
              JOIN leads l ON l.id = cs.lead_id
             WHERE cs.id = $1::uuid""",
         m.send_id)
@@ -65,14 +84,40 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
         await fila.concluir(conn, m.fila_id)
         return
 
-    # (b) A campanha ainda está enviando? Cancelada não deve continuar saindo.
-    if envio["campanha"] != "sending":
+    # (b) Se HÁ campanha, ela tem de estar enviando — cancelada não continua
+    # saindo. Se não há, é e-mail de fluxo e segue.
+    if envio["campanha"] is not None and envio["campanha"] != "sending":
         await conn.execute(
             """UPDATE campaign_sends SET status = 'failed', sent_at = now(),
                    error = 'campanha não está em envio'
                 WHERE id = $1::uuid AND status = 'pending'""", m.send_id)
         await fila.concluir(conn, m.fila_id)
         return
+
+    assunto_bruto, corpo_bruto = envio["subject"], envio["body"]
+    if envio["journey_run_id"] is not None:
+        # E-mail de fluxo: o conteúdo vem do template apontado pelo nó.
+        conteudo = await conn.fetchrow(
+            """SELECT n->'config'->>'subject' AS subject,
+                      t.html AS body
+                 FROM journey_runs r
+                 JOIN journeys j ON j.id = r.journey_id
+                 CROSS JOIN LATERAL jsonb_array_elements(j.nodes) AS n
+                 LEFT JOIN email_templates t
+                        ON t.id = (n->'config'->>'template_id')::uuid
+                WHERE r.id = $1::uuid AND n->>'id' = $2""",
+            envio["journey_run_id"], envio["journey_node_id"])
+        if conteudo is None or not (conteudo["body"] or "").strip():
+            # Sem template resolvido não há o que enviar. Falha visível: um
+            # e-mail vazio saindo seria pior que um envio marcado como falho.
+            await conn.execute(
+                """UPDATE campaign_sends SET status = 'failed', sent_at = now(),
+                       error = 'nó de fluxo sem template com conteúdo'
+                    WHERE id = $1::uuid AND status = 'pending'""", m.send_id)
+            await fila.concluir(conn, m.fila_id)
+            return
+        assunto_bruto = conteudo["subject"] or "(sem assunto)"
+        corpo_bruto = conteudo["body"]
 
     email = (envio["email"] or "").strip().lower()
 
@@ -92,12 +137,12 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
     url = url_de_descadastro(settings.FRONTEND_URL, m.lead_id, email,
                              segredo_descadastro)
     contato = {"nome": envio["nome"], "empresa": envio["empresa"], "email": email}
-    html = garantir_rodape(aplicar_merge_tags(envio["body"] or "", contato, url), url)
+    html = garantir_rodape(aplicar_merge_tags(corpo_bruto or "", contato, url), url)
     # ⚠️ O ASSUNTO também leva merge tags. O campo da tela sugere isso
     # explicitamente ("Ex: {{nome}}, confira esta novidade!"), e sem esta linha o
     # contato recebe um e-mail com "Oi {{nome}}" na caixa de entrada — o
     # esqueleto do template, no lugar mais visível que existe.
-    assunto = aplicar_merge_tags(envio["subject"] or "(sem assunto)", contato, url)
+    assunto = aplicar_merge_tags(assunto_bruto or "(sem assunto)", contato, url)
     resend_id = await resend.enviar(
         chave=chave, de=de, para=email,
         assunto=assunto,
@@ -105,9 +150,13 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
         cabecalhos=cabecalhos_rfc8058(url),
         # Estes três nomes exatos são os que o webhook procura. Qualquer outro
         # deixa a correlação no fallback do resend_email_id.
-        tags=[{"name": "send_id", "value": m.send_id},
-              {"name": "campaign_id", "value": m.campaign_id},
-              {"name": "lead_id", "value": m.lead_id}])
+        #
+        # ⚠️ Tag de valor nulo é OMITIDA. E-mail de jornada não tem campanha, e
+        # o Resend recusa o ENVIO INTEIRO — não só a tag — quando um valor não
+        # é string. O `send_id` sozinho já correlaciona de forma exata.
+        tags=[{"name": nome, "value": valor} for nome, valor in
+              (("send_id", m.send_id), ("campaign_id", m.campaign_id),
+               ("lead_id", m.lead_id)) if valor])
 
     # (e) Só agora sai da fila.
     await conn.execute(
@@ -169,8 +218,10 @@ async def _tick() -> int:
     # O fechamento é do banco: só ele sabe se `pending` chegou a zero.
     async with sessao(role="service_role") as conn:
         for campanha in campanhas:
-            await conn.fetchval("SELECT finalize_campaign_if_drained($1::uuid)",
-                                campanha)
+            # ⚠️ E-mail de fluxo não tem campanha para fechar.
+            if campanha is not None:
+                await conn.fetchval(
+                    "SELECT finalize_campaign_if_drained($1::uuid)", campanha)
     return len(mensagens)
 
 
@@ -204,11 +255,92 @@ async def _promover_agendadas() -> int:
     return promovidas
 
 
+async def _rodar_jornadas() -> dict:
+    """Uma passada das jornadas, em três blocos — a mesma ordem do original.
+
+    A) matrícula por segmento — quem passou a atender às regras entra
+    B) a fila de eventos — acorda quem esperava e matricula quem entra por evento
+    C) os runs vencidos — o executor de nós
+
+    ⚠️ A ordem importa: matricular antes de rodar faz o contato novo já andar
+    nesta passada, em vez de esperar a próxima.
+    """
+    from app.jornadas import executor
+
+    resumo = {"matriculados": 0, "acordados": 0, "runs": 0}
+
+    # ---- A. Matrícula por segmento ------------------------------------------
+    async with sessao(role="service_role") as conn:
+        fluxos = await conn.fetch(
+            "SELECT id FROM journeys WHERE status = 'active' AND entry_type = 'segment'")
+        for f in fluxos:
+            try:
+                n = await conn.fetchval(
+                    "SELECT journey_enroll_segment($1::uuid, $2)", f["id"], 200)
+                resumo["matriculados"] += int(n or 0)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("matrícula do fluxo %s falhou: %s", f["id"], e)
+
+    # ---- B. A fila de eventos -----------------------------------------------
+    # ⚠️ O trigger só INSERE aqui; o trabalho de acordar fluxos é nosso, fora da
+    # transação de quem gravou o evento.
+    async with sessao(role="service_role") as conn:
+        eventos = await conn.fetch(
+            """DELETE FROM journey_events
+                WHERE id IN (SELECT id FROM journey_events
+                              WHERE visivel_em <= now()
+                              ORDER BY id LIMIT $1
+                              FOR UPDATE SKIP LOCKED)
+              RETURNING lead_id::text, event_type, occurred_at, metadata""",
+            EVENTOS_LOTE)
+        for e in eventos:
+            try:
+                acordados = await conn.fetchval(
+                    "SELECT journey_wake_on_event($1::uuid, $2, $3::timestamptz, $4::jsonb)",
+                    e["lead_id"], e["event_type"], e["occurred_at"],
+                    e["metadata"] or {})
+                if isinstance(acordados, str):
+                    import json as _json
+                    acordados = _json.loads(acordados)
+                resumo["acordados"] += int((acordados or {}).get("woken") or 0)
+                n = await conn.fetchval(
+                    "SELECT journey_enroll_event($1::uuid, $2)",
+                    e["lead_id"], e["event_type"])
+                resumo["matriculados"] += int(n or 0)
+            except Exception as exc:  # noqa: BLE001
+                # ⚠️ O evento já saiu da fila (o DELETE ... RETURNING é o claim).
+                # Perder um evento é ruim, mas repô-lo numa transação que já
+                # falhou é pior — o log é o rastro.
+                logger.warning("evento de jornada %s/%s falhou: %s",
+                               e["lead_id"], e["event_type"], exc)
+
+    # ---- C. Os runs vencidos ------------------------------------------------
+    async with sessao(role="service_role") as conn:
+        runs = await conn.fetch(
+            "SELECT * FROM journey_claim_due_runs($1, $2)",
+            JORNADAS_LOTE, JORNADAS_LEASE)
+    for linha in runs:
+        run = {"run_id": str(linha["run_id"]), "journey_id": str(linha["journey_id"]),
+               "lead_id": str(linha["lead_id"]),
+               "current_node_id": linha["current_node_id"], "state": linha["state"],
+               "waiting_event": linha["waiting_event"], "context": linha["context"],
+               "lock_token": str(linha["lock_token"]), "nodes": linha["nodes"],
+               "reentry": linha["reentry"]}
+        try:
+            async with sessao(role="service_role") as conn:
+                await executor.rodar_cadeia(conn, run)
+            resumo["runs"] += 1
+        except Exception:  # noqa: BLE001 — um run não derruba os outros
+            logger.exception("falha ao rodar a jornada do run %s", run["run_id"])
+    return resumo
+
+
 async def principal() -> None:
     await init_db()
     logger.info("worker no ar — lote de %s, intervalo de %ss",
                 settings.FILA_LOTE, settings.WORKER_INTERVALO_SEGUNDOS)
     proximo_agendador = 0.0
+    proximo_jornadas = 0.0
     try:
         while not _parar.is_set():
             agora = asyncio.get_running_loop().time()
@@ -218,6 +350,14 @@ async def principal() -> None:
                     await _promover_agendadas()
                 except Exception:  # noqa: BLE001
                     logger.exception("falha na passada do agendador")
+            if agora >= proximo_jornadas:
+                proximo_jornadas = agora + JORNADAS_INTERVALO
+                try:
+                    r = await _rodar_jornadas()
+                    if any(r.values()):
+                        logger.info("jornadas: %s", r)
+                except Exception:  # noqa: BLE001
+                    logger.exception("falha na passada das jornadas")
             try:
                 tratadas = await _tick()
             except Exception:  # noqa: BLE001 — o laço não morre por uma passada
