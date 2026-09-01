@@ -5,17 +5,15 @@
 
 ## Onde paramos
 
-**Lote 3B (O motor) concluído.** O envio de e-mail existe de ponta a ponta:
-enfileirador, fila com visibility timeout e fila-morta, worker que drena,
-montagem por destinatário, supressão respeitada e descadastro assinado
-funcionando na tela.
+**O lote 3 fechou.** Campanhas, templates, o motor de envio e o retorno estão
+todos de pé. Falta uma coisa só, e é uma decisão, não um defeito: **o primeiro
+envio real** — adiado em 01/09/2026 porque o sistema ainda não tem usuário e
+configurar domínio e chave do Resend agora não paga o trabalho.
 
-**O primeiro envio real foi adiado por decisão** (01/09/2026): o sistema ainda
-não tem usuário, e configurar domínio e chave do Resend agora não paga o
-trabalho. ⚠️ Enquanto a chave não existir, o worker **não consome a fila** — de
-propósito. Campanha enfileirada fica esperando, nada é perdido, nada mente.
+⚠️ Enquanto a chave não existir, o worker **não consome a fila** — de propósito.
+Campanha enfileirada fica esperando, nada é perdido, nada mente.
 
-Quando for a hora, são três passos:
+Quando for a hora:
 
 ```bash
 bash ~/marketinghs-configurar-resend.sh          # pede chave e remetente
@@ -23,55 +21,50 @@ cd ~/github/MarketingHS/backend && ./.venv/bin/python -m app.worker
 # na tela: campanha para UM contato de teste, enviar
 ```
 
-### O que já está de pé
+### O que o lote 3 deixou pronto
 
-`pgmq` virou `email_send_queue` (tabela + `FOR UPDATE SKIP LOCKED`), `pg_cron`
-virou laço `asyncio` no worker, `supabase_vault` virou `integration_secrets`, e
-o `invoke_edge_function` não voltou. **17 testes** cobrem o motor.
+| | |
+|---|---|
+| **3A** | CRUD de campanha e template, audiência ao vivo, acompanhamento |
+| **3B** | Fila (visibility timeout, recuo, fila-morta), worker, montagem por destinatário, descadastro assinado |
+| **3C** | Webhook do Resend, agendador, API pública, config do Resend e supressão pela tela |
 
-Provado sem enviar um byte:
+**28 testes** cobrem o motor e o webhook — as duas partes que a spec manda
+nascer com teste automatizado. `pytest` inteiro: 55.
 
-- **modo degradado**: sem `RESEND_API_KEY` o worker fica de pé, avisa e **não**
-  consome a fila. Fingir que enviou seria o pior desfecho — as linhas sairiam de
-  `pending`, a campanha fecharia como enviada e ninguém receberia nada.
-- **pipeline inteiro** com o Resend substituído: 3 mensagens, 2 enviadas, 1
-  virando `suppressed` (não `failed`), fila a zero, campanha fechada pelo
-  `finalize` do banco, cabeçalhos RFC 8058 com one-click.
-- **recuperação de órfãs**: fila apagada com as linhas `pending` de pé, e o
-  re-enfileiramento republicou as 3 sem criar nenhuma duplicata.
-- **as duas pontas do HMAC concordam**: o token do nosso worker foi conferido
-  contra o `computeToken` do `email-unsubscribe/index.ts` **rodando de verdade**
-  — endereço comum, com acento e com maiúsculas.
+### O que o portão pegou nestes lotes, e o plano não
 
-### As duas coisas que o portão pegou
+Vale ler antes do próximo lote, porque o padrão se repete:
 
-**A página `/descadastrar` não existia.** O worker assina um link para
-`{FRONTEND_URL}/descadastrar` e essa rota não estava no `App.tsx` — todo link de
-descadastro daria 404. Foi criada, pública, e conferida clicando: valida sem
-descadastrar (RFC 8058), descadastra ao confirmar, e token adulterado mostra
-"Link inválido" **sem** jogar o visitante no login.
+1. **A rota `/descadastrar` não existia.** O worker assinava um link para ela em
+   todo e-mail e daria 404.
+2. **`campaigns-api` e `templates-api` também serviam integrador externo** —
+   portar as telas não as tornou órfãs.
+3. **O webhook estava sob o limite de taxa de `/publico`** (30/min por IP). Uma
+   campanha de mil e-mails geraria milhares de eventos, e o Resend levaria 429 e
+   re-tentaria por 10 horas.
+4. **As rotas de supressão aceitavam usuário sem papel**, que poderia desfazer
+   descadastro e hard bounce.
+5. **A documentação ensinava URLs mortas** — três vezes: a tela de Documentação
+   da API, o `dnmarketing-api.yaml`, e o exemplo da merge tag no editor.
 
-**`process-email-queue` não existe.** Sete arquivos a citam e ela não está no
-repositório nem no histórico do git. Toda a lógica por destinatário foi derivada
-de quem a verifica. Está registrado no plano do 3B, tabela por tabela.
+Nenhum desses estava no plano. Todos apareceram porque o portão tem três partes
+e a terceira é abrir no navegador.
 
-## O próximo passo, depois do envio
+## O próximo passo
 
-**Lote 3C.** O que ficou de fora:
+**Lote 4 (Jornadas)** ou **lote 5 (Integrações HS)**. O 4 depende do motor, que
+agora existe; o 5 traz os 2.077 clientes do DataCore e ⚠️ **exige trocar a senha
+do superusuário do Postgres antes**.
 
-- **webhook do Resend** — abertura e clique não voltam sem ele. Assinatura Svix:
-  HMAC-SHA256 sobre `"{svix-id}.{svix-timestamp}.{corpo}"`, chave = base64 do
-  `RESEND_WEBHOOK_SECRET` sem o prefixo `whsec_`, janela anti-replay de 5 min.
-- **agendamento.** ⚠️ `promote_scheduled_campaigns` está quebrada e o defeito é
-  latente: chama `invoke_edge_function`, que o lote 0 apagou. Devolve 0 sem erro
-  hoje porque o laço não roda sem campanha agendada; estoura com
-  `UndefinedFunctionError` no instante em que uma vence. O conserto é o
-  agendador Python fazer a seleção e chamar `/campanhas/{id}/enviar` direto — é
-  isso que apaga a indireção em vez de portá-la.
-- **a tela de configuração do Resend** (`resend-config`, 568 linhas) e a **lista
-  de supressão** na interface.
-- **a metade pública de `campaigns-api` e `templates-api`**, que o 3A descobriu
-  que ainda não tinha substituto.
+Para o lote 4, o que já está levantado: as quatro funções de fila de jornada
+(`journey_queue_read`, `journey_queue_delete`, `journey_enqueue_email`,
+`fn_contact_event_to_journey_queue`) e a `evaluate_automation_on_etiqueta` foram
+removidas do schema no lote 0 e precisam voltar em Python. A tabela de fila
+`journey_events` **não existe** — o 3B criou só a de e-mail, de propósito. As
+funções de jornada que SOBREVIVERAM (`journey_claim_due_runs`,
+`journey_enroll_event`, `journey_wake_on_event`, `validate_journey_graph`) não
+se reimplementam.
 
 ### Lote 2 (Segmentos), antes disso
 

@@ -17,7 +17,7 @@ A spec que justifica esta ordem:
 | **2** | **Segmentos** — construtor de regras, audiência | 1 | ✅ **concluído** (01/09/2026) |
 | **3A** | **Campanhas e templates** — CRUD, audiência, acompanhamento (sem envio) | 0 | ✅ **concluído** (01/09/2026) |
 | **3B** | **O motor** — filas, worker, Resend, descadastro | 2 | ✅ **concluído** (01/09/2026) — envio real adiado por decisão |
-| 3C | Retorno — webhook do Resend, métricas, agendamento, config do Resend, supressão na tela, metade pública de campaigns/templates-api | 6 | a fazer |
+| **3C** | **O retorno** — webhook, agendamento, API pública, config e supressão | 4 | ✅ **concluído** (01/09/2026) |
 | 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
 | 5 | Integrações HS — GrowthHS, DataCore, identidade, Meta CAPI | 6 | a fazer |
 | 6 | Analytics + IA | 4 | a fazer |
@@ -31,9 +31,9 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas          : 16/48  (send-campaign e email-unsubscribe saíram no 3B)
-telas migradas              : 25      (a página pública de descadastro é nova)
-acesso direto ao banco      : 51 pontos  (eram 68 antes do 3A, 87 antes do lote 2, 153 antes do 1B)
+functions portadas          : 18/48
+telas migradas              : 27
+acesso direto ao banco      : 48 pontos  (eram 51 antes do 3C, 68 antes do 3A, 153 antes do 1B)
 ```
 
 ⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
@@ -45,6 +45,37 @@ de quanto trabalho falta: é mais que o dobro.
 lote 2. É outro 68 — este é medido pelo comando multilinha, o da spec era a
 contagem errada de linha única no início de tudo. Não é sinal de que nada andou:
 eram 153.
+
+## O lote 3C entregou — e o lote 3 fechou
+
+O retorno: o que acontece com o e-mail depois de sair volta para dentro.
+
+**O webhook do Resend**, com dez testes. A assinatura Svix é provada
+localmente calculando o HMAC com o mesmo segredo — mesmo método que provou o
+HMAC do descadastro no 3B. Cobre o dedupe (evento repetido devolve 200, porque
+500 faria o Svix reentregar por 10 horas), o avanço monotônico de status
+(`delivered` tardio não rebaixa `opened`; `opened` tardio não sobrescreve
+`bounced`), a supressão automática só em hard bounce, e a escada de degradação
+para evento de campanha excluída.
+
+**O agendador.** `promote_scheduled_campaigns` chamava `invoke_edge_function`,
+apagada no lote 0 — defeito latente que só quebraria em produção, no instante em
+que uma campanha vencesse. Agora ela só seleciona, e quem dispara é o laço
+`asyncio` do worker, reusando o MESMO enfileirador da rota e da API pública.
+
+**A metade pública** de campanhas e templates, que o 3A descobriu faltando —
+com isso `campaigns-api` e `templates-api` saíram da pasta. **A configuração do
+Resend** pela tela (938 linhas viraram 181) e **a lista de supressão**.
+
+⚠️ **Dois defeitos que o portão pegou, não o plano:**
+
+- o webhook ficava sob o limite de taxa de `/publico` (30/min por IP). Uma
+  campanha de mil e-mails gera milhares de eventos, e o Resend levaria 429 e
+  re-tentaria por 10 horas. Isento agora — a assinatura Svix é a proteção dele.
+- as três rotas de supressão estavam em `usuario_atual`, e este sistema tem
+  usuário autenticado sem papel. Ele poderia ler a lista inteira (que diz quem
+  marcou a gente como spam) e REMOVER supressões, desfazendo descadastro e hard
+  bounce. Todas em `admin_atual`, provado com um token sem papel.
 
 ## O lote 3B entregou
 
