@@ -11,3 +11,6 @@ uvicorn[standard]>=0.30.0
 
 # teste — só app/auth/security.py neste lote (ver Restrições globais)
 pytest>=8.0.0
+# O motor de fila do lote 3B é assíncrono e é o único lugar com teste
+# automatizado — a spec exige. Sem isto os testes dele nem coletam.
+pytest-asyncio>=0.24.0
