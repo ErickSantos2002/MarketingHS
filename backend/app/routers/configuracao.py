@@ -147,9 +147,16 @@ async def listar_supressoes(
     busca: str | None = Query(None, alias="q"),
     pagina: int = Query(1, alias="page", ge=1),
     limite: int = Query(20, alias="limit", ge=1, le=100),
-    _: Usuario = Depends(usuario_atual),
+    _: Usuario = Depends(admin_atual),
 ):
-    """Lista paginada, com busca por endereço."""
+    """Lista paginada, com busca por endereço.
+
+    ⚠️ `admin_atual`, não `usuario_atual`. Um usuário autenticado sem papel
+    (`sem_papel`, o que existe neste sistema) poderia paginar a lista inteira —
+    e ela não é só uma lista de endereços: o `reason` diz quem marcou a gente
+    como spam e quem deu hard bounce. É informação sobre comportamento, mais
+    sensível que a agenda de contatos.
+    """
     padrao = f"%{busca.strip()}%" if busca and busca.strip() else None
     async with sessao(role="service_role") as conn:
         total = await conn.fetchval(
@@ -171,8 +178,11 @@ async def listar_supressoes(
 
 
 @router.post("/supressoes", status_code=status.HTTP_201_CREATED)
-async def suprimir(dados: SupressaoIn, _: Usuario = Depends(usuario_atual)):
+async def suprimir(dados: SupressaoIn, _: Usuario = Depends(admin_atual)):
     """Supressão manual, feita pelo admin.
+
+    ⚠️ `admin_atual`: suprimir bloqueia um endereço de receber qualquer
+    campanha, para sempre, e a tela vive em Configurações.
 
     ⚠️ Endereço já suprimido devolve 200 com `ja_existia`, não 409. Suprimir é
     idempotente por natureza: quem clica quer o endereço fora da lista de envio,
@@ -193,15 +203,92 @@ async def suprimir(dados: SupressaoIn, _: Usuario = Depends(usuario_atual)):
 
 
 @router.delete("/supressoes/{supressao_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remover_supressao(supressao_id: str, _: Usuario = Depends(usuario_atual)):
+async def remover_supressao(supressao_id: str, _: Usuario = Depends(admin_atual)):
     """Tira o endereço da lista — ele volta a poder receber campanha.
 
-    ⚠️ Isso desfaz também bounce e reclamação, que vieram do provedor. Remover
-    um endereço que deu hard bounce faz o e-mail ser tentado de novo e a
-    reputação do remetente piorar. É decisão do admin, mas a tela avisa.
+    ⚠️ `admin_atual`, e aqui é o caso mais grave dos três: isso desfaz também
+    bounce e reclamação, que vieram do provedor. Remover um endereço que pediu
+    descadastro o faz voltar a receber e-mail — o oposto do que ele pediu — e
+    remover um hard bounce faz o envio ser tentado de novo, piorando a
+    reputação do remetente. É decisão do admin, e a tela avisa antes.
     """
     async with sessao(role="service_role") as conn:
         r = await conn.execute(
             "DELETE FROM email_suppressions WHERE id = $1::uuid", supressao_id)
     if r.endswith(" 0"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Supressão não encontrada.")
+
+
+# ── Configuração do Resend ───────────────────────────────────────────────────
+# Os segredos moram em `integration_secrets` (ver app/integracoes.py), não no
+# repositório e não no .env de produção.
+
+class ResendIn(BaseModel):
+    # Todos opcionais: a tela grava só o que o admin preencheu. Campo ausente
+    # NÃO apaga o segredo guardado.
+    api_key: str | None = None
+    email_from: str | None = None
+    unsubscribe_secret: str | None = None
+    webhook_secret: str | None = None
+
+
+SEGREDOS_RESEND = {
+    "api_key": "RESEND_API_KEY",
+    "email_from": "EMAIL_FROM",
+    "unsubscribe_secret": "UNSUBSCRIBE_SECRET",
+    "webhook_secret": "RESEND_WEBHOOK_SECRET",
+}
+
+
+@router.get("/config/resend")
+async def ler_config_resend(_: Usuario = Depends(admin_atual)):
+    """O que está configurado — NUNCA o valor.
+
+    ⚠️ Devolver o valor colocaria a RESEND_API_KEY no HTML de qualquer admin
+    logado, e num log de proxy no caminho. A tela só precisa saber se o segredo
+    existe; os últimos quatro caracteres da chave bastam para a pessoa
+    reconhecer qual é.
+
+    ⚠️ `EMAIL_FROM` é a exceção e volta inteiro: não é segredo, é o endereço que
+    aparece na caixa de entrada de quem recebe.
+    """
+    from app.integracoes import ler_segredo
+
+    valores = {campo: await ler_segredo(nome)
+               for campo, nome in SEGREDOS_RESEND.items()}
+    chave = valores["api_key"] or ""
+    return {
+        "resend_api_key": {"configurado": bool(chave),
+                           "ultimos4": chave[-4:] if len(chave) >= 4 else None},
+        "email_from": valores["email_from"],
+        "unsubscribe_secret": {"configurado": bool(valores["unsubscribe_secret"])},
+        "webhook_secret": {"configurado": bool(valores["webhook_secret"])},
+    }
+
+
+@router.put("/config/resend")
+async def gravar_config_resend(dados: ResendIn, _: Usuario = Depends(admin_atual)):
+    """Grava só o que veio preenchido.
+
+    ⚠️ `exclude_unset` não basta aqui: a tela manda campo vazio quando o admin
+    não digitou nada naquele input. String vazia é "não mexi", não "apague" —
+    apagar a RESEND_API_KEY por engano pararia todo envio em silêncio.
+    """
+    from app.integracoes import gravar_segredo
+
+    if dados.webhook_secret and not dados.webhook_secret.startswith("whsec_"):
+        # A chave do HMAC é o base64 do segredo SEM o prefixo. Um valor sem
+        # `whsec_` faz toda assinatura falhar e os eventos do Resend serem
+        # rejeitados em silêncio — melhor recusar aqui.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            'O segredo do webhook começa com "whsec_" — é o signing secret que '
+            "o Resend mostra ao criar o webhook.")
+
+    gravados = []
+    for campo, nome in SEGREDOS_RESEND.items():
+        valor = getattr(dados, campo)
+        if valor and valor.strip():
+            await gravar_segredo(nome, valor.strip())
+            gravados.append(campo)
+    return {"gravados": gravados}
