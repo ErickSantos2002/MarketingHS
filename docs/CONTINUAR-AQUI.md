@@ -1,20 +1,50 @@
 # Continuar aqui
 
-**Atualizado:** 31 de agosto de 2026
+**Atualizado:** 1º de setembro de 2026
 **Branch:** `reconstrucao` — **ainda não pushada**
 
 ## Onde paramos
 
-**Lote 1D (A porta pública) concluído**, em cima do 1C, 1B, 1A e do lote 0.
+**Lote 2 (Segmentos) concluído**, em cima do 1D, 1C, 1B, 1A e do lote 0.
+
+Segmento funciona de ponta a ponta pela tela: criar estático escolhendo contatos
+na busca, criar dinâmico montando regras com a prévia contando ao vivo, editar,
+duplicar, ver a lista de contatos, e excluir — com a guarda do banco recusando
+quando o segmento está em uso e mostrando **qual campanha** o usa.
+
+Tudo conferido no navegador, clicando: a lista com as contagens certas, a gaveta
+de contatos, a prévia mostrando "1 contato — Carla Menezes" enquanto a regra era
+montada, o salvamento, o 409 da exclusão aparecendo como aviso na tela, e a
+barra de ações em massa inserindo um contato novo (confirmado no banco).
+
+A API pública `/publico/segmentos` substituiu a `segments-api`, com escopo de
+chave aplicado nos dois sentidos.
+
+O acesso direto ao banco caiu de 87 para **68 pontos**.
+
+### O que valeu a pena e não estava no plano
+
+O portão encontrou **duas chamadas mortas que nenhuma tela fazia**: a tela de
+Documentação da API e a especificação OpenAPI pública ainda ensinavam
+`/segments-api` aos integradores. Portar a tela não bastava — quem integra lê a
+documentação, não o código. As duas foram atualizadas.
+
+Também virou 400 (com mensagem) o que era 500 quando alguém manda um `lead_id`
+que não existe, e duplicar segmento estático passou a levar os membros junto: a
+tela duplicava com a lista vazia, devolvendo uma casca.
+
+### Lote 1D (A porta pública), antes disso
 
 A autenticação por chave de API existe: criar chave devolve a chave crua uma vez
 e nunca mais, o escopo é aplicado nos dois sentidos, chave inválida e ausente
 dão 401. Isso **destrava as 23 functions restantes** que dependiam dela.
 
-⚠️ **Pendência honesta:** a tela de chaves não foi clicada no navegador. O código
-está portado, tipado e compilando, e os endpoints foram verificados por HTTP —
-mas um overlay de outra aba bloqueou o clique depois de três tentativas, e o
-portão exige o clique. Conferir antes de considerar a tela fechada.
+⚠️ **Pendência honesta que continua aberta:** a tela de chaves nunca foi clicada
+no navegador. O código está portado, tipado e compilando, e os endpoints foram
+verificados por HTTP — mas um overlay de outra aba bloqueou o clique, e o portão
+exige o clique. O lote 2 usou chaves de API de verdade contra os endpoints
+públicos, o que aumenta a confiança no backend, mas **não** substitui abrir a
+tela de Configurações → API Keys e criar uma chave clicando.
 
 ### Lote 1C (Escrita), antes disso
 
@@ -56,26 +86,29 @@ verdade, conferido no navegador com Playwright e não só por teste:
 
 ## O próximo passo
 
-**Executar o lote 2 (Segmentos).** O plano está escrito e revisado em
-`docs/superpowers/plans/2026-08-31-marketinghs-lote-2-segmentos.md` — 6 tarefas,
-com código real e duas suposições já verificadas contra o banco.
+**Executar o lote 3 (Campanhas + o motor).** É o maior valor de negócio do
+projeto e a parte que a spec diz nascer com teste automatizado — um e-mail
+enviado duas vezes para a base inteira queima o domínio.
 
-Ele destrava o lote 3 (Campanhas), que é o maior valor de negócio.
+⚠️ **O plano do lote 3 ainda não está escrito.** Um plano por lote é o
+combinado, e ele merece atenção extra: são **14 funções de banco e 2 triggers** a
+reimplementar em Python, não 9 como a spec estimou. Duas filas
+(`email_send_queue` e `journey_events`) viram tabela comum com
+`FOR UPDATE SKIP LOCKED`, e o agendador vira laço `asyncio` no `worker/`, que
+está vazio até aqui.
 
-### O panorama depois dele
+O lote 2 entregou o que o 3 precisava: campanha já tem como escolher público.
+`useSegmentAudience` e `SegmentMultiSelect` funcionam contra a API própria, e a
+contagem que o assistente de campanha mostra vem das mesmas funções que o envio
+usa.
 
-O lote 1 acabou. Com a chave de API existindo, os próximos lotes deixam de
-esbarrar em autenticação — as 23 functions que dependiam dela estão livres.
+### O panorama
 
-Candidatos, por valor:
-
-- **Lote 2 (Segmentos)** — 1 function, e é o que a campanha precisa para
-  escolher público. Pequeno e destrava o lote 3.
-- **Lote 3 (Campanhas + o motor)** — o maior valor de negócio e a parte que a
-  spec diz nascer com teste automatizado. São 14 funções de banco a
-  reimplementar em Python, não 9 como a spec estimou.
+- **Lote 3 (Campanhas + o motor)** — o maior valor, e o único que nasce com
+  teste automatizado. Depende do `worker/`, que ainda não existe.
 - **Lote 5 (Integrações HS)** — handoff para o GrowthHS e os 2.077 clientes do
   DataCore. ⚠️ Exige trocar a senha do superusuário antes.
+- **Lote 4 (Jornadas)** — depende do motor do lote 3.
 
 ### O que o 1C fez, para referência
 
@@ -102,13 +135,17 @@ Uma decisão que nasce no 1B: a lista hoje ordena por `updated_at`, e recalcular
 scores carimba esse campo em toda a base de uma vez, embaralhando a ordem.
 Provavelmente deve passar a ordenar por `created_at`.
 
-## Antes de começar, três coisas do Erick
+## Antes de começar, o que depende do Erick
 
-1. Cadastrar `[marketinghs]` no `~/.config/bancos/admin.toml` e rodar
-   `criar_leitura.py marketinghs` — é o que faz `bancos.consultar` funcionar
+1. ~~Cadastrar `[marketinghs]` no cadastro de bancos~~ — **feito**, o apelido
+   já responde a `bancos.consultar`
 2. Preencher `POSTGRES_HOST_INTERNO` em `~/marketinghs.env`
-3. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
-   Está na spec e é intencional, mas nunca foi feito.
+3. **Trocar a senha do superusuário do Postgres** — obrigatório antes do lote 5,
+   não bloqueia o 3
+4. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
+   Está na spec e é intencional, mas nunca foi feito. ⚠️ Antes de pushar, ver o
+   `SETUP-CLAUDE.md` (não versionado): o `.env` da dn.ia com credenciais do
+   Supabase está no histórico do git desde o commit inicial do remix.
 
 ## Como subir o que existe
 

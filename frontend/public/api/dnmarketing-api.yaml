@@ -168,6 +168,37 @@ components:
         error:
           type: string
 
+    Segmento:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [dynamic, static]
+        rules:
+          type: array
+          items:
+            type: object
+        logic:
+          type: string
+          enum: [and, or]
+        contacts_count:
+          type: integer
+          description: Só na listagem.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
     Conversion:
       type: object
       properties:
@@ -1064,7 +1095,7 @@ paths:
         '404':
           $ref: '#/paths/~1contact-tags-sync/put/responses/404'
 
-  /segments-api:
+  /publico/segmentos:
     get:
       operationId: segmentsList
       summary: Listar segmentos
@@ -1072,12 +1103,6 @@ paths:
       tags:
         - Segmentos
       parameters:
-        - name: id
-          in: query
-          schema:
-            type: string
-            format: uuid
-          description: ID do segmento para detalhes
         - name: type
           in: query
           schema:
@@ -1094,6 +1119,7 @@ paths:
           schema:
             type: integer
             default: 20
+            maximum: 100
       responses:
         '200':
           description: Lista de segmentos
@@ -1105,26 +1131,11 @@ paths:
                   data:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        name:
-                          type: string
-                        type:
-                          type: string
-                        rules:
-                          type: array
-                        contacts_count:
-                          type: integer
-                        created_at:
-                          type: string
-                          format: date-time
+                      $ref: '#/components/schemas/Segmento'
                   pagination:
                     $ref: '#/components/schemas/Pagination'
         '401':
-          description: Token inválido
+          description: Chave de API ausente ou inválida
           content:
             application/json:
               schema:
@@ -1133,35 +1144,32 @@ paths:
       operationId: segmentsCreate
       summary: Criar segmento
       description: |
-        Cria um novo segmento. Para estáticos, envie contact_ids.
-        Use action=add_contacts&id=uuid para adicionar contatos a um segmento estático existente.
+        Cria um novo segmento. Para estáticos, envie contact_ids — o segmento e
+        os membros são gravados na mesma transação.
+        Exige chave de API com permissão de escrita.
       tags:
         - Segmentos
-      parameters:
-        - name: action
-          in: query
-          schema:
-            type: string
-            enum: [add_contacts]
-          description: Ação especial
-        - name: id
-          in: query
-          schema:
-            type: string
-            format: uuid
-          description: ID do segmento (para add_contacts)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [name]
               properties:
                 name:
                   type: string
                 type:
                   type: string
                   enum: [dynamic, static]
+                  default: dynamic
+                description:
+                  type: string
+                  nullable: true
+                logic:
+                  type: string
+                  enum: [and, or]
+                  default: and
                 rules:
                   type: array
                   items:
@@ -1190,9 +1198,124 @@ paths:
                   success:
                     type: boolean
                   segment:
-                    type: object
+                    $ref: '#/components/schemas/Segmento'
         '400':
-          description: Dados inválidos
+          description: Dados inválidos, ou algum contact_id não existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: A chave não tem permissão de escrita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /publico/segmentos/{id}:
+    get:
+      operationId: segmentsGet
+      summary: Detalhe do segmento
+      description: |
+        O segmento e uma amostra de até 20 contatos. Contato na lixeira
+        (deleted_at preenchido) não aparece.
+      tags:
+        - Segmentos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Segmento com amostra de contatos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Segmento'
+                  - type: object
+                    properties:
+                      contacts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            nome:
+                              type: string
+                              nullable: true
+                            email:
+                              type: string
+                              nullable: true
+                            whatsapp:
+                              type: string
+                              nullable: true
+                            etiqueta:
+                              type: string
+                              nullable: true
+                            status:
+                              type: string
+                              nullable: true
+        '404':
+          description: Segmento não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /publico/segmentos/{id}/contatos:
+    post:
+      operationId: segmentsAddContacts
+      summary: Adicionar contatos a um segmento estático
+      description: |
+        Só vale para segmento estático. Em segmento dinâmico devolve 409:
+        quem entra nele é decidido pelas regras, e gravar a lista à mão não
+        mudaria o que ele resolve. Exige permissão de escrita.
+      tags:
+        - Segmentos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_ids]
+              properties:
+                contact_ids:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Contatos adicionados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  segment_id:
+                    type: string
+                    format: uuid
+                  contacts_added:
+                    type: integer
+        '409':
+          description: O segmento é dinâmico
           content:
             application/json:
               schema:
