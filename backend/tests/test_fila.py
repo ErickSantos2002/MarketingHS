@@ -20,22 +20,28 @@ async def test_reivindicar_esconde_a_mensagem_dos_outros(conexao, semear):
     o índice único de campaign_sends barraria o segundo, mas o trabalho seria
     feito duas vezes e o erro ficaria invisível.
     """
-    await semear(quantidade=1)
-    primeira = await fila.reivindicar(conexao, limite=10, visibilidade=120)
-    segunda = await fila.reivindicar(conexao, limite=10, visibilidade=120)
-    assert len(primeira) == 1
-    assert segunda == []
+    [msg] = await semear(quantidade=1)
+    primeira = await fila.reivindicar(conexao, limite=50, visibilidade=120)
+    segunda = await fila.reivindicar(conexao, limite=50, visibilidade=120)
+    # ⚠️ Filtrado pelo send_id semeado, não pela contagem do lote. `reivindicar`
+    # pega da fila inteira, e afirmar `len == 1` faria o teste depender do banco
+    # estar vazio — quebrando por dado alheio e apontando para o lugar errado.
+    meus = [m for m in primeira if m.send_id == msg["send_id"]]
+    assert len(meus) == 1
+    assert all(m.send_id != msg["send_id"] for m in segunda)
 
 
 async def test_mensagem_devolvida_volta_a_ficar_visivel(conexao, semear):
     """Devolver com tentativas abaixo do teto reagenda em vez de matar."""
-    await semear(quantidade=1)
-    [m] = await fila.reivindicar(conexao, limite=10, visibilidade=120)
+    [msg] = await semear(quantidade=1)
+    [m] = [x for x in await fila.reivindicar(conexao, limite=50, visibilidade=120)
+           if x.send_id == msg["send_id"]]
     destino = await fila.devolver(conexao, m.fila_id, "erro de rede",
                                   max_tentativas=5)
     assert destino == "reagendada"
     # `visivel_em` no futuro: ainda não pode ser reivindicada de novo
-    assert await fila.reivindicar(conexao, limite=10, visibilidade=120) == []
+    de_novo = await fila.reivindicar(conexao, limite=50, visibilidade=120)
+    assert all(x.send_id != msg["send_id"] for x in de_novo)
 
 
 async def test_estourar_o_teto_manda_para_a_fila_morta(conexao, semear):
@@ -43,10 +49,13 @@ async def test_estourar_o_teto_manda_para_a_fila_morta(conexao, semear):
 
     Apagar direto esconderia justamente o caso que precisa ser investigado.
     """
-    await semear(quantidade=1)
+    mensagens = await semear(quantidade=1)
+    campanha = mensagens[0]["campaign_id"]
     destino = None
+    alvo = mensagens[0]["send_id"]
     for _ in range(5):
-        [m] = await fila.reivindicar(conexao, limite=10, visibilidade=0)
+        [m] = [x for x in await fila.reivindicar(conexao, limite=50, visibilidade=0)
+               if x.send_id == alvo]
         destino = await fila.devolver(conexao, m.fila_id, "sempre falha",
                                       max_tentativas=5)
         # ⚠️ `devolver` empurra `visivel_em` para frente com recuo progressivo.
@@ -56,17 +65,24 @@ async def test_estourar_o_teto_manda_para_a_fila_morta(conexao, semear):
         await conexao.execute(
             "UPDATE email_send_queue SET visivel_em = now() WHERE id = $1", m.fila_id)
     assert destino == "morta"
-    assert await conexao.fetchval("SELECT count(*) FROM email_send_queue") == 0
-    assert await conexao.fetchval("SELECT count(*) FROM email_send_dead") == 1
+    # ⚠️ Escopado à campanha do teste. Contar a tabela inteira faria o teste
+    # depender do banco estar vazio, e quebrar por dado alheio.
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM email_send_queue WHERE campaign_id = $1::uuid",
+        campanha) == 0
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM email_send_dead WHERE campaign_id = $1::uuid",
+        campanha) == 1
 
 
 async def test_o_recuo_cresce_a_cada_tentativa(conexao, semear):
     """Um erro de rede que dura dois minutos não pode consumir as cinco
     tentativas em dez segundos. O recuo é 1min, 2min, 4min..."""
-    await semear(quantidade=1)
+    [msg] = await semear(quantidade=1)
     esperas = []
     for _ in range(3):
-        [m] = await fila.reivindicar(conexao, limite=10, visibilidade=0)
+        [m] = [x for x in await fila.reivindicar(conexao, limite=50, visibilidade=0)
+               if x.send_id == msg["send_id"]]
         await fila.devolver(conexao, m.fila_id, "erro", max_tentativas=99)
         esperas.append(await conexao.fetchval(
             "SELECT visivel_em - now() FROM email_send_queue WHERE id = $1",
@@ -86,12 +102,17 @@ async def test_publicar_o_mesmo_envio_duas_vezes_nao_duplica(conexao, semear):
     mensagens = await semear(quantidade=1)
     n = await fila.publicar(conexao, [mensagens[0]])
     assert n == 0
-    assert await conexao.fetchval("SELECT count(*) FROM email_send_queue") == 1
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM email_send_queue WHERE campaign_id = $1::uuid",
+        mensagens[0]["campaign_id"]) == 1
 
 
 async def test_concluir_tira_a_mensagem_da_fila(conexao, semear):
     """Concluir só acontece depois do envio confirmado."""
-    await semear(quantidade=1)
-    [m] = await fila.reivindicar(conexao, limite=10, visibilidade=120)
+    mensagens = await semear(quantidade=1)
+    [m] = [x for x in await fila.reivindicar(conexao, limite=50, visibilidade=120)
+           if x.send_id == mensagens[0]["send_id"]]
     await fila.concluir(conexao, m.fila_id)
-    assert await conexao.fetchval("SELECT count(*) FROM email_send_queue") == 0
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM email_send_queue WHERE campaign_id = $1::uuid",
+        mensagens[0]["campaign_id"]) == 0

@@ -33,6 +33,10 @@ async def semear(conexao):
     from app import fila
 
     async def _semear(quantidade: int = 1):
+        """Devolve as mensagens; `mensagens[0]["campaign_id"]` escopa as
+        contagens. ⚠️ Contar a tabela INTEIRA faz o teste depender do banco
+        estar vazio — e ele passa a quebrar por causa de dado deixado por
+        outra coisa, apontando para o lugar errado."""
         campanha = await conexao.fetchval(
             "INSERT INTO campaigns (name, channel, status) "
             "VALUES ('teste de fila', 'email', 'sending') RETURNING id")
