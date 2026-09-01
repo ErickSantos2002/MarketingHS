@@ -13,7 +13,7 @@ import { Mail, MessageCircle, ChevronRight, ChevronLeft, Send, Clock, AlertTrian
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
 import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 import { useCampaigns, type Campaign } from '@/hooks/useCampaigns';
-import { editarCampanha } from '@/lib/campanhas';
+import { editarCampanha, enviarCampanha } from '@/lib/campanhas';
 import { includeSegmentIds, excludeSegmentIds } from '@/lib/campaignAudience';
 import { useTemplates, type EmailTemplate } from '@/hooks/useTemplates';
 import { BRASILIA_TIMEZONE } from '@/hooks/useLeadAnalytics';
@@ -293,18 +293,26 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
         }
       }
 
-      // ⚠️ O ENVIO NÃO EXISTE NESTE LOTE (3A). A fila, o worker e o Resend
-      // chegam no 3B; o agendamento, no 3C. Até lá a campanha fica salva em
-      // rascunho e o wizard diz isso — um botão que estoura ao ser clicado
-      // ensina o admin a desconfiar da tela inteira.
-      //
-      // Quando o 3B chegar: aqui entra a chamada ao enfileirador próprio, e
-      // NÃO uma invocação da Edge Function `send-campaign` — ela não volta.
-      toast.info(
-        isScheduled
-          ? 'A campanha foi salva em rascunho. O agendamento chega no próximo lote.'
-          : 'A campanha foi salva em rascunho. O envio chega no próximo lote.',
-      );
+      if (isScheduled) {
+        // ⚠️ O AGENDAMENTO ainda não dispara nada. `promote_scheduled_campaigns`
+        // chama a `invoke_edge_function`, que o lote 0 apagou, e estoura no
+        // instante em que uma campanha vence. É do 3C consertar. Até lá a data
+        // fica guardada e a campanha NÃO é enfileirada — dizer o contrário
+        // faria o admin acreditar que agendou.
+        toast.info('A campanha foi salva com a data. O disparo automático chega no próximo lote.');
+      } else {
+        try {
+          const { queued } = await enviarCampanha(created.id);
+          toast.success(`Campanha em envio — ${queued} contatos na fila`);
+        } catch (e) {
+          // A campanha já existe e ficou gravada; só o enfileiramento falhou.
+          // Dizer isso é o que evita o admin criar a mesma campanha de novo.
+          toast.error(
+            (e instanceof Error ? e.message : 'Erro ao iniciar o envio') +
+            ' A campanha ficou salva — você pode tentar enviar de novo pela lista.',
+          );
+        }
+      }
     }
     setSending(false);
     setConfirmOpen(false);

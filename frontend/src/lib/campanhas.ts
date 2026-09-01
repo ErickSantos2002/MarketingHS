@@ -111,3 +111,8 @@ export interface AudienciaCampanha {
 
 export const audienciaDaCampanha = (id: string) =>
   api.get<AudienciaCampanha>(`/campanhas/${id}/audiencia`);
+
+// Enfileira e devolve na hora — quem envia é o worker. ⚠️ Não existe mais
+// `functions.invoke('send-campaign')`: a Edge Function não volta.
+export const enviarCampanha = (id: string) =>
+  api.post<{ queued: number; ignorados: number }>(`/campanhas/${id}/enviar`);
