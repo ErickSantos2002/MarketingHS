@@ -5,21 +5,51 @@
 
 ## Onde paramos
 
-**O lote 3 fechou.** Campanhas, templates, o motor de envio e o retorno estão
-todos de pé. Falta uma coisa só, e é uma decisão, não um defeito: **o primeiro
-envio real** — adiado em 01/09/2026 porque o sistema ainda não tem usuário e
-configurar domínio e chave do Resend agora não paga o trabalho.
+**Lote 4 (Jornadas) na metade: tarefas 1, 2 e 3 de 5.** Lotes 0 a 3 fechados.
 
-⚠️ Enquanto a chave não existir, o worker **não consome a fila** — de propósito.
-Campanha enfileirada fica esperando, nada é perdido, nada mente.
+### O que já roda
 
-Quando for a hora:
+Um fluxo completo funciona de ponta a ponta, provado: contato entra pelo
+segmento → `delay` → condicional dá verdadeiro → e-mail enfileirado com
+`journey_run_id` e campanha nula → o worker do 3B aceita → sai "Bem-vindo Carla
+Menezes" com o corpo do template.
 
-```bash
-bash ~/marketinghs-configurar-resend.sh          # pede chave e remetente
-cd ~/github/MarketingHS/backend && ./.venv/bin/python -m app.worker
-# na tela: campanha para UM contato de teste, enviar
-```
+- **migration 010** — fila de eventos, o trigger que a alimenta, e
+  `journey_enqueue_email`
+- **`/jornadas`** — CRUD, detalhe com métricas do banco, execuções
+- **`app/jornadas/executor.py`** — sete tipos de nó, o fencing token, a espera
+  escopada por nó
+- **o laço de jornadas no worker** — matrícula, fila de eventos, runs vencidos
+
+### O que falta
+
+**Tarefa 4 — as telas.** `useJourneys` (5 invokes), `useJourneyRuns` (1 ponto),
+`JourneyBuilder` (711 linhas, 1 invoke), `NodeConfigDialog` (1+1),
+`useAutomationRules` (5 pontos), `AutomationRuleForm` (1+1). O cliente vai em
+`frontend/src/lib/jornadas.ts`, no molde de `lib/segmentos.ts`.
+
+⚠️ **Uma decisão a tomar na tarefa 4:** `evaluate_automation_on_etiqueta` e o
+trigger `trg_automation_on_etiqueta_change` foram removidos no lote 0. Se a tela
+de automações permite criar regra que dependa deles, **ou** a função volta como
+trigger, **ou** a tela diz que aquele gatilho não está ligado. Não deixe a tela
+oferecer o que não roda.
+
+⚠️ `JourneyBuilder` tem 711 linhas e é o editor visual do grafo — **não o
+reescreva**, troque só os pontos de acesso.
+
+**Tarefa 5 — fechar:** portão (documentação incluída), placar, e os documentos.
+
+### O que o lote 4 já ensinou
+
+- **`journey_claim_due_runs` já é o motor de reivindicação.** A jornada não
+  precisa de fila para os runs — só para os eventos. Dez funções de jornada
+  sobreviveram ao port e não se reimplementam.
+- **O `JOIN` com `campaigns` no worker do 3B era `JOIN`, não `LEFT JOIN`.**
+  E-mail de jornada não tem campanha: a linha não voltava, o envio era
+  concluído como se tivesse saído, e o fluxo pareceria funcionar enquanto
+  ninguém recebia. Estava mapeado no plano e era real.
+- **Tag de valor nulo faz o Resend recusar o envio inteiro**, não só a tag.
+  Esse não estava no plano — apareceu porque o ensaio quebrou ao imprimir.
 
 ### O que o lote 3 deixou pronto
 
