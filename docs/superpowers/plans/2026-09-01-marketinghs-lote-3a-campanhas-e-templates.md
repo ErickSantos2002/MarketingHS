@@ -495,7 +495,13 @@ class CampanhaIn(BaseModel):
     design: dict | None = None
     segment_ids: list[str] = Field(default_factory=list)
     excluded_segment_ids: list[str] = Field(default_factory=list)
-    scheduled_at: str | None = None
+    # ⚠️ datetime, NÃO str — precisa de `from datetime import datetime` no topo.
+    # O asyncpg recusa string num parâmetro timestamptz ("expected a
+    # datetime.date or datetime.datetime instance") e o cast `::timestamptz`
+    # não salva: ele age no SQL, depois de o driver já ter rejeitado o
+    # argumento. Este plano trazia `str` e derrubou o POST com 500 na primeira
+    # execução.
+    scheduled_at: datetime | None = None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -537,7 +543,7 @@ class CampanhaPatch(BaseModel):
     design: dict | None = None
     segment_ids: list[str] | None = None
     excluded_segment_ids: list[str] | None = None
-    scheduled_at: str | None = None
+    scheduled_at: datetime | None = None
 
 
 # Editar campanha que já saiu (ou está saindo) reescreveria a história de um

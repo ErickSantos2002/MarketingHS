@@ -6,6 +6,7 @@ no lote errado.
 """
 
 import logging
+from datetime import datetime
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -105,3 +106,141 @@ async def detalhe(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     return {**dict(linha),
             "segment_names": linha["segment_names"] or [],
             "sends": [dict(e) for e in envios]}
+
+
+class CampanhaIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    channel: str = Field(pattern="^(email|whatsapp)$")
+    subject: str | None = None
+    body: str | None = None
+    design: dict | None = None
+    segment_ids: list[str] = Field(default_factory=list)
+    excluded_segment_ids: list[str] = Field(default_factory=list)
+    # ⚠️ datetime, não str. O asyncpg recusa string num parâmetro timestamptz
+    # ("expected a datetime.date or datetime.datetime instance") e o cast
+    # `::timestamptz` não salva — ele age no SQL, depois de o driver já ter
+    # rejeitado o argumento. O pydantic converte o ISO-8601 que a tela manda.
+    scheduled_at: datetime | None = None
+
+
+class CampanhaPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    subject: str | None = None
+    body: str | None = None
+    design: dict | None = None
+    segment_ids: list[str] | None = None
+    excluded_segment_ids: list[str] | None = None
+    scheduled_at: datetime | None = None
+
+
+# Editar campanha que já saiu (ou está saindo) reescreveria a história de um
+# envio real: o corpo mudaria, mas o que chegou na caixa de entrada não.
+EDITAVEL = ("draft", "scheduled", "paused", "failed")
+
+CASTS = {"design": "::jsonb", "segment_ids": "::uuid[]",
+         "excluded_segment_ids": "::uuid[]", "scheduled_at": "::timestamptz"}
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def criar(dados: CampanhaIn, _: Usuario = Depends(usuario_atual)):
+    """Nasce sempre em `draft`.
+
+    ⚠️ O status NÃO vem do corpo. Deixar o cliente escolher permitiria criar uma
+    campanha já em `sending` — que o worker do 3B pegaria e enviaria sem que
+    ninguém tivesse clicado em enviar.
+
+    ⚠️ `scheduled_at` é aceito e gravado, mas NADA no 3A leva a campanha para o
+    status `scheduled`, e o promotor (`promote_scheduled_campaigns`) está
+    quebrado até o 3C. A data fica guardada e não dispara nada — guardá-la é
+    certo, é o que o 3C vai ler, mas não há botão de agendar neste lote.
+    """
+    async with sessao(role="service_role") as conn:
+        novo_id = await conn.fetchval(
+            """INSERT INTO campaigns (name, channel, status, subject, body,
+                                      design, segment_ids, excluded_segment_ids,
+                                      scheduled_at)
+               VALUES ($1, $2, 'draft', $3, $4, $5::jsonb,
+                       $6::uuid[], $7::uuid[], $8::timestamptz)
+               RETURNING id""",
+            dados.name.strip(), dados.channel, dados.subject, dados.body,
+            dados.design, dados.segment_ids, dados.excluded_segment_ids,
+            dados.scheduled_at)
+    return {"id": str(novo_id)}
+
+
+@router.patch("/{campanha_id}")
+async def editar(campanha_id: str, dados: CampanhaPatch,
+                 _: Usuario = Depends(usuario_atual)):
+    """⚠️ PATCH de verdade (`exclude_unset`) e trava por status.
+
+    Só `draft`, `scheduled`, `paused` e `failed` aceitam edição. `sending` e
+    `sent` recusam com 409: a campanha já foi para a fila, e trocar o corpo
+    agora faria a tela contar uma história diferente da que chegou ao contato.
+    """
+    campos = dados.model_dump(exclude_unset=True)
+    if not campos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada a atualizar.")
+
+    partes, valores = [], []
+    for i, (coluna, valor) in enumerate(campos.items(), start=2):
+        partes.append(f"{coluna} = ${i}{CASTS.get(coluna, '')}")
+        valores.append(valor)
+
+    async with sessao(role="service_role") as conn:
+        estado = await conn.fetchval(
+            "SELECT status FROM campaigns WHERE id = $1::uuid", campanha_id)
+        if estado is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+        if estado not in EDITAVEL:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Esta campanha está em {estado!r} e não pode mais ser editada. "
+                "Duplique-a para criar uma nova versão.")
+        await conn.execute(
+            f"""UPDATE campaigns SET {', '.join(partes)}, updated_at = now()
+                 WHERE id = $1::uuid""",
+            campanha_id, *valores)
+    return {"id": campanha_id}
+
+
+@router.post("/{campanha_id}/duplicar", status_code=status.HTTP_201_CREATED)
+async def duplicar(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+    """A cópia nasce em `draft`, sem `scheduled_at`, sem `sent_at` e com `stats`
+    no padrão da coluna — copiar o histórico de envio da original faria a cópia
+    parecer já enviada. O sufixo é ' (cópia)', o mesmo que o lote 2 usou em
+    segmentos.
+    """
+    async with sessao(role="service_role") as conn:
+        novo = await conn.fetchval(
+            """INSERT INTO campaigns (name, channel, status, subject, body,
+                                      design, segment_ids, excluded_segment_ids)
+               SELECT name || ' (cópia)', channel, 'draft', subject, body,
+                      design, segment_ids, excluded_segment_ids
+                 FROM campaigns WHERE id = $1::uuid
+               RETURNING id""",
+            campanha_id)
+        if novo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+    return {"id": str(novo)}
+
+
+@router.delete("/{campanha_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+    """`guard_campaign_delete` é um trigger que recusa apagar campanha com envio
+    em andamento, com mensagem escrita para quem usa. Devolvê-la como 409 é o
+    mesmo tratamento que o lote 2 deu ao `guard_segment_delete`; deixar virar
+    500 trocaria orientação por "Internal Server Error".
+
+    ⚠️ A guarda recusa em DOIS casos, e campanha `sent` não é um deles:
+      - `status = 'sending'` — o envio está acontecendo agora
+      - existe `campaign_sends` com `status = 'pending'` — sobrou fila
+    Campanha `sent` e drenada apaga normalmente.
+    """
+    try:
+        async with sessao(role="service_role") as conn:
+            r = await conn.execute(
+                "DELETE FROM campaigns WHERE id = $1::uuid", campanha_id)
+    except asyncpg.exceptions.RaiseError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    if r.endswith(" 0"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
