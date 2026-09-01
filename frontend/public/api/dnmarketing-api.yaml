@@ -168,6 +168,69 @@ components:
         error:
           type: string
 
+    Campanha:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [email, whatsapp]
+        status:
+          type: string
+          enum: [draft, scheduled, sending, sent, paused, failed]
+        subject:
+          type: string
+          nullable: true
+        segment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        segment_names:
+          type: object
+          additionalProperties:
+            type: string
+          description: Mapa id -> nome, cobrindo inclusões e exclusões.
+        stats:
+          type: object
+          description: |
+            Ao vivo, agregado de campaign_sends. NÃO é a coluna `stats`, que é
+            escrita uma vez só quando a fila drena e mostraria 0% de abertura
+            para sempre.
+        scheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        design:
+          type: object
+          nullable: true
+        html:
+          type: string
+          nullable: true
+
     Segmento:
       type: object
       properties:
@@ -1321,25 +1384,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /campaigns-api:
+  /publico/campanhas:
     get:
       operationId: campaignsList
       summary: Listar campanhas
-      description: Lista campanhas com stats e paginação.
+      description: |
+        Lista campanhas com nomes de segmento e estatísticas ao vivo, agregadas
+        de campaign_sends. Exige chave de API com permissão de leitura.
       tags:
         - Campanhas
       parameters:
-        - name: id
-          in: query
-          schema:
-            type: string
-            format: uuid
-          description: ID da campanha para detalhes
         - name: status
           in: query
           schema:
             type: string
-            enum: [draft, sent, sending]
+            enum: [draft, scheduled, sending, sent, paused, failed]
         - name: channel
           in: query
           schema:
@@ -1355,6 +1414,7 @@ paths:
           schema:
             type: integer
             default: 20
+            maximum: 100
       responses:
         '200':
           description: Lista de campanhas
@@ -1366,106 +1426,55 @@ paths:
                   data:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        name:
-                          type: string
-                        channel:
-                          type: string
-                        status:
-                          type: string
-                        segment_name:
-                          type: string
-                          nullable: true
-                        stats:
-                          type: object
-                          description: |
-                            Estatísticas da campanha computadas ao vivo a partir de `campaign_sends`.
-                            Semântica de agregação (roll-ups): `sent` inclui delivered+opened+clicked;
-                            `delivered` inclui opened+clicked; `opened` inclui clicked.
-                            `bounced` e `complained` são novos status alimentados pelo webhook do Resend.
-                            Se a agregação ao vivo falhar, retorna o objeto stats armazenado como fallback.
-                          properties:
-                            pending:
-                              type: integer
-                              description: Mensagens pendentes de envio
-                            sent:
-                              type: integer
-                              description: Mensagens enviadas (inclui delivered, opened, clicked)
-                            delivered:
-                              type: integer
-                              description: Mensagens entregues (inclui opened, clicked)
-                            opened:
-                              type: integer
-                              description: Mensagens abertas (inclui clicked)
-                            clicked:
-                              type: integer
-                              description: Mensagens clicadas
-                            bounced:
-                              type: integer
-                              description: Mensagens que devolveram (rejeitadas)
-                            complained:
-                              type: integer
-                              description: Mensagens marcadas como spam
-                            failed:
-                              type: integer
-                              description: Falhas permanentes de envio
-                            unsubscribed:
-                              type: integer
-                              description: Destinatários que se desinscreverem
-                        sent_at:
-                          type: string
-                          format: date-time
-                          nullable: true
+                      $ref: '#/components/schemas/Campanha'
                   pagination:
                     $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Chave de API ausente ou inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       operationId: campaignsCreate
-      summary: Criar e disparar campanha
+      summary: Criar campanha
       description: |
-        Cria uma campanha. Se send_now=true, dispara imediatamente.
-        Use action=send&id=uuid para enviar uma campanha em draft.
+        A campanha nasce SEMPRE em `draft` — o status não vem do corpo.
+        Permitir `sending` deixaria disparar sem passar pelo enfileirador.
+        Exige permissão de escrita.
       tags:
         - Campanhas
-      parameters:
-        - name: action
-          in: query
-          schema:
-            type: string
-            enum: [send]
-        - name: id
-          in: query
-          schema:
-            type: string
-            format: uuid
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required:
-                - name
-                - channel
+              required: [name]
               properties:
                 name:
                   type: string
                 channel:
                   type: string
                   enum: [email, whatsapp]
-                segment_id:
-                  type: string
-                  format: uuid
+                  default: email
                 subject:
                   type: string
+                  nullable: true
                 body:
                   type: string
-                send_now:
-                  type: boolean
-                  default: false
+                  nullable: true
+                  description: O HTML do e-mail.
+                segment_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                excluded_segment_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
       responses:
         '201':
           description: Campanha criada
@@ -1478,6 +1487,171 @@ paths:
                     type: boolean
                   campaign:
                     type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+
+  /publico/campanhas/{id}:
+    get:
+      operationId: campaignsGet
+      summary: Detalhe da campanha
+      description: A campanha, os nomes dos segmentos e até 20 envios.
+      tags:
+        - Campanhas
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campanha com amostra de envios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campanha'
+        '404':
+          description: Campanha não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /publico/campanhas/{id}/enviar:
+    post:
+      operationId: campaignsSend
+      summary: Enfileirar o disparo
+      description: |
+        Enfileira e devolve na hora — quem envia é o worker. Devolve 409 se a
+        campanha já estiver em envio. Exige permissão de escrita.
+      tags:
+        - Campanhas
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Enfileirada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued:
+                    type: integer
+                  ignorados:
+                    type: integer
+                  campaign_id:
+                    type: string
+                    format: uuid
+        '409':
+          description: A campanha já está em envio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /publico/templates:
+    get:
+      operationId: templatesList
+      summary: Listar templates de e-mail
+      tags:
+        - Templates
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Lista de templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Template'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      operationId: templatesCreate
+      summary: Criar template
+      description: Exige permissão de escrita.
+      tags:
+        - Templates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                  nullable: true
+                category:
+                  type: string
+                  nullable: true
+                design:
+                  type: object
+                  description: O JSON do editor Unlayer.
+                html:
+                  type: string
+                  description: O HTML que o editor exporta.
+      responses:
+        '201':
+          description: Template criado
+
+  /publico/templates/{id}:
+    get:
+      operationId: templatesGet
+      summary: Detalhe do template
+      tags:
+        - Templates
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: O template, com design e html
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '404':
+          description: Template não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /pages-api:
     get:

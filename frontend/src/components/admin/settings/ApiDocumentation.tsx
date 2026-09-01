@@ -662,34 +662,59 @@ curl -X POST \\
     notes: 'GET /publico/segmentos/{id} traz a ficha de um segmento com uma amostra de até 20 contatos. POST /publico/segmentos cria (aceita contact_ids quando type=static). POST /publico/segmentos/{id}/contatos adiciona contatos a segmento estático — em segmento dinâmico devolve 409, porque quem entra nele é decidido pelas regras. Criar exige chave com permissão de escrita; listar, de leitura.',
   },
   {
-    id: 'campaigns-api',
+    id: 'campanhas',
     method: 'GET',
-    path: '/campaigns-api',
+    path: '/publico/campanhas',
     title: 'Listar campanhas',
     description: 'Lista campanhas com stats. POST para criar e disparar campanhas.',
     params: [
-      { name: 'id', type: 'uuid', required: 'Não', description: 'ID da campanha para detalhes' },
-      { name: 'status', type: 'string', required: 'Não', description: 'draft, sent, sending' },
+      { name: 'status', type: 'string', required: 'Não', description: 'draft, scheduled, sending, sent, paused, failed' },
       { name: 'channel', type: 'string', required: 'Não', description: 'email ou whatsapp' },
       { name: 'page', type: 'number', required: 'Não', description: 'Página (default: 1)' },
       { name: 'limit', type: 'number', required: 'Não', description: 'Itens por página (default: 20)' },
     ],
     curl: `curl -X GET \\
-  '${BASE_URL}/campaigns-api?status=sent&channel=email' \\
-  -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
+  '${BASE_URL}/publico/campanhas?status=sent&channel=email' \\
+  -H 'Authorization: Bearer [CHAVE_DE_API]'`,
     response: JSON.stringify({
       data: [{
         id: "uuid",
         name: "Email Janeiro",
         channel: "email",
         status: "sent",
-        segment_name: "Hotleads",
+        segment_names: { "uuid-do-segmento": "Hotleads" },
         stats: { sent: 150, opened: 45, clicked: 12, failed: 3 },
         sent_at: "2026-03-15T14:00:00Z"
       }],
       pagination: { page: 1, limit: 20, total: 8, pages: 1 }
     }, null, 2),
-    notes: 'POST /campaigns-api para criar. POST ?action=send&id=uuid para disparar uma campanha em draft.',
+    notes: 'GET /publico/campanhas/{id} traz a ficha com uma amostra de até 20 envios e as estatísticas ao vivo. POST /publico/campanhas cria — a campanha nasce sempre em draft, o status não vem do corpo. POST /publico/campanhas/{id}/enviar enfileira o disparo e devolve na hora; quem envia é o worker. Listar exige chave de leitura; criar e enviar, de escrita.',
+  },
+  {
+    id: 'templates',
+    method: 'GET',
+    path: '/publico/templates',
+    title: 'Listar templates de e-mail',
+    description: 'Lista os templates. POST para criar.',
+    params: [
+      { name: 'category', type: 'string', required: 'Não', description: 'Filtro por categoria' },
+      { name: 'page', type: 'number', required: 'Não', description: 'Página (default: 1)' },
+      { name: 'limit', type: 'number', required: 'Não', description: 'Itens por página (default: 20)' },
+    ],
+    curl: `curl -X GET \\
+  '${BASE_URL}/publico/templates?limit=10' \\
+  -H 'Authorization: Bearer [CHAVE_DE_API]'`,
+    response: JSON.stringify({
+      data: [{
+        id: "uuid",
+        name: "Boas-vindas",
+        category: "onboarding",
+        html: "<p>Olá {{nome}}</p>",
+        created_at: "2026-03-01T10:00:00Z"
+      }],
+      pagination: { page: 1, limit: 10, total: 3, pages: 1 }
+    }, null, 2),
+    notes: 'GET /publico/templates/{id} traz um template inteiro, com o design do editor. POST /publico/templates cria. O campo `design` é o JSON do Unlayer e o `html` é o que ele exporta — os dois andam juntos. Listar exige chave de leitura; criar, de escrita.',
   },
   {
     id: 'pages-api',

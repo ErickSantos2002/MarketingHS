@@ -692,3 +692,171 @@ async def descadastro_efetivar(dados: DescadastroIn):
         logger.exception("descadastro: falha ao registrar o evento")
 
     return {"ok": True, "email": email}
+
+
+# ── Campanhas e templates (a metade pública) ─────────────────────────────────
+# O 3A portou a metade do admin e descobriu, pelo portão, que `campaigns-api` e
+# `templates-api` também aceitam chave de API — servem integrador externo. Esta
+# é a outra metade.
+#
+# ⚠️ A origem montava a agregação de estatísticas interpolando o id em SQL cru e
+# executando por `execute_readonly_query`, uma RPC SECURITY DEFINER. A spec
+# decidiu não portar isso ("era dívida, não ativo"). Aqui tudo é parâmetro, e a
+# agregação é a MESMA do admin — uma verdade só.
+
+class CampanhaPublicaIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    channel: str = Field(default="email", pattern="^(email|whatsapp)$")
+    subject: str | None = None
+    body: str | None = None
+    segment_ids: list[str] = Field(default_factory=list)
+    excluded_segment_ids: list[str] = Field(default_factory=list)
+
+
+@router.get("/campanhas")
+async def listar_campanhas_publico(
+    estado: str | None = Query(None, alias="status"),
+    canal: str | None = Query(None, alias="channel"),
+    pagina: int = Query(1, alias="page", ge=1),
+    limite: int = Query(20, alias="limit", ge=1, le=100),
+    _: ChaveApi = Depends(chave_api("read")),
+):
+    """Lista paginada, com nomes de segmento e estatísticas ao vivo."""
+    from app.routers.campanhas import (
+        COLUNAS, ESTATISTICAS_AO_VIVO, NOMES_DOS_SEGMENTOS, _campanha,
+    )
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            """SELECT count(*) FROM campaigns
+                WHERE ($1::text IS NULL OR status = $1)
+                  AND ($2::text IS NULL OR channel = $2)""",
+            estado, canal)
+        linhas = await conn.fetch(
+            f"""SELECT {COLUNAS}, s.nomes AS segment_names, v.numeros AS stats_ao_vivo
+                  FROM campaigns c {NOMES_DOS_SEGMENTOS} {ESTATISTICAS_AO_VIVO}
+                 WHERE ($1::text IS NULL OR c.status = $1)
+                   AND ($2::text IS NULL OR c.channel = $2)
+                 ORDER BY c.created_at DESC
+                 LIMIT $3 OFFSET $4""",
+            estado, canal, limite, (pagina - 1) * limite)
+    return {
+        "data": [_campanha(l) for l in linhas],
+        "pagination": {"page": pagina, "limit": limite, "total": total,
+                       "pages": (total + limite - 1) // limite},
+    }
+
+
+@router.get("/campanhas/{campanha_id}")
+async def campanha_publico(campanha_id: str,
+                           _: ChaveApi = Depends(chave_api("read"))):
+    """A campanha e uma amostra dos envios."""
+    from app.routers.campanhas import (
+        COLUNAS, ESTATISTICAS_AO_VIVO, NOMES_DOS_SEGMENTOS, _campanha,
+    )
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            f"""SELECT {COLUNAS}, s.nomes AS segment_names, v.numeros AS stats_ao_vivo
+                  FROM campaigns c {NOMES_DOS_SEGMENTOS} {ESTATISTICAS_AO_VIVO}
+                 WHERE c.id = $1::uuid""",
+            campanha_id)
+        if linha is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada")
+        envios = await conn.fetch(
+            """SELECT cs.id::text, cs.lead_id::text, cs.dnia_id::text, cs.channel,
+                      cs.status, cs.sent_at::text, cs.opened_at::text,
+                      cs.clicked_at::text, cs.error
+                 FROM campaign_sends cs
+                WHERE cs.campaign_id = $1::uuid
+                ORDER BY cs.sent_at DESC NULLS LAST
+                LIMIT 20""",
+            campanha_id)
+    return {**_campanha(linha), "sends": [dict(e) for e in envios]}
+
+
+@router.post("/campanhas", status_code=status.HTTP_201_CREATED)
+async def criar_campanha_publico(dados: CampanhaPublicaIn,
+                                 _: ChaveApi = Depends(chave_api("write"))):
+    """⚠️ Nasce sempre em `draft`, como no admin. O status não vem do corpo:
+    permitir `sending` deixaria um integrador externo disparar sem passar pelo
+    enfileirador, e o worker pegaria uma campanha que ninguém mandou enviar."""
+    async with sessao(role="service_role") as conn:
+        novo = await conn.fetchval(
+            """INSERT INTO campaigns (name, channel, status, subject, body,
+                                      segment_ids, excluded_segment_ids)
+               VALUES ($1, $2, 'draft', $3, $4, $5::uuid[], $6::uuid[])
+               RETURNING id""",
+            dados.name.strip(), dados.channel, dados.subject, dados.body,
+            dados.segment_ids, dados.excluded_segment_ids)
+    return {"success": True, "campaign": {"id": str(novo)}}
+
+
+@router.post("/campanhas/{campanha_id}/enviar")
+async def enviar_campanha_publico(campanha_id: str,
+                                  _: ChaveApi = Depends(chave_api("write"))):
+    """O `?action=send` da `campaigns-api`.
+
+    ⚠️ Reusa o MESMO enfileirador da rota do admin e do agendador. Um terceiro
+    caminho de envio seria a terceira implementação da mesma coisa.
+    """
+    from app.routers.envio import enfileirar
+    return await enfileirar(campanha_id)
+
+
+class TemplatePublicoIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    category: str | None = None
+    design: dict | None = None
+    html: str | None = None
+
+
+COLUNAS_TEMPLATE = ("id::text, name, description, category, design, html, "
+                    "created_at::text, updated_at::text")
+
+
+@router.get("/templates")
+async def listar_templates_publico(
+    categoria: str | None = Query(None, alias="category"),
+    pagina: int = Query(1, alias="page", ge=1),
+    limite: int = Query(20, alias="limit", ge=1, le=100),
+    _: ChaveApi = Depends(chave_api("read")),
+):
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            "SELECT count(*) FROM email_templates "
+            "WHERE $1::text IS NULL OR category = $1", categoria)
+        linhas = await conn.fetch(
+            f"""SELECT {COLUNAS_TEMPLATE} FROM email_templates
+                 WHERE $1::text IS NULL OR category = $1
+                 ORDER BY updated_at DESC, id DESC
+                 LIMIT $2 OFFSET $3""",
+            categoria, limite, (pagina - 1) * limite)
+    return {
+        "data": [dict(l) for l in linhas],
+        "pagination": {"page": pagina, "limit": limite, "total": total,
+                       "pages": (total + limite - 1) // limite},
+    }
+
+
+@router.get("/templates/{template_id}")
+async def template_publico(template_id: str,
+                           _: ChaveApi = Depends(chave_api("read"))):
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            f"SELECT {COLUNAS_TEMPLATE} FROM email_templates WHERE id = $1::uuid",
+            template_id)
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template não encontrado")
+    return dict(linha)
+
+
+@router.post("/templates", status_code=status.HTTP_201_CREATED)
+async def criar_template_publico(dados: TemplatePublicoIn,
+                                 _: ChaveApi = Depends(chave_api("write"))):
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            f"""INSERT INTO email_templates (name, description, category, design, html)
+                VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING {COLUNAS_TEMPLATE}""",
+            dados.name.strip(), dados.description, dados.category,
+            dados.design, dados.html)
+    return {"success": True, "template": dict(linha)}
