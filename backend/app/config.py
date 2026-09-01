@@ -23,6 +23,23 @@ class Settings(BaseSettings):
     # Herdado da origem; ver a pendência no ROADMAP.
     WEBHOOK_SECRET: str = ""
 
+    # Envio de e-mail (lote 3B). Os valores podem vir daqui OU da tabela
+    # integration_secrets — ver app/integracoes.py, que lê o banco primeiro e
+    # cai para o ambiente. Declarar aqui é o que permite o fallback existir.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = ""
+    UNSUBSCRIBE_SECRET: str = ""
+    RESEND_WEBHOOK_SECRET: str = ""
+
+    # O motor de fila. Visibilidade é por quanto tempo uma mensagem reivindicada
+    # fica escondida dos outros workers; se o envio demorar mais que isso, outro
+    # worker a pega — e o índice único de campaign_sends é o que impede o e-mail
+    # duplicado nesse caso.
+    FILA_VISIBILIDADE_SEGUNDOS: int = 120
+    FILA_MAX_TENTATIVAS: int = 5
+    FILA_LOTE: int = 20
+    WORKER_INTERVALO_SEGUNDOS: float = 2.0
+
     # ⚠️ Toda chave lida do ambiente PRECISA ser declarada aqui, mesmo que outro
     # módulo é que a leia: o pydantic-settings recusa chave desconhecida no .env
     # e derruba o boot inteiro. Isso já derrubou o HS.OS duas vezes.
