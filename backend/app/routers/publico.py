@@ -8,6 +8,8 @@ import base64
 import json
 import logging
 
+import asyncpg
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -399,3 +401,164 @@ async def detalhe_contato_publico(
             "mentoria": identidade["mentoria_client_id"] is not None,
         },
     }
+
+
+# ── Segmentos ────────────────────────────────────────────────────────────────
+# Porta a `segments-api`. A forma da resposta segue a da origem (`data` +
+# `pagination`, `contacts_count`, `contacts`) porque quem consome é sistema de
+# terceiro: mudar o formato aqui quebraria integração que não passa por nós.
+
+class SegmentoPublicoIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    type: str = Field(default="dynamic", pattern="^(static|dynamic)$")
+    description: str | None = None
+    rules: list[dict] = Field(default_factory=list)
+    logic: str = Field(default="and", pattern="^(and|or)$")
+    contact_ids: list[str] | None = None
+
+
+class ContatosPublicoIn(BaseModel):
+    contact_ids: list[str] = Field(min_length=1, max_length=10000)
+
+
+# Uma amostra, não a base inteira: a origem devolvia 20 contatos na ficha do
+# segmento e isso é o que o consumidor externo espera.
+AMOSTRA_CONTATOS = 20
+
+
+@router.get("/segmentos")
+async def listar_segmentos(
+    tipo: str | None = Query(None, alias="type", pattern="^(static|dynamic)$"),
+    pagina: int = Query(1, alias="page", ge=1),
+    limite: int = Query(20, alias="limit", ge=1, le=100),
+    _: ChaveApi = Depends(chave_api("read")),
+):
+    """Lista paginada, com a contagem de contatos de cada segmento.
+
+    ⚠️ A contagem sai da MESMA consulta, como no endpoint do admin. A origem
+    percorria os segmentos e disparava uma RPC ou uma contagem por segmento —
+    numa página de 100, cento e uma idas ao banco.
+    """
+    # O filtro vai por parâmetro em vez de entrar na string: `$1 IS NULL OR
+    # type = $1` deixa as duas consultas com a mesma forma e sem SQL montado
+    # por concatenação.
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            "SELECT count(*) FROM segments WHERE $1::text IS NULL OR type = $1",
+            tipo)
+        linhas = await conn.fetch(
+            """SELECT s.id::text, s.name, s.description, s.type, s.rules,
+                      s.logic, s.created_at::text, s.updated_at::text,
+                      c.total AS contacts_count
+                 FROM segments s
+                 LEFT JOIN LATERAL (
+                     SELECT CASE
+                         WHEN s.type = 'dynamic'
+                           THEN (SELECT count(*) FROM evaluate_segment_rules(s.id))
+                         ELSE (SELECT count(*) FROM segment_contacts sc
+                                WHERE sc.segment_id = s.id)
+                     END AS total
+                 ) c ON true
+                WHERE $1::text IS NULL OR s.type = $1
+                ORDER BY s.created_at DESC
+                LIMIT $2 OFFSET $3""",
+            tipo, limite, (pagina - 1) * limite)
+    return {
+        "data": [dict(l) for l in linhas],
+        "pagination": {
+            "page": pagina, "limit": limite, "total": total,
+            "pages": (total + limite - 1) // limite,
+        },
+    }
+
+
+@router.get("/segmentos/{segmento_id}")
+async def segmento(segmento_id: str, _: ChaveApi = Depends(chave_api("read"))):
+    """Um segmento e uma amostra dos contatos dele.
+
+    ⚠️ `deleted_at IS NULL`, igual ao endpoint do admin: contato na lixeira não
+    pertence mais a segmento nenhum, e quem consome esta rota costuma usar a
+    resposta para disparar mensagem.
+    """
+    async with sessao(role="service_role") as conn:
+        seg = await conn.fetchrow(
+            """SELECT id::text, name, description, type, rules, logic,
+                      created_at::text, updated_at::text
+                 FROM segments WHERE id = $1::uuid""", segmento_id)
+        if seg is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Segmento não encontrado")
+
+        if seg["type"] == "dynamic":
+            contatos = await conn.fetch(
+                """SELECT l.id::text, l.nome, l.email, l.whatsapp, l.etiqueta, l.status
+                     FROM evaluate_segment_rules($1::uuid) r
+                     JOIN leads l ON l.id = r.lead_id
+                    WHERE l.deleted_at IS NULL
+                    ORDER BY l.created_at DESC LIMIT $2""",
+                segmento_id, AMOSTRA_CONTATOS)
+        else:
+            contatos = await conn.fetch(
+                """SELECT l.id::text, l.nome, l.email, l.whatsapp, l.etiqueta, l.status
+                     FROM segment_contacts sc
+                     JOIN leads l ON l.id = sc.lead_id
+                    WHERE sc.segment_id = $1::uuid AND l.deleted_at IS NULL
+                    ORDER BY l.created_at DESC LIMIT $2""",
+                segmento_id, AMOSTRA_CONTATOS)
+
+    return {**dict(seg), "contacts": [dict(c) for c in contatos]}
+
+
+@router.post("/segmentos", status_code=status.HTTP_201_CREATED)
+async def criar_segmento(dados: SegmentoPublicoIn,
+                         _: ChaveApi = Depends(chave_api("write"))):
+    """Cria o segmento e, se estático, os membros — na mesma transação.
+
+    ⚠️ A origem inseria os membros DEPOIS, fora de qualquer transação e sem
+    esperar o resultado: falhar ali deixava um segmento pela metade e devolvia
+    201 assim mesmo.
+    """
+    try:
+        async with sessao(role="service_role") as conn:
+            novo = await conn.fetchrow(
+                """INSERT INTO segments (name, description, type, rules, logic)
+                   VALUES ($1, $2, $3, $4::jsonb, $5)
+                   RETURNING id::text, name, description, type, rules, logic,
+                             created_at::text, updated_at::text""",
+                dados.name.strip(), dados.description, dados.type,
+                dados.rules, dados.logic)
+            if dados.type == "static" and dados.contact_ids:
+                await conn.execute(
+                    """INSERT INTO segment_contacts (segment_id, lead_id)
+                       SELECT $1::uuid, unnest($2::uuid[]) ON CONFLICT DO NOTHING""",
+                    novo["id"], dados.contact_ids)
+    except asyncpg.exceptions.ForeignKeyViolationError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Um ou mais contatos informados não existem")
+    return {"success": True, "segment": dict(novo)}
+
+
+@router.post("/segmentos/{segmento_id}/contatos")
+async def adicionar_contatos_publico(
+    segmento_id: str, dados: ContatosPublicoIn,
+    _: ChaveApi = Depends(chave_api("write")),
+):
+    """Adiciona contatos a um segmento estático."""
+    try:
+        async with sessao(role="service_role") as conn:
+            tipo = await conn.fetchval(
+                "SELECT type FROM segments WHERE id = $1::uuid", segmento_id)
+            if tipo is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Segmento não encontrado")
+            if tipo != "static":
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Só é possível adicionar contatos a segmentos estáticos")
+            await conn.execute(
+                """INSERT INTO segment_contacts (segment_id, lead_id)
+                   SELECT $1::uuid, unnest($2::uuid[]) ON CONFLICT DO NOTHING""",
+                segmento_id, dados.contact_ids)
+    except asyncpg.exceptions.ForeignKeyViolationError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Um ou mais contatos informados não existem")
+    return {"success": True, "segment_id": segmento_id,
+            "contacts_added": len(dados.contact_ids)}

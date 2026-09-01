@@ -635,17 +635,19 @@ curl -X POST \\
     notes: 'Substituição total (PUT semântico, POST aceito como alias). Registra evento "tags_synced" na timeline com source_app=nexus. Para mutações parciais (adicionar OU remover tags individualmente), use /contact-update com tags_add / tags_remove.',
   },
   {
+    id: 'segmentos',
+    method: 'GET',
+    path: '/publico/segmentos',
     title: 'Listar segmentos',
     description: 'Lista segmentos com contagem de contatos. POST para criar segmentos ou adicionar contatos.',
     params: [
-      { name: 'id', type: 'uuid', required: 'Não', description: 'ID do segmento para detalhes' },
       { name: 'type', type: 'string', required: 'Não', description: 'dynamic ou static' },
       { name: 'page', type: 'number', required: 'Não', description: 'Página (default: 1)' },
       { name: 'limit', type: 'number', required: 'Não', description: 'Itens por página (default: 20)' },
     ],
     curl: `curl -X GET \\
-  '${BASE_URL}/segments-api?type=dynamic&limit=10' \\
-  -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
+  '${BASE_URL}/publico/segmentos?type=dynamic&limit=10' \\
+  -H 'Authorization: Bearer [CHAVE_DE_API]'`,
     response: JSON.stringify({
       data: [{
         id: "uuid",
@@ -657,7 +659,7 @@ curl -X POST \\
       }],
       pagination: { page: 1, limit: 10, total: 5, pages: 1 }
     }, null, 2),
-    notes: 'POST /segments-api para criar. POST ?action=add_contacts&id=uuid para adicionar contatos a segmentos estáticos.',
+    notes: 'GET /publico/segmentos/{id} traz a ficha de um segmento com uma amostra de até 20 contatos. POST /publico/segmentos cria (aceita contact_ids quando type=static). POST /publico/segmentos/{id}/contatos adiciona contatos a segmento estático — em segmento dinâmico devolve 409, porque quem entra nele é decidido pelas regras. Criar exige chave com permissão de escrita; listar, de leitura.',
   },
   {
     id: 'campaigns-api',
