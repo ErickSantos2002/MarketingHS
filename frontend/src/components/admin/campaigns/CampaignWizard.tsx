@@ -10,10 +10,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Mail, MessageCircle, ChevronRight, ChevronLeft, Send, Clock, AlertTriangle, Loader2, Check, Pencil } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
 import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 import { useCampaigns, type Campaign } from '@/hooks/useCampaigns';
+import { editarCampanha } from '@/lib/campanhas';
 import { includeSegmentIds, excludeSegmentIds } from '@/lib/campaignAudience';
 import { useTemplates, type EmailTemplate } from '@/hooks/useTemplates';
 import { BRASILIA_TIMEZONE } from '@/hooks/useLeadAnalytics';
@@ -283,41 +283,28 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
     }
 
     {
-      // Save design JSON
+      // O design do Unlayer só existe depois do export, então vai num PATCH
+      // separado. O PATCH é parcial: manda só `design` e não toca no resto.
       if (channel === 'email' && emailDesign) {
-        await supabase
-          .from('campaigns' as any)
-          .update({ design: emailDesign } as any)
-          .eq('id', created.id);
-      }
-
-      if (isScheduled) {
-        // Nada a invocar: o job pg_cron promote-scheduled-campaigns dispara no horário
-        // (status='scheduled' AND scheduled_at <= now()) e chama o send-campaign sozinho.
-        toast.success(`Campanha agendada para ${formatScheduleInput(scheduledAt)}`);
-      } else {
         try {
-          // functions.invoke NÃO lança em respostas 4xx/5xx — é obrigatório checar
-          // `error` e o corpo da resposta, senão um 409/500 exibiria "sucesso".
-          const { data, error } = await supabase.functions.invoke<{ error?: string }>(
-            'send-campaign',
-            { body: { campaign_id: created.id } },
-          );
-
-          if (error || data?.error) {
-            const detail = data?.error || error?.message;
-            toast.error(
-              detail
-                ? `Erro ao iniciar envio da campanha: ${detail}`
-                : 'Erro ao iniciar envio da campanha',
-            );
-          } else {
-            toast.success('Campanha em envio — acompanhe o progresso na lista');
-          }
+          await editarCampanha(created.id, { design: emailDesign });
         } catch {
-          toast.error('Erro ao iniciar envio da campanha');
+          toast.error('A campanha foi criada, mas o layout não pôde ser salvo.');
         }
       }
+
+      // ⚠️ O ENVIO NÃO EXISTE NESTE LOTE (3A). A fila, o worker e o Resend
+      // chegam no 3B; o agendamento, no 3C. Até lá a campanha fica salva em
+      // rascunho e o wizard diz isso — um botão que estoura ao ser clicado
+      // ensina o admin a desconfiar da tela inteira.
+      //
+      // Quando o 3B chegar: aqui entra a chamada ao enfileirador próprio, e
+      // NÃO uma invocação da Edge Function `send-campaign` — ela não volta.
+      toast.info(
+        isScheduled
+          ? 'A campanha foi salva em rascunho. O agendamento chega no próximo lote.'
+          : 'A campanha foi salva em rascunho. O envio chega no próximo lote.',
+      );
     }
     setSending(false);
     setConfirmOpen(false);

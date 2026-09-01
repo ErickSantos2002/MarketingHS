@@ -27,14 +27,76 @@ COLUNAS = """
 """
 
 # Os nomes dos segmentos numa subconsulta lateral, não numa segunda viagem.
+#
+# ⚠️ Um MAPA id -> nome, não uma lista, e cobrindo inclusões E exclusões. É o
+# que `describeAudience` no frontend consome para montar o rótulo ("Todos os
+# contatos", "Quentes — exceto Descadastrados"); uma lista de nomes perderia
+# qual id é qual e deixaria os excluídos de fora.
+#
+# Um id ausente do mapa é segmento apagado depois do envio — o rótulo mostra
+# "Segmento removido", e é por isso que o mapa não pode ser um array posicional.
 NOMES_DOS_SEGMENTOS = """
     LEFT JOIN LATERAL (
-        SELECT array_agg(g.name ORDER BY g.name) AS nomes
-          FROM segments g WHERE g.id = ANY(c.segment_ids)
+        SELECT jsonb_object_agg(g.id::text, g.name) AS nomes
+          FROM segments g
+         WHERE g.id = ANY(c.segment_ids || c.excluded_segment_ids)
     ) s ON true
 """
 
+# ⚠️ `campaigns.stats` é CONGELADA. Ela só é escrita uma vez, por
+# `finalize_campaign_if_drained`, no instante em que a fila drena — antes de
+# qualquer humano abrir ou clicar. Ler a coluna e mandar para a tela faz a
+# lista mostrar ~0% de abertura para sempre, que é exatamente o defeito que o
+# frontend contornava calculando ao vivo no navegador.
+#
+# O contorno dele era pior que o problema: `supabase.rpc('execute_readonly_query')`
+# com SQL montado por concatenação, uma função SECURITY DEFINER que aceita
+# consulta arbitrária vinda do navegador. A spec já decidiu não portar essa RPC
+# ("era dívida, não ativo" — ver publico.py). A agregação vem para cá.
+#
+# ⚠️ Os filtros abaixo são os MESMOS de `finalize_campaign_if_drained`, coluna
+# por coluna. O cálculo ao vivo do frontend divergia num ponto: ele não contava
+# `unsubscribed` como `sent`, e a função do banco conta. Seguir a função é o que
+# evita uma terceira verdade — assim o valor ao vivo e o congelado têm a mesma
+# semântica, e só a atualidade os separa.
+ESTATISTICAS_AO_VIVO = """
+    LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
+            'sent',       count(*) FILTER (WHERE cs.status IN ('sent','delivered','opened','clicked','unsubscribed')),
+            'delivered',  count(*) FILTER (WHERE cs.status IN ('delivered','opened','clicked')),
+            'opened',     count(*) FILTER (WHERE cs.status IN ('opened','clicked')),
+            'clicked',    count(*) FILTER (WHERE cs.status = 'clicked'),
+            'failed',     count(*) FILTER (WHERE cs.status IN ('failed','bounced')),
+            'suppressed', count(*) FILTER (WHERE cs.status = 'suppressed'),
+            'pending',    count(*) FILTER (WHERE cs.status = 'pending'),
+            -- Os brutos, que a tela de detalhe mostra separados do roll-up.
+            -- Antes eram DEZ consultas de contagem, uma por status.
+            'bounced',      count(*) FILTER (WHERE cs.status = 'bounced'),
+            'complained',   count(*) FILTER (WHERE cs.status = 'complained'),
+            'unsubscribed', count(*) FILTER (WHERE cs.status = 'unsubscribed'),
+            'total',        count(*)
+        ) AS numeros
+          FROM campaign_sends cs WHERE cs.campaign_id = c.id
+    ) v ON true
+"""
+
 AMOSTRA_ENVIOS = 50
+
+
+def _campanha(linha) -> dict:
+    """Monta a campanha para a tela, com `stats` ao vivo no lugar da coluna.
+
+    A coluna congelada continua no banco (é o que `finalize_campaign_if_drained`
+    escreve) e vai junto como `stats_congelado`, para quem precisar comparar —
+    mas o que a tela lê é o número de agora.
+    """
+    d = dict(linha)
+    congelado = d.pop("stats", None)
+    ao_vivo = d.pop("stats_ao_vivo", None)
+    return {**d,
+            "segment_names": d.get("segment_names") or {},
+            "stats": ao_vivo or congelado or {},
+            "stats_congelado": congelado}
 
 
 @router.get("")
@@ -59,16 +121,15 @@ async def listar(
                   AND ($2::text IS NULL OR channel = $2)""",
             estado, canal)
         linhas = await conn.fetch(
-            f"""SELECT {COLUNAS}, s.nomes AS segment_names
-                  FROM campaigns c {NOMES_DOS_SEGMENTOS}
+            f"""SELECT {COLUNAS}, s.nomes AS segment_names, v.numeros AS stats_ao_vivo
+                  FROM campaigns c {NOMES_DOS_SEGMENTOS} {ESTATISTICAS_AO_VIVO}
                  WHERE ($1::text IS NULL OR c.status = $1)
                    AND ($2::text IS NULL OR c.channel = $2)
                  ORDER BY c.created_at DESC
                  LIMIT $3 OFFSET $4""",
             estado, canal, limite, (pagina - 1) * limite)
     return {
-        "data": [{**dict(l), "segment_names": l["segment_names"] or []}
-                 for l in linhas],
+        "data": [_campanha(l) for l in linhas],
         "pagination": {"page": pagina, "limit": limite, "total": total,
                        "pages": (total + limite - 1) // limite},
     }
@@ -85,8 +146,8 @@ async def detalhe(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     """
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
-            f"""SELECT {COLUNAS}, s.nomes AS segment_names
-                  FROM campaigns c {NOMES_DOS_SEGMENTOS}
+            f"""SELECT {COLUNAS}, s.nomes AS segment_names, v.numeros AS stats_ao_vivo
+                  FROM campaigns c {NOMES_DOS_SEGMENTOS} {ESTATISTICAS_AO_VIVO}
                  WHERE c.id = $1::uuid""",
             campanha_id)
         if linha is None:
@@ -103,9 +164,7 @@ async def detalhe(campanha_id: str, _: Usuario = Depends(usuario_atual)):
                 LIMIT $2""",
             campanha_id, AMOSTRA_ENVIOS)
 
-    return {**dict(linha),
-            "segment_names": linha["segment_names"] or [],
-            "sends": [dict(e) for e in envios]}
+    return {**_campanha(linha), "sends": [dict(e) for e in envios]}
 
 
 class CampanhaIn(BaseModel):
@@ -280,3 +339,69 @@ async def audiencia(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     return {"total": total or 0,
             "amostra_nomes": [a["nome"] for a in amostra],
             "teto_aplicado": len(incluir) == 0}
+
+
+@router.get("/{campanha_id}/envios")
+async def envios(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+    """Todos os envios da campanha, com o contato já junto.
+
+    ⚠️ `NULLS LAST` não é enfeite. A partir da fila os envios nascem `pending`
+    com `sent_at` nulo, e em Postgres NULL vem PRIMEIRO num `ORDER BY DESC` —
+    sem isso a lista mostraria os que ainda não saíram acima dos que já saíram.
+
+    ⚠️ O contato vem por JOIN. A tela buscava os envios e depois os leads em
+    lotes de 200, montando o mapa no navegador.
+    """
+    async with sessao(role="service_role") as conn:
+        existe = await conn.fetchval(
+            "SELECT 1 FROM campaigns WHERE id = $1::uuid", campanha_id)
+        if existe is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+        linhas = await conn.fetch(
+            """SELECT cs.id::text, cs.campaign_id::text, cs.lead_id::text,
+                      cs.dnia_id::text, cs.channel, cs.status,
+                      cs.sent_at::text, cs.opened_at::text, cs.clicked_at::text,
+                      cs.error,
+                      COALESCE(l.nome, '-')     AS lead_name,
+                      COALESCE(l.email, '-')    AS lead_email,
+                      COALESCE(l.whatsapp, '-') AS lead_phone
+                 FROM campaign_sends cs
+                 LEFT JOIN leads l ON l.id = cs.lead_id
+                WHERE cs.campaign_id = $1::uuid
+                ORDER BY cs.sent_at DESC NULLS LAST, cs.created_at DESC""",
+            campanha_id)
+    return [dict(l) for l in linhas]
+
+
+@router.post("/{campanha_id}/cancelar-agendamento")
+async def cancelar_agendamento(campanha_id: str,
+                               _: Usuario = Depends(usuario_atual)):
+    """Volta a campanha agendada para rascunho.
+
+    ⚠️ O `AND status = 'scheduled'` é reavaliado NO BANCO, no instante do
+    UPDATE. Entre o clique e a chegada da requisição, o agendador pode ter
+    promovido a campanha para `sending` — e dizer "agendamento cancelado" para
+    um envio em curso seria mentir. Zero linhas afetadas é o único sinal de que
+    a corrida foi perdida.
+
+    ⚠️ No 3A nada leva uma campanha a `scheduled` (o agendamento é do 3C), então
+    este caminho existe para a tela não ficar sem ele — e já nasce com a trava
+    certa para quando o agendador aparecer.
+    """
+    async with sessao(role="service_role") as conn:
+        r = await conn.execute(
+            """UPDATE campaigns SET status = 'draft', scheduled_at = NULL,
+                                    updated_at = now()
+                WHERE id = $1::uuid AND status = 'scheduled'""",
+            campanha_id)
+    if r.endswith(" 0"):
+        existe = None
+        async with sessao(role="service_role") as conn:
+            existe = await conn.fetchval(
+                "SELECT status FROM campaigns WHERE id = $1::uuid", campanha_id)
+        if existe is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Esta campanha está em {existe!r} e não pode mais ser cancelada.")
+    return {"id": campanha_id, "status": "draft"}

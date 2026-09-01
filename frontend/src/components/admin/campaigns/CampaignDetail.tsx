@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Mail, MessageCircle, Send, Eye, MousePointerClick, AlertCircle, Loader2, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import type { Campaign, CampaignSend, CampaignLiveStats } from '@/hooks/useCampaigns';
 import { useCampaigns } from '@/hooks/useCampaigns';
-import { supabase } from '@/integrations/supabase/client';
+import { lerCampanha } from '@/lib/campanhas';
 
 interface CampaignDetailProps {
   campaign: Campaign;
@@ -69,19 +69,21 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
     if (runningRef.current) return;
     runningRef.current = true;
     try {
-      const [sendsData, statsData] = await Promise.all([
+      // Uma viagem a menos: a ficha da campanha já traz o status atual e as
+      // estatísticas ao vivo. Antes eram três chamadas — envios, dez contagens
+      // de status, e um select só para reler o status.
+      const [sendsData, fresh] = await Promise.all([
         getCampaignSends(campaign.id),
-        getCampaignStats(campaign.id),
+        lerCampanha(campaign.id).catch(() => null),
       ]);
-      const { data: fresh } = await supabase
-        .from('campaigns' as any)
-        .select('status')
-        .eq('id', campaign.id)
-        .maybeSingle();
       if (isCancelled()) return;
       setSends(sendsData);
-      setLiveStats(statsData);
-      setLiveStatus(((fresh as any)?.status as string) ?? campaign.status);
+      setLiveStats({
+        total: 0, pending: 0, sent: 0, delivered: 0, opened: 0, clicked: 0,
+        bounced: 0, complained: 0, failed: 0, unsubscribed: 0, suppressed: 0,
+        ...(fresh?.stats ?? {}),
+      });
+      setLiveStatus(fresh?.status ?? campaign.status);
       setLoading(false);
     } catch (e) {
       // Sem este catch, uma falha de rede numa das 11 queries deixaria o spinner

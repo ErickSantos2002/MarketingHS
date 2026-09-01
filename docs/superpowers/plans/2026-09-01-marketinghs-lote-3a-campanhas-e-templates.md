@@ -428,10 +428,21 @@ async def listar(
 async def detalhe(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     """A campanha, os nomes dos segmentos e uma amostra dos envios.
 
-    ⚠️ `stats` é lido da coluna, NÃO recalculado aqui. Quem calcula é
-    `finalize_campaign_if_drained`, no banco, quando a fila drena. Uma segunda
-    contagem nesta rota divergiria da primeira no meio de um envio, e a tela
-    mostraria um número que o banco não confirma.
+    ⚠️ `stats` NÃO pode ser lido da coluna — ela é CONGELADA. Só é escrita uma
+    vez, por `finalize_campaign_if_drained`, no instante em que a fila drena,
+    antes de qualquer humano abrir ou clicar. Servir a coluna faria a tela
+    mostrar ~0% de abertura para sempre.
+
+    É por isso que o frontend calculava ao vivo — mas com
+    `supabase.rpc('execute_readonly_query')` e SQL montado por concatenação:
+    uma função SECURITY DEFINER que aceita consulta arbitrária do navegador. A
+    spec já decidiu não portar essa RPC ("era dívida, não ativo"). A agregação
+    vem para o servidor, num `LEFT JOIN LATERAL`.
+
+    ⚠️ Use os MESMOS filtros de `finalize_campaign_if_drained`, coluna por
+    coluna. O cálculo do frontend divergia num ponto — não contava
+    `unsubscribed` como `sent`, e a função do banco conta. Seguir a função é o
+    que evita uma terceira verdade.
     """
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
@@ -826,6 +837,9 @@ print(n, 'pontos de acesso direto')"
 - [ ] Um template é criado, editado e apagado pela tela
 - [ ] `PATCH` parcial de template **não apaga** `design` nem `html`
 - [ ] A lista de campanhas traz os nomes dos segmentos sem segunda viagem
+- [ ] As estatísticas vêm ao vivo e **batem com `finalize_campaign_if_drained`**
+      nas chaves que as duas têm
+- [ ] `useCampaigns` não chama mais `execute_readonly_query`
 - [ ] Campanha nasce em `draft` mesmo que o corpo peça outro status
 - [ ] Editar campanha `sent` devolve **409**, não reescreve o passado
 - [ ] Excluir campanha em `sending` devolve **409 com a mensagem do banco**
