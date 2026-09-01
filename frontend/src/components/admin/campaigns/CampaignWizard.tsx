@@ -294,12 +294,10 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
       }
 
       if (isScheduled) {
-        // ⚠️ O AGENDAMENTO ainda não dispara nada. `promote_scheduled_campaigns`
-        // chama a `invoke_edge_function`, que o lote 0 apagou, e estoura no
-        // instante em que uma campanha vence. É do 3C consertar. Até lá a data
-        // fica guardada e a campanha NÃO é enfileirada — dizer o contrário
-        // faria o admin acreditar que agendou.
-        toast.info('A campanha foi salva com a data. O disparo automático chega no próximo lote.');
+        // Nada a chamar: a campanha nasceu `scheduled` (o servidor deriva isso
+        // da data) e o agendador do worker a promove na hora certa. É o
+        // pg_cron do Supabase, agora como laço asyncio.
+        toast.success(`Campanha agendada para ${formatScheduleInput(scheduledAt)}`);
       } else {
         try {
           const { queued } = await enviarCampanha(created.id);

@@ -1,4 +1,4 @@
-"""O worker: drena a fila de e-mail.
+"""O worker: drena a fila de e-mail e promove as campanhas agendadas.
 
 Substitui o `pg_cron` por um laço `asyncio`, no padrão do `guardiao_crons.py` do
 HS.OS. Roda como processo separado (`python -m app.worker`) porque reiniciar a
@@ -31,6 +31,10 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger("worker")
 
 REMETENTE_PADRAO = "MarketingHS <noreply@localhost>"
+
+# O agendador roda num ritmo próprio: não adianta varrer campanha agendada a
+# cada dois segundos, e a granularidade útil do agendamento é o minuto.
+AGENDADOR_INTERVALO = 60
 
 _parar = asyncio.Event()
 
@@ -170,12 +174,50 @@ async def _tick() -> int:
     return len(mensagens)
 
 
+async def _promover_agendadas() -> int:
+    """Promove as campanhas cujo horário chegou.
+
+    ⚠️ Isto é o `pg_cron` do Supabase, e a função do banco agora SÓ SELECIONA —
+    quem dispara é este laço. A versão herdada chamava `invoke_edge_function`
+    (o banco falando com a aplicação por HTTP) e quebrava, porque essa função
+    foi apagada no lote 0. Apagar a indireção em vez de portá-la é a decisão
+    nº 4 da spec.
+
+    ⚠️ NÃO duplicar o claim: o enfileirador já faz o CAS de `scheduled` para
+    `sending`. Duas instâncias do worker chamando a mesma campanha resultam num
+    409 para a perdedora, que é o comportamento certo.
+    """
+    from app.routers.envio import enfileirar
+
+    async with sessao(role="service_role") as conn:
+        vencidas = [r["id"] for r in
+                    await conn.fetch("SELECT id FROM promote_scheduled_campaigns()")]
+    promovidas = 0
+    for campanha_id in vencidas:
+        try:
+            resultado = await enfileirar(str(campanha_id))
+            logger.info("campanha agendada %s promovida: %s na fila",
+                        campanha_id, resultado["queued"])
+            promovidas += 1
+        except Exception as e:  # noqa: BLE001 — uma campanha não derruba as outras
+            logger.warning("falha ao promover a campanha %s: %s", campanha_id, e)
+    return promovidas
+
+
 async def principal() -> None:
     await init_db()
     logger.info("worker no ar — lote de %s, intervalo de %ss",
                 settings.FILA_LOTE, settings.WORKER_INTERVALO_SEGUNDOS)
+    proximo_agendador = 0.0
     try:
         while not _parar.is_set():
+            agora = asyncio.get_running_loop().time()
+            if agora >= proximo_agendador:
+                proximo_agendador = agora + AGENDADOR_INTERVALO
+                try:
+                    await _promover_agendadas()
+                except Exception:  # noqa: BLE001
+                    logger.exception("falha na passada do agendador")
             try:
                 tratadas = await _tick()
             except Exception:  # noqa: BLE001 — o laço não morre por uma passada

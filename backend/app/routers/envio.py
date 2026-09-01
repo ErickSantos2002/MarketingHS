@@ -38,6 +38,17 @@ async def enviar(campanha_id: str, _: Usuario = Depends(admin_atual)):
     o UUID de uma campanha forçava o envio para até 5.000 contatos com um POST
     anônimo. Foi corrigido lá e não se reintroduz aqui.
     """
+    return await enfileirar(campanha_id)
+
+
+async def enfileirar(campanha_id: str) -> dict:
+    """O enfileiramento em si, sem autenticação.
+
+    Separado da rota porque o AGENDADOR do worker precisa dele e não tem
+    usuário para autenticar. Escrever um segundo enfileirador para o agendador
+    seria criar duas implementações da mesma coisa — e a que diverge é sempre a
+    que ninguém está olhando.
+    """
     async with sessao(role="service_role") as conn:
         campanha = await conn.fetchrow(
             """SELECT id::text, status, channel,

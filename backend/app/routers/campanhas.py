@@ -6,7 +6,7 @@ no lote errado.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -208,22 +208,28 @@ async def criar(dados: CampanhaIn, _: Usuario = Depends(usuario_atual)):
     campanha já em `sending` — que o worker do 3B pegaria e enviaria sem que
     ninguém tivesse clicado em enviar.
 
-    ⚠️ `scheduled_at` é aceito e gravado, mas NADA no 3A leva a campanha para o
-    status `scheduled`, e o promotor (`promote_scheduled_campaigns`) está
-    quebrado até o 3C. A data fica guardada e não dispara nada — guardá-la é
-    certo, é o que o 3C vai ler, mas não há botão de agendar neste lote.
+    ⚠️ Com `scheduled_at` no FUTURO a campanha nasce `scheduled`, e o agendador
+    do worker a promove quando a hora chegar. Sem data, nasce `draft`. O status
+    continua sendo DERIVADO pelo servidor, nunca escolhido pelo cliente — e
+    `sending` continua fora de alcance.
+
+    Data no passado nasce `draft` de propósito: agendar para trás significaria
+    disparo imediato no primeiro tick do agendador, o que quase nunca é o que
+    alguém quis ao digitar a data errada.
     """
+    agendada = (dados.scheduled_at is not None
+                and dados.scheduled_at > datetime.now(timezone.utc))
     async with sessao(role="service_role") as conn:
         novo_id = await conn.fetchval(
             """INSERT INTO campaigns (name, channel, status, subject, body,
                                       design, segment_ids, excluded_segment_ids,
                                       scheduled_at)
-               VALUES ($1, $2, 'draft', $3, $4, $5::jsonb,
+               VALUES ($1, $2, $9, $3, $4, $5::jsonb,
                        $6::uuid[], $7::uuid[], $8::timestamptz)
                RETURNING id""",
             dados.name.strip(), dados.channel, dados.subject, dados.body,
             dados.design, dados.segment_ids, dados.excluded_segment_ids,
-            dados.scheduled_at)
+            dados.scheduled_at, "scheduled" if agendada else "draft")
     return {"id": str(novo_id)}
 
 
