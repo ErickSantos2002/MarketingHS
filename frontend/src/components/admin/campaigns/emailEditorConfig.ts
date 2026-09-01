@@ -12,15 +12,15 @@ export const EMAIL_MERGE_TAGS = {
   nome: { name: 'Nome do contato', value: '{{nome}}', sample: 'João Silva' },
   empresa: { name: 'Empresa', value: '{{empresa}}', sample: 'Empresa LTDA' },
   email: { name: 'Email', value: '{{email}}', sample: 'joao@empresa.com' },
-  // Substituída pelo worker (process-email-queue) no momento do envio, por
-  // destinatário — ver replaceVars() lá. Se o HTML final não contiver a
+  // Substituída pelo worker (backend/app/worker.py) no momento do envio, por
+  // destinatário — ver app/email/montagem.py. Se o HTML final não contiver a
   // tag/o link, o worker injeta um rodapé automático de descadastro; mas
   // templates podem (e devem) incluir esta tag explicitamente para
   // controlar posição e estilo do link de descadastro.
   unsubscribe_url: {
     name: 'Link de descadastro',
     value: '{{unsubscribe_url}}',
-    sample: 'https://exemplo.com/functions/v1/email-unsubscribe?...',
+    sample: 'https://exemplo.com/descadastrar?lid=...&e=...&t=...',
   },
 };
 

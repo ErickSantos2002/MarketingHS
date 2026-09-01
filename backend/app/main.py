@@ -48,6 +48,11 @@ app.add_middleware(
     LimiteTaxaMiddleware,
     por_minuto=settings.LIMITE_PUBLICO_POR_MINUTO,
     prefixos=("/publico", "/auth/login"),
+    # ⚠️ O webhook do Resend vem de poucos IPs e uma campanha de mil e-mails
+    # gera milhares de eventos em minutos. Limitá-lo faria o provedor levar 429
+    # e re-tentar cada evento por 10 horas. Ele se autentica por assinatura
+    # Svix — ver o cabeçalho do middleware.
+    isentos=("/publico/webhook/",),
 )
 
 
