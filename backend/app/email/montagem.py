@@ -28,22 +28,37 @@ def _b64url(dados: bytes) -> str:
     return base64.urlsafe_b64encode(dados).decode().rstrip("=")
 
 
-def url_de_descadastro(base: str, lead_id: str, email: str, segredo: str) -> str:
-    """O link assinado, por destinatário.
+def normalizar_email(email: str) -> str:
+    """Minúsculo e sem espaços nas pontas.
 
-    ⚠️ O e-mail é normalizado (minúsculo, sem espaços nas pontas) ANTES de
-    assinar. O verificador faz `b64urlDecode(e).toLowerCase().trim()` e só
-    então confere o MAC — assinar o valor cru daria 401 em todo endereço com
+    ⚠️ É a normalização que o verificador aplica (`.toLowerCase().trim()`)
+    ANTES de conferir o MAC. Assinar o valor cru daria 401 em todo endereço com
     maiúscula, e o contato veria "link inválido" ao tentar sair da lista.
     """
-    normalizado = (email or "").strip().lower()
+    return (email or "").strip().lower()
+
+
+def assinar_token(lead_id: str, email_normalizado: str, segredo: str) -> str:
+    """O HMAC do descadastro.
+
+    ⚠️ Esta função é usada pelas DUAS pontas — o worker que assina e o endpoint
+    que verifica. É de propósito: duas implementações do mesmo MAC divergiriam
+    algum dia, e a divergência apareceria como "todo descadastro dá 401",
+    invisível até um contato reclamar.
+    """
     mac = hmac.new(segredo.encode("utf-8"),
-                   f"{lead_id}:{normalizado}".encode("utf-8"),
+                   f"{lead_id}:{email_normalizado}".encode("utf-8"),
                    hashlib.sha256).digest()
+    return _b64url(mac)
+
+
+def url_de_descadastro(base: str, lead_id: str, email: str, segredo: str) -> str:
+    """O link assinado, por destinatário."""
+    normalizado = normalizar_email(email)
     parametros = urlencode({
         "lid": lead_id,
         "e": _b64url(normalizado.encode("utf-8")),
-        "t": _b64url(mac),
+        "t": assinar_token(lead_id, normalizado, segredo),
     })
     return f"{base.rstrip('/')}/descadastrar?{parametros}"
 

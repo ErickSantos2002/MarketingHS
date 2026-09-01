@@ -5,6 +5,7 @@ Ficam sob `/publico` porque é esse prefixo que o limite de taxa do lote 0 cobre
 """
 
 import base64
+import hmac
 import json
 import logging
 
@@ -15,6 +16,8 @@ from pydantic import BaseModel, Field
 
 from app.chave_api import ChaveApi, chave_api
 from app.database import sessao
+from app.email.montagem import assinar_token, normalizar_email
+from app.integracoes import ler_segredo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/publico", tags=["publico"])
@@ -562,3 +565,130 @@ async def adicionar_contatos_publico(
                             "Um ou mais contatos informados não existem")
     return {"success": True, "segment_id": segmento_id,
             "contacts_added": len(dados.contact_ids)}
+
+
+# ── Descadastro ──────────────────────────────────────────────────────────────
+# Porte de `email-unsubscribe`. A outra ponta do HMAC que o worker assina.
+
+class DescadastroIn(BaseModel):
+    lid: str
+    e: str
+    t: str
+
+
+def _b64url_decodifica(s: str) -> str:
+    """Inverso do encoder do worker: decodifica os BYTES utf-8.
+
+    ⚠️ Decodificar como Latin-1 (o que `atob` sozinho faz) daria mojibake em
+    endereço com acento — e o MAC, calculado sobre a string errada, não
+    bateria. O original corrigiu isso e o porte precisa manter.
+    """
+    resto = len(s) % 4
+    completo = s + ("=" * (4 - resto) if resto else "")
+    return base64.urlsafe_b64decode(completo).decode("utf-8")
+
+
+async def _conferir_token(lid: str, e: str, t: str) -> str:
+    """Devolve o e-mail normalizado, ou levanta 400/401.
+
+    ⚠️ O segredo vem de `integracoes.ler_segredo` — a MESMA função que o worker
+    usa para assinar. Ler de fontes diferentes faria todo descadastro dar 401,
+    e o defeito só apareceria quando um contato reclamasse.
+    """
+    if not lid or not e or not t:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Requisição incompleta.")
+    try:
+        email = normalizar_email(_b64url_decodifica(e))
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Requisição inválida.")
+    if not email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Requisição inválida.")
+
+    segredo = await ler_segredo("UNSUBSCRIBE_SECRET")
+    if not segredo:
+        logger.error("descadastro: UNSUBSCRIBE_SECRET ausente")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            "Servidor mal configurado.")
+
+    # A MESMA função que o worker usa para assinar — ver o aviso em
+    # `assinar_token`. Reimplementar o MAC aqui seria criar a segunda
+    # implementação que um dia diverge.
+    esperado = assinar_token(lid, email, segredo)
+    # compare_digest, nunca `==`: comparação de string sai no primeiro byte
+    # diferente, e isso é medível. ⚠️ Os dois lados como str — misturar str e
+    # bytes levanta TypeError, pegadinha que já mordeu no GestorHS.
+    if not hmac.compare_digest(str(t), str(esperado)):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token inválido.")
+    return email
+
+
+@router.get("/descadastro")
+async def descadastro_conferir(lid: str = Query(...), e: str = Query(...),
+                               t: str = Query(...)):
+    """SÓ valida o token e devolve o e-mail, para a página montar a confirmação.
+
+    ⚠️ NENHUMA escrita acontece aqui. A RFC 8058 exige que o link clicável do
+    corpo do e-mail — pré-carregado por muitos clientes — não tenha efeito
+    colateral. Se o GET descadastrasse, o contato sairia da lista sem ter
+    clicado em nada, só porque o cliente de e-mail buscou o link.
+    """
+    email = await _conferir_token(lid, e, t)
+    return {"ok": True, "email": email}
+
+
+@router.post("/descadastro")
+async def descadastro_efetivar(dados: DescadastroIn):
+    """Descadastra de fato. É o que o botão nativo do Gmail/Yahoo chama."""
+    email = await _conferir_token(dados.lid, dados.e, dados.t)
+
+    # 1. A supressão é o ÚNICO efeito que precisa dar certo. Se falhar,
+    #    respondemos 500 para que o provedor re-tente o POST one-click — a lista
+    #    de descadastro é a fonte da verdade de compliance, e um 200 com a
+    #    gravação falhada perderia o pedido em silêncio.
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            """INSERT INTO email_suppressions (email, reason, source, lead_id)
+               VALUES ($1, 'unsubscribe', 'descadastro', $2::uuid)
+               ON CONFLICT (email) DO NOTHING""",
+            email, dados.lid)
+
+    # 2. Marcar o último envio como 'unsubscribed' — best-effort, nunca derruba
+    #    a resposta: a supressão acima já impede envios futuros.
+    try:
+        async with sessao(role="service_role") as conn:
+            # ⚠️ NULLS LAST é obrigatório: existem linhas 'pending' com sent_at
+            # nulo, e NULL vem PRIMEIRO num ORDER BY DESC — sem isso o
+            # descadastro marcaria uma campanha ainda na fila.
+            #
+            # ⚠️ Os status terminais são preservados. Sobrescrever um 'bounced'
+            # ou 'suppressed' por 'unsubscribed' apagaria o motivo real e
+            # sugeriria, falsamente, que o e-mail chegou a sair.
+            await conn.execute(
+                """UPDATE campaign_sends SET status = 'unsubscribed'
+                    WHERE id = (
+                        SELECT id FROM campaign_sends
+                         WHERE lead_id = $1::uuid AND channel = 'email'
+                           AND status NOT IN ('pending','bounced','complained',
+                                              'failed','unsubscribed','suppressed')
+                         ORDER BY sent_at DESC NULLS LAST
+                         LIMIT 1)""",
+                dados.lid)
+    except Exception:  # noqa: BLE001
+        logger.exception("descadastro: falha ao marcar o último envio")
+
+    # 3. Evento na timeline — best-effort pelo mesmo motivo.
+    try:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                """INSERT INTO contact_events
+                       (dnia_id, lead_id, source_app, event_type, title,
+                        metadata, occurred_at)
+                   SELECT l.dnia_id, l.id, 'marketinghs', 'email_unsubscribed',
+                          'Descadastrou-se de e-mails',
+                          jsonb_build_object('email', $2::text), now()
+                     FROM leads l WHERE l.id = $1::uuid""",
+                dados.lid, email)
+    except Exception:  # noqa: BLE001
+        logger.exception("descadastro: falha ao registrar o evento")
+
+    return {"ok": True, "email": email}
