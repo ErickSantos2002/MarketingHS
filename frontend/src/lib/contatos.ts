@@ -50,3 +50,33 @@ export interface Scoring {
 export const lerScoring = () => api.get<Scoring>('/config/scoring');
 export const gravarScoring = (s: Omit<Scoring, 'updated_at'>) =>
   api.put<Scoring>('/config/scoring', s);
+
+// ── Lista de supressão ──────────────────────────────────────────────────────
+// Quem está aqui não recebe e-mail de campanha; o worker confere esta lista
+// imediatamente antes de cada envio.
+
+export interface Supressao {
+  id: string;
+  email: string;
+  reason: string;
+  source: string | null;
+  lead_id: string | null;
+  created_at: string;
+}
+
+export interface PaginaSupressoes {
+  data: Supressao[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+export const listarSupressoes = (busca: string, pagina: number, limite: number) =>
+  api.get<PaginaSupressoes>(
+    `/supressoes?page=${pagina}&limit=${limite}` +
+    (busca.trim() ? `&q=${encodeURIComponent(busca.trim())}` : ''));
+
+// Devolve `ja_existia` em vez de erro: suprimir é idempotente por natureza.
+export const suprimir = (email: string) =>
+  api.post<{ email: string; ja_existia: boolean }>('/supressoes', { email });
+
+export const removerSupressao = (id: string) =>
+  api.delete<void>(`/supressoes/${id}`);

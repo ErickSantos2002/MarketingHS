@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { listarSupressoes, removerSupressao, suprimir } from '@/lib/contatos';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -82,47 +82,32 @@ export default function SuppressionList() {
 
     const fetchSuppressions = async () => {
       setLoading(true);
-      const from = (page - 1) * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      try {
+        const { data, pagination } = await listarSupressoes(search, page, PAGE_SIZE);
 
-      // Tipos de 'email_suppressions' ainda não estão em types.ts (auto-gerado);
-      // serão regenerados após o deploy da migration — mesmo padrão de useCampaigns.tsx.
-      let query = supabase
-        .from('email_suppressions' as any)
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(from, to);
+        // Descarta respostas de requisições superadas (troca rápida de página/busca)
+        if (cancelled) return;
 
-      if (search.trim()) {
-        query = query.ilike('email', `%${search.trim()}%`);
-      }
+        // Se a página atual deixou de existir (ex.: removeu o último item da
+        // última página), volta para a última válida — o effect refaz o fetch.
+        const newTotalPages = Math.max(1, Math.ceil(pagination.total / PAGE_SIZE));
+        if (page > newTotalPages) {
+          setTotalCount(pagination.total);
+          setPage(newTotalPages);
+          return;
+        }
 
-      const { data, error, count } = await query;
-
-      // Descarta respostas de requisições superadas (troca rápida de página/busca)
-      if (cancelled) return;
-
-      if (error) {
-        console.error('Error fetching email suppressions:', error);
+        setItems(data as unknown as Suppression[]);
+        setTotalCount(pagination.total);
+        setLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Erro ao carregar a lista de supressão:', err);
         toast.error('Erro ao carregar lista de supressão');
         setItems([]);
         setTotalCount(0);
         setLoading(false);
-        return;
       }
-
-      // Se a página atual deixou de existir (ex.: removeu o último item da última
-      // página), volta para a última página válida — o effect refaz o fetch.
-      const newTotalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
-      if (page > newTotalPages) {
-        setTotalCount(count ?? 0);
-        setPage(newTotalPages);
-        return;
-      }
-
-      setItems((data as unknown as Suppression[]) || []);
-      setTotalCount(count ?? 0);
-      setLoading(false);
     };
 
     fetchSuppressions();
@@ -146,16 +131,11 @@ export default function SuppressionList() {
     }
     setAdding(true);
     try {
-      const { error } = await supabase
-        .from('email_suppressions' as any)
-        .insert({ email, reason: 'manual', source: 'admin' } as any);
-
-      if (error) {
-        if (error.code === '23505') {
-          toast.info('Este email já está na lista de supressão');
-        } else {
-          throw error;
-        }
+      // O servidor devolve `ja_existia` em vez de erro: suprimir é idempotente
+      // por natureza, e quem clica quer o endereço fora da lista de envio.
+      const { ja_existia } = await suprimir(email);
+      if (ja_existia) {
+        toast.info('Este email já está na lista de supressão');
       } else {
         toast.success('Email suprimido com sucesso');
       }
@@ -174,11 +154,7 @@ export default function SuppressionList() {
   const handleRemove = async (id: string) => {
     setRemoving(id);
     try {
-      const { error } = await supabase
-        .from('email_suppressions' as any)
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await removerSupressao(id);
       toast.success('Email removido da lista de supressão');
       refetch();
     } catch (err) {
