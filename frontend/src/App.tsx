@@ -18,6 +18,7 @@ const PageConfigEditor = lazy(() => import("./components/admin/pages/PageConfigE
 const AdminImport = lazy(() => import("./pages/admin/ImportPage"));
 const AdminSettings = lazy(() => import("./pages/admin/SettingsPage"));
 const AdminSegments = lazy(() => import("./pages/admin/Segments"));
+const Descadastrar = lazy(() => import("./pages/Descadastrar"));
 const AdminCampaigns = lazy(() => import("./pages/admin/Campaigns"));
 const AdminAutomations = lazy(() => import("./pages/admin/Automations"));
 const AdminJourneyBuilder = lazy(() => import("./pages/admin/JourneyBuilder"));
@@ -115,6 +116,15 @@ const App = () => (
                 </ProtectedRoute>
               </AuthProvider>
             }
+          />
+
+          {/* Descadastro — PÚBLICA, sem AuthProvider nem ProtectedRoute. É o
+              destino do link assinado que vai em todo e-mail de campanha: quem
+              chega aqui é um contato sem conta, e exigir sessão tornaria o
+              descadastro impossível — o oposto do que a RFC 8058 pede. */}
+          <Route
+            path="/descadastrar"
+            element={<Suspense fallback={<PageLoader />}><Descadastrar /></Suspense>}
           />
 
           {/* Redirects */}

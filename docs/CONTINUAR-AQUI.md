@@ -5,76 +5,74 @@
 
 ## Onde paramos
 
-**Lote 3A (Campanhas e templates) concluído.** ⚠️ **O lote 3 NÃO fechou** — ele
-foi partido em 3A/3B/3C, e o "pronto" que a spec define ("uma campanha de teste
-sai de verdade e a abertura aparece na timeline") é a soma de 3B e 3C.
+**Lote 3B — o motor — com o código pronto e conferido, faltando UMA coisa: o
+primeiro envio real.** Ele depende de uma chave do Resend e de um domínio
+verificado, e o script está pronto.
 
-O que funciona pela tela agora: criar campanha escolhendo template e segmentos,
-com a audiência contando ao vivo; editar; duplicar; excluir; e acompanhar pela
-gaveta de detalhe, com a tabela de envios e as métricas. Template tem CRUD
-próprio. **Nada é enviado** — o botão avisa que o envio chega no 3B e a campanha
-fica salva em rascunho.
+### O que fazer agora, em três passos
 
-Conferido no navegador: a lista com os rótulos de audiência certos ("Todos os
-contatos", "Quentes"), o wizard contando 3 → 1 ao escolher o segmento, o
-template aparecendo no seletor, o fluxo até "Confirmar envio" terminando com a
-campanha em rascunho, e a gaveta mostrando 2 enviados / 2 abertos (100%) /
-1 clicado (50%) / 1 bounce a partir de envios semeados.
+```bash
+# 1. gravar a chave do Resend e o remetente (pede os dois, não mostra na tela)
+bash ~/marketinghs-configurar-resend.sh
 
-O acesso direto ao banco caiu de 68 para **51 pontos**.
+# 2. subir o worker
+cd ~/github/MarketingHS/backend && ./.venv/bin/python -m app.worker
 
-### As três coisas que o 3A ensinou
+# 3. na tela, criar uma campanha para UM contato de teste e enviar
+```
 
-**`campaigns.stats` é congelada.** Só é escrita uma vez, quando a fila drena,
-antes de qualquer abertura. O frontend já sabia e contornava com
-`execute_readonly_query` — SQL por concatenação numa função SECURITY DEFINER que
-aceita consulta arbitrária do navegador. A agregação veio para o servidor, com
-os MESMOS filtros de `finalize_campaign_if_drained`. Resta um chamador daquela
-RPC: `usePages`.
+Confira que o e-mail chega, que as merge tags foram trocadas, que existe link de
+descadastro e que ele funciona. **Só então o 3B fecha.**
 
-**O portão pegou o plano de novo.** Ele dizia que `campaigns-api` e
-`templates-api` sairiam da pasta. Não saíram: as duas aceitam chave de API — ou
-seja, servem integrador externo — e o 3A portou só a metade do admin. A
-`campaigns-api` ainda carrega o `?action=send`. **A metade pública das duas é
-tarefa do 3B**, e por isso a documentação pública ficou como está.
+### O que já está de pé
 
-**Duas correções vieram da execução, não da revisão:** `scheduled_at` como `str`
-derrubava o POST com 500 (o asyncpg exige `datetime` em `timestamptz`, e o cast
-`::timestamptz` não salva), e o plano descrevia errado o `guard_campaign_delete`
-— ele recusa `sending` e envios `pending`, não campanha `sent`.
+`pgmq` virou `email_send_queue` (tabela + `FOR UPDATE SKIP LOCKED`), `pg_cron`
+virou laço `asyncio` no worker, `supabase_vault` virou `integration_secrets`, e
+o `invoke_edge_function` não voltou. **17 testes** cobrem o motor.
 
-## O próximo passo
+Provado sem enviar um byte:
 
-**Escrever o plano do 3B (O motor), e executá-lo.** É o coração do projeto e o
-único lugar que a spec manda nascer com teste automatizado — um e-mail enviado
-duas vezes para a base inteira queima o domínio.
+- **modo degradado**: sem `RESEND_API_KEY` o worker fica de pé, avisa e **não**
+  consome a fila. Fingir que enviou seria o pior desfecho — as linhas sairiam de
+  `pending`, a campanha fecharia como enviada e ninguém receberia nada.
+- **pipeline inteiro** com o Resend substituído: 3 mensagens, 2 enviadas, 1
+  virando `suppressed` (não `failed`), fila a zero, campanha fechada pelo
+  `finalize` do banco, cabeçalhos RFC 8058 com one-click.
+- **recuperação de órfãs**: fila apagada com as linhas `pending` de pé, e o
+  re-enfileiramento republicou as 3 sem criar nenhuma duplicata.
+- **as duas pontas do HMAC concordam**: o token do nosso worker foi conferido
+  contra o `computeToken` do `email-unsubscribe/index.ts` **rodando de verdade**
+  — endereço comum, com acento e com maiúsculas.
 
-O que o 3B tem de resolver, já levantado e verificado:
+### As duas coisas que o portão pegou
 
-1. **`process-email-queue` NÃO EXISTE.** O worker que de fato envia é citado por
-   sete arquivos e não está no repositório nem no histórico do git. A lógica por
-   destinatário — supressão, merge tags, URL de descadastro assinada, rodapé,
-   cabeçalhos RFC 8058 — terá de ser **derivada de quem a verifica**:
-   `email-unsubscribe` (que confere o HMAC), `send-test-email` (credenciais e
-   merge tags) e `_shared/secrets.ts` (ordem de resolução do segredo).
-2. **As tabelas de fila não existem.** `email_send_queue` e `journey_events`
-   eram do `pgmq`. Viram tabela comum + `FOR UPDATE SKIP LOCKED`.
-3. **Sete funções de banco a reimplementar:** `email_queue_read`,
-   `email_queue_delete`, `email_queue_send_batch`, `reset_stuck_campaigns` e as
-   três de segredo de integração. As outras sete da lista original são do lote 4
-   (jornadas) ou não voltam (`invoke_edge_function`).
-4. **A metade pública de `campaigns-api` e `templates-api`**, mais o
-   `?action=send`.
-5. O `worker/` na raiz está vazio, mas o `docker-compose.yml` já aponta o
-   serviço para `python -m app.worker` na imagem do backend.
+**A página `/descadastrar` não existia.** O worker assina um link para
+`{FRONTEND_URL}/descadastrar` e essa rota não estava no `App.tsx` — todo link de
+descadastro daria 404. Foi criada, pública, e conferida clicando: valida sem
+descadastrar (RFC 8058), descadastra ao confirmar, e token adulterado mostra
+"Link inválido" **sem** jogar o visitante no login.
 
-### Depois do 3B
+**`process-email-queue` não existe.** Sete arquivos a citam e ela não está no
+repositório nem no histórico do git. Toda a lógica por destinatário foi derivada
+de quem a verifica. Está registrado no plano do 3B, tabela por tabela.
 
-**3C** — webhook do Resend (assinatura Svix), métricas e agendamento.
-⚠️ `promote_scheduled_campaigns` está **quebrada e o defeito é latente**: ela
-chama `invoke_edge_function`, que o lote 0 apagou. Devolve 0 sem erro hoje
-porque o laço não roda sem campanha agendada; estoura com `UndefinedFunctionError`
-no instante em que uma vence. Provado.
+## O próximo passo, depois do envio
+
+**Lote 3C.** O que ficou de fora:
+
+- **webhook do Resend** — abertura e clique não voltam sem ele. Assinatura Svix:
+  HMAC-SHA256 sobre `"{svix-id}.{svix-timestamp}.{corpo}"`, chave = base64 do
+  `RESEND_WEBHOOK_SECRET` sem o prefixo `whsec_`, janela anti-replay de 5 min.
+- **agendamento.** ⚠️ `promote_scheduled_campaigns` está quebrada e o defeito é
+  latente: chama `invoke_edge_function`, que o lote 0 apagou. Devolve 0 sem erro
+  hoje porque o laço não roda sem campanha agendada; estoura com
+  `UndefinedFunctionError` no instante em que uma vence. O conserto é o
+  agendador Python fazer a seleção e chamar `/campanhas/{id}/enviar` direto — é
+  isso que apaga a indireção em vez de portá-la.
+- **a tela de configuração do Resend** (`resend-config`, 568 linhas) e a **lista
+  de supressão** na interface.
+- **a metade pública de `campaigns-api` e `templates-api`**, que o 3A descobriu
+  que ainda não tinha substituto.
 
 ### Lote 2 (Segmentos), antes disso
 

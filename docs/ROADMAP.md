@@ -16,8 +16,8 @@ A spec que justifica esta ordem:
 | **1D** | **A porta pública** — chave de API, ingestão e leitura externa | 5 | ✅ **concluído** (31/08/2026) |
 | **2** | **Segmentos** — construtor de regras, audiência | 1 | ✅ **concluído** (01/09/2026) |
 | **3A** | **Campanhas e templates** — CRUD, audiência, acompanhamento (sem envio) | 0 | ✅ **concluído** (01/09/2026) |
-| 3B | **O motor** — filas, worker, Resend, descadastro, supressão | 6 | a fazer |
-| 3C | Retorno — webhook do Resend, métricas, agendamento | 2 | a fazer |
+| **3B** | **O motor** — filas, worker, Resend, descadastro | 2 | 🟡 **código pronto** (01/09/2026), falta o primeiro envio real |
+| 3C | Retorno — webhook do Resend, métricas, agendamento, config do Resend, supressão na tela, metade pública de campaigns/templates-api | 6 | a fazer |
 | 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
 | 5 | Integrações HS — GrowthHS, DataCore, identidade, Meta CAPI | 6 | a fazer |
 | 6 | Analytics + IA | 4 | a fazer |
@@ -31,8 +31,8 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas          : 14/48  (sem mudança no 3A — ver abaixo)
-telas migradas              : 24
+functions portadas          : 16/48  (send-campaign e email-unsubscribe saíram no 3B)
+telas migradas              : 25      (a página pública de descadastro é nova)
 acesso direto ao banco      : 51 pontos  (eram 68 antes do 3A, 87 antes do lote 2, 153 antes do 1B)
 ```
 
@@ -45,6 +45,39 @@ de quanto trabalho falta: é mais que o dobro.
 lote 2. É outro 68 — este é medido pelo comando multilinha, o da spec era a
 contagem errada de linha única no início de tudo. Não é sinal de que nada andou:
 eram 153.
+
+## O lote 3B entregou
+
+O motor. `pgmq` virou `email_send_queue` (tabela comum + `FOR UPDATE SKIP
+LOCKED`), `pg_cron` virou laço `asyncio` no worker, `supabase_vault` virou
+`integration_secrets`, e o `invoke_edge_function` **não voltou** — o worker
+chama a função Python direto.
+
+É o único lote com teste automatizado, e a spec diz por quê. **17 testes**:
+seis do motor de fila (reivindicação sob concorrência, visibility timeout, recuo
+progressivo, fila-morta, republicação idempotente), onze da parte `text/plain`,
+oito da montagem por destinatário.
+
+⚠️ **A função de referência não existia.** `process-email-queue` é citada por
+sete arquivos e não está no repositório nem no histórico do git. A lógica por
+destinatário foi **derivada de quem a verifica** — e a prova é que o token
+gerado pelo nosso worker foi conferido contra o `computeToken` do
+`email-unsubscribe/index.ts` rodando de verdade: confere em endereço comum, com
+acento e com maiúsculas.
+
+O que foi provado sem enviar um byte: modo degradado (sem `RESEND_API_KEY` o
+worker não consome a fila e diz por quê), o pipeline inteiro com o Resend
+substituído (3 mensagens, 2 enviadas, 1 suprimida, fila a zero, campanha
+fechada pelo `finalize` do banco), e a recuperação de órfãs (fila apagada com as
+linhas `pending` de pé → 3 republicadas, nenhuma duplicata).
+
+**A página `/descadastrar` não existia** e o link assinado ia para um 404 — o
+portão pegou. Foi criada, pública, e conferida no navegador: valida, descadastra
+ao confirmar, e um token adulterado mostra "Link inválido" sem jogar o visitante
+no login.
+
+🟡 **Falta o primeiro envio real**, que depende de uma chave do Resend e de um
+domínio verificado. Script pronto em `~/marketinghs-configurar-resend.sh`.
 
 ## O lote 3A entregou
 
