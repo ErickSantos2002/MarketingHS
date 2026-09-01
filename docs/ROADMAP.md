@@ -15,7 +15,9 @@ A spec que justifica esta ordem:
 
 | **1D** | **A porta pública** — chave de API, ingestão e leitura externa | 5 | ✅ **concluído** (31/08/2026) |
 | **2** | **Segmentos** — construtor de regras, audiência | 1 | ✅ **concluído** (01/09/2026) |
-| 3 | **Campanhas + o motor** — templates, agendamento, fila, worker, Resend | 8 | a fazer |
+| **3A** | **Campanhas e templates** — CRUD, audiência, acompanhamento (sem envio) | 0 | ✅ **concluído** (01/09/2026) |
+| 3B | **O motor** — filas, worker, Resend, descadastro, supressão | 6 | a fazer |
+| 3C | Retorno — webhook do Resend, métricas, agendamento | 2 | a fazer |
 | 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
 | 5 | Integrações HS — GrowthHS, DataCore, identidade, Meta CAPI | 6 | a fazer |
 | 6 | Analytics + IA | 4 | a fazer |
@@ -29,9 +31,9 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas          : 14/48
-telas migradas              : 22
-acesso direto ao banco      : 68 pontos  (eram 87 antes do lote 2, 153 antes do 1B)
+functions portadas          : 14/48  (sem mudança no 3A — ver abaixo)
+telas migradas              : 24
+acesso direto ao banco      : 51 pontos  (eram 68 antes do 3A, 87 antes do lote 2, 153 antes do 1B)
 ```
 
 ⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
@@ -43,6 +45,35 @@ de quanto trabalho falta: é mais que o dobro.
 lote 2. É outro 68 — este é medido pelo comando multilinha, o da spec era a
 contagem errada de linha única no início de tudo. Não é sinal de que nada andou:
 eram 153.
+
+## O lote 3A entregou
+
+Campanhas e templates de ponta a ponta pela tela — **sem enviar nada**. CRUD dos
+dois, audiência, acompanhamento com a tabela de envios, e a trava que impede
+editar campanha que já saiu.
+
+O lote 3 foi partido em **3A / 3B / 3C**, pelo mesmo motivo que partiu o lote 1.
+A decisão da spec de que o motor nasce sendo usado (§6) não se reabre: o que
+mudou foi o tamanho do plano. **O lote 3 continua aberto** — o "pronto" da spec
+("uma campanha de teste sai de verdade e a abertura aparece na timeline") é a
+soma de 3B e 3C.
+
+**A correção que mais importa: `campaigns.stats` é congelada.** Ela só é escrita
+uma vez, quando a fila drena, antes de qualquer abertura ou clique — servir a
+coluna mostraria ~0% de abertura para sempre. O frontend já sabia e contornava
+com `execute_readonly_query`: SQL por concatenação numa função SECURITY DEFINER
+que aceita consulta arbitrária do navegador. A agregação veio para o servidor,
+com os MESMOS filtros de `finalize_campaign_if_drained` (provado comparando as
+duas depois de um finalize). Resta um chamador daquela RPC: `usePages`.
+
+Duas viagens a menos: `getCampaignStats` fazia dez consultas de contagem, uma
+por status; `getCampaignSends` buscava os envios e depois os leads em lotes de
+200.
+
+⚠️ **Nenhuma function saiu da pasta**, e o portão é que pegou isso: tanto
+`campaigns-api` quanto `templates-api` aceitam chave de API — servem integrador
+externo, e o 3A portou só a metade do admin. A `campaigns-api` ainda carrega o
+`?action=send`. **A metade pública das duas é tarefa do 3B.**
 
 ## O lote 2 entregou
 
@@ -157,7 +188,8 @@ quebra silenciosa em erro visível sem derrubar a casca do admin.
   que vale tudo, herdado da origem. Vale decidir se continua.
 - [ ] **A especificação OpenAPI pública** (`public/api/dnmarketing-api.yaml`)
   descreve os endpoints antigos. Atualizar ou apagar. **Segmentos já foi** (lote
-  2); o resto do arquivo continua com as URLs das Edge Functions.
+  2); o resto continua com as URLs das Edge Functions — inclusive campanhas e
+  templates, de propósito: a API pública dos dois ainda não foi portada.
 - [ ] **A tela de chaves não foi conferida no navegador.** O código está portado,
   tipado e compilando, e os endpoints foram verificados por HTTP ponta a ponta —
   mas um overlay de outra aba impediu o clique, e o portão exige o clique.

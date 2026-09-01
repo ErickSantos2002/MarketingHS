@@ -807,13 +807,27 @@ grep -rn "campaigns-api\|templates-api" frontend/src frontend/public backend/app
 # 3. as telas conferidas no navegador (tarefa 5, passo 4)
 ```
 
-⚠️ **`send-campaign`, `send-test-email`, `resend-*` e `email-unsubscribe`
-CONTINUAM na pasta.** Elas são a especificação do 3B e do 3C. Só
-`campaigns-api` e `templates-api` saem neste lote.
+⚠️ **NENHUMA function sai da pasta no 3A.** Este plano dizia que
+`campaigns-api` e `templates-api` sairiam, e estava errado — o portão pegou:
 
-- [ ] **Passo 2: o placar.** Esperado: **16/48** functions (14 + as 2 deste
-  lote) e acesso direto perto de **51** (68 menos os 17 dos quatro arquivos).
-  Meça, não herde:
+- as **duas** aceitam chave de API (`validateAuth`), ou seja, também servem
+  integrador externo. O 3A portou só a metade do admin; a metade pública não
+  tem substituto ainda.
+- a `campaigns-api` ainda carrega `POST ?action=send`, o gatilho de envio, que
+  é do 3B por definição.
+
+Portar a tela que você tinha em mente não quer dizer que a function ficou órfã
+— é literalmente o aviso do `CLAUDE.md`, e ele valeu aqui. **A metade pública
+das duas passa a ser tarefa do 3B**, junto com o envio.
+
+Por consequência, a documentação (`ApiDocumentation.tsx` e
+`dnmarketing-api.yaml`) **fica como está**: ela descreve a API pública, que
+continua sendo a especificação até o 3B substituí-la. Diferente do lote 2, onde
+a pública foi portada no mesmo lote e por isso a documentação tinha de mudar.
+
+- [ ] **Passo 2: o placar.** Esperado: functions **14/48 — sem mudança**, pelo
+  motivo do passo 1; acesso direto perto de **51** (68 menos os 17 dos quatro
+  arquivos). ✅ Medido: 51. Meça, não herde:
 
 ```bash
 python3 -c "
@@ -846,8 +860,11 @@ print(n, 'pontos de acesso direto')"
 - [ ] Excluir campanha `sent` e drenada **funciona** (a guarda não a protege)
 - [ ] A audiência da campanha bate com a da tela de Segmentos
 - [ ] O botão de enviar avisa que o envio é do 3B, sem erro no console
-- [ ] `grep` limpo nos quatro arquivos, e nenhuma menção viva a `campaigns-api`
-      ou `templates-api` — documentação incluída
+- [ ] `grep` limpo nos quatro arquivos do domínio
+- [ ] `useCampaigns` não chama mais `execute_readonly_query` (resta só
+      `usePages`)
+- [ ] `campaigns-api` e `templates-api` **continuam na pasta**, com o motivo
+      registrado: a metade pública das duas ainda não foi portada
 - [ ] `pytest` continua passando
 
 ## O que este lote NÃO entrega

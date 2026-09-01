@@ -5,33 +5,87 @@
 
 ## Onde paramos
 
-**Lote 2 (Segmentos) concluído**, em cima do 1D, 1C, 1B, 1A e do lote 0.
+**Lote 3A (Campanhas e templates) concluído.** ⚠️ **O lote 3 NÃO fechou** — ele
+foi partido em 3A/3B/3C, e o "pronto" que a spec define ("uma campanha de teste
+sai de verdade e a abertura aparece na timeline") é a soma de 3B e 3C.
+
+O que funciona pela tela agora: criar campanha escolhendo template e segmentos,
+com a audiência contando ao vivo; editar; duplicar; excluir; e acompanhar pela
+gaveta de detalhe, com a tabela de envios e as métricas. Template tem CRUD
+próprio. **Nada é enviado** — o botão avisa que o envio chega no 3B e a campanha
+fica salva em rascunho.
+
+Conferido no navegador: a lista com os rótulos de audiência certos ("Todos os
+contatos", "Quentes"), o wizard contando 3 → 1 ao escolher o segmento, o
+template aparecendo no seletor, o fluxo até "Confirmar envio" terminando com a
+campanha em rascunho, e a gaveta mostrando 2 enviados / 2 abertos (100%) /
+1 clicado (50%) / 1 bounce a partir de envios semeados.
+
+O acesso direto ao banco caiu de 68 para **51 pontos**.
+
+### As três coisas que o 3A ensinou
+
+**`campaigns.stats` é congelada.** Só é escrita uma vez, quando a fila drena,
+antes de qualquer abertura. O frontend já sabia e contornava com
+`execute_readonly_query` — SQL por concatenação numa função SECURITY DEFINER que
+aceita consulta arbitrária do navegador. A agregação veio para o servidor, com
+os MESMOS filtros de `finalize_campaign_if_drained`. Resta um chamador daquela
+RPC: `usePages`.
+
+**O portão pegou o plano de novo.** Ele dizia que `campaigns-api` e
+`templates-api` sairiam da pasta. Não saíram: as duas aceitam chave de API — ou
+seja, servem integrador externo — e o 3A portou só a metade do admin. A
+`campaigns-api` ainda carrega o `?action=send`. **A metade pública das duas é
+tarefa do 3B**, e por isso a documentação pública ficou como está.
+
+**Duas correções vieram da execução, não da revisão:** `scheduled_at` como `str`
+derrubava o POST com 500 (o asyncpg exige `datetime` em `timestamptz`, e o cast
+`::timestamptz` não salva), e o plano descrevia errado o `guard_campaign_delete`
+— ele recusa `sending` e envios `pending`, não campanha `sent`.
+
+## O próximo passo
+
+**Escrever o plano do 3B (O motor), e executá-lo.** É o coração do projeto e o
+único lugar que a spec manda nascer com teste automatizado — um e-mail enviado
+duas vezes para a base inteira queima o domínio.
+
+O que o 3B tem de resolver, já levantado e verificado:
+
+1. **`process-email-queue` NÃO EXISTE.** O worker que de fato envia é citado por
+   sete arquivos e não está no repositório nem no histórico do git. A lógica por
+   destinatário — supressão, merge tags, URL de descadastro assinada, rodapé,
+   cabeçalhos RFC 8058 — terá de ser **derivada de quem a verifica**:
+   `email-unsubscribe` (que confere o HMAC), `send-test-email` (credenciais e
+   merge tags) e `_shared/secrets.ts` (ordem de resolução do segredo).
+2. **As tabelas de fila não existem.** `email_send_queue` e `journey_events`
+   eram do `pgmq`. Viram tabela comum + `FOR UPDATE SKIP LOCKED`.
+3. **Sete funções de banco a reimplementar:** `email_queue_read`,
+   `email_queue_delete`, `email_queue_send_batch`, `reset_stuck_campaigns` e as
+   três de segredo de integração. As outras sete da lista original são do lote 4
+   (jornadas) ou não voltam (`invoke_edge_function`).
+4. **A metade pública de `campaigns-api` e `templates-api`**, mais o
+   `?action=send`.
+5. O `worker/` na raiz está vazio, mas o `docker-compose.yml` já aponta o
+   serviço para `python -m app.worker` na imagem do backend.
+
+### Depois do 3B
+
+**3C** — webhook do Resend (assinatura Svix), métricas e agendamento.
+⚠️ `promote_scheduled_campaigns` está **quebrada e o defeito é latente**: ela
+chama `invoke_edge_function`, que o lote 0 apagou. Devolve 0 sem erro hoje
+porque o laço não roda sem campanha agendada; estoura com `UndefinedFunctionError`
+no instante em que uma vence. Provado.
+
+### Lote 2 (Segmentos), antes disso
 
 Segmento funciona de ponta a ponta pela tela: criar estático escolhendo contatos
 na busca, criar dinâmico montando regras com a prévia contando ao vivo, editar,
 duplicar, ver a lista de contatos, e excluir — com a guarda do banco recusando
 quando o segmento está em uso e mostrando **qual campanha** o usa.
 
-Tudo conferido no navegador, clicando: a lista com as contagens certas, a gaveta
-de contatos, a prévia mostrando "1 contato — Carla Menezes" enquanto a regra era
-montada, o salvamento, o 409 da exclusão aparecendo como aviso na tela, e a
-barra de ações em massa inserindo um contato novo (confirmado no banco).
-
-A API pública `/publico/segmentos` substituiu a `segments-api`, com escopo de
-chave aplicado nos dois sentidos.
-
-O acesso direto ao banco caiu de 87 para **68 pontos**.
-
-### O que valeu a pena e não estava no plano
-
-O portão encontrou **duas chamadas mortas que nenhuma tela fazia**: a tela de
-Documentação da API e a especificação OpenAPI pública ainda ensinavam
-`/segments-api` aos integradores. Portar a tela não bastava — quem integra lê a
-documentação, não o código. As duas foram atualizadas.
-
-Também virou 400 (com mensagem) o que era 500 quando alguém manda um `lead_id`
-que não existe, e duplicar segmento estático passou a levar os membros junto: a
-tela duplicava com a lista vazia, devolvendo uma casca.
+A API pública `/publico/segmentos` substituiu a `segments-api`. O portão pegou
+duas chamadas mortas que nenhuma tela fazia: a tela de Documentação da API e a
+especificação OpenAPI pública ainda ensinavam `/segments-api` aos integradores.
 
 ### Lote 1D (A porta pública), antes disso
 
@@ -83,32 +137,6 @@ verdade, conferido no navegador com Playwright e não só por teste:
 - A aba **Configurações → Usuários** lista, cria, promove, rebaixa, troca e-mail,
   reseta senha e exclui — tudo contra a API própria
 - Tela não portada mostra "Tela ainda não portada: `<alvo>`" sem derrubar a casca
-
-## O próximo passo
-
-**Executar o lote 3 (Campanhas + o motor).** É o maior valor de negócio do
-projeto e a parte que a spec diz nascer com teste automatizado — um e-mail
-enviado duas vezes para a base inteira queima o domínio.
-
-⚠️ **O plano do lote 3 ainda não está escrito.** Um plano por lote é o
-combinado, e ele merece atenção extra: são **14 funções de banco e 2 triggers** a
-reimplementar em Python, não 9 como a spec estimou. Duas filas
-(`email_send_queue` e `journey_events`) viram tabela comum com
-`FOR UPDATE SKIP LOCKED`, e o agendador vira laço `asyncio` no `worker/`, que
-está vazio até aqui.
-
-O lote 2 entregou o que o 3 precisava: campanha já tem como escolher público.
-`useSegmentAudience` e `SegmentMultiSelect` funcionam contra a API própria, e a
-contagem que o assistente de campanha mostra vem das mesmas funções que o envio
-usa.
-
-### O panorama
-
-- **Lote 3 (Campanhas + o motor)** — o maior valor, e o único que nasce com
-  teste automatizado. Depende do `worker/`, que ainda não existe.
-- **Lote 5 (Integrações HS)** — handoff para o GrowthHS e os 2.077 clientes do
-  DataCore. ⚠️ Exige trocar a senha do superusuário antes.
-- **Lote 4 (Jornadas)** — depende do motor do lote 3.
 
 ### O que o 1C fez, para referência
 
