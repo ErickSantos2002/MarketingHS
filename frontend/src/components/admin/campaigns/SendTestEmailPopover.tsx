@@ -6,7 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { enviarEmailDeTeste } from '@/lib/campanhas';
+import { ErroApi } from '@/lib/api';
 
 // Botao + popover de "Enviar teste" de um template de email. Extraido de
 // /templates/:id/preview para ser reusado no modal de visualizacao aberto pelo
@@ -44,30 +45,18 @@ export function SendTestEmailPopover({ templateId, templateName }: Props) {
     }
 
     setSending(true);
-    const { data, error } = await supabase.functions.invoke('send-test-email', {
-      body: { template_id: templateId, to },
-    });
-    setSending(false);
-
-    // supabase.functions.invoke devolve `error` generico (FunctionsHttpError) em
-    // qualquer status >= 400 e joga o corpo real em error.context -- sem ler esse
-    // corpo, o usuario so veria "Edge Function returned a non-2xx status code" e
-    // nunca a causa ("RESEND_API_KEY nao configurada", supressao, etc.).
-    if (error) {
-      let message = 'Não foi possível enviar o email de teste';
-      try {
-        const context = (error as { context?: Response }).context;
-        const body = await context?.json?.();
-        if (body?.error) message = String(body.error);
-      } catch {
-        // corpo ilegivel: fica a mensagem generica acima
-      }
-      toast.error(message);
+    try {
+      await enviarEmailDeTeste(templateId, to);
+    } catch (e) {
+      // ⚠️ A mensagem do servidor é a útil e precisa aparecer inteira: sem a
+      // chave do Resend vem um 503 explicando que o envio ainda não está
+      // configurado, e isso é decisão em aberto, não defeito. Um genérico
+      // mandaria o usuário caçar bug onde não há.
+      toast.error(e instanceof ErroApi ? e.message
+                  : 'Não foi possível enviar o email de teste');
       return;
-    }
-    if (data?.error) {
-      toast.error(String(data.error));
-      return;
+    } finally {
+      setSending(false);
     }
 
     toast.success(`Email de teste enviado para ${to}`);

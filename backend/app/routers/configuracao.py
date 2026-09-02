@@ -72,6 +72,39 @@ async def listar_tags(_: Usuario = Depends(usuario_atual)):
     return [TagOut(**dict(l)) for l in linhas]
 
 
+# ── Redes sociais da marca ───────────────────────────────────────────────────
+# ⚠️ NÃO passa por `/preferencias/{chave}`. Aquela rota compõe a chave com o id
+# de quem está autenticado, de propósito — é preferência POR USUÁRIO. Rede
+# social da marca é GLOBAL: por lá, cada admin guardaria a sua, e o rodapé do
+# e-mail mudaria conforme quem editou por último.
+
+CHAVE_REDES_SOCIAIS = "social_links"
+
+
+@router.get("/config/redes-sociais")
+async def ler_redes_sociais(_: Usuario = Depends(usuario_atual)):
+    """Leitura em `usuario_atual`: o editor de e-mail precisa dos ícones para
+    montar o rodapé, e não são segredo — são links públicos da marca."""
+    async with sessao(role="service_role") as conn:
+        valor = await conn.fetchval(
+            "SELECT setting_value FROM dashboard_settings WHERE setting_key = $1",
+            CHAVE_REDES_SOCIAIS)
+    return {"valor": valor}
+
+
+@router.put("/config/redes-sociais")
+async def gravar_redes_sociais(corpo: dict, _: Usuario = Depends(admin_atual)):
+    """Escrita em `admin_atual`: é config de marca, não preferência de tela."""
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            """INSERT INTO dashboard_settings (setting_key, setting_value)
+               VALUES ($1, $2::jsonb)
+               ON CONFLICT (setting_key) DO UPDATE
+                 SET setting_value = EXCLUDED.setting_value, updated_at = now()""",
+            CHAVE_REDES_SOCIAIS, corpo.get("valor"))
+    return {"valor": corpo.get("valor")}
+
+
 @router.get("/lead-statuses")
 async def listar_status_de_lead(_: Usuario = Depends(usuario_atual)):
     """O funil, na ordem em que a tela desenha.

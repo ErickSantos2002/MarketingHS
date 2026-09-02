@@ -12,9 +12,22 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app import fila
+from pydantic import BaseModel, Field
+
+from app import fila, integracoes
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual
+from app.email import resend
+from app.email.montagem import normalizar_email
+from app.texto import html_para_texto
+
+# O remetente sai do mesmo lugar que o worker usa — dois padrões diferentes
+# fariam o teste chegar de um endereço e a campanha de outro.
+REMETENTE_PADRAO = "MarketingHS <onboarding@resend.dev>"
+
+
+async def _remetente() -> str:
+    return (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campanhas", tags=["campanhas-envio"])
@@ -184,3 +197,89 @@ async def enfileirar(campanha_id: str) -> dict:
     return {"queued": publicadas,
             "ignorados": len(sem_email) + len(processados),
             "campaign_id": campanha_id}
+
+
+# ── Envio de teste ───────────────────────────────────────────────────────────
+# Porte de `send-test-email`. Copiado da function, não lembrado.
+
+# ⚠️ Os valores de amostra são da origem, e existem para o admin ver o template
+# com texto no lugar de `{{nome}}`. O `{{unsubscribe_url}}` vira '#' de
+# propósito: um e-mail de teste NÃO pode carregar link de descadastro válido —
+# clicar nele descadastraria um contato de verdade.
+AMOSTRA_MERGE_TAGS = {
+    "{{nome}}": "João Silva",
+    "{{empresa}}": "Empresa LTDA",
+    "{{email}}": "joao@empresa.com",
+    "{{unsubscribe_url}}": "#",
+}
+
+
+class TesteIn(BaseModel):
+    template_id: str
+    to: str = Field(min_length=3, max_length=320)
+
+
+@router.post("/enviar-teste")
+async def enviar_teste(dados: TesteIn, _: Usuario = Depends(admin_atual)):
+    """Um e-mail de teste a partir de um template, para o admin conferir como
+    ele chega no cliente de e-mail.
+
+    ⚠️ **O HTML nunca vem do corpo da requisição** — só o `template_id`. É o que
+    impede a rota de virar um relay para mandar qualquer coisa de dentro do
+    domínio da HS.
+
+    ⚠️ **Sem tags do Resend, de propósito.** O `resend-webhook` resolve envios
+    pelas tags, e um teste não tem linha em `campaign_sends` para correlacionar:
+    com tag, o evento de abertura do teste bateria num envio real.
+    """
+    async with sessao(role="service_role") as conn:
+        modelo = await conn.fetchrow(
+            "SELECT name, html FROM email_templates WHERE id = $1::uuid",
+            dados.template_id)
+        if modelo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Template não encontrado.")
+        if not (modelo["html"] or "").strip():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Este template ainda não tem conteúdo para enviar.")
+        # A supressão vale também para o teste: o endereço pode ser o de um
+        # contato que se descadastrou, e mandar assim é o que queima domínio.
+        #
+        # ⚠️ `normalize_suppression_email` NÃO serve para isto — apesar do nome,
+        # ela não recebe argumento: é a função do TRIGGER que normaliza a coluna
+        # na gravação. A comparação usa o mesmo `normalizar_email` que o worker
+        # aplica em `_processar`, senão um endereço com maiúscula passaria pela
+        # supressão.
+        suprimido = await conn.fetchrow(
+            "SELECT reason FROM email_suppressions WHERE email = $1",
+            normalizar_email(dados.to))
+    if suprimido:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Este endereço está na lista de descadastro ({suprimido['reason']}) "
+            f"e não pode receber e-mails.")
+
+    chave = await integracoes.ler_segredo("RESEND_API_KEY")
+    if not chave:
+        # ⚠️ 503 e não 500: a falta da chave é decisão em aberto (o envio real
+        # está adiado), não defeito. A tela precisa distinguir uma coisa da
+        # outra para não mandar ninguém caçar bug onde não há.
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "O Resend ainda não está configurado — grave a chave em "
+            "Configurações → Resend para enviar e-mails de teste.")
+
+    html = modelo["html"]
+    for tag, amostra in AMOSTRA_MERGE_TAGS.items():
+        html = html.replace(tag, amostra)
+
+    de = await _remetente()
+    try:
+        eid = await resend.enviar(
+            chave=chave, de=de, para=dados.to,
+            assunto=f"[Teste] {modelo['name']}",
+            html=html, texto=html_para_texto(html), cabecalhos={}, tags=None)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("envio de teste falhou: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            "O Resend recusou o envio.")
+    return {"enviado": True, "para": dados.to, "de": de, "resend_email_id": eid}

@@ -18,3 +18,12 @@ export const gravarConfigResend = (dados: {
   email_from?: string;
   webhook_secret?: string;
 }) => api.put<{ gravados: string[] }>('/config/resend', dados);
+
+// Redes sociais da marca. ⚠️ Global, não por usuário — o rodapé do e-mail é o
+// mesmo para todo mundo. Por isso NÃO usa `/preferencias/{chave}`, que compõe a
+// chave com o id de quem está autenticado.
+export const lerRedesSociais = () =>
+  api.get<{ valor: unknown }>('/config/redes-sociais').then(r => r.valor);
+
+export const gravarRedesSociais = (valor: unknown) =>
+  api.put<{ valor: unknown }>('/config/redes-sociais', { valor });

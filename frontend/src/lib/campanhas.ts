@@ -116,3 +116,15 @@ export const audienciaDaCampanha = (id: string) =>
 // `functions.invoke('send-campaign')`: a Edge Function não volta.
 export const enviarCampanha = (id: string) =>
   api.post<{ queued: number; ignorados: number }>(`/campanhas/${id}/enviar`);
+
+export interface ResultadoTeste {
+  enviado: boolean;
+  para: string;
+  de: string;
+  resend_email_id: string;
+}
+
+// ⚠️ Só o `template_id` viaja — o HTML nunca vem do cliente. É o que impede a
+// rota de virar um relay para mandar qualquer coisa do domínio da HS.
+export const enviarEmailDeTeste = (templateId: string, to: string) =>
+  api.post<ResultadoTeste>('/campanhas/enviar-teste', { template_id: templateId, to });
