@@ -185,7 +185,7 @@ export function buildEmailEditorOptions(social: SocialLinksConfig | null) {
 // e-mail chegar quebrado para todo mundo, e o defeito só apareceria na caixa de
 // entrada dos outros.
 //
-// Antes isto subia para `supabase.storage`, bucket `email-assets`. Não há
+// Antes isto subia para o storage do Supabase, bucket `email-assets`. Não há
 // Supabase: todo upload de imagem no editor falhava, e a tela só dizia "Erro ao
 // fazer upload da imagem".
 //

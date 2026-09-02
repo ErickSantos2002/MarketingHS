@@ -5,14 +5,33 @@
 
 ## Onde paramos
 
-**Lotes 0 a 4 fechados, e o 5B também.** O lote 5 foi partido em três, como os
-lotes 1 e 3:
+**Lotes 0 a 4 fechados, mais o 5B e o 5D.** O lote 5 foi partido em quatro:
 
 | | | |
 |---|---|---|
 | **5A** | Handoff → GrowthHS | ⏸ **bloqueado** — ver abaixo |
 | **5B** | Contatos do DataCore | ✅ concluído (02/09/2026) |
 | **5C** | Identidade unificada, Meta CAPI | a fazer |
+| **5D** | Limpeza das sobras | ✅ concluído (02/09/2026) |
+
+## 🎨 O trabalho de visual já pode começar
+
+Era para isto que o 5D existiu. **Doze das dezesseis telas do admin estão 100%
+livres do toco do Supabase** e podem ser redesenhadas agora:
+
+> Automações · Campanhas · Contatos · Experiments (as três) · Importar ·
+> Construtor de fluxo · Login · Segmentos · Preview de template · Templates
+
+⚠️ **Não redesenhe estas quatro ainda:**
+
+| Tela | Por quê |
+|---|---|
+| **Visão Geral** e **Analytics** | o lote 6 as reescreve por dentro — trabalho de visual agora seria refeito |
+| **Páginas** | lote 7 |
+| **Configurações** | falta o `NexusCard` (5A, bloqueado) e o `MetaCard` (5C) |
+
+⚠️ O design system da HS **vive no Claude Design** — ler de lá (DesignSync)
+antes de desenhar, em vez de inventar.
 
 ## ⏸ Por que o 5A está bloqueado
 

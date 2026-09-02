@@ -21,6 +21,7 @@ A spec que justifica esta ordem:
 | **4** | **Jornadas e automações** — board, gatilhos, condicionais, regras | 3 | ✅ **concluído** (02/09/2026) — `handoff_nexus` e as ações do Nexus ficam para o 5 |
 | **5B** | **Contatos do DataCore** — sincronização de mão única, 2.080 clientes | 0 | ✅ **concluído** (02/09/2026) |
 | 5A | Handoff → GrowthHS | 2 | ⏸ **bloqueado** — depende de endpoint novo no `hsgrowth-sistema` (contrato em `docs/contratos/`) |
+| **5D** | **Limpeza** — as sobras que prendiam as telas do dia a dia | 8 | ✅ **concluído** (02/09/2026) |
 | 5C | Identidade unificada, Meta CAPI | 4 | a fazer |
 | 6 | Analytics + IA | 4 | a fazer |
 | 7 | Captação pública — landing da HS, conversões, A/B | 6 | a fazer |
@@ -33,9 +34,10 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas          : 21/48
+functions portadas          : 27/48   (21 portadas + 6 descartadas)
 telas migradas              : 31
-acesso direto ao banco      : 30 pontos  (eram 48 antes do 4, 51 antes do 3C, 68 antes do 3A, 153 antes do 1B)
+acesso direto ao banco      : 27 pontos  (eram 30 antes do 5D, 48 antes do 4, 51 antes do 3C, 68 antes do 3A, 153 antes do 1B)
+telas 100% livres do toco   : 12 de 16
 ```
 
 ⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
@@ -47,6 +49,44 @@ de quanto trabalho falta: é mais que o dobro.
 lote 2. É outro 68 — este é medido pelo comando multilinha, o da spec era a
 contagem errada de linha única no início de tudo. Não é sinal de que nada andou:
 eram 153.
+
+## O lote 5D entregou
+
+**Doze das dezesseis telas do admin ficaram 100% livres do toco do Supabase** —
+Contatos, Segmentos, Campanhas, o construtor de fluxo, o preview de template, os
+três Experiments, Automações, Importar, Templates e Login. É o que destrava o
+trabalho de visual: essas telas podem ser redesenhadas sem esperar os lotes 6 e 7.
+
+Oito functions fora da pasta. Seis delas **descartadas, não portadas** (as cinco
+do Pingback e a `send-to-ticketia`) — a spec já mandava, na tabela de travas de
+terceiro; são o rastreador e o sistema de ingresso da dn.ia, e a HS não tem
+equivalente.
+
+⚠️ **Três caminhos quebrados em silêncio, que ninguém sabia que existiam:**
+
+1. **Todo upload de imagem no editor de e-mail falhava.** Ele subia para um
+   bucket do Supabase que não existe mais, e a tela só dizia "Erro ao fazer
+   upload". As imagens agora moram no Postgres (`email_assets`, migration 014) e
+   são servidas por `/publico/imagem/{id}` — **sem autenticação, de propósito**:
+   quem busca a imagem é o cliente de e-mail de quem recebeu.
+2. **O editor de páginas oferecia configurar o dn.ticket** — campo para
+   preencher, botão "Testar conexão" — de uma integração descartada, com uma
+   function morta do outro lado.
+3. **A exclusão de contato chamava `delete-contact`** embora a rota própria
+   exista desde o lote 1C. Ninguém apontou a tabela para ela.
+
+⚠️ **Duas armadilhas de nome:** `normalize_suppression_email` não normaliza
+nada — não recebe argumento, é a função do TRIGGER que normaliza a coluna na
+gravação. E `/preferencias/{chave}` NÃO servia para as redes sociais da marca:
+ela compõe a chave com o id de quem está autenticado, de propósito, e o rodapé
+do e-mail mudaria conforme quem editou por último.
+
+⚠️ **SVG não entra no upload de imagem.** SVG carrega script; servido do nosso
+domínio, viraria XSS na conta de quem abrisse a URL.
+
+⚠️ **Se as imagens de e-mail um dia forem muitas**, guardá-las no Postgres vira
+migração para armazenamento de objeto. A decisão está registrada aqui em vez de
+implícita no código.
 
 ## O lote 5B entregou
 

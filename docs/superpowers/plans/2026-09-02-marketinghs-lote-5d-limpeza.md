@@ -60,14 +60,14 @@ O caminho mais barato do lote, e o único que **remove** em vez de portar.
   `backend/supabase/functions/send-to-ticketia`
 - Modifica: `frontend/src/pages/admin/SettingsPage.tsx`
 
-- [ ] **Passo 1: confirme que a spec manda descartar**
+- [x] **Passo 1: confirme que a spec manda descartar**
 
 `docs/superpowers/specs/2026-08-31-marketinghs-design.md`, seção 9, tabela de
 travas de terceiro: *"Nexus, Ticketia, Pingback | 6 functions | **Descartadas**"*.
 Pingback é o rastreador da dn.ia e Ticketia o sistema de ingresso dela — nenhum
 dos dois tem equivalente na HS.
 
-- [ ] **Passo 2: veja quem mais chama**
+- [x] **Passo 2: veja quem mais chama**
 
 ```bash
 grep -rn "pingback\|Pingback\|ticketia" frontend/src backend/app --include=*.ts --include=*.tsx --include=*.py
@@ -76,9 +76,9 @@ grep -rn "pingback\|Pingback\|ticketia" frontend/src backend/app --include=*.ts 
 ⚠️ Se alguma tela de captura ainda chamar `send-to-pingback*`, ela é do lote 7 —
 **pare e registre**, não apague o consumidor junto.
 
-- [ ] **Passo 3: apague o card e o registro dele no SettingsPage**
+- [x] **Passo 3: apague o card e o registro dele no SettingsPage**
 
-- [ ] **Passo 4: apague as seis functions**
+- [x] **Passo 4: apague as seis functions**
 
 ```bash
 git rm -r backend/supabase/functions/send-to-pingback \
@@ -89,14 +89,14 @@ git rm -r backend/supabase/functions/send-to-pingback \
           backend/supabase/functions/send-to-ticketia
 ```
 
-- [ ] **Passo 5: a documentação.** Confira que nenhuma delas está ensinada na
+- [x] **Passo 5: a documentação.** Confira que nenhuma delas está ensinada na
   tela de Documentação da API nem no `dnmarketing-api.yaml`. Já mordeu quatro
   vezes neste projeto.
 
-- [ ] **Passo 6: abra Configurações no navegador** e confirme que a tela monta
+- [x] **Passo 6: abra Configurações no navegador** e confirme que a tela monta
   sem o card.
 
-- [ ] **Passo 7: commit**
+- [x] **Passo 7: commit**
 
 ---
 
@@ -112,7 +112,7 @@ custo-benefício do lote.
 **Interfaces:**
 - Produz: `GET /lead-statuses` → `[{id, name, color, sort_order, is_system}]`
 
-- [ ] **Passo 1: a rota**, ao lado de `/tipos-de-contato`, que é o molde:
+- [x] **Passo 1: a rota**, ao lado de `/tipos-de-contato`, que é o molde:
 
 ```python
 @router.get("/lead-statuses")
@@ -129,7 +129,7 @@ async def listar_status_de_lead(_: Usuario = Depends(usuario_atual)):
     return [dict(l) for l in linhas]
 ```
 
-- [ ] **Passo 2: o cliente**, em `lib/contatos.ts`:
+- [x] **Passo 2: o cliente**, em `lib/contatos.ts`:
 
 ```ts
 export interface StatusDeLead {
@@ -139,14 +139,14 @@ export interface StatusDeLead {
 export const listarStatusDeLead = () => api.get<StatusDeLead[]>('/lead-statuses');
 ```
 
-- [ ] **Passo 3: o hook.** `useLeadStatuses` mantém a assinatura
+- [x] **Passo 3: o hook.** `useLeadStatuses` mantém a assinatura
   (`{ statuses, options, colors, getColor, isLoading }`) — quem consome não muda.
   Troque só o `queryFn` por `listarStatusDeLead`.
 
-- [ ] **Passo 4: confira no navegador.** Abra Contatos e mude o status de um
+- [x] **Passo 4: confira no navegador.** Abra Contatos e mude o status de um
   contato pelo dropdown: as cores e a ordem têm de vir iguais.
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ---
 
@@ -160,22 +160,22 @@ apontada para ele e continuou chamando `delete-contact`.
 - Modifica: `frontend/src/components/admin/contacts/ContactsTable.tsx`
 - Apaga: `backend/supabase/functions/delete-contact` (se ficar órfã)
 
-- [ ] **Passo 1: veja o que `lib/contatos.ts` já expõe** para exclusão. Se
+- [x] **Passo 1: veja o que `lib/contatos.ts` já expõe** para exclusão. Se
   houver função, use-a; se não, escreva-a no molde das outras.
 
-- [ ] **Passo 2: troque o `supabase.functions.invoke('delete-contact', ...)`**
+- [x] **Passo 2: troque o `supabase.functions.invoke('delete-contact', ...)`**
   (linha ~469) pela chamada da API. ⚠️ A tela hoje lê `data?.error` do corpo; com
   o `ErroApi` a mensagem vem em `e.message` — mostre a mensagem do servidor, não
   um genérico.
 
-- [ ] **Passo 3: `grep -rn "delete-contact" frontend/src`** — se ninguém mais
+- [x] **Passo 3: `grep -rn "delete-contact" frontend/src`** — se ninguém mais
   chamar, `git rm -r backend/supabase/functions/delete-contact`.
 
-- [ ] **Passo 4: confira no navegador excluindo um contato de teste** que você
+- [x] **Passo 4: confira no navegador excluindo um contato de teste** que você
   mesmo criou. ⚠️ A exclusão é lógica (`deleted_at`), então confira que ele some
   da lista e continua no banco.
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ---
 
@@ -193,15 +193,15 @@ quem está autenticado, de propósito — é preferência POR USUÁRIO. Rede soc
 marca é global; passar por lá guardaria uma config diferente para cada admin e
 o rodapé do e-mail mudaria conforme quem editou por último.
 
-- [ ] **Passo 1: as rotas.** Leitura em `usuario_atual` (o editor de e-mail
+- [x] **Passo 1: as rotas.** Leitura em `usuario_atual` (o editor de e-mail
   precisa), escrita em `admin_atual` (é config de marca).
 
-- [ ] **Passo 2: o cliente e o hook**, mantendo a assinatura do hook.
+- [x] **Passo 2: o cliente e o hook**, mantendo a assinatura do hook.
 
-- [ ] **Passo 3: confira no navegador** — abra o editor de e-mail e veja os
+- [x] **Passo 3: confira no navegador** — abra o editor de e-mail e veja os
   ícones de rede social aparecerem no rodapé.
 
-- [ ] **Passo 4: commit**
+- [x] **Passo 4: commit**
 
 ---
 
@@ -216,23 +216,23 @@ o rodapé do e-mail mudaria conforme quem editou por último.
 **Interfaces:**
 - Produz: `POST /envio/teste` `{template_id, to}` → `{enviado: bool, motivo?: str}`
 
-- [ ] **Passo 1: leia `send-test-email/index.ts` ANTES de escrever.** Função
+- [x] **Passo 1: leia `send-test-email/index.ts` ANTES de escrever.** Função
   herdada se copia, não se lembra — foi assim que o lote 3B quase perdeu o HMAC
   do descadastro.
 
-- [ ] **Passo 2: a rota**, reusando a montagem por destinatário que o 3B já
+- [x] **Passo 2: a rota**, reusando a montagem por destinatário que o 3B já
   escreveu. ⚠️ Sem `RESEND_API_KEY` ela responde **503 com motivo**, não 500: o
   envio real está adiado por decisão, e isso não é defeito.
 
-- [ ] **Passo 3: o popover.** ⚠️ O comentário no arquivo explica por que ele NÃO
+- [x] **Passo 3: o popover.** ⚠️ O comentário no arquivo explica por que ele NÃO
   reusa `validateEmailFormat` (o destinatário de teste pode ser um endereço
   temporário, de propósito). Preserve isso.
 
-- [ ] **Passo 4: confira no navegador**, abrindo o preview de um template e
+- [x] **Passo 4: confira no navegador**, abrindo o preview de um template e
   clicando em "Enviar teste". Sem chave do Resend, o esperado é a mensagem
   explicando — não um erro genérico.
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ---
 
@@ -247,7 +247,7 @@ mostra "Erro ao fazer upload da imagem" e segue.
 **A imagem precisa de URL pública**: ela vai dentro de um e-mail que chega na
 caixa de outra pessoa, e o cliente de e-mail busca a imagem de fora.
 
-- [ ] **Passo 1: escolha o armazenamento.** A recomendação é **guardar no
+- [x] **Passo 1: escolha o armazenamento.** A recomendação é **guardar no
   Postgres** (`email_assets(id, nome, tipo, bytes, criado_em)`) e servir por uma
   rota pública `GET /publico/imagem/{id}`:
   - não exige decisão de infraestrutura do Erick (volume, bucket, S3);
@@ -257,45 +257,45 @@ caixa de outra pessoa, e o cliente de e-mail busca a imagem de fora.
   ⚠️ **Se um dia forem muitas**, isto vira migração; anote a troca no ROADMAP em
   vez de deixar a decisão implícita.
 
-- [ ] **Passo 2: a migration** com a tabela e o `GRANT` para `service_role`.
+- [x] **Passo 2: a migration** com a tabela e o `GRANT` para `service_role`.
 
-- [ ] **Passo 3: a rota de upload** (`POST /imagens`, admin) e a **pública de
+- [x] **Passo 3: a rota de upload** (`POST /imagens`, admin) e a **pública de
   leitura**. ⚠️ A pública serve bytes sem autenticação — limite tipo
   (`image/png|jpeg|gif|webp`) e tamanho, e devolva `Content-Type` correto e
   `Cache-Control` longo.
 
-- [ ] **Passo 4: troque o callback do Unlayer** para a rota nova.
+- [x] **Passo 4: troque o callback do Unlayer** para a rota nova.
 
-- [ ] **Passo 5: confira no navegador** subindo uma imagem no editor de e-mail e
+- [x] **Passo 5: confira no navegador** subindo uma imagem no editor de e-mail e
   vendo-a aparecer no corpo. Depois **abra a URL da imagem numa aba anônima** —
   se ela exigir login, o e-mail chega quebrado para quem recebe.
 
-- [ ] **Passo 6: commit**
+- [x] **Passo 6: commit**
 
 ---
 
 ## Tarefa 7: Fechar
 
-- [ ] **Passo 1: o portão, as três partes**, documentação incluída.
-- [ ] **Passo 2: o placar**, com o comando canônico do `CLAUDE.md`.
-- [ ] **Passo 3: prove o objetivo do lote.** Rode a análise por tela e confirme
+- [x] **Passo 1: o portão, as três partes**, documentação incluída.
+- [x] **Passo 2: o placar**, com o comando canônico do `CLAUDE.md`.
+- [x] **Passo 3: prove o objetivo do lote.** Rode a análise por tela e confirme
   que **Contatos, Segmentos, Campanhas e o construtor de fluxo** não têm mais
   nenhum caminho até o toco.
-- [ ] **Passo 4: `ROADMAP.md` e `CONTINUAR-AQUI.md`.**
-- [ ] **Passo 5: commit**
+- [x] **Passo 4: `ROADMAP.md` e `CONTINUAR-AQUI.md`.**
+- [x] **Passo 5: commit**
 
 ---
 
 ## Definição de pronto
 
-- [ ] Contatos, Segmentos, Campanhas e o construtor de fluxo: **zero** caminhos
+- [x] Contatos, Segmentos, Campanhas e o construtor de fluxo: **zero** caminhos
       até `integrations/supabase/client.ts`
-- [ ] O dropdown de status mostra as mesmas cores e a mesma ordem de antes
-- [ ] Excluir contato pela tabela funciona, e a exclusão continua lógica
-- [ ] O editor de e-mail sobe imagem, e a imagem abre sem login
-- [ ] "Enviar teste" explica a falta da chave do Resend em vez de erro genérico
-- [ ] Pelo menos 7 functions saíram da pasta (6 do Pingback/Ticketia + as órfãs)
-- [ ] `pytest` continua passando
+- [x] O dropdown de status mostra as mesmas cores e a mesma ordem de antes
+- [x] Excluir contato pela tabela funciona, e a exclusão continua lógica
+- [x] O editor de e-mail sobe imagem, e a imagem abre sem login
+- [x] "Enviar teste" explica a falta da chave do Resend em vez de erro genérico
+- [x] Pelo menos 7 functions saíram da pasta (6 do Pingback/Ticketia + as órfãs)
+- [x] `pytest` continua passando
 
 ## O que fica fora
 
