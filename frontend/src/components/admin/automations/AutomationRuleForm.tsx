@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertCircle, Zap, GitBranch, Play, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import type { AutomationRule, AutomationCondition } from '@/lib/automationEngine';
+import { listarTags } from '@/lib/contatos';
+import type { AutomationRule, AutomationCondition } from '@/lib/automacoes';
 
 interface NexusStage {
   id: string;
@@ -196,37 +196,19 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
   const [isActive, setIsActive] = useState(rule?.is_active ?? true);
   const [saving, setSaving] = useState(false);
 
-  // Nexus stages
-  const [stages, setStages] = useState<NexusStage[]>([]);
-  const [stagesLoading, setStagesLoading] = useState(false);
-  const [stagesError, setStagesError] = useState<string | null>(null);
+  // Estágios do Nexus — ver AUTOMACAO_NAO_LIGADA em lib/automacoes. Não há
+  // lista para carregar: `get-nexus-stages` é do lote 5. O campo vira texto
+  // livre, que é o mesmo caminho que a origem já usava quando a lista falhava.
 
   // Tags
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    supabase.from('tags').select('id, name').order('name').then(({ data }) => setTags(data || []));
+    // A API devolve {id, nome, cor}; o formulário fala {id, name}.
+    listarTags()
+      .then((lista) => setTags(lista.map((t) => ({ id: t.id, name: t.nome }))))
+      .catch(() => setTags([]));
   }, []);
-
-  useEffect(() => {
-    if (actionType === 'create_in_nexus' || actionType === 'move_stage_nexus') {
-      fetchStages();
-    }
-  }, [actionType]);
-
-  const fetchStages = async () => {
-    setStagesLoading(true);
-    setStagesError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('get-nexus-stages');
-      if (error) throw error;
-      setStages(data?.stages || []);
-    } catch {
-      setStagesError('Não foi possível carregar os estágios.');
-    } finally {
-      setStagesLoading(false);
-    }
-  };
 
   const updateCondition = (index: number, cond: AutomationCondition) => {
     setConditions(prev => prev.map((c, i) => i === index ? cond : c));
@@ -394,36 +376,15 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
           {needsStageSelect && (
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Estágio do pipeline</Label>
-              {stagesLoading ? (
-                <Skeleton className="h-10 w-full rounded-xl" />
-              ) : stagesError ? (
-                <div className="flex items-center gap-2 text-xs text-destructive p-3 rounded-xl bg-destructive/5 border border-destructive/10">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span>{stagesError}</span>
-                </div>
-              ) : stages.length > 0 ? (
-                <Select
-                  value={actionValue}
-                  onValueChange={(v) => {
-                    setActionValue(v);
-                    const stage = stages.find(s => s.id === v);
-                    setActionMetadata({ stage_id: v, stage_name: stage?.name || '' });
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Selecione o estágio..." /></SelectTrigger>
-                  <SelectContent>
-                    {stages.filter(s => !s.is_won && !s.is_lost).map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  placeholder="ID do estágio no Nexus"
-                  value={actionValue}
-                  onChange={(e) => { setActionValue(e.target.value); setActionMetadata({ stage_id: e.target.value, stage_name: e.target.value }); }}
-                />
-              )}
+              <Input
+                placeholder="ID do estágio no Nexus"
+                value={actionValue}
+                onChange={(e) => { setActionValue(e.target.value); setActionMetadata({ stage_id: e.target.value, stage_name: e.target.value }); }}
+              />
+              <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+                A lista de estágios chega junto com a integração; por enquanto o
+                identificador é digitado.
+              </p>
             </div>
           )}
         </div>
@@ -436,7 +397,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
         <Switch checked={isActive} onCheckedChange={setIsActive} />
         <div>
           <Label className="text-sm">Ativa esta regra imediatamente</Label>
-          <p className="text-[10px] text-muted-foreground/60">Será executada na próxima alteração de um lead que atenda à condição.</p>
+          <p className="text-[10px] text-muted-foreground/60">Fica guardada e pronta — mas nada dispara ainda, como diz o aviso acima.</p>
         </div>
       </div>
 

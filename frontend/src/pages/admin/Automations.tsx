@@ -4,15 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Zap, Plus, Pencil, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Zap, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { useAutomationRules } from '@/hooks/useAutomationRules';
 import { AutomationRuleForm } from '@/components/admin/automations/AutomationRuleForm';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { AutomationRule } from '@/lib/automationEngine';
+import { AUTOMACAO_NAO_LIGADA, previaDaRegra, type AutomationRule } from '@/lib/automacoes';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { JourneysTab } from '@/components/admin/automations/JourneysTab';
 
@@ -48,13 +46,15 @@ export default function Automations() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // Retroactive processing state
-  const [retroRule, setRetroRule] = useState<Partial<AutomationRule> | null>(null);
-  const [retroMatchCount, setRetroMatchCount] = useState(0);
-  const [retroLoading, setRetroLoading] = useState(false);
-  const [retroProcessing, setRetroProcessing] = useState(false);
-  const [retroProgress, setRetroProgress] = useState(0);
-  const [retroTotal, setRetroTotal] = useState(0);
+  // A prévia depois de salvar: quantos contatos a regra pegaria.
+  //
+  // ⚠️ O PROCESSAMENTO retroativo saiu. Ele percorria os contatos chamando
+  // `handoff-to-nexus` um a um, e essa function é do lote 5 — a barra de
+  // progresso encheria até 100% sem nada ter sido enviado, que é pior do que
+  // não existir. O número continua: saber quantos a regra pega é útil hoje.
+  const [previaRegra, setPreviaRegra] = useState<Partial<AutomationRule> | null>(null);
+  const [previaTotal, setPreviaTotal] = useState(0);
+  const [previaCarregando, setPreviaCarregando] = useState(false);
 
   const handleCreate = () => {
     setEditingRule(null);
@@ -66,198 +66,32 @@ export default function Automations() {
     setShowForm(true);
   };
 
-  const applyConditionToQuery = async (
-    query: any,
-    cond: { type: string; operator: string; value: string }
-  ) => {
-    switch (cond.type) {
-      case 'status':
-        return cond.operator === 'is'
-          ? query.eq('status', cond.value)
-          : query.neq('status', cond.value);
-      case 'etiqueta':
-        return cond.operator === 'is'
-          ? query.eq('etiqueta', cond.value)
-          : query.neq('etiqueta', cond.value);
-      case 'score': {
-        const scoreVal = parseInt(cond.value || '0');
-        return cond.operator === 'greater_than'
-          ? query.gt('lead_score', scoreVal)
-          : query.lt('lead_score', scoreVal);
-      }
-      case 'created_at': {
-        if (cond.operator === 'after') {
-          return query.gte('created_at', cond.value);
-        } else if (cond.operator === 'before') {
-          return query.lte('created_at', cond.value + 'T23:59:59');
-        } else if (cond.operator === 'between') {
-          const parts = cond.value.split('|');
-          if (parts.length === 2) {
-            return query.gte('created_at', parts[0]).lte('created_at', parts[1] + 'T23:59:59');
-          }
-        } else if (cond.operator === 'last_n_days') {
-          const cutoff = new Date();
-          cutoff.setDate(cutoff.getDate() - Number(cond.value));
-          return query.gte('created_at', cutoff.toISOString());
-        }
-        return query;
-      }
-      default:
-        return query;
-    }
-  };
-
-  const queryMatchingLeads = async (rule: Partial<AutomationRule>) => {
-    const conditions: { type: string; operator: string; value: string }[] =
-      rule.conditions && Array.isArray(rule.conditions) && rule.conditions.length > 0
-        ? rule.conditions
-        : [{ type: rule.condition_type!, operator: rule.condition_operator!, value: rule.condition_value! }];
-
-    const logic = (rule as any).condition_logic || 'and';
-
-    // For AND logic, apply all filterable conditions to a single query
-    // For OR logic, run separate queries and merge results
-    if (logic === 'and') {
-      let query = supabase.from('leads').select('id, dnia_id, etiqueta, created_at');
-
-      // Handle tag conditions separately (need join)
-      const tagConditions = conditions.filter(c => c.type === 'tag');
-      const otherConditions = conditions.filter(c => c.type !== 'tag');
-
-      for (const cond of otherConditions) {
-        query = await applyConditionToQuery(query, cond);
-      }
-
-      let { data: leads } = await query;
-      if (!leads || leads.length === 0) return [];
-
-      // Apply tag filters client-side if needed
-      if (tagConditions.length > 0) {
-        for (const tagCond of tagConditions) {
-          const { data: tagData } = await supabase.from('tags').select('id').eq('name', tagCond.value).single();
-          if (!tagData) return [];
-          const { data: leadTagData } = await supabase.from('lead_tags').select('lead_id').eq('tag_id', tagData.id);
-          const tagLeadIds = new Set((leadTagData || []).map(lt => lt.lead_id));
-          leads = leads!.filter(l =>
-            tagCond.operator === 'contains' ? tagLeadIds.has(l.id) : !tagLeadIds.has(l.id)
-          );
-        }
-      }
-
-      return filterOutNexusLeads(leads || []);
-    } else {
-      // OR: run each condition separately and merge
-      const allLeadIds = new Set<string>();
-      const allLeads: any[] = [];
-
-      for (const cond of conditions) {
-        if (cond.type === 'tag') {
-          const { data: tagData } = await supabase.from('tags').select('id').eq('name', cond.value).single();
-          if (!tagData) continue;
-          const { data: leadTagData } = await supabase.from('lead_tags').select('lead_id').eq('tag_id', tagData.id);
-          const leadIds = (leadTagData || []).map(lt => lt.lead_id);
-          if (leadIds.length === 0) continue;
-          const { data: leads } = await supabase.from('leads').select('id, dnia_id, etiqueta').in('id', leadIds);
-          for (const l of leads || []) {
-            if (!allLeadIds.has(l.id)) { allLeadIds.add(l.id); allLeads.push(l); }
-          }
-        } else {
-          let query = supabase.from('leads').select('id, dnia_id, etiqueta');
-          query = await applyConditionToQuery(query, cond);
-          const { data: leads } = await query;
-          for (const l of leads || []) {
-            if (!allLeadIds.has(l.id)) { allLeadIds.add(l.id); allLeads.push(l); }
-          }
-        }
-      }
-
-      return filterOutNexusLeads(allLeads);
-    }
-  };
-
-  const filterOutNexusLeads = async (leads: any[]) => {
-    if (leads.length === 0) return [];
-    const dniaIds = leads.map(l => l.dnia_id).filter(Boolean) as string[];
-    let nexusSet = new Set<string>();
-    if (dniaIds.length > 0) {
-      const { data: identities } = await supabase
-        .from('ecosystem_identities')
-        .select('dnia_id, nexus_contact_id')
-        .in('dnia_id', dniaIds)
-        .not('nexus_contact_id', 'is', null);
-      nexusSet = new Set((identities || []).map(i => i.dnia_id));
-    }
-    return leads.filter(l => !l.dnia_id || !nexusSet.has(l.dnia_id));
-  };
-
-
   const handleSave = async (rule: Partial<AutomationRule>) => {
     const ok = await saveRule(rule);
-    if (ok) {
-      setShowForm(false);
+    if (!ok) return;
+    setShowForm(false);
 
-      // Only offer retroactive processing for create/move actions (not block)
-      if (rule.action_type === 'block_nexus') return;
+    // `block_nexus` não manda ninguém para lugar nenhum: contar quantos ela
+    // pegaria não diz nada a quem acabou de criá-la.
+    if (rule.action_type === 'block_nexus') return;
 
-      setRetroRule(rule);
-      setRetroLoading(true);
-
-      try {
-        const matchingLeads = await queryMatchingLeads(rule);
-        setRetroMatchCount(matchingLeads.length);
-      } catch {
-        setRetroMatchCount(0);
-      }
-      setRetroLoading(false);
-    }
-  };
-
-  const handleRetroProcess = async () => {
-    if (!retroRule) return;
-    setRetroProcessing(true);
-    setRetroProgress(0);
-
+    setPreviaRegra(rule);
+    setPreviaCarregando(true);
     try {
-      const matchingLeads = await queryMatchingLeads(retroRule);
-      setRetroTotal(matchingLeads.length);
-
-      let processed = 0;
-      let errors = 0;
-
-      for (const lead of matchingLeads) {
-        try {
-          // Find the saved rule id
-          const ruleId = retroRule.id || (editingRule?.id);
-          
-          if (ruleId) {
-            await supabase.functions.invoke('handoff-to-nexus', {
-              body: { lead_id: lead.id, rule_id: ruleId },
-            });
-          } else {
-            // Manual mode fallback
-            await supabase.functions.invoke('handoff-to-nexus', {
-              body: { lead_id: lead.id, manual: true },
-            });
-          }
-        } catch {
-          errors++;
-        }
-
-        processed++;
-        setRetroProgress(Math.round((processed / matchingLeads.length) * 100));
-      }
-
-      if (errors > 0) {
-        toast.warning(`Processados ${processed - errors} de ${matchingLeads.length}. ${errors} com erro.`);
-      } else {
-        toast.success(`${processed} contatos processados com sucesso!`);
-      }
-    } catch (err: any) {
-      toast.error('Erro ao processar contatos');
+      // ⚠️ Uma chamada, e volta só o número. A origem trazia a lista inteira
+      // de leads para o navegador para ler `.length`.
+      const { total } = await previaDaRegra({
+        conditions: rule.conditions,
+        condition_logic: rule.condition_logic,
+        condition_type: rule.condition_type,
+        condition_operator: rule.condition_operator,
+        condition_value: rule.condition_value,
+      });
+      setPreviaTotal(total);
+    } catch {
+      setPreviaTotal(0);
     } finally {
-      setRetroProcessing(false);
-      setRetroRule(null);
-      setRetroProgress(0);
+      setPreviaCarregando(false);
     }
   };
 
@@ -288,12 +122,15 @@ export default function Automations() {
             </Button>
           </div>
 
-          {/* Nexus warning banner */}
+          {/* ⚠️ O aviso da origem mandava conferir as credenciais do Nexus em
+              Configurações, como se faltasse configuração. Não falta: a
+              integração inteira é do lote 5. Mandar procurar credencial que
+              não existe faz perder tempo procurando defeito onde não há. */}
       <Card className="border-amber-500/30 bg-amber-500/5">
-        <CardContent className="py-3 flex items-center gap-3">
-          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+        <CardContent className="py-3 flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            As automações dependem da conexão com o Nexus. Verifique se as credenciais estão configuradas em Configurações.
+            {AUTOMACAO_NAO_LIGADA}
           </p>
         </CardContent>
       </Card>
@@ -327,12 +164,16 @@ export default function Automations() {
                   <p className="text-xs text-muted-foreground">
                     <span className="font-medium text-foreground/70">SE</span>{' '}
                     {(() => {
-                      const conds = (rule as any).conditions && Array.isArray((rule as any).conditions) && (rule as any).conditions.length > 0
-                        ? (rule as any).conditions
+                      // Os casts para `any` saíram: `AutomationRule` em
+                      // lib/automacoes já garante `conditions` e
+                      // `condition_logic`. A regra de campo único continua
+                      // sendo o reserva, porque as colunas antigas ainda
+                      // existem na tabela.
+                      const conds = rule.conditions?.length
+                        ? rule.conditions
                         : [{ type: rule.condition_type, operator: rule.condition_operator, value: rule.condition_value }];
-                      const logic = (rule as any).condition_logic || 'and';
-                      const separator = logic === 'and' ? ' E ' : ' OU ';
-                      return conds.map((c: any, i: number) => (
+                      const separator = (rule.condition_logic || 'and') === 'and' ? ' E ' : ' OU ';
+                      return conds.map((c, i) => (
                         <span key={i}>
                           {i > 0 && <span className="text-primary/60 font-semibold">{separator}</span>}
                           {CONDITION_LABELS[c.type] || c.type}{' '}
@@ -344,8 +185,8 @@ export default function Automations() {
                     {' → '}
                     <span className="font-medium text-foreground/70">ENTÃO</span>{' '}
                     {ACTION_LABELS[rule.action_type] || rule.action_type}
-                    {(rule.action_metadata as any)?.stage_name && (
-                      <> em "<span className="font-medium text-foreground">{(rule.action_metadata as any).stage_name}</span>"</>
+                    {typeof rule.action_metadata?.stage_name === 'string' && (
+                      <> em "<span className="font-medium text-foreground">{rule.action_metadata.stage_name}</span>"</>
                     )}
                   </p>
                 </div>
@@ -378,54 +219,42 @@ export default function Automations() {
         </DialogContent>
       </Dialog>
 
-      {/* Retroactive processing dialog */}
-      <Dialog open={!!retroRule} onOpenChange={(open) => { if (!open && !retroProcessing) setRetroRule(null); }}>
+      {/* A prévia depois de salvar. Informativa: diz quantos a regra pega e
+          quando isso vai acontecer. Não há botão de aplicar — ver o comentário
+          do estado acima. */}
+      <Dialog open={!!previaRegra} onOpenChange={(open) => { if (!open) setPreviaRegra(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Aplicar regra a contatos existentes?</DialogTitle>
+            <DialogTitle>Regra salva</DialogTitle>
             <DialogDescription>
-              {retroLoading ? (
-                'Calculando contatos que atendem à condição...'
-              ) : retroProcessing ? (
-                `Processando contatos... ${retroProgress}%`
-              ) : retroMatchCount === 0 ? (
+              {previaCarregando ? (
+                'Calculando quantos contatos atendem à condição...'
+              ) : previaTotal === 0 ? (
                 'Nenhum contato existente atende a esta condição (ou todos já estão no Nexus).'
               ) : (
                 <>
-                  <strong>{retroMatchCount}</strong> contato{retroMatchCount !== 1 ? 's' : ''} existente{retroMatchCount !== 1 ? 's' : ''} atende{retroMatchCount === 1 ? '' : 'm'} à condição e ainda não está{retroMatchCount === 1 ? '' : 'ão'} no Nexus. Deseja aplicar a regra agora?
+                  <strong>{previaTotal}</strong> contato{previaTotal !== 1 ? 's' : ''} existente{previaTotal !== 1 ? 's' : ''}
+                  {' '}atende{previaTotal === 1 ? '' : 'm'} à condição e ainda não está{previaTotal === 1 ? '' : 'ão'} no Nexus.
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
 
-          {retroProcessing && (
-            <div className="space-y-2">
-              <Progress value={retroProgress} className="h-2" />
-              <p className="text-xs text-muted-foreground text-center">
-                {Math.round((retroProgress / 100) * retroTotal)} de {retroTotal}
+          {!previaCarregando && previaTotal > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+              <p className="text-xs text-amber-900 dark:text-amber-200">
+                Eles não serão enviados agora. {AUTOMACAO_NAO_LIGADA}
               </p>
             </div>
           )}
 
           <DialogFooter>
-            {!retroProcessing && (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => setRetroRule(null)}>
-                  {retroMatchCount === 0 ? 'Fechar' : 'Pular'}
-                </Button>
-                {retroMatchCount > 0 && !retroLoading && (
-                  <Button size="sm" onClick={handleRetroProcess} className="gap-1.5">
-                    <Zap className="h-3.5 w-3.5" />
-                    Aplicar agora
-                  </Button>
-                )}
-              </>
-            )}
+            <Button variant="ghost" size="sm" onClick={() => setPreviaRegra(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { AutomationRule } from '@/lib/automationEngine';
+import {
+  listarRegras, criarRegra, editarRegra, excluirRegra, type AutomationRule,
+} from '@/lib/automacoes';
+import { ErroApi } from '@/lib/api';
+
+// A mensagem do trigger `validate_automation_rule_fields` nomeia o campo
+// inválido. A API a repassa em `detail` — mostrar, não mascarar.
+const motivo = (erro: unknown, padrao: string) =>
+  erro instanceof ErroApi ? erro.message : padrao;
 
 export function useAutomationRules() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -9,51 +16,40 @@ export function useAutomationRules() {
 
   const fetchRules = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('automation_rules')
-      .select('*')
-      .order('priority', { ascending: false });
-
-    if (error) {
-      toast.error('Erro ao carregar regras');
-    } else {
-      setRules((data || []) as unknown as AutomationRule[]);
+    try {
+      setRules(await listarRegras());
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao carregar regras'));
+      setRules([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
 
   const toggleRule = async (id: string, isActive: boolean) => {
-    const { error } = await supabase
-      .from('automation_rules')
-      .update({ is_active: isActive } as any)
-      .eq('id', id);
-
-    if (error) {
-      toast.error('Erro ao atualizar regra');
-    } else {
+    try {
+      await editarRegra(id, { is_active: isActive });
       setRules(prev => prev.map(r => r.id === id ? { ...r, is_active: isActive } : r));
       toast.success(isActive ? 'Regra ativada' : 'Regra desativada');
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao atualizar regra'));
     }
   };
 
   const deleteRule = async (id: string) => {
-    const { error } = await supabase
-      .from('automation_rules')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      toast.error('Erro ao excluir regra');
-    } else {
+    try {
+      await excluirRegra(id);
       setRules(prev => prev.filter(r => r.id !== id));
       toast.success('Regra excluída');
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao excluir regra'));
     }
   };
 
   const saveRule = async (rule: Partial<AutomationRule> & { id?: string }) => {
-    const payload: any = {
+    const payload = {
       name: rule.name,
       priority: rule.priority,
       condition_type: rule.condition_type,
@@ -67,26 +63,15 @@ export function useAutomationRules() {
       is_active: rule.is_active,
     };
 
-    if (rule.id) {
-      const { error } = await supabase
-        .from('automation_rules')
-        .update(payload)
-        .eq('id', rule.id);
-
-      if (error) {
-        toast.error('Erro ao salvar regra');
-        return false;
+    try {
+      if (rule.id) {
+        await editarRegra(rule.id, payload);
+      } else {
+        await criarRegra({ ...payload, is_active: rule.is_active ?? true });
       }
-    } else {
-      payload.is_active = rule.is_active ?? true;
-      const { error } = await supabase
-        .from('automation_rules')
-        .insert(payload);
-
-      if (error) {
-        toast.error('Erro ao criar regra');
-        return false;
-      }
+    } catch (erro) {
+      toast.error(motivo(erro, rule.id ? 'Erro ao salvar regra' : 'Erro ao criar regra'));
+      return false;
     }
 
     toast.success('Regra salva!');

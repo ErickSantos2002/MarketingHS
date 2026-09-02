@@ -1784,11 +1784,15 @@ paths:
                     type: string
                     nullable: true
 
-  /automations-api:
+  /publico/automacoes:
     get:
       operationId: automationsList
       summary: Listar regras de automação
-      description: Retorna todas as regras de automação.
+      description: >
+        Retorna todas as regras de automação, por prioridade decrescente.
+        ATENÇÃO: as regras são cadastro. A ação de todas elas é o handoff para
+        o Nexus, que ainda não está ligado neste sistema — a regra fica salva e
+        pronta, mas nada dispara.
       tags:
         - Automações
       responses:
@@ -1819,10 +1823,23 @@ paths:
                           type: string
                         condition_value:
                           type: string
+                        conditions:
+                          type: array
+                          items:
+                            type: object
+                        condition_logic:
+                          type: string
+                          enum: [and, or]
                         action_type:
                           type: string
                         action_metadata:
                           type: object
+                        condition:
+                          type: string
+                          description: A condição legível, montada pelo servidor.
+                        action:
+                          type: string
+                          description: A ação legível, montada pelo servidor.
     post:
       operationId: automationsCreate
       summary: Criar regra de automação
@@ -1838,7 +1855,6 @@ paths:
                 - name
                 - condition_type
                 - condition_operator
-                - condition_value
                 - action_type
               properties:
                 name:
@@ -1847,12 +1863,22 @@ paths:
                   type: integer
                 condition_type:
                   type: string
+                  enum: [status, etiqueta, tag, score, created_at]
                 condition_operator:
                   type: string
+                  enum: [is, is_not, greater_than, less_than, contains, between, after, before, last_n_days]
                 condition_value:
                   type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                condition_logic:
+                  type: string
+                  enum: [and, or]
                 action_type:
                   type: string
+                  enum: [create_in_nexus, move_stage_nexus, block_nexus]
                 action_value:
                   type: string
                 action_metadata:
@@ -1871,14 +1897,17 @@ paths:
                     type: boolean
                   rule:
                     type: object
+
+  /publico/automacoes/{id}:
     patch:
       operationId: automationsUpdate
       summary: Atualizar regra de automação
+      description: O caminho de ativar e desativar uma regra.
       tags:
         - Automações
       parameters:
         - name: id
-          in: query
+          in: path
           required: true
           schema:
             type: string

@@ -157,24 +157,15 @@ export function StatusTagsSection({
   // reconversão e WhatsApp. Recalcular depois de mexer numa tag nunca mudou
   // nada; era risco por nada.
 
-  const triggerAutomation = () => {
-    import('@/lib/automationEngine').then(async ({ evaluateAndExecute }) => {
-      // Relê o lead do servidor: a etiqueta e o score podem ter mudado pelo
-      // trigger desde que a tela carregou.
-      const { lead: freshLead } = await lerFicha<{ id: string; status: string | null;
-        etiqueta: string | null; lead_score: number | null; dnia_id: string | null }>(lead.id);
-      if (freshLead) {
-        const ruleName = await evaluateAndExecute(freshLead);
-        if (ruleName) toast.success(`Automação executada: ${ruleName}`);
-      }
-    }).catch(() => {});
-  };
+  // ⚠️ `triggerAutomation` saiu no lote 4B, pelo mesmo motivo do StatusDropdown:
+  // ela avaliava as regras no navegador e chamava `handoff-to-nexus`, do lote 5.
+  // Relia o lead do servidor para nada. A avaliação volta no lote 5, no
+  // servidor, junto da ação. Ver AUTOMACAO_NAO_LIGADA em lib/automacoes.
 
   const handleRemoveTag = async (tagId: string) => {
     await removerTagDoContato(lead.id, tagId);
     setLeadTags(prev => prev.filter(t => t.id !== tagId));
     onTagsChanged();
-    triggerAutomation();
     toast.success('Tag removida');
   };
 
@@ -184,7 +175,6 @@ export function StatusTagsSection({
     setTagSearch('');
     setShowTagDropdown(false);
     onTagsChanged();
-    triggerAutomation();
     toast.success(`Tag "${tag.name}" adicionada`);
   };
 

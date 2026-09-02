@@ -9,6 +9,7 @@ from app.config import settings
 from app.auth.router import router as auth_router
 from app.database import close_db, init_db
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
+from app.routers.automacoes import router as automacoes_router
 from app.routers.campanhas import router as campanhas_router
 from app.routers.envio import router as envio_router
 from app.routers.chaves import router as chaves_router
@@ -84,5 +85,6 @@ app.include_router(templates_router)
 app.include_router(campanhas_router)
 app.include_router(envio_router)
 app.include_router(jornadas_router)
+app.include_router(automacoes_router)
 app.include_router(publico_router)
 app.include_router(webhook_router)

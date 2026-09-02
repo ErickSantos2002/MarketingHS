@@ -16,6 +16,9 @@ from pydantic import BaseModel, Field
 
 from app.chave_api import ChaveApi, chave_api
 from app.database import sessao
+from app.routers.automacoes import (
+    RegraIn, RegraPatch, atualizar_regra, inserir_regra,
+)
 from app.email.montagem import assinar_token, normalizar_email
 from app.integracoes import ler_segredo
 
@@ -860,3 +863,57 @@ async def criar_template_publico(dados: TemplatePublicoIn,
             dados.name.strip(), dados.description, dados.category,
             dados.design, dados.html)
     return {"success": True, "template": dict(linha)}
+
+
+# ---------------------------------------------------------------------------
+# Automações — a metade pública. Substitui a `automations-api`.
+#
+# ⚠️ A tela não é o portão inteiro: `automations-api` aceitava CHAVE DE API com
+# escopo read/write, não só o admin. Portar a tela de Automações não a torna
+# órfã — integrador externo continua do outro lado, e a URL está ensinada na
+# tela de Documentação da API e no `dnmarketing-api.yaml`. Mesma armadilha de
+# `campaigns-api` e `templates-api` no lote 3A.
+#
+# ⚠️ O que estas rotas fazem é CADASTRO. Nenhuma regra dispara: as três ações
+# possíveis são o Nexus, que é o lote 5.
+# ---------------------------------------------------------------------------
+
+def _regra_publica(l) -> dict:
+    """A forma que a `automations-api` devolvia, incluindo as duas strings
+    derivadas (`condition` e `action`) que a documentação pública promete."""
+    d = dict(l)
+    d["conditions"] = d.get("conditions") or []
+    meta = d.get("action_metadata") or {}
+    d["action_metadata"] = meta
+    d["condition"] = (f"{d['condition_type']} {d['condition_operator']} "
+                      f"{d['condition_value']}")
+    estagio = meta.get("stage_name") if isinstance(meta, dict) else None
+    d["action"] = f"{d['action_type']}{' em ' + estagio if estagio else ''}"
+    return d
+
+
+@router.get("/automacoes")
+async def listar_automacoes_publico(_: ChaveApi = Depends(chave_api("read"))):
+    from app.routers.automacoes import COLUNAS as COLUNAS_REGRA
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            f"""SELECT {COLUNAS_REGRA} FROM automation_rules
+                 ORDER BY priority DESC, created_at""")
+    return {"data": [_regra_publica(l) for l in linhas]}
+
+
+@router.post("/automacoes", status_code=status.HTTP_201_CREATED)
+async def criar_automacao_publico(dados: RegraIn,
+                                  _: ChaveApi = Depends(chave_api("write"))):
+    """⚠️ O INSERT é o mesmo da rota de admin, e a validação do vocabulário é do
+    trigger `validate_automation_rule_fields` — a mensagem dele volta como 400."""
+    return {"success": True, "rule": {"id": await inserir_regra(dados)}}
+
+
+@router.patch("/automacoes/{regra_id}")
+async def editar_automacao_publico(regra_id: str, dados: RegraPatch,
+                                   _: ChaveApi = Depends(chave_api("write"))):
+    """A documentação pública ensina o PATCH como o jeito de ativar e desativar
+    uma regra. É a rota que mais é chamada de fora; não pode sumir."""
+    await atualizar_regra(regra_id, dados)
+    return {"success": True, "rule": {"id": regra_id}}

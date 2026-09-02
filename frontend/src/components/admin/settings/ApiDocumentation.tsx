@@ -742,15 +742,15 @@ curl -X POST \\
     notes: 'PATCH /pages-api?slug=xxx para atualizar config e UTM presets.',
   },
   {
-    id: 'automations-api',
+    id: 'automacoes',
     method: 'GET',
-    path: '/automations-api',
+    path: '/publico/automacoes',
     title: 'Listar automações',
-    description: 'Lista regras de automação. POST para criar, PATCH para ativar/desativar.',
+    description: 'Lista regras de automação, por prioridade decrescente. POST para criar, PATCH para ativar/desativar. ⚠️ As regras são cadastro: a ação de todas é o handoff para o Nexus, que ainda não está ligado — nada dispara.',
     params: [],
     curl: `curl -X GET \\
-  '${BASE_URL}/automations-api' \\
-  -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
+  '${BASE_URL}/publico/automacoes' \\
+  -H 'Authorization: Bearer [CHAVE_DE_API]'`,
     response: JSON.stringify({
       data: [{
         id: "uuid",
@@ -765,7 +765,7 @@ curl -X POST \\
         action_metadata: { stage_name: "Diagnóstico" }
       }]
     }, null, 2),
-    notes: 'PATCH /automations-api?id=uuid para ativar/desativar regras.',
+    notes: 'PATCH /publico/automacoes/{id} para ativar/desativar regras.',
   },
   {
     id: 'analytics-api',

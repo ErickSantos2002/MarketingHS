@@ -51,14 +51,10 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
     // de quais status avançam o estágio é decisão de produto da HS e ainda não
     // existe. Quem decidir isso, decide no servidor.
 
-    // As automações são de outro lote e ainda falam com o Supabase; a chamada
-    // fica protegida e volta a funcionar quando elas forem portadas.
-    import('@/lib/automationEngine').then(async ({ evaluateAndExecute }) => {
-      try {
-        const ruleName = await evaluateAndExecute({ id: leadId } as never);
-        if (ruleName) toast.success(`Automação executada: ${ruleName}`);
-      } catch { /* automações ainda não portadas */ }
-    }).catch(() => {});
+    // ⚠️ A chamada às automações saiu no lote 4B. Ela avaliava as regras no
+    // navegador e chamava `handoff-to-nexus`, que é do lote 5 — o toast dizia
+    // "Automação executada" enquanto nada saía. A avaliação volta no lote 5,
+    // no servidor, junto da ação que ela dispara. Ver AUTOMACAO_NAO_LIGADA.
 
     onStatusChange?.(newStatus);
   };

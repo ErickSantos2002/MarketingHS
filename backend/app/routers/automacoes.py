@@ -1,0 +1,290 @@
+"""Regras de automação. Substitui a `automations-api`.
+
+⚠️ **A ação de toda regra é o Nexus** — `create_in_nexus`, `move_stage_nexus`,
+`block_nexus`, e o trigger de validação do banco não aceita outra coisa. A
+integração com o GrowthHS é o LOTE 5. Então aqui existe o cadastro das regras e
+a contagem de quem elas pegariam, e **nada dispara**. A tela diz isso em letra
+grande; não é acidente nem pendência esquecida.
+
+⚠️ `evaluate_automation_on_etiqueta` e o trigger `trg_automation_on_etiqueta_change`
+foram removidos no lote 0 e NÃO voltam aqui: um trigger que avalia e não tem
+ação para chamar é trigger sem consumidor. Ele volta no lote 5, junto do Nexus.
+"""
+
+import logging
+from datetime import datetime, timedelta, timezone
+
+import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+
+from app.database import sessao
+from app.dependencies import Usuario, admin_atual, usuario_atual
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/automacoes", tags=["automacoes"])
+
+COLUNAS = """
+    id::text, name, is_active, priority, condition_type, condition_operator,
+    condition_value, conditions, condition_logic, action_type, action_value,
+    action_metadata, created_at::text, updated_at::text
+"""
+
+CASTS = {"conditions": "::jsonb", "action_metadata": "::jsonb"}
+
+
+class Condicao(BaseModel):
+    type: str
+    operator: str
+    value: str = ""
+
+
+class RegraIn(BaseModel):
+    """⚠️ Os valores de `condition_type`, `condition_operator` e `action_type`
+    NÃO são validados aqui de propósito. Quem valida é o trigger
+    `validate_automation_rule_fields`, e a mensagem dele é a mensagem útil.
+    Repetir a lista neste arquivo criaria uma segunda cópia do vocabulário, e a
+    que diverge é sempre a que ninguém está olhando.
+    """
+    name: str = Field(min_length=1, max_length=200)
+    priority: int = 0
+    condition_type: str
+    condition_operator: str
+    condition_value: str = ""
+    conditions: list[Condicao] = Field(default_factory=list)
+    condition_logic: str = "and"
+    action_type: str
+    action_value: str | None = None
+    action_metadata: dict = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class RegraPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    priority: int | None = None
+    condition_type: str | None = None
+    condition_operator: str | None = None
+    condition_value: str | None = None
+    conditions: list[Condicao] | None = None
+    condition_logic: str | None = None
+    action_type: str | None = None
+    action_value: str | None = None
+    action_metadata: dict | None = None
+    is_active: bool | None = None
+
+
+def _linha(l) -> dict:
+    d = dict(l)
+    d["conditions"] = d.get("conditions") or []
+    d["action_metadata"] = d.get("action_metadata") or {}
+    return d
+
+
+@router.get("")
+async def listar(_: Usuario = Depends(usuario_atual)):
+    """Prioridade decrescente: a primeira que bate é a que vale."""
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            f"SELECT {COLUNAS} FROM automation_rules ORDER BY priority DESC, created_at")
+    return [_linha(l) for l in linhas]
+
+
+# ---------------------------------------------------------------------------
+# A prévia: quantos contatos a regra pegaria
+# ---------------------------------------------------------------------------
+
+# ⚠️ Este é o ÚNICO lugar onde o vocabulário de condição vira SQL. A origem
+# tinha DUAS implementações que discordavam entre si: `queryMatchingLeads`
+# (a contagem, em PostgREST) e `evaluateSingleCondition` (a avaliação em tempo
+# real, em JavaScript). Elas divergiam no NULL — `.neq('status', x)` no Postgres
+# descarta quem tem status nulo, enquanto `lead.status !== x` em JS aceita. O
+# mesmo contato entrava numa conta e não na outra.
+#
+# Onde as duas divergiam, a escolha foi feita caso a caso e está aqui por
+# escrito, para não virar mistério depois:
+#
+#   status/etiqueta com `is_not`  -> semântica do SQL: `<>` NÃO pega quem tem o
+#       campo nulo. Contato sem status não "tem status diferente de X"; ele não
+#       tem status. Era o que a contagem fazia, e é o que o usuário via.
+#   score                         -> `coalesce(lead_score, 0)`: sem pontuação
+#       conta como zero. Aqui as duas concordavam no espírito; a contagem é que
+#       destoava, porque `.gt()` descartava o nulo em silêncio.
+#
+# A avaliação em tempo real volta no lote 5, aqui, servida por esta mesma
+# função — não por uma segunda cópia no navegador.
+#
+# ⚠️ Valor SEMPRE em parâmetro, nunca concatenado. `build_segment_condition`, no
+# banco, monta SQL com quote_literal; aqui não há motivo para repetir isso.
+def _condicao_sql(c: Condicao, params: list) -> str | None:
+    def p(valor) -> str:
+        params.append(valor)
+        return f"${len(params)}"
+
+    tipo, op, val = c.type, c.operator, c.value
+
+    if tipo == "status":
+        return f"l.status = {p(val)}" if op == "is" else f"l.status <> {p(val)}"
+
+    if tipo == "etiqueta":
+        return f"l.etiqueta = {p(val)}" if op == "is" else f"l.etiqueta <> {p(val)}"
+
+    if tipo == "tag":
+        existe = (f"EXISTS (SELECT 1 FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id"
+                  f" WHERE lt.lead_id = l.id AND t.name = {p(val)})")
+        return existe if op == "contains" else f"NOT {existe}"
+
+    if tipo == "score":
+        try:
+            n = int(val or 0)
+        except ValueError:
+            return None
+        alvo = p(n)
+        return (f"coalesce(l.lead_score, 0) > {alvo}" if op == "greater_than"
+                else f"coalesce(l.lead_score, 0) < {alvo}")
+
+    if tipo == "created_at":
+        if op == "after":
+            return f"l.created_at >= {p(val)}::timestamptz"
+        if op == "before":
+            # O dia inteiro conta: 'antes de 10/09' inclui 10/09 até 23:59:59,
+            # como fazia a origem. Cortar à meia-noite perderia o dia todo.
+            return f"l.created_at < ({p(val)}::date + 1)"
+        if op == "between":
+            partes = (val or "").split("|")
+            if len(partes) != 2:
+                return None
+            return (f"l.created_at >= {p(partes[0])}::timestamptz"
+                    f" AND l.created_at < ({p(partes[1])}::date + 1)")
+        if op == "last_n_days":
+            try:
+                dias = int(val or 0)
+            except ValueError:
+                return None
+            corte = datetime.now(timezone.utc) - timedelta(days=dias)
+            return f"l.created_at >= {p(corte)}"
+        return None
+
+    return None
+
+
+class PreviaIn(BaseModel):
+    conditions: list[Condicao] = Field(default_factory=list)
+    condition_logic: str = "and"
+    # Compatibilidade com a regra de campo único, que ainda existe na tabela.
+    condition_type: str | None = None
+    condition_operator: str | None = None
+    condition_value: str | None = None
+
+
+@router.post("/previa")
+async def previa(dados: PreviaIn, _: Usuario = Depends(admin_atual)):
+    """Quantos contatos a regra pegaria, sem contar quem já está no Nexus.
+
+    ⚠️ Só o TOTAL e uma amostra voltam. A origem trazia a lista inteira de leads
+    para o navegador só para chamar `.length` — com a base crescida isso é a
+    página inteira de contatos trafegando para mostrar um número.
+    """
+    condicoes = dados.conditions or []
+    if not condicoes and dados.condition_type:
+        condicoes = [Condicao(type=dados.condition_type,
+                              operator=dados.condition_operator or "is",
+                              value=dados.condition_value or "")]
+
+    params: list = []
+    partes = [s for s in (_condicao_sql(c, params) for c in condicoes) if s]
+    if not partes:
+        return {"total": 0, "amostra": []}
+
+    juncao = " OR " if (dados.condition_logic or "and").lower() == "or" else " AND "
+    onde = "(" + juncao.join(f"({s})" for s in partes) + ")"
+
+    # ⚠️ Quem já tem contato no Nexus fica de fora — a regra não o mandaria de
+    # novo. `dnia_id` nulo NÃO é exclusão: contato sem identidade no ecossistema
+    # nunca esteve no Nexus.
+    fora_do_nexus = """
+        AND NOT EXISTS (
+            SELECT 1 FROM ecosystem_identities ei
+             WHERE l.dnia_id IS NOT NULL
+               AND ei.dnia_id = l.dnia_id
+               AND ei.nexus_contact_id IS NOT NULL
+        )"""
+
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval(
+            f"SELECT count(*) FROM leads l WHERE {onde} {fora_do_nexus}", *params)
+        amostra = await conn.fetch(
+            f"""SELECT l.id::text, l.nome, l.email, l.etiqueta
+                  FROM leads l WHERE {onde} {fora_do_nexus}
+                 ORDER BY l.created_at DESC LIMIT 5""", *params)
+    return {"total": int(total or 0), "amostra": [dict(a) for a in amostra]}
+
+
+# ---------------------------------------------------------------------------
+# Escrita — admin. ⚠️ Regra de automação decide quem vai para o comercial:
+# `usuario_atual` aqui deixaria um `sem_papel` criar e apagar regra.
+# ---------------------------------------------------------------------------
+
+# A escrita mora aqui e a metade pública (routers/publico.py) chama estas duas
+# funções. Duas cópias do INSERT divergiriam no dia em que uma coluna nova
+# entrasse — e a que ninguém olha é a pública.
+
+async def inserir_regra(dados: RegraIn) -> str:
+    campos = dados.model_dump()
+    campos["conditions"] = [c.model_dump() for c in dados.conditions]
+    colunas = list(campos)
+    nomes = ", ".join(colunas)
+    marcas = ", ".join(f"${i}{CASTS.get(c, '')}" for i, c in enumerate(colunas, 1))
+    valores = [campos[c] for c in colunas]
+    try:
+        async with sessao(role="service_role") as conn:
+            novo = await conn.fetchval(
+                f"INSERT INTO automation_rules ({nomes}) VALUES ({marcas}) RETURNING id",
+                *valores)
+    except asyncpg.exceptions.RaiseError as exc:
+        # A mensagem do trigger nomeia o campo inválido — é a útil.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return str(novo)
+
+
+async def atualizar_regra(regra_id: str, dados: RegraPatch) -> None:
+    campos = dados.model_dump(exclude_unset=True)
+    if not campos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada a atualizar.")
+    if "conditions" in campos and dados.conditions is not None:
+        campos["conditions"] = [c.model_dump() for c in dados.conditions]
+
+    partes, valores = [], []
+    for i, (coluna, valor) in enumerate(campos.items(), start=2):
+        partes.append(f"{coluna} = ${i}{CASTS.get(coluna, '')}")
+        valores.append(valor)
+
+    try:
+        async with sessao(role="service_role") as conn:
+            r = await conn.execute(
+                f"UPDATE automation_rules SET {', '.join(partes)} WHERE id = $1::uuid",
+                regra_id, *valores)
+    except asyncpg.exceptions.RaiseError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    if r.endswith(" 0"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra não encontrada.")
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def criar(dados: RegraIn, _: Usuario = Depends(admin_atual)):
+    return {"id": await inserir_regra(dados)}
+
+
+@router.patch("/{regra_id}")
+async def editar(regra_id: str, dados: RegraPatch,
+                 _: Usuario = Depends(admin_atual)):
+    await atualizar_regra(regra_id, dados)
+    return {"id": regra_id}
+
+
+@router.delete("/{regra_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir(regra_id: str, _: Usuario = Depends(admin_atual)):
+    async with sessao(role="service_role") as conn:
+        r = await conn.execute(
+            "DELETE FROM automation_rules WHERE id = $1::uuid", regra_id)
+    if r.endswith(" 0"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Regra não encontrada.")
