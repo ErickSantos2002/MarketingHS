@@ -654,6 +654,31 @@ git commit -m "feat(5B): a sincronização de mão única do DataCore"
 
 ---
 
+## ⚠️ Correção da tarefa 3, feita na execução (02/09/2026)
+
+O desenho cliente-a-cliente deste plano **não sobreviveu ao contato com os dados
+reais**. Duas coisas, achadas rodando:
+
+**1. Era inviável em tempo.** Três idas ao banco por cliente, ~400ms cada contra
+o Postgres remoto: **~14 minutos** para os 2.080, tudo numa transação só. Nenhum
+proxy na frente da API aguenta uma requisição dessas, e uma falha no minuto 13
+perderia tudo. Refeito em blocos de 500 com quatro consultas cada:
+**3,1 segundos**, medido na base inteira.
+
+**2. A idempotência estava errada para 91% da base.** `ON CONFLICT (email) DO
+NOTHING` não protege quem entra sem e-mail — NULL não conflita com NULL no
+Postgres — e 1.897 dos 2.080 clientes não têm e-mail. A segunda carga criaria
+1.897 leads duplicados. O teste `test_rodar_duas_vezes_nao_duplica` não pegou
+porque usava um cliente COM e-mail. Agora a existência do lead é checada por
+`NOT EXISTS ... WHERE l.dnia_id = d.dnia_id`, e há um segundo teste para o caso
+sem e-mail.
+
+O caminho cliente-a-cliente continua existindo, mas só como **reserva**: quando
+um bloco falha, ele reprocessa aquele bloco linha a linha para isolar o cliente
+problemático, em vez de perder os 500.
+
+---
+
 ## Tarefa 4: A rota e a tela
 
 **Arquivos:**

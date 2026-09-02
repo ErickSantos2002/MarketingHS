@@ -120,3 +120,21 @@ async def test_um_cliente_ruim_nao_derruba_os_outros(conexao):
     r = await sincronizar(conexao, [ruim, *bons])
     assert len(r.erros) == 1, r.erros
     assert r.criados == 2, "os dois bons entraram apesar do erro do primeiro"
+
+
+@pytest.mark.asyncio
+async def test_rodar_duas_vezes_sem_email_tambem_nao_duplica(conexao):
+    """⚠️ O caso que o primeiro teste de idempotência NÃO cobria.
+
+    `ON CONFLICT (email) DO NOTHING` não protege quem entra sem e-mail: NULL não
+    conflita com NULL no Postgres. E ~91% da base do ERP não tem e-mail — ou
+    seja, a segunda carga criaria um lead duplicado para cada um deles.
+    """
+    c = [_cliente(cpf_cnpj="50000000000001", email=None)]
+    await sincronizar(conexao, c)
+    await sincronizar(conexao, c)
+    n = await conexao.fetchval(
+        """SELECT count(*) FROM leads l
+             JOIN ecosystem_identities i ON i.dnia_id = l.dnia_id
+            WHERE i.datacore_cliente_id = '50000000000001'""")
+    assert n == 1, f"a segunda carga duplicou o lead ({n} linhas)"
