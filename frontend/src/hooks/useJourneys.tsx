@@ -1,7 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import {
+  listarJornadas, obterJornada, criarJornada, editarJornada, excluirJornada,
+  type JornadaPatch,
+} from '@/lib/jornadas';
+import { ErroApi } from '@/lib/api';
 import type { Journey, JourneyNodeMetrics } from '@/lib/journeys';
+
+// A mensagem do banco (grafo cíclico, nó sem config, fluxo sem nós, fluxo com
+// execuções que não se apaga) é a mensagem útil para quem monta o fluxo. A API
+// a repassa em `detail`, e o ErroApi a carrega em `message` -- mostrar, não
+// mascarar por um genérico.
+const motivo = (erro: unknown, padrao: string) =>
+  erro instanceof ErroApi ? erro.message : padrao;
 
 export function useJourneys() {
   const [journeys, setJourneys] = useState<Journey[]>([]);
@@ -9,54 +20,53 @@ export function useJourneys() {
 
   const fetchJourneys = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.functions.invoke('journeys-api', { method: 'GET' });
-    if (error) {
-      toast.error('Erro ao carregar fluxos');
+    try {
+      setJourneys(await listarJornadas());
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao carregar fluxos'));
       setJourneys([]);
-    } else {
-      setJourneys((data?.data ?? []) as Journey[]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchJourneys(); }, [fetchJourneys]);
 
+  // Devolve só o `id` — é tudo que a API dá ao criar, e tudo que quem chama
+  // usa (navegar para o construtor do fluxo novo).
   const createJourney = async (payload: Partial<Journey>): Promise<Journey | null> => {
-    const { data, error } = await supabase.functions.invoke('journeys-api', {
-      method: 'POST', body: payload,
-    });
-    if (error || data?.error) {
-      toast.error(data?.error || 'Erro ao criar fluxo');
+    try {
+      const novo = await criarJornada(payload as Parameters<typeof criarJornada>[0]);
+      toast.success('Fluxo criado');
+      await fetchJourneys();
+      return novo as Journey;
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao criar fluxo'));
       return null;
     }
-    toast.success('Fluxo criado');
-    await fetchJourneys();
-    return data.journey as Journey;
   };
 
   const updateJourney = async (id: string, payload: Partial<Journey>): Promise<boolean> => {
-    const { data, error } = await supabase.functions.invoke(`journeys-api?id=${id}`, {
-      method: 'PATCH', body: payload,
-    });
-    if (error || data?.error) {
-      // A mensagem do banco (grafo cíclico, nó sem config, fluxo sem nós) é a
-      // mensagem útil para o usuário -- mostrar, não mascarar.
-      toast.error(data?.error || 'Erro ao salvar fluxo');
+    try {
+      await editarJornada(id, payload as JornadaPatch);
+      await fetchJourneys();
+      return true;
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao salvar fluxo'));
       return false;
     }
-    await fetchJourneys();
-    return true;
   };
 
   const deleteJourney = async (id: string): Promise<boolean> => {
-    const { data, error } = await supabase.functions.invoke(`journeys-api?id=${id}`, { method: 'DELETE' });
-    if (error || data?.error) {
-      toast.error(data?.error || 'Erro ao excluir fluxo');
+    try {
+      await excluirJornada(id);
+      toast.success('Fluxo excluído');
+      await fetchJourneys();
+      return true;
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao excluir fluxo'));
       return false;
     }
-    toast.success('Fluxo excluído');
-    await fetchJourneys();
-    return true;
   };
 
   return { journeys, loading, fetchJourneys, createJourney, updateJourney, deleteJourney };
@@ -71,16 +81,17 @@ export function useJourney(id: string | undefined) {
   const fetchJourney = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    const { data, error } = await supabase.functions.invoke(`journeys-api?id=${id}`, { method: 'GET' });
-    if (error || data?.error) {
-      toast.error(data?.error || 'Erro ao carregar fluxo');
+    try {
+      const r = await obterJornada(id);
+      setJourney(r.data);
+      setMetrics(r.metrics ?? {});
+      setRuns(r.runs ?? {});
+    } catch (erro) {
+      toast.error(motivo(erro, 'Erro ao carregar fluxo'));
       setJourney(null);
-    } else {
-      setJourney(data.data as Journey);
-      setMetrics((data.metrics ?? {}) as Record<string, JourneyNodeMetrics>);
-      setRuns((data.runs ?? {}) as Record<string, number>);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [id]);
 
   useEffect(() => { fetchJourney(); }, [fetchJourney]);

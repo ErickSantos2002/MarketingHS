@@ -62,6 +62,20 @@ export const NODE_LABELS: Record<JourneyNodeType, string> = {
   handoff_nexus: 'Enviar para o Nexus',
 };
 
+// Tipos de nó cujo consumidor AINDA NÃO EXISTE neste produto. A tela não pode
+// oferecer o que não roda: o executor registra `failed` com a razão em vez de
+// fingir sucesso (um fluxo que "entregou ao comercial" sem entregar nada é pior
+// que um que falhou visivelmente), e o construtor não deixa montar o passo.
+//
+// `handoff_nexus` entrega o contato ao GrowthHS, e a integração é o lote 5.
+// Quando ela chegar, apagar a entrada daqui religa o nó nos três lugares que
+// leem este mapa — menu do "+", diálogo de configuração e validação.
+export const NODE_NAO_LIGADO: Partial<Record<JourneyNodeType, string>> = {
+  handoff_nexus: 'A integração com o GrowthHS ainda não está ligada neste ' +
+    'sistema. Um passo destes não seria executado — o fluxo pararia nele com ' +
+    'erro. Ele volta a funcionar quando a integração entrar.',
+};
+
 export const BRANCH_TYPES: JourneyNodeType[] = ['branch_attribute', 'branch_segment', 'branch_email_event'];
 export const isBranch = (t: JourneyNodeType) => BRANCH_TYPES.includes(t);
 

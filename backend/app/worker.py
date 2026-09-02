@@ -275,9 +275,12 @@ async def _rodar_jornadas() -> dict:
             "SELECT id FROM journeys WHERE status = 'active' AND entry_type = 'segment'")
         for f in fluxos:
             try:
-                n = await conn.fetchval(
-                    "SELECT journey_enroll_segment($1::uuid, $2)", f["id"], 200)
-                resumo["matriculados"] += int(n or 0)
+                # SAVEPOINT pelo mesmo motivo do bloco B: um fluxo que levanta
+                # erro não pode levar a matrícula dos outros junto.
+                async with conn.transaction():
+                    n = await conn.fetchval(
+                        "SELECT journey_enroll_segment($1::uuid, $2)", f["id"], 200)
+                    resumo["matriculados"] += int(n or 0)
             except Exception as e:  # noqa: BLE001
                 logger.warning("matrícula do fluxo %s falhou: %s", f["id"], e)
 
@@ -295,22 +298,32 @@ async def _rodar_jornadas() -> dict:
             EVENTOS_LOTE)
         for e in eventos:
             try:
-                acordados = await conn.fetchval(
-                    "SELECT journey_wake_on_event($1::uuid, $2, $3::timestamptz, $4::jsonb)",
-                    e["lead_id"], e["event_type"], e["occurred_at"],
-                    e["metadata"] or {})
-                if isinstance(acordados, str):
-                    import json as _json
-                    acordados = _json.loads(acordados)
-                resumo["acordados"] += int((acordados or {}).get("woken") or 0)
-                n = await conn.fetchval(
-                    "SELECT journey_enroll_event($1::uuid, $2)",
-                    e["lead_id"], e["event_type"])
-                resumo["matriculados"] += int(n or 0)
+                # ⚠️ SAVEPOINT por evento. `sessao()` abre UMA transação para o
+                # lote inteiro: sem isto, o primeiro evento que levanta erro
+                # aborta a transação e os outros 19 morrem em cadeia com
+                # "current transaction is aborted" -- inclusive o DELETE que os
+                # reivindicou, que volta atrás e devolve o lote à fila para
+                # falhar de novo no próximo tick, para sempre. O try/except
+                # sozinho não protege nada: ele captura o erro, mas a transação
+                # continua envenenada.
+                async with conn.transaction():
+                    acordados = await conn.fetchval(
+                        "SELECT journey_wake_on_event($1::uuid, $2, $3::timestamptz, $4::jsonb)",
+                        e["lead_id"], e["event_type"], e["occurred_at"],
+                        e["metadata"] or {})
+                    if isinstance(acordados, str):
+                        import json as _json
+                        acordados = _json.loads(acordados)
+                    resumo["acordados"] += int((acordados or {}).get("woken") or 0)
+                    n = await conn.fetchval(
+                        "SELECT journey_enroll_event($1::uuid, $2)",
+                        e["lead_id"], e["event_type"])
+                    resumo["matriculados"] += int(n or 0)
             except Exception as exc:  # noqa: BLE001
-                # ⚠️ O evento já saiu da fila (o DELETE ... RETURNING é o claim).
-                # Perder um evento é ruim, mas repô-lo numa transação que já
-                # falhou é pior — o log é o rastro.
+                # ⚠️ O evento já saiu da fila (o DELETE ... RETURNING é o claim),
+                # e o SAVEPOINT preserva esse claim ao voltar atrás — só o
+                # trabalho deste evento é desfeito. Perder um evento é ruim, mas
+                # repô-lo para falhar em laço é pior; o log é o rastro.
                 logger.warning("evento de jornada %s/%s falhou: %s",
                                e["lead_id"], e["event_type"], exc)
 

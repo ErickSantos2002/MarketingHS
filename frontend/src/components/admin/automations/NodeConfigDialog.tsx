@@ -6,10 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSegments } from '@/hooks/useSegments';
-import { NODE_LABELS, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
+import { NODE_LABELS, NODE_NAO_LIGADO, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
 
 // Mesmo vocabulário field/operator/value que build_segment_condition
 // (migration 20260713250000) mapeia -- evaluate_rules_for_lead (Task 6.4)
@@ -124,9 +124,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   // as mesmas do filtro ETIQUETA de /contacts e do campo Etiqueta dos segmentos.
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
 
-  // handoff_nexus
-  const [stages, setStages] = useState<{ id: string; name: string; is_won?: boolean; is_lost?: boolean }[]>([]);
-  const [stagesLoading, setStagesLoading] = useState(false);
+  // handoff_nexus — ver NODE_NAO_LIGADO em lib/journeys. Não há lista de
+  // estágios para carregar: o GrowthHS entra no lote 5.
   const [stageId, setStageId] = useState('');
 
   useEffect(() => {
@@ -149,23 +148,14 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
     if (type && isBranch(type)) setCondType(type);
     setTagName(cfg.tag_name || '');
     setStageId(cfg.stage_id || '');
-
-    if (type === 'handoff_nexus') {
-      setStagesLoading(true);
-      supabase.functions.invoke('get-nexus-stages')
-        .then(({ data }) => setStages(data?.stages || []))
-        .catch(() => setStages([]))
-        .finally(() => setStagesLoading(false));
-    }
   }, [open, type, initialConfig]);
 
   useEffect(() => {
     if (!open) return;
-    supabase
-      .from('tags')
-      .select('id, name')
-      .order('name')
-      .then(({ data }) => setTags(data || []));
+    // A API devolve {id, nome, cor}; o diálogo fala {id, name}.
+    listarTags()
+      .then((lista) => setTags(lista.map((t) => ({ id: t.id, name: t.nome }))))
+      .catch(() => setTags([]));
   }, [open]);
 
   const addRule = () => setRules((r) => [...r, { field: '', operator: '', value: '' }]);
@@ -193,7 +183,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       case 'branch_segment': return !!segmentId;
       case 'branch_email_event': return !!sourceNodeId && ['delivered', 'opened', 'clicked'].includes(emailCheck);
       case 'apply_tag': return !!normalizedTag;
-      case 'handoff_nexus': return !!stageId;
+      // Passo sem consumidor não se salva — ver NODE_NAO_LIGADO.
+      case 'handoff_nexus': return false;
       default: return false;
     }
   };
@@ -227,11 +218,12 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       case 'apply_tag':
         config = { tag_name: normalizedTag };
         break;
-      case 'handoff_nexus': {
-        const stage = stages.find((s) => s.id === stageId);
-        config = { stage_id: stageId, stage_name: stage?.name || '' };
+      case 'handoff_nexus':
+        // Inalcançável: isValid() recusa este tipo enquanto o GrowthHS não
+        // entrar. O `stage_id` de um fluxo antigo é preservado como está, sem
+        // o `stage_name` que só a integração saberia resolver.
+        config = { stage_id: stageId };
         break;
-      }
     }
     // Passa o subtipo real quando é uma Condição; o chamador persiste esse type.
     onSave(config, type && isBranch(type) ? (effType ?? undefined) : undefined);
@@ -489,18 +481,11 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
           )}
 
           {type === 'handoff_nexus' && (
-            <div className="space-y-1.5">
-              <Label>Estágio do pipeline no Nexus</Label>
-              {stagesLoading ? (
-                <p className="text-xs text-muted-foreground">Carregando estágios...</p>
-              ) : (
-                <Select value={stageId} onValueChange={setStageId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o estágio" /></SelectTrigger>
-                  <SelectContent>
-                    {stages.filter((s) => !s.is_won && !s.is_lost).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
+            <div className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+              <p className="text-xs text-amber-900 dark:text-amber-200">
+                {NODE_NAO_LIGADO.handoff_nexus}
+              </p>
             </div>
           )}
         </div>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { editarJornada } from '@/lib/jornadas';
+import { ErroApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,7 +27,7 @@ import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 import { useSegments } from '@/hooks/useSegments';
 import { useTemplates } from '@/hooks/useTemplates';
 import {
-  NODE_LABELS, STATUS_LABELS, EVENT_OPTIONS, isBranch, newNodeId, readEntrySegments,
+  NODE_LABELS, NODE_NAO_LIGADO, STATUS_LABELS, EVENT_OPTIONS, isBranch, newNodeId, readEntrySegments,
   type Journey, type JourneyNode, type JourneyNodeType,
 } from '@/lib/journeys';
 import { JourneyNodeCard } from '@/components/admin/automations/JourneyNodeCard';
@@ -263,16 +264,15 @@ export default function JourneyBuilder() {
   };
 
   const savePatch = async (patch: Record<string, any>): Promise<boolean> => {
-    const { data, error } = await supabase.functions.invoke(`journeys-api?id=${id}`, {
-      method: 'PATCH', body: patch,
-    });
-    if (error || data?.error) {
+    try {
+      await editarJornada(id!, patch);
+      return true;
+    } catch (erro) {
       // A mensagem do banco (grafo cíclico, nó sem config, fluxo sem nós) é a
       // mensagem útil para o usuário -- mostrar, não mascarar.
-      toast.error(data?.error || 'Erro ao salvar fluxo');
+      toast.error(erro instanceof ErroApi ? erro.message : 'Erro ao salvar fluxo');
       return false;
     }
-    return true;
   };
 
   const doSaveGraph = async () => {
@@ -357,11 +357,26 @@ export default function JourneyBuilder() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center">
-        {ADD_MENU.map((item) => (
-          <DropdownMenuItem key={item.label} onClick={() => openAddMenu(parentId, branchKey, item.type)}>
-            {item.label}
-          </DropdownMenuItem>
-        ))}
+        {ADD_MENU.map((item) => {
+          // Passo cujo consumidor ainda não existe continua à vista, para quem
+          // monta o fluxo saber que ele existe -- mas não se adiciona, e o
+          // porquê fica escrito. Esconder ensinaria que o passo não existe;
+          // deixar clicável ensinaria que ele roda.
+          const naoLigado = NODE_NAO_LIGADO[item.type];
+          return (
+            <DropdownMenuItem
+              key={item.label}
+              disabled={!!naoLigado}
+              title={naoLigado}
+              onClick={() => openAddMenu(parentId, branchKey, item.type)}
+            >
+              {item.label}
+              {naoLigado && (
+                <span className="ml-2 text-[10px] text-muted-foreground">não ligado</span>
+              )}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );
