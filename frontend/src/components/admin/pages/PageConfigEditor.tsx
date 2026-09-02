@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Ticket, Activity } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,7 +20,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { usePages } from '@/hooks/usePages';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const FORM_FIELDS = [
@@ -59,7 +58,6 @@ export default function PageConfigEditor() {
   const [publishDialog, setPublishDialog] = useState<'publish' | 'unpublish' | null>(null);
   const [showEventKey, setShowEventKey] = useState(false);
   const [showUserKey, setShowUserKey] = useState(false);
-  const [testingTicketia, setTestingTicketia] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -117,10 +115,6 @@ export default function PageConfigEditor() {
     setPublishDialog(null);
   };
 
-  const ticketia = config.ticketia || {};
-  const updateTicketia = (key: string, value: any) => {
-    updateField('ticketia', { ...ticketia, [key]: value });
-  };
 
   const clarity = config.clarity || {};
   const clarityIdValid = /^[a-z0-9]{6,20}$/i.test((clarity.project_id || '').trim());
@@ -131,35 +125,6 @@ export default function PageConfigEditor() {
       next.enabled = false;
     }
     updateField('clarity', next);
-  };
-
-  const handleTestTicketia = async () => {
-    if (!ticketia.event_id || !ticketia.event_api_key || !ticketia.user_api_key) {
-      toast.error('Preencha todos os campos do dn.ticket antes de testar');
-      return;
-    }
-    setTestingTicketia(true);
-    try {
-      // ensure latest config is saved
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      await saveConfig(config);
-      const { data, error } = await supabase.functions.invoke('send-to-ticketia', {
-        body: { slug: page!.slug, test: true },
-      });
-      if (error) throw error;
-      if (data?.success) {
-        toast.success(`dn.ticket respondeu OK (status ${data.status})`);
-      } else if (data?.skipped) {
-        toast.warning('Integração desativada — ative o toggle para enviar novos leads ao dn.ticket');
-      } else {
-        const detail = data?.error || (data?.body ? JSON.stringify(data.body).slice(0, 200) : JSON.stringify(data).slice(0, 200));
-        toast.error(`Falha dn.ticket${data?.status ? ` (status ${data.status})` : ''} — ${detail}`);
-      }
-    } catch (e: any) {
-      toast.error(`Erro ao testar: ${e.message || e}`);
-    } finally {
-      setTestingTicketia(false);
-    }
   };
 
   const visibleFields = config.visible_fields || ['nome', 'email', 'whatsapp', 'cargo', 'faturamento'];
@@ -303,86 +268,11 @@ export default function PageConfigEditor() {
             </div>
           </section>
 
-          {/* Integração Ticket.ia */}
-          <section className="border rounded-lg p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium text-sm flex items-center gap-2">
-                <Ticket className="h-4 w-4" />
-                Integração{' '}
-                <a
-                  href="https://dnticket.dnia.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  &lt;dn.ticket&gt;
-                </a>
-              </h3>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="ticketia-enabled" className="text-xs text-muted-foreground">
-                  {ticketia.enabled ? 'Ativada' : 'Desativada'}
-                </Label>
-                <Switch
-                  id="ticketia-enabled"
-                  checked={!!ticketia.enabled}
-                  onCheckedChange={(v) => updateTicketia('enabled', v)}
-                />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Cada novo lead capturado será cadastrado automaticamente como participante no evento dn.ticket.
-            </p>
-            <div className="space-y-2">
-              <Label className="text-xs">ID do evento</Label>
-              <Input
-                value={ticketia.event_id || ''}
-                onChange={(e) => updateTicketia('event_id', e.target.value)}
-                placeholder="UUID do evento dn.ticket"
-                className="font-mono text-xs"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">API key do evento</Label>
-              <div className="flex gap-2">
-                <Input
-                  type={showEventKey ? 'text' : 'password'}
-                  value={ticketia.event_api_key || ''}
-                  onChange={(e) => updateTicketia('event_api_key', e.target.value)}
-                  placeholder="x-event-api-key"
-                  className="font-mono text-xs"
-                />
-                <Button type="button" variant="outline" size="icon" onClick={() => setShowEventKey((v) => !v)}>
-                  {showEventKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">API key do usuário</Label>
-              <div className="flex gap-2">
-                <Input
-                  type={showUserKey ? 'text' : 'password'}
-                  value={ticketia.user_api_key || ''}
-                  onChange={(e) => updateTicketia('user_api_key', e.target.value)}
-                  placeholder="x-user-api-key"
-                  className="font-mono text-xs"
-                />
-                <Button type="button" variant="outline" size="icon" onClick={() => setShowUserKey((v) => !v)}>
-                  {showUserKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleTestTicketia}
-              disabled={testingTicketia || !ticketia.event_id || !ticketia.event_api_key || !ticketia.user_api_key}
-            >
-              {testingTicketia ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Ticket className="h-4 w-4 mr-1" />}
-              Testar conexão
-            </Button>
-          </section>
-
+          {/* ⚠️ A seção do dn.ticket saiu no lote 5D. Ticketia é o sistema de
+              ingresso da dn.ia e a spec o DESCARTA (seção 9, travas de
+              terceiro) — a HS não tem equivalente. A tela oferecia configurar e
+              "Testar conexão" numa integração que não existe mais: campo para
+              preencher, botão para clicar, e uma function morta do outro lado. */}
           {/* Integração Microsoft Clarity */}
           <section className="border rounded-lg p-4 space-y-4">
             <div className="flex items-center justify-between">

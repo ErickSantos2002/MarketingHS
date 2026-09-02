@@ -9,7 +9,6 @@ import ApiDocumentation from '@/components/admin/settings/ApiDocumentation';
 import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings';
 import NexusCard from '@/components/admin/settings/NexusCard';
 import ResendConfigCard from '@/components/admin/settings/ResendConfigCard';
-import PingbackCard from '@/components/admin/settings/PingbackCard';
 import MetaCard from '@/components/admin/settings/MetaCard';
 
 import ApiKeysManagement from '@/components/admin/settings/ApiKeysManagement';
@@ -149,8 +148,10 @@ export default function SettingsPage() {
             {/* Resend Card */}
             <ResendConfigCard />
 
-            {/* Pingback Card */}
-            <PingbackCard />
+            {/* ⚠️ O PingbackCard saiu no lote 5D. Pingback é o rastreador da
+                dn.ia e a spec o DESCARTA (seção 9) — a HS não usa. O card
+                configurava credenciais de um serviço de terceiro que este
+                produto não fala mais. */}
 
             {/* Meta Card */}
             <MetaCard />
