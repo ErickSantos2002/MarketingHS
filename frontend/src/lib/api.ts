@@ -4,7 +4,7 @@
 // ⚠️ VITE_API_URL é resolvida em BUILD TIME, não em runtime. Trocar a variável
 // no servidor sem rebuildar não muda nada — a URL já está dentro do bundle.
 // Isso já custou tempo no Grana. Em desenvolvimento o proxy do Vite cobre.
-const BASE = import.meta.env.VITE_API_URL ?? '/api';
+export const BASE = import.meta.env.VITE_API_URL ?? '/api';
 
 const CHAVE_TOKEN = 'marketinghs-token';
 

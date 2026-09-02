@@ -1,4 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+import { subirImagemDeEmail } from '@/lib/config';
+import { ErroApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { socialIconsFor, type SocialLinksConfig } from '@/lib/socialLinks';
 
@@ -176,34 +177,29 @@ export function buildEmailEditorOptions(social: SocialLinksConfig | null) {
   } as any;
 }
 
-// Handler de upload de imagem do Unlayer -> bucket `email-assets` (RLS
-// restringe INSERT/UPDATE/DELETE a admins — migration 20260505124817).
-// `folder` só separa os assets de campanhas dos de templates dentro do
-// mesmo bucket, para organização; a política de storage é a mesma para
-// ambos os prefixos.
+// Handler de upload de imagem do Unlayer.
+//
+// ⚠️ A imagem vai para o NOSSO backend (`POST /imagens`) e é servida por
+// `/publico/imagem/{id}`, SEM autenticação — quem busca a imagem é o cliente de
+// e-mail de quem recebeu, que não tem sessão aqui. Uma URL autenticada faria o
+// e-mail chegar quebrado para todo mundo, e o defeito só apareceria na caixa de
+// entrada dos outros.
+//
+// Antes isto subia para `supabase.storage`, bucket `email-assets`. Não há
+// Supabase: todo upload de imagem no editor falhava, e a tela só dizia "Erro ao
+// fazer upload da imagem".
+//
+// `folder` separa os assets de campanha dos de template, para organização.
 export function registerEmailImageUpload(unlayer: any, folder: 'campaigns' | 'templates') {
   unlayer.registerCallback('image', async (file: any, done: any) => {
     try {
-      const attachment = file.attachments[0];
-      const fileExt = attachment.name.split('.').pop();
-      const fileName = `${folder}/${Date.now()}.${fileExt}`;
-
-      const { error } = await supabase.storage
-        .from('email-assets')
-        .upload(fileName, attachment);
-
-      if (error) {
-        toast.error('Erro ao fazer upload da imagem');
-        done({ progress: 0 });
-        return;
-      }
-
-      const { data: urlData } = supabase.storage
-        .from('email-assets')
-        .getPublicUrl(fileName);
-
-      done({ progress: 100, url: urlData.publicUrl });
-    } catch {
+      const anexo = file.attachments[0];
+      const { url } = await subirImagemDeEmail(anexo, folder);
+      done({ progress: 100, url });
+    } catch (e) {
+      // A mensagem do servidor é a útil: diz se foi o tipo (SVG não entra, por
+      // causa de script embutido) ou o tamanho.
+      toast.error(e instanceof ErroApi ? e.message : 'Erro ao fazer upload da imagem');
       done({ progress: 0 });
     }
   });

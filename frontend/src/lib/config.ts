@@ -1,6 +1,6 @@
 // Configuração de integrações. Os segredos ficam no banco e NUNCA voltam para
 // a tela — só o fato de existirem.
-import { api } from '@/lib/api';
+import { api, BASE, ErroApi, lerToken } from '@/lib/api';
 
 export interface ConfigResend {
   resend_api_key: { configurado: boolean; ultimos4: string | null };
@@ -27,3 +27,33 @@ export const lerRedesSociais = () =>
 
 export const gravarRedesSociais = (valor: unknown) =>
   api.put<{ valor: unknown }>('/config/redes-sociais', { valor });
+
+export interface ImagemDeEmail {
+  id: string;
+  url: string;
+  tamanho: number;
+}
+
+// ⚠️ Multipart, não JSON: `api.post` serializa para JSON e definiria o
+// Content-Type errado. O `fetch` vai direto, e o browser monta o boundary.
+export async function subirImagemDeEmail(
+  arquivo: File,
+  pasta: 'campaigns' | 'templates',
+): Promise<ImagemDeEmail> {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+  corpo.append('pasta', pasta);
+
+  const token = lerToken();
+  const resposta = await fetch(`${BASE}/imagens`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: corpo,
+  });
+  if (!resposta.ok) {
+    let detalhe = `Erro ${resposta.status}`;
+    try { detalhe = (await resposta.json()).detail ?? detalhe; } catch { /* sem corpo */ }
+    throw new ErroApi(resposta.status, detalhe);
+  }
+  return resposta.json();
+}
