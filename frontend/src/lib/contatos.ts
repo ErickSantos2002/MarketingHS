@@ -33,11 +33,30 @@ export const importarContatos = (
   modo: 'enriquecer' | 'sobrescrever',
 ) => api.post<ResultadoImportacao>('/contatos/importar', { linhas, modo });
 
+// ⚠️ Exclusão LÓGICA: o servidor marca `deleted_at` e `deleted_by`. O contato
+// some das listas mas continua no banco, e é isso que faz as três visões
+// (ativos / apagados / todos) existirem.
+export const excluirContato = (leadId: string) =>
+  api.delete<void>(`/contatos/${leadId}`);
+
 export const aplicarTag = (leadId: string, tag: string) =>
   api.post<void>(`/contatos/${leadId}/tags`, { tag });
 
 export const listarTags = () =>
   api.get<{ id: string; nome: string; cor: string | null }[]>('/tags');
+
+export interface StatusDeLead {
+  id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  is_system: boolean;
+}
+
+// O funil, na ordem em que a tela desenha. `leads.status` é FK para
+// `lead_statuses(name)` — a lista não é sugestão, é o vocabulário que o banco
+// aceita.
+export const listarStatusDeLead = () => api.get<StatusDeLead[]>('/lead-statuses');
 
 // Os valores de `leads.tipo` que existem na base. ⚠️ O construtor de segmentos
 // trazia esta lista fixa no código, herdada da dn.ia — envelheceu calada e já

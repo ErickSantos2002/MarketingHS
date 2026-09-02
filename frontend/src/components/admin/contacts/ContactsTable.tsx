@@ -22,7 +22,8 @@ import { ALL_COLUMNS } from '@/components/admin/ColumnSelector';
 import { LeadDetailSheet } from '@/components/admin/LeadDetailSheet';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { excluirContato } from '@/lib/contatos';
+import { ErroApi } from '@/lib/api';
 
 interface ContactsTableProps {
   leads: (Lead | EnrichedLead)[];
@@ -466,20 +467,19 @@ export function ContactsTable({
                   if (!deleteTarget) return;
                   setDeleting(true);
                   try {
-                    const { data, error } = await supabase.functions.invoke('delete-contact', {
-                      body: { lead_id: deleteTarget.id },
-                    });
-                    if (error) throw new Error(error.message);
-                    if (data?.error) throw new Error(data.error);
-                    toast.success(
-                      data?.nexus_deleted
-                        ? 'Contato apagado do sistema e do Nexus'
-                        : 'Contato apagado com sucesso'
-                    );
+                    await excluirContato(deleteTarget.id);
+                    // ⚠️ O "e do Nexus" saiu da mensagem. A function herdada
+                    // apagava o contato no Nexus antes de marcar aqui e
+                    // devolvia `nexus_deleted`; a integração com o GrowthHS é o
+                    // lote 5A. Dizer que apagou lá seria mentir — e a rota do
+                    // backend já registra a propagação como pendência dela.
+                    toast.success('Contato apagado com sucesso');
                     setDeleteTarget(null);
                     onRefresh?.();
-                  } catch (err: any) {
-                    toast.error(`Erro ao apagar: ${err.message || 'Erro desconhecido'}`);
+                  } catch (err) {
+                    toast.error(err instanceof ErroApi
+                      ? `Erro ao apagar: ${err.message}`
+                      : 'Erro ao apagar o contato');
                   }
                   setDeleting(false);
                 }}

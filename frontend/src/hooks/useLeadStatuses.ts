@@ -1,28 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { listarStatusDeLead, type StatusDeLead } from '@/lib/contatos';
 
-export type LeadStatus = {
-  id: string;
-  name: string;
-  color: string;
-  sort_order: number;
-  is_system: boolean;
-};
+export type LeadStatus = StatusDeLead;
 
 const FALLBACK_COLOR = '#888780';
 
 export function useLeadStatuses() {
   const query = useQuery({
     queryKey: ['lead-statuses'],
-    queryFn: async (): Promise<LeadStatus[]> => {
-      const { data, error } = await supabase
-        .from('lead_statuses' as any)
-        .select('id, name, color, sort_order, is_system')
-        .order('sort_order', { ascending: true })
-        .order('name', { ascending: true });
-      if (error) throw error;
-      return (data as any) ?? [];
-    },
+    // A ordenação é do servidor (sort_order, depois name), como era aqui.
+    queryFn: listarStatusDeLead,
     staleTime: 5 * 60 * 1000,
   });
 

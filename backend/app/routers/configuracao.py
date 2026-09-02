@@ -72,6 +72,22 @@ async def listar_tags(_: Usuario = Depends(usuario_atual)):
     return [TagOut(**dict(l)) for l in linhas]
 
 
+@router.get("/lead-statuses")
+async def listar_status_de_lead(_: Usuario = Depends(usuario_atual)):
+    """O funil, na ordem em que a tela desenha.
+
+    ⚠️ `leads.status` é FK para `lead_statuses(name)` — quem inventar um status
+    no cliente toma erro de integridade do banco, que é o certo. Foi por isso
+    que o lote 5B NÃO criou um status "Cliente" para os contatos do DataCore:
+    mexer no funil é decisão de produto.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            """SELECT id::text, name, color, sort_order, is_system
+                 FROM lead_statuses ORDER BY sort_order, name""")
+    return [dict(l) for l in linhas]
+
+
 @router.get("/tipos-de-contato", response_model=list[str])
 async def listar_tipos(_: Usuario = Depends(usuario_atual)):
     """Os valores de `leads.tipo` que existem de verdade na base.
