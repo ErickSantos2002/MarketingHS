@@ -1,55 +1,118 @@
 # Continuar aqui
 
-**Atualizado:** 1º de setembro de 2026
+**Atualizado:** 2 de setembro de 2026
 **Branch:** `reconstrucao` — **ainda não pushada**
 
 ## Onde paramos
 
-**Lote 4 (Jornadas) na metade: tarefas 1, 2 e 3 de 5.** Lotes 0 a 3 fechados.
+**Lote 4 fechado.** Lotes 0 a 4 concluídos. O próximo é o **lote 5
+(Integrações HS)**, e ⚠️ **ele exige trocar a senha do superusuário do Postgres
+antes**.
 
-### O que já roda
+### O que o lote 4 entregou
 
-Um fluxo completo funciona de ponta a ponta, provado: contato entra pelo
-segmento → `delay` → condicional dá verdadeiro → e-mail enfileirado com
-`journey_run_id` e campanha nula → o worker do 3B aceita → sai "Bem-vindo Carla
-Menezes" com o corpo do template.
+Jornadas e automações. Três telas migradas, três functions fora da pasta
+(`journeys-api`, `journey-worker`, `automations-api`), **48 → 30** pontos de
+acesso direto ao banco.
 
-- **migration 010** — fila de eventos, o trigger que a alimenta, e
-  `journey_enqueue_email`
-- **`/jornadas`** — CRUD, detalhe com métricas do banco, execuções
-- **`app/jornadas/executor.py`** — sete tipos de nó, o fencing token, a espera
-  escopada por nó
-- **o laço de jornadas no worker** — matrícula, fila de eventos, runs vencidos
+Um fluxo de dois passos roda de ponta a ponta pela tela: criado, salvo, ativado
+com os contatos inscritos, o `delay` gravando `wakeup_at`, o worker acordando
+os runs e a tag saindo do outro lado. As regras de automação têm CRUD completo,
+prévia de quantos contatos pegam, e metade pública com chave de API.
 
-### O que falta
+### O que NÃO roda, de propósito, e onde está escrito
 
-**Tarefa 4 — as telas.** `useJourneys` (5 invokes), `useJourneyRuns` (1 ponto),
-`JourneyBuilder` (711 linhas, 1 invoke), `NodeConfigDialog` (1+1),
-`useAutomationRules` (5 pontos), `AutomationRuleForm` (1+1). O cliente vai em
-`frontend/src/lib/jornadas.ts`, no molde de `lib/segmentos.ts`.
+`handoff_nexus` (o nó) e as três ações de regra (`create_in_nexus`,
+`move_stage_nexus`, `block_nexus`) dependem do GrowthHS, que é o lote 5. A tela
+diz isso em vez de oferecer o que não roda:
 
-⚠️ **Uma decisão a tomar na tarefa 4:** `evaluate_automation_on_etiqueta` e o
-trigger `trg_automation_on_etiqueta_change` foram removidos no lote 0. Se a tela
-de automações permite criar regra que dependa deles, **ou** a função volta como
-trigger, **ou** a tela diz que aquele gatilho não está ligado. Não deixe a tela
-oferecer o que não roda.
+| Onde | Constante |
+|---|---|
+| nó de fluxo | `NODE_NAO_LIGADO` em `frontend/src/lib/journeys.ts` |
+| regra de automação | `AUTOMACAO_NAO_LIGADA` em `frontend/src/lib/automacoes.ts` |
 
-⚠️ `JourneyBuilder` tem 711 linhas e é o editor visual do grafo — **não o
-reescreva**, troque só os pontos de acesso.
+**Apagar a entrada de `NODE_NAO_LIGADO` religa o nó nos três lugares que leem o
+mapa** — menu do "+", diálogo de configuração e validação. É o primeiro passo
+do lote 5.
 
-**Tarefa 5 — fechar:** portão (documentação incluída), placar, e os documentos.
+⚠️ `evaluate_automation_on_etiqueta` e `trg_automation_on_etiqueta_change`
+continuam removidos, e é decisão, não esquecimento: um trigger que avalia
+regras cuja única ação não existe é trigger sem consumidor. Ele volta no lote
+5, junto do Nexus — e a avaliação volta **no servidor**, servida por
+`_condicao_sql` em `app/routers/automacoes.py`, não por uma segunda cópia no
+navegador.
 
-### O que o lote 4 já ensinou
+### O que o lote 4 ensinou, e vale para o 5
 
-- **`journey_claim_due_runs` já é o motor de reivindicação.** A jornada não
-  precisa de fila para os runs — só para os eventos. Dez funções de jornada
-  sobreviveram ao port e não se reimplementam.
-- **O `JOIN` com `campaigns` no worker do 3B era `JOIN`, não `LEFT JOIN`.**
-  E-mail de jornada não tem campanha: a linha não voltava, o envio era
-  concluído como se tivesse saído, e o fluxo pareceria funcionar enquanto
-  ninguém recebia. Estava mapeado no plano e era real.
-- **Tag de valor nulo faz o Resend recusar o envio inteiro**, não só a tag.
-  Esse não estava no plano — apareceu porque o ensaio quebrou ao imprimir.
+Três defeitos, nenhum no plano, todos achados por abrir no navegador e rodar o
+worker de verdade. Dois deles **nunca funcionaram desde a origem**:
+
+1. **Sobreviver ao port não é prova de que roda.** `journey_wake_on_event`
+   estava na lista de "não reimplemente" e levantava erro em toda chamada —
+   `LATERAL` no `FROM` de um `UPDATE` referenciando a tabela-alvo. Nenhum
+   `wait_for_event` jamais acordou. Exercitar o caminho é a única prova.
+2. **Duas funções do banco podem discordar entre si.** `journey_enroll_segment`
+   lia `segment_ids`; `fn_journeys_validate` exigia `segment_id`. Nenhum fluxo
+   com entrada por segmento podia ser ativado. Quando um guard e um executor
+   olham o mesmo campo, conferir se olham do mesmo jeito.
+3. **`sessao()` é UMA transação para o laço inteiro.** `try/except` por item não
+   protege: o primeiro erro aborta a transação e todo o resto morre com
+   "current transaction is aborted" — inclusive o `DELETE` que reivindicou o
+   lote, que volta atrás e devolve tudo à fila para falhar de novo, para
+   sempre. Laço dentro de uma `sessao()` precisa de SAVEPOINT
+   (`async with conn.transaction()` aninhado). **Vale para todo laço do worker.**
+
+E, pela quarta vez, **a tela limpa não era o portão inteiro**: `automations-api`
+servia chave de API e estava ensinada na tela de Documentação da API e no
+`dnmarketing-api.yaml`.
+
+### Migrations aplicadas no lote 4
+
+| | |
+|---|---|
+| **010** | fila de eventos, o trigger que a alimenta, `journey_enqueue_email` |
+| **011** | `fn_journeys_validate` aceita entrada por vários segmentos |
+| **012** | `journey_wake_on_event` volta a ser executável |
+
+## O próximo passo — lote 5 (Integrações HS)
+
+Traz os 2.077 clientes do DataCore, o GrowthHS e a identidade. É o lote que
+**liga** o que o 4 deixou desligado de propósito.
+
+⚠️ **Exige trocar a senha do superusuário do Postgres antes.**
+
+As functions que sobram desse domínio: `handoff-to-nexus`, `get-nexus-stages`,
+`nexus-config`, `merge-identities`, `identity-lookup`/`identity-upsert`. O
+`NexusCard` em Configurações ainda fala com as duas primeiras — é o único
+consumidor vivo delas.
+
+## Antes de começar, o que depende do Erick
+
+1. ~~Cadastrar `[marketinghs]` no cadastro de bancos~~ — **feito**
+2. Preencher `POSTGRES_HOST_INTERNO` em `~/marketinghs.env`
+3. **Trocar a senha do superusuário do Postgres** — obrigatório para o lote 5
+4. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
+   Está na spec e é intencional, mas nunca foi feito. ⚠️ Antes de pushar, ver o
+   `SETUP-CLAUDE.md` (não versionado): o `.env` da dn.ia com credenciais do
+   Supabase está no histórico do git desde o commit inicial do remix.
+
+## Como subir o que existe
+
+```bash
+cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100 --reload
+cd frontend && npx vite --port 8080
+cd backend && ./.venv/bin/python -m app.worker    # jornadas + fila de e-mail
+```
+
+⚠️ A porta 8000 é do **TaskHS** nesta máquina; o MarketingHS usa 8100 no host.
+Dentro do contêiner o backend continua na 8000.
+
+⚠️ Sem `RESEND_API_KEY` o worker **não consome a fila de e-mail**, de propósito
+(decisão do Erick, lote 3B). As jornadas rodam normalmente; só o envio espera.
+
+---
+
+## Histórico dos lotes anteriores
 
 ### O que o lote 3 deixou pronto
 

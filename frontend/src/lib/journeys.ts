@@ -1,5 +1,6 @@
 // Contrato do grafo de fluxo. ESPELHA exatamente o que validate_journey_graph
-// (migration 20260714100000) aceita e o que o journey-worker sabe executar.
+// aceita no banco e o que o executor sabe rodar — que agora é
+// `backend/app/jornadas/executor.py`, não mais a `journey-worker`.
 // Mudar aqui sem mudar lá = fluxo que a UI deixa salvar e o banco rejeita.
 
 export type JourneyStatus = 'draft' | 'active' | 'paused' | 'archived';

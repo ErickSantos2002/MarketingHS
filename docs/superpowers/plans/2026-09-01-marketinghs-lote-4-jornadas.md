@@ -329,45 +329,45 @@ envio" — e o fluxo parece funcionar, porque o nó avança.
 `JourneyBuilder` (1 invoke, 711 linhas), `NodeConfigDialog` (1+1),
 `useAutomationRules` (5 pontos), `AutomationRuleForm` (1+1)
 
-- [ ] **Passo 1: o cliente** `frontend/src/lib/jornadas.ts`, no molde de
+- [x] **Passo 1: o cliente** `frontend/src/lib/jornadas.ts`, no molde de
   `lib/segmentos.ts` e `lib/campanhas.ts`.
 
-- [ ] **Passo 2: os hooks e o construtor.** ⚠️ `JourneyBuilder` tem 711 linhas e
+- [x] **Passo 2: os hooks e o construtor.** ⚠️ `JourneyBuilder` tem 711 linhas e
   é o editor visual do grafo — **não o reescreva**, troque só os pontos.
 
-- [ ] **Passo 3: as regras de automação.** ⚠️ `evaluate_automation_on_etiqueta`
+- [x] **Passo 3: as regras de automação.** ⚠️ `evaluate_automation_on_etiqueta`
   e o trigger `trg_automation_on_etiqueta_change` foram removidos no lote 0. Se
   a tela permite criar regra que dependa deles, **ou** a regra volta como
   trigger, **ou** a tela diz que aquele gatilho não está ligado. Não deixe a
   tela oferecer o que não roda.
 
-- [ ] **Passo 4: conferir no navegador** — criar um fluxo de dois passos, ativar,
+- [x] **Passo 4: conferir no navegador** — criar um fluxo de dois passos, ativar,
   e ver a execução aparecer.
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ---
 
 ## Tarefa 5: Fechar
 
-- [ ] **Passo 1: o portão, as três partes** — documentação incluída.
-- [ ] **Passo 2: o placar.** Meça.
-- [ ] **Passo 3: `ROADMAP.md` e `CONTINUAR-AQUI.md`.**
-- [ ] **Passo 4: commit**
+- [x] **Passo 1: o portão, as três partes** — documentação incluída.
+- [x] **Passo 2: o placar.** Meça.
+- [x] **Passo 3: `ROADMAP.md` e `CONTINUAR-AQUI.md`.**
+- [x] **Passo 4: commit**
 
 ---
 
 ## Definição de pronto
 
-- [ ] Um fluxo de dois passos com condicional roda de ponta a ponta
-- [ ] Nó `send_email` cria a linha com `journey_run_id` e enfileira
-- [ ] Reexecutar o mesmo nó **não** cria um segundo e-mail (índice único)
-- [ ] `writeRun` recusa gravar quando o lease expirou
-- [ ] `delay` e `wait_for_event` devolvem o run com `wakeup_at` correto
-- [ ] Evento de contato entra na fila de jornada pelo trigger
-- [ ] `handoff_nexus` falha **visivelmente**, não em silêncio
-- [ ] E-mail de fluxo (sem campanha) não é recusado pelo worker do 3B
-- [ ] `pytest` continua passando
+- [x] Um fluxo de dois passos com condicional roda de ponta a ponta
+- [x] Nó `send_email` cria a linha com `journey_run_id` e enfileira
+- [x] Reexecutar o mesmo nó **não** cria um segundo e-mail (índice único)
+- [x] `writeRun` recusa gravar quando o lease expirou
+- [x] `delay` e `wait_for_event` devolvem o run com `wakeup_at` correto
+- [x] Evento de contato entra na fila de jornada pelo trigger
+- [x] `handoff_nexus` falha **visivelmente**, não em silêncio
+- [x] E-mail de fluxo (sem campanha) não é recusado pelo worker do 3B
+- [x] `pytest` continua passando
 
 ## O que fica fora
 

@@ -18,7 +18,7 @@ A spec que justifica esta ordem:
 | **3A** | **Campanhas e templates** — CRUD, audiência, acompanhamento (sem envio) | 0 | ✅ **concluído** (01/09/2026) |
 | **3B** | **O motor** — filas, worker, Resend, descadastro | 2 | ✅ **concluído** (01/09/2026) — envio real adiado por decisão |
 | **3C** | **O retorno** — webhook, agendamento, API pública, config e supressão | 4 | ✅ **concluído** (01/09/2026) |
-| 4 | Jornadas — board, gatilhos, condicionais | 2 | a fazer |
+| **4** | **Jornadas e automações** — board, gatilhos, condicionais, regras | 3 | ✅ **concluído** (02/09/2026) — `handoff_nexus` e as ações do Nexus ficam para o 5 |
 | 5 | Integrações HS — GrowthHS, DataCore, identidade, Meta CAPI | 6 | a fazer |
 | 6 | Analytics + IA | 4 | a fazer |
 | 7 | Captação pública — landing da HS, conversões, A/B | 6 | a fazer |
@@ -31,9 +31,9 @@ de `pingback`. São o sistema de ingresso e o rastreador da dn.ia.
 Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.OS.
 
 ```
-functions portadas          : 18/48
-telas migradas              : 27
-acesso direto ao banco      : 48 pontos  (eram 51 antes do 3C, 68 antes do 3A, 153 antes do 1B)
+functions portadas          : 21/48
+telas migradas              : 30
+acesso direto ao banco      : 30 pontos  (eram 48 antes do 4, 51 antes do 3C, 68 antes do 3A, 153 antes do 1B)
 ```
 
 ⚠️ **A spec dizia 68 pontos em 20 arquivos. Estava errado** — a medição usou um
@@ -45,6 +45,53 @@ de quanto trabalho falta: é mais que o dobro.
 lote 2. É outro 68 — este é medido pelo comando multilinha, o da spec era a
 contagem errada de linha única no início de tudo. Não é sinal de que nada andou:
 eram 153.
+
+## O lote 4 entregou
+
+Jornadas e automações. Três telas migradas — a aba Fluxos, o construtor de
+fluxo e a aba Regras — e três functions fora da pasta: `journeys-api`,
+`journey-worker` e `automations-api`.
+
+**As jornadas rodam de ponta a ponta pela tela.** Fluxo de dois passos criado,
+salvo, ativado com os contatos inscritos, o `delay` gravando `wakeup_at`, o
+worker acordando os runs e a tag saindo do outro lado. O `JourneyBuilder` (711
+linhas, o editor visual do grafo) não foi reescrito: só os pontos de acesso.
+
+**As regras de automação são cadastro, e a tela diz isso.** As três ações
+possíveis são o Nexus, e a integração é o lote 5 — então a regra se cria, se
+edita, se ativa e se apaga, mas nada dispara. `AUTOMACAO_NAO_LIGADA` e
+`NODE_NAO_LIGADO` são as duas frases únicas que dizem o que não roda; apagar a
+entrada religa a tela quando o 5 chegar. `evaluate_automation_on_etiqueta` NÃO
+voltou como trigger, pelo mesmo motivo: seria trigger sem consumidor.
+
+⚠️ **Três defeitos que o portão pegou, e nenhum estava no plano.** Dois deles
+nunca funcionaram desde a origem:
+
+- **`fn_journeys_validate` exigia `entry_config.segment_id`** enquanto
+  `journey_enroll_segment` já lia `segment_ids`. A tela grava o plural desde
+  que a entrada passou a aceitar N segmentos — ou seja, **nenhum fluxo com
+  entrada por segmento jamais pôde ser ativado**, nem aqui nem na dn.marketing.
+  Migration 011 alinhou o guard ao inscritor.
+- **`journey_wake_on_event` levantava erro em toda chamada:** o `UPDATE` tinha
+  um `LATERAL` no `FROM` referenciando a própria tabela-alvo, o que o Postgres
+  proíbe em qualquer versão. **Nenhum `wait_for_event` jamais acordou.** Ela
+  estava na lista de "sobreviveu ao port, não reimplemente" — sobreviver não é
+  prova de que roda. Migration 012.
+- **O lote de eventos do worker se auto-envenenava.** `sessao()` abre UMA
+  transação para o laço inteiro: o primeiro erro abortava a transação e os
+  outros 19 morriam em cadeia, **inclusive o `DELETE` que os reivindicou** —
+  que voltava atrás e devolvia o lote à fila para falhar de novo, para sempre.
+  O `try/except` por item não protegia nada. SAVEPOINT por evento e por fluxo.
+
+⚠️ **E a documentação ensinava URL morta pela quarta vez.** `automations-api`
+aceitava chave de API com escopo read/write, e estava na tela de Documentação
+da API e no `dnmarketing-api.yaml`. `/publico/automacoes` é a metade pública,
+com o `INSERT` e o `UPDATE` compartilhados com a rota de admin.
+
+⚠️ **A origem tinha duas implementações do vocabulário de condição que
+discordavam** — a contagem em PostgREST e a avaliação em JavaScript, divergindo
+no NULL. O mesmo contato entrava numa conta e não na outra. Agora é uma só, em
+`_condicao_sql`, com as escolhas caso a caso escritas.
 
 ## O lote 3C entregou — e o lote 3 fechou
 
