@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     FILA_LOTE: int = 20
     WORKER_INTERVALO_SEGUNDOS: float = 2.0
 
+    # DataCore (Tiny ERP), o banco de onde vêm os clientes. SOMENTE LEITURA:
+    # a sincronização é de mão única, o ERP manda e o MarketingHS obedece.
+    # Vazio = sincronização desligada, e a rota responde 503 em vez de estourar.
+    DATACORE_URL: str = ""
+
+    # ⚠️ Ligado, faz a sincronização varrer e-mail de nota fiscal e conta a
+    # receber, além do cadastro do cliente. Medido em 02/09/2026: sobe o alcance
+    # de 190 para 327 clientes. É decisão do Erick e do Nicholson, não do
+    # sistema — e-mail de nota fiscal foi coletado para faturar, não para
+    # marketing. Nasce desligado de propósito.
+    DATACORE_EMAIL_DE_NOTAS: bool = False
+
     # ⚠️ Toda chave lida do ambiente PRECISA ser declarada aqui, mesmo que outro
     # módulo é que a leia: o pydantic-settings recusa chave desconhecida no .env
     # e derruba o boot inteiro. Isso já derrubou o HS.OS duas vezes.

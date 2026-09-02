@@ -10,6 +10,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _pool: Optional[asyncpg.Pool] = None
+_pool_datacore: Optional[asyncpg.Pool] = None
 
 
 async def _preparar_conexao(conn: asyncpg.Connection) -> None:
@@ -37,6 +38,54 @@ async def init_db() -> None:
 async def close_db() -> None:
     if _pool:
         await _pool.close()
+
+
+# ---------------------------------------------------------------------------
+# DataCore (Tiny ERP) — a segunda pool, de LEITURA
+# ---------------------------------------------------------------------------
+
+async def init_datacore() -> None:
+    """A pool do DataCore. Mão única: daqui só se lê.
+
+    ⚠️ `default_transaction_read_only=on` é a trava de verdade. A regra de mão
+    única está na spec e em comentário, mas comentário não impede um UPDATE
+    distraído — o servidor impede, e o erro aparece no teste em vez de aparecer
+    no ERP da empresa.
+
+    Sem DATACORE_URL a pool não sobe e a rota de sincronização responde 503,
+    mesma escada de `init_db`.
+    """
+    global _pool_datacore
+    if not settings.DATACORE_URL:
+        logger.warning("DATACORE_URL vazio — sincronização com o DataCore desligada.")
+        return
+    try:
+        _pool_datacore = await asyncpg.create_pool(
+            settings.DATACORE_URL, min_size=1, max_size=3,
+            setup=_preparar_conexao,
+            server_settings={"default_transaction_read_only": "on"},
+        )
+    except Exception as exc:  # noqa: BLE001 — o DataCore fora do ar não derruba a API
+        logger.error("Falha ao conectar no DataCore: %s", exc)
+
+
+async def close_datacore() -> None:
+    if _pool_datacore:
+        await _pool_datacore.close()
+
+
+@asynccontextmanager
+async def sessao_datacore():
+    """Conexão de leitura no DataCore.
+
+    Sem `SET LOCAL ROLE`: o papel de leitura do outro banco já não tem
+    privilégio de escrita, e a pool é read-only. Os PAPEIS daqui são do
+    MarketingHS e não existem lá.
+    """
+    if _pool_datacore is None:
+        raise RuntimeError("DataCore indisponível")
+    async with _pool_datacore.acquire() as conn:
+        yield conn
 
 
 # SET LOCAL ROLE não aceita parâmetro — o nome vai concatenado na query, então
