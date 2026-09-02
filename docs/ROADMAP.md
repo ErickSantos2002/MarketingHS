@@ -19,7 +19,9 @@ A spec que justifica esta ordem:
 | **3B** | **O motor** — filas, worker, Resend, descadastro | 2 | ✅ **concluído** (01/09/2026) — envio real adiado por decisão |
 | **3C** | **O retorno** — webhook, agendamento, API pública, config e supressão | 4 | ✅ **concluído** (01/09/2026) |
 | **4** | **Jornadas e automações** — board, gatilhos, condicionais, regras | 3 | ✅ **concluído** (02/09/2026) — `handoff_nexus` e as ações do Nexus ficam para o 5 |
-| 5 | Integrações HS — GrowthHS, DataCore, identidade, Meta CAPI | 6 | a fazer |
+| **5B** | **Contatos do DataCore** — sincronização de mão única, 2.080 clientes | 0 | ✅ **concluído** (02/09/2026) |
+| 5A | Handoff → GrowthHS | 2 | ⏸ **bloqueado** — depende de endpoint novo no `hsgrowth-sistema` (contrato em `docs/contratos/`) |
+| 5C | Identidade unificada, Meta CAPI | 4 | a fazer |
 | 6 | Analytics + IA | 4 | a fazer |
 | 7 | Captação pública — landing da HS, conversões, A/B | 6 | a fazer |
 
@@ -32,7 +34,7 @@ Dois números, nunca somados. Foi juntá-los que escondeu telas quebradas no HS.
 
 ```
 functions portadas          : 21/48
-telas migradas              : 30
+telas migradas              : 31
 acesso direto ao banco      : 30 pontos  (eram 48 antes do 4, 51 antes do 3C, 68 antes do 3A, 153 antes do 1B)
 ```
 
@@ -45,6 +47,45 @@ de quanto trabalho falta: é mais que o dobro.
 lote 2. É outro 68 — este é medido pelo comando multilinha, o da spec era a
 contagem errada de linha única no início de tudo. Não é sinal de que nada andou:
 eram 153.
+
+## O lote 5B entregou
+
+Os **2.080 clientes do ERP** entraram como contato, marcados `stage='client'` na
+identidade e `tipo='datacore'` no lead, e o construtor de segmentos recorta
+cliente contra lead — conferido na tela, contando 2.080.
+
+Nenhuma function saiu da pasta: o DataCore nunca teve uma no repo herdado. O
+lote é uma porta nova, não uma portagem.
+
+⚠️ **A spec errava o número central por onze vezes.** Ela diz "2.077 clientes,
+todos os 2.077 com e-mail". Medido: **2.081 clientes, 190 com e-mail** no
+cadastro (183 depois de descartar o que não é endereço). Unindo `contas_receber`
+e `servicos` o teto é 327 — e varrer nota fiscal é decisão do Erick e do
+Nicholson, então nasceu atrás de `DATACORE_EMAIL_DE_NOTAS`, desligada. Quem ler
+a spec depois vai tropeçar de novo se não vir isto aqui.
+
+⚠️ **Três defeitos que só apareceram rodando com dado real:**
+
+1. **A sincronização levava ~14 minutos** — três idas ao banco por cliente,
+   400ms cada contra o Postgres remoto, tudo numa transação só. Nenhum proxy na
+   frente da API aguenta. Refeita em blocos de 500: **3,1 segundos**.
+2. **A idempotência estava errada para 91% da base.** `ON CONFLICT (email) DO
+   NOTHING` não protege quem entra sem e-mail — NULL não conflita com NULL — e
+   1.897 clientes não têm e-mail. A segunda carga criaria 1.897 duplicados. O
+   teste de idempotência não pegou porque usava um cliente COM e-mail.
+3. **O construtor de segmentos tinha a lista de `tipo` FIXA no código**, herdada
+   da dn.ia ("modal_pago", "Evento 14/04/26"). Já não incluía `csv_import`, do
+   lote 1A, e não incluiria `datacore` — dava para importar 2.080 contatos que
+   ninguém conseguia segmentar depois. Agora a lista vem do banco.
+
+⚠️ **Duas armadilhas medidas antes de escrever, e provadas em teste:** 26
+clientes do ERP dividem um telefone e `ecosystem_identities.phone` é UNIQUE (o
+telefone vai para o lead, não para a identidade); e um cliente está no ERP sem
+`cpf_cnpj`, sem chave possível — fica de fora, e o leitor loga quem.
+
+⚠️ **A spec também errava dois vocabulários:** `stage` é em inglês (`client`, e
+o trigger recusa `cliente`), e não existe status "Cliente" em `lead_statuses` —
+inventar um é decisão de produto, então o status ficou no padrão.
 
 ## O lote 4 entregou
 

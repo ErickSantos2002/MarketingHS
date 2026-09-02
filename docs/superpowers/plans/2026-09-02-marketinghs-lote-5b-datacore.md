@@ -136,7 +136,7 @@ isso explicitamente, não por acidente.
 - Produz: coluna `ecosystem_identities.datacore_cliente_id text`, única quando
   não nula.
 
-- [ ] **Passo 1: a migration**
+- [x] **Passo 1: a migration**
 
 ```sql
 -- 013: a chave do DataCore em ecosystem_identities.
@@ -158,7 +158,7 @@ COMMENT ON COLUMN public.ecosystem_identities.datacore_cliente_id IS
     'cpf_cnpj do cliente em tiny.clientes. Chave da sincronização de mão única.';
 ```
 
-- [ ] **Passo 2: a configuração**
+- [x] **Passo 2: a configuração**
 
 Em `backend/app/config.py`, junto das outras:
 
@@ -181,7 +181,7 @@ DATACORE_URL=postgresql://leitura:SENHA@62.72.11.28:5555/datacore-banco
 DATACORE_EMAIL_DE_NOTAS=false
 ```
 
-- [ ] **Passo 3: escreva o teste que falha**
+- [x] **Passo 3: escreva o teste que falha**
 
 ```python
 # backend/tests/test_datacore_pool.py
@@ -206,12 +206,12 @@ async def test_pool_do_datacore_le():
     assert n > 2000
 ```
 
-- [ ] **Passo 4: rode e veja falhar**
+- [x] **Passo 4: rode e veja falhar**
 
 Run: `./.venv/bin/python -m pytest tests/test_datacore_pool.py -v`
 Esperado: FAIL — `ImportError: cannot import name 'sessao_datacore'`
 
-- [ ] **Passo 5: a segunda pool**
+- [x] **Passo 5: a segunda pool**
 
 Em `backend/app/database.py`, ao lado de `_pool`:
 
@@ -264,12 +264,12 @@ E no ciclo de vida, em `backend/app/main.py`, junto de `init_db()` e `close_db()
     await close_datacore()
 ```
 
-- [ ] **Passo 6: rode e veja passar**
+- [x] **Passo 6: rode e veja passar**
 
 Run: `./.venv/bin/python -m pytest tests/test_datacore_pool.py -v`
 Esperado: PASS (2 testes)
 
-- [ ] **Passo 7: aplique a migration**
+- [x] **Passo 7: aplique a migration**
 
 Monte `~/marketinghs-migration-013.sh` no molde dos scripts 011 e 012 (o Claude
 não roda DDL; o Erick roda no Konsole) e confirme depois:
@@ -279,7 +279,7 @@ SELECT indexname FROM pg_indexes
  WHERE tablename='ecosystem_identities' AND indexname='uniq_ecosystem_datacore_cliente';
 ```
 
-- [ ] **Passo 8: commit**
+- [x] **Passo 8: commit**
 
 ```bash
 git add backend/migrations/013_datacore.sql backend/app/database.py \
@@ -301,7 +301,7 @@ git commit -m "feat(5B): a porta de leitura para o DataCore e a chave de sincron
 - Produz: `async def clientes_do_datacore(conn, com_email_de_notas: bool) -> list[ClienteErp]`
   e a dataclass `ClienteErp(cpf_cnpj, nome, email, fone, cidade, uf, tipo_pessoa)`.
 
-- [ ] **Passo 1: escreva o teste que falha**
+- [x] **Passo 1: escreva o teste que falha**
 
 ```python
 # backend/tests/test_datacore_leitura.py
@@ -334,12 +334,12 @@ async def test_email_de_notas_amplia_o_alcance():
     assert com_email(com_notas) > com_email(so_cadastro)
 ```
 
-- [ ] **Passo 2: rode e veja falhar**
+- [x] **Passo 2: rode e veja falhar**
 
 Run: `./.venv/bin/python -m pytest tests/test_datacore_leitura.py -v`
 Esperado: FAIL — `ModuleNotFoundError: app.dominio.datacore`
 
-- [ ] **Passo 3: o leitor**
+- [x] **Passo 3: o leitor**
 
 ```python
 """Leitura do DataCore (Tiny ERP). Mão única: só lê.
@@ -412,12 +412,12 @@ async def clientes_do_datacore(conn, com_email_de_notas: bool) -> list[ClienteEr
     ]
 ```
 
-- [ ] **Passo 4: rode e veja passar**
+- [x] **Passo 4: rode e veja passar**
 
 Run: `./.venv/bin/python -m pytest tests/test_datacore_leitura.py -v`
 Esperado: PASS (2 testes)
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ```bash
 git add backend/app/dominio/datacore.py backend/tests/test_datacore_leitura.py
@@ -438,7 +438,7 @@ git commit -m "feat(5B): o leitor do DataCore, com as três fontes de e-mail"
 - Produz: `async def sincronizar(conn_hs, clientes: list[ClienteErp]) -> Resumo`,
   com `Resumo(criados, atualizados, sem_email, colisoes_de_email, erros)`.
 
-- [ ] **Passo 1: escreva os testes que falham**
+- [x] **Passo 1: escreva os testes que falham**
 
 ```python
 # backend/tests/test_sincronizacao_datacore.py
@@ -520,12 +520,12 @@ async def test_marca_como_cliente():
     assert source == "datacore"
 ```
 
-- [ ] **Passo 2: rode e veja falhar**
+- [x] **Passo 2: rode e veja falhar**
 
 Run: `./.venv/bin/python -m pytest tests/test_sincronizacao_datacore.py -v`
 Esperado: FAIL — `ModuleNotFoundError: app.dominio.sincronizacao_datacore`
 
-- [ ] **Passo 3: a sincronização**
+- [x] **Passo 3: a sincronização**
 
 ```python
 """Do DataCore para o MarketingHS. Mão única.
@@ -639,12 +639,12 @@ async def _um_cliente(conn, c: ClienteErp, r: Resumo) -> None:
 013 não foi aplicada, o `INSERT` estoura com "no unique or exclusion constraint
 matching" — e a mensagem não é óbvia. Confira o índice antes de depurar.
 
-- [ ] **Passo 4: rode e veja passar**
+- [x] **Passo 4: rode e veja passar**
 
 Run: `./.venv/bin/python -m pytest tests/test_sincronizacao_datacore.py -v`
 Esperado: PASS (5 testes)
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ```bash
 git add backend/app/dominio/sincronizacao_datacore.py \
@@ -695,7 +695,7 @@ problemático, em vez de perder os 500.
 - Produz: `GET /datacore/previa` → `{total, com_email, ja_importados}`;
   `POST /datacore/sincronizar` → o `Resumo` serializado.
 
-- [ ] **Passo 1: a rota**
+- [x] **Passo 1: a rota**
 
 ```python
 """Sincronização com o DataCore (Tiny ERP). Mão única, só leitura do lado de lá.
@@ -759,7 +759,7 @@ async def executar(_: Usuario = Depends(admin_atual)):
 
 Registre em `main.py` no molde do `automacoes_router`.
 
-- [ ] **Passo 2: o cliente do frontend**
+- [x] **Passo 2: o cliente do frontend**
 
 ```ts
 // Cliente da sincronização com o DataCore.
@@ -791,7 +791,7 @@ export const sincronizarDatacore = () =>
   api.post<ResumoSincronizacao>('/datacore/sincronizar');
 ```
 
-- [ ] **Passo 3: a aba na tela de Importar**
+- [x] **Passo 3: a aba na tela de Importar**
 
 `ImportPage.tsx` passa a ter duas abas, no molde da tela de Automações:
 
@@ -918,13 +918,13 @@ export function DatacoreImport() {
 }
 ```
 
-- [ ] **Passo 4: confira no navegador**
+- [x] **Passo 4: confira no navegador**
 
 Rode a prévia, execute a sincronização, e depois abra **Segmentos** e monte um
 segmento dinâmico com `status is Cliente`. A prévia tem de contar os clientes
 importados. É o "pronto" da spec: o construtor recorta cliente contra lead.
 
-- [ ] **Passo 5: commit**
+- [x] **Passo 5: commit**
 
 ```bash
 git add backend/app/routers/datacore.py backend/app/main.py \
@@ -936,30 +936,30 @@ git commit -m "feat(5B): a rota e a tela da sincronização do DataCore"
 
 ## Tarefa 5: Fechar
 
-- [ ] **Passo 1: o portão, as três partes.** Nenhuma function do lote 5B sai da
+- [x] **Passo 1: o portão, as três partes.** Nenhuma function do lote 5B sai da
   pasta (o DataCore nunca teve function no repo herdado), mas a documentação
   conta: confira que a tela de Documentação da API e o `dnmarketing-api.yaml`
   não passaram a mentir.
-- [ ] **Passo 2: o placar.** Meça com o comando canônico do `CLAUDE.md`.
-- [ ] **Passo 3: `ROADMAP.md` e `CONTINUAR-AQUI.md`.** ⚠️ **Registre o erro da
+- [x] **Passo 2: o placar.** Meça com o comando canônico do `CLAUDE.md`.
+- [x] **Passo 3: `ROADMAP.md` e `CONTINUAR-AQUI.md`.** ⚠️ **Registre o erro da
   spec no ROADMAP** — "2.077 com e-mail" era 190, e quem ler a spec depois vai
   tropeçar de novo se o roadmap não avisar.
-- [ ] **Passo 4: commit**
+- [x] **Passo 4: commit**
 
 ---
 
 ## Definição de pronto
 
-- [ ] Os 2.081 clientes do ERP existem como contato, com `source='datacore'`
-- [ ] `ecosystem_identities.stage = 'cliente'` para todos eles
-- [ ] Rodar a sincronização duas vezes **não** duplica ninguém
-- [ ] Cliente sem e-mail entra (são ~91% deles)
-- [ ] Os 26 clientes que dividem telefone viram 26 identidades, não uma
-- [ ] E-mail repetido no ERP não derruba a carga
-- [ ] Um segmento dinâmico consegue recortar cliente contra lead, conferido na tela
-- [ ] A tela diz, antes do botão, quantos têm e-mail de verdade
-- [ ] Nada foi escrito no banco do DataCore — provado pelo teste de read-only
-- [ ] `pytest` continua passando
+- [x] Os 2.081 clientes do ERP existem como contato, com `source='datacore'`
+- [x] `ecosystem_identities.stage = 'cliente'` para todos eles
+- [x] Rodar a sincronização duas vezes **não** duplica ninguém
+- [x] Cliente sem e-mail entra (são ~91% deles)
+- [x] Os 26 clientes que dividem telefone viram 26 identidades, não uma
+- [x] E-mail repetido no ERP não derruba a carga
+- [x] Um segmento dinâmico consegue recortar cliente contra lead, conferido na tela
+- [x] A tela diz, antes do botão, quantos têm e-mail de verdade
+- [x] Nada foi escrito no banco do DataCore — provado pelo teste de read-only
+- [x] `pytest` continua passando
 
 ## O que fica fora
 

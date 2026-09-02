@@ -72,6 +72,24 @@ async def listar_tags(_: Usuario = Depends(usuario_atual)):
     return [TagOut(**dict(l)) for l in linhas]
 
 
+@router.get("/tipos-de-contato", response_model=list[str])
+async def listar_tipos(_: Usuario = Depends(usuario_atual)):
+    """Os valores de `leads.tipo` que existem de verdade na base.
+
+    ⚠️ O construtor de segmentos trazia esta lista FIXA no código, herdada da
+    dn.ia ("modal_pago", "Evento 14/04/26", "Lançamento 24 e 25Fev"...). Ela já
+    não incluía `csv_import`, do lote 1A, e não incluiria `datacore`, do 5B —
+    ou seja, dava para importar contatos que ninguém conseguia segmentar. Uma
+    lista de valores do banco escrita à mão envelhece calada; esta não.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            """SELECT DISTINCT tipo FROM leads
+                WHERE tipo IS NOT NULL AND btrim(tipo) <> '' AND deleted_at IS NULL
+                ORDER BY tipo""")
+    return [l["tipo"] for l in linhas]
+
+
 @router.post("/tags", response_model=TagOut, status_code=status.HTTP_201_CREATED)
 async def criar_tag(dados: TagIn, _: Usuario = Depends(usuario_atual)):
     """⚠️ Upsert, não INSERT — pelo mesmo motivo do lote 1A: `tags_name_key` é

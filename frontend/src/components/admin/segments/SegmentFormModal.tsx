@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
 import { useSegments, type Segment, type SegmentRule } from '@/hooks/useSegments';
 import { buscarContatos, previaDeRegras } from '@/lib/segmentos';
-import { listarTags } from '@/lib/contatos';
+import { listarTags, listarTiposDeContato } from '@/lib/contatos';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { STATUS_OPTIONS } from '@/components/admin/contacts/StatusBadge';
 
@@ -122,18 +122,11 @@ const QUALIFICACAO_VALUES = [
 
 // Só usado pelo campo legado 'etiqueta' (coluna leads.etiqueta).
 const ETIQUETA_VALUES = ['hotlead', 'warm', 'raw'];
-const TIPO_VALUES = [
-  'convidado',
-  'gratuito',
-  'form_pago',
-  'modal_pago',
-  'modal_gratuito',
-  'interesse_ecossistema',
-  'Evento VIP',
-  'Evento 14/04/26',
-  'Lançamento 24 e 25Fev',
-  'Programa IAficacao',
-];
+// ⚠️ Os valores de `tipo` vêm do BANCO, não daqui. A lista fixa que morava
+// neste lugar era da dn.ia ("modal_pago", "Evento 14/04/26"...) e envelheceu
+// calada: não tinha `csv_import`, do lote 1A, nem `datacore`, do 5B — dava para
+// importar contatos que ninguém conseguia segmentar depois.
+const TIPO_FALLBACK: string[] = [];
 // Buckets canônicos de faturamento — cada valor mapeia (no backend, em
 // build_segment_condition) para todas as variantes gravadas no banco
 // (canônica, prosa antiga "Entre R$ ..." e slugs curtos).
@@ -177,6 +170,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
   // Etiquetas reais vinculadas aos contatos (tabela `tags`, ligada por
   // lead_tags) — as mesmas que a tela /contacts lista no filtro ETIQUETA.
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
+  const [tiposDeContato, setTiposDeContato] = useState<string[]>(TIPO_FALLBACK);
 
   const [previewLeads, setPreviewLeads] = useState<any[]>([]);
   const [previewCount, setPreviewCount] = useState(0);
@@ -210,6 +204,9 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
     listarTags()
       .then(lista => setTags(lista.map(t => ({ id: t.id, name: t.nome }))))
       .catch(() => setTags([]));
+    listarTiposDeContato()
+      .then(setTiposDeContato)
+      .catch(() => setTiposDeContato(TIPO_FALLBACK));
   }, [open]);
 
   useEffect(() => {
@@ -370,7 +367,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
         <Select value={rule.value} onValueChange={v => updateRule(index, { value: v })}>
           <SelectTrigger className="flex-1 min-w-[140px] "><SelectValue placeholder="Modal" /></SelectTrigger>
           <SelectContent>
-            {TIPO_VALUES.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+            {tiposDeContato.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
       );

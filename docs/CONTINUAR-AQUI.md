@@ -5,96 +5,83 @@
 
 ## Onde paramos
 
-**Lote 4 fechado.** Lotes 0 a 4 concluídos. O próximo é o **lote 5
-(Integrações HS)**, e ⚠️ **ele exige trocar a senha do superusuário do Postgres
-antes**.
+**Lotes 0 a 4 fechados, e o 5B também.** O lote 5 foi partido em três, como os
+lotes 1 e 3:
 
-### O que o lote 4 entregou
+| | | |
+|---|---|---|
+| **5A** | Handoff → GrowthHS | ⏸ **bloqueado** — ver abaixo |
+| **5B** | Contatos do DataCore | ✅ concluído (02/09/2026) |
+| **5C** | Identidade unificada, Meta CAPI | a fazer |
 
-Jornadas e automações. Três telas migradas, três functions fora da pasta
-(`journeys-api`, `journey-worker`, `automations-api`), **48 → 30** pontos de
-acesso direto ao banco.
+## ⏸ Por que o 5A está bloqueado
 
-Um fluxo de dois passos roda de ponta a ponta pela tela: criado, salvo, ativado
-com os contatos inscritos, o `delay` gravando `wakeup_at`, o worker acordando
-os runs e a tag saindo do outro lado. As regras de automação têm CRUD completo,
-prévia de quantos contatos pegam, e metade pública com chave de API.
+A spec deixava em aberto se a API do GrowthHS já criava card. **Não cria.**
+Existe `POST /integration/service-cards` no `hsgrowth-sistema`, com o desenho
+certo (chave de API, escopo, create-or-return idempotente), mas ele só cria card
+de **serviço**, em board de serviço, com o `source` travado num `Literal` de três
+valores do GestorHS. O handoff do marketing quer card **comercial**.
 
-### O que NÃO roda, de propósito, e onde está escrito
+O contrato completo do endpoint que falta está em
+**`docs/contratos/2026-09-02-endpoint-card-comercial-growthhs.md`** — é um pedido
+ao `hsgrowth-sistema`, não trabalho para fazer aqui.
 
-`handoff_nexus` (o nó) e as três ações de regra (`create_in_nexus`,
-`move_stage_nexus`, `block_nexus`) dependem do GrowthHS, que é o lote 5. A tela
-diz isso em vez de oferecer o que não roda:
+⚠️ **O contrato achou um buraco que a spec não previa:** `service_cards` tem
+`external_source`/`external_id` com unicidade e o card comercial **não tem
+nenhum dos dois**. Sem chave de idempotência, um retry nosso cria um segundo
+card para o mesmo lead — e quem descobre é o vendedor.
 
-| Onde | Constante |
-|---|---|
-| nó de fluxo | `NODE_NAO_LIGADO` em `frontend/src/lib/journeys.ts` |
-| regra de automação | `AUTOMACAO_NAO_LIGADA` em `frontend/src/lib/automacoes.ts` |
+**Para destravar, precisamos de volta:** a chave de API com escopo
+`cards:create`, o `board_id` do funil, a URL base da API, e se `origin` é lista
+fechada ou texto livre.
 
-**Apagar a entrada de `NODE_NAO_LIGADO` religa o nó nos três lugares que leem o
-mapa** — menu do "+", diálogo de configuração e validação. É o primeiro passo
-do lote 5.
+## O que o 5B entregou
 
-⚠️ `evaluate_automation_on_etiqueta` e `trg_automation_on_etiqueta_change`
-continuam removidos, e é decisão, não esquecimento: um trigger que avalia
-regras cuja única ação não existe é trigger sem consumidor. Ele volta no lote
-5, junto do Nexus — e a avaliação volta **no servidor**, servida por
-`_condicao_sql` em `app/routers/automacoes.py`, não por uma segunda cópia no
-navegador.
+Os 2.080 clientes do ERP entraram como contato. `stage='client'` na identidade,
+`tipo='datacore'` no lead, e o construtor de segmentos recorta cliente contra
+lead — conferido na tela, contando 2.080.
 
-### O que o lote 4 ensinou, e vale para o 5
+⚠️ **A spec errava o número central por onze vezes:** "2.077 clientes, todos com
+e-mail" são, na real, **2.081 clientes e 183 com e-mail utilizável**. Unindo
+nota fiscal e conta a receber o teto é 327, e isso está atrás de
+`DATACORE_EMAIL_DE_NOTAS`, **desligada** — e-mail coletado para faturar não é
+consentimento para marketing, e ligar é decisão do Erick e do Nicholson.
 
-Três defeitos, nenhum no plano, todos achados por abrir no navegador e rodar o
-worker de verdade. Dois deles **nunca funcionaram desde a origem**:
+## O que o 5B ensinou, e vale para o 5C
 
-1. **Sobreviver ao port não é prova de que roda.** `journey_wake_on_event`
-   estava na lista de "não reimplemente" e levantava erro em toda chamada —
-   `LATERAL` no `FROM` de um `UPDATE` referenciando a tabela-alvo. Nenhum
-   `wait_for_event` jamais acordou. Exercitar o caminho é a única prova.
-2. **Duas funções do banco podem discordar entre si.** `journey_enroll_segment`
-   lia `segment_ids`; `fn_journeys_validate` exigia `segment_id`. Nenhum fluxo
-   com entrada por segmento podia ser ativado. Quando um guard e um executor
-   olham o mesmo campo, conferir se olham do mesmo jeito.
-3. **`sessao()` é UMA transação para o laço inteiro.** `try/except` por item não
-   protege: o primeiro erro aborta a transação e todo o resto morre com
-   "current transaction is aborted" — inclusive o `DELETE` que reivindicou o
-   lote, que volta atrás e devolve tudo à fila para falhar de novo, para
-   sempre. Laço dentro de uma `sessao()` precisa de SAVEPOINT
-   (`async with conn.transaction()` aninhado). **Vale para todo laço do worker.**
+1. **Três queries por linha não escalam para dois mil.** 400ms cada contra o
+   Postgres remoto viram 14 minutos. Bloco de 500 com `unnest` levou a 3,1s. Se
+   o 5C for casar identidades em massa, nasça em lote.
+2. **`ON CONFLICT (email)` não é idempotência** quando o e-mail pode ser nulo:
+   NULL não conflita com NULL. A chave tem de ser a que sempre existe.
+3. **Lista de valores escrita à mão no frontend envelhece calada.** A de `tipo`
+   era da dn.ia e já não tinha `csv_import`, do lote 1A — dava para importar
+   contato que ninguém segmentava. Agora vem do banco (`/tipos-de-contato`).
+4. **A spec erra vocabulário, não só número.** `stage` é em inglês; não existe
+   status "Cliente". Conferir contra o banco antes de escrever.
+5. **Matar o pytest no meio vaza dado.** A fixture do webhook commita e só
+   desfaz no teardown; um `timeout` deixou a linha e o índice único derrubou a
+   rodada seguinte inteira. A fixture agora limpa antes de inserir.
 
-E, pela quarta vez, **a tela limpa não era o portão inteiro**: `automations-api`
-servia chave de API e estava ensinada na tela de Documentação da API e no
-`dnmarketing-api.yaml`.
-
-### Migrations aplicadas no lote 4
+## Migrations aplicadas
 
 | | |
 |---|---|
-| **010** | fila de eventos, o trigger que a alimenta, `journey_enqueue_email` |
-| **011** | `fn_journeys_validate` aceita entrada por vários segmentos |
-| **012** | `journey_wake_on_event` volta a ser executável |
+| **010–012** | lote 4 (jornadas) |
+| **013** | `ecosystem_identities.datacore_cliente_id` + índice único parcial |
 
-## O próximo passo — lote 5 (Integrações HS)
-
-Traz os 2.077 clientes do DataCore, o GrowthHS e a identidade. É o lote que
-**liga** o que o 4 deixou desligado de propósito.
-
-⚠️ **Exige trocar a senha do superusuário do Postgres antes.**
-
-As functions que sobram desse domínio: `handoff-to-nexus`, `get-nexus-stages`,
-`nexus-config`, `merge-identities`, `identity-lookup`/`identity-upsert`. O
-`NexusCard` em Configurações ainda fala com as duas primeiras — é o único
-consumidor vivo delas.
-
-## Antes de começar, o que depende do Erick
+## Antes de continuar, o que depende do Erick
 
 1. ~~Cadastrar `[marketinghs]` no cadastro de bancos~~ — **feito**
-2. Preencher `POSTGRES_HOST_INTERNO` em `~/marketinghs.env`
-3. **Trocar a senha do superusuário do Postgres** — obrigatório para o lote 5
-4. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
-   Está na spec e é intencional, mas nunca foi feito. ⚠️ Antes de pushar, ver o
-   `SETUP-CLAUDE.md` (não versionado): o `.env` da dn.ia com credenciais do
-   Supabase está no histórico do git desde o commit inicial do remix.
+2. ~~Trocar a senha do superusuário do Postgres~~ — a ferramenta está pronta:
+   `bash ~/trocar-senha-admin.sh marketinghs`. ⚠️ Depois, atualizar
+   `POSTGRES_PASSWORD` no EasyPanel.
+3. Preencher `POSTGRES_HOST_INTERNO` em `~/marketinghs.env`
+4. **Passar o contrato do 5A** para o agente do `hsgrowth-sistema`
+5. Decidir sobre `DATACORE_EMAIL_DE_NOTAS` (190 → 327 contatos alcançáveis)
+6. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
+   ⚠️ Antes de pushar, ver o `SETUP-CLAUDE.md` (não versionado): o `.env` da
+   dn.ia com credenciais do Supabase está no histórico do git.
 
 ## Como subir o que existe
 
@@ -105,10 +92,13 @@ cd backend && ./.venv/bin/python -m app.worker    # jornadas + fila de e-mail
 ```
 
 ⚠️ A porta 8000 é do **TaskHS** nesta máquina; o MarketingHS usa 8100 no host.
-Dentro do contêiner o backend continua na 8000.
 
 ⚠️ Sem `RESEND_API_KEY` o worker **não consome a fila de e-mail**, de propósito
-(decisão do Erick, lote 3B). As jornadas rodam normalmente; só o envio espera.
+(decisão do Erick, lote 3B). As jornadas rodam; só o envio espera.
+
+⚠️ `DATACORE_URL` usa o papel **`leitura`**, e a pool abre em
+`default_transaction_read_only=on`. A sincronização é de mão única e o servidor
+é quem garante.
 
 ---
 

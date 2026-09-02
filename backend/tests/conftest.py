@@ -113,6 +113,12 @@ async def envio():
         campanha = await conn.fetchval(
             "INSERT INTO campaigns (name, channel, status) "
             "VALUES ('teste de webhook', 'email', 'sending') RETURNING id")
+        # ⚠️ Limpa antes de inserir. Esta fixture COMMITA e só desfaz no
+        # teardown — se o pytest morrer no meio (timeout, Ctrl-C), a linha fica
+        # e `leads_email_unique` faz TODA rodada seguinte falhar no setup, com
+        # um erro que aponta para o índice e não para o motivo. E a exclusão
+        # lógica não resolve: o índice único não olha `deleted_at`.
+        await conn.execute("DELETE FROM leads WHERE email = 'a@b.c' AND tipo = 'teste'")
         lead = await conn.fetchval(
             "INSERT INTO leads (nome, email, tipo) "
             "VALUES ('Webhook', 'a@b.c', 'teste') RETURNING id")

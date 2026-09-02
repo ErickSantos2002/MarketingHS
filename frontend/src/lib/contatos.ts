@@ -39,6 +39,11 @@ export const aplicarTag = (leadId: string, tag: string) =>
 export const listarTags = () =>
   api.get<{ id: string; nome: string; cor: string | null }[]>('/tags');
 
+// Os valores de `leads.tipo` que existem na base. ⚠️ O construtor de segmentos
+// trazia esta lista fixa no código, herdada da dn.ia — envelheceu calada e já
+// não incluía `csv_import` nem `datacore`.
+export const listarTiposDeContato = () => api.get<string[]>('/tipos-de-contato');
+
 export const recalcularScores = () =>
   api.post<{ atualizados: number }>('/contatos/recalcular-scores');
 
