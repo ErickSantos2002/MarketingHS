@@ -1498,9 +1498,15 @@ Criar `backend/app/routers/ia.py`:
 """As rotas de IA. Substituem `ai-data-analyst`, `analyze-leads` e
 `analyze-challenges`.
 
-⚠️ Todas exigem `usuario_atual` — e as ferramentas rodam pela MESMA `sessao()`
-do request, com o papel de quem perguntou. Nunca `service_role`: o analista lê
-dado a pedido de uma pessoa, e isso é request de usuário.
+⚠️ Todas exigem `admin_atual`, não `usuario_atual` — as NOVE rotas. O RLS de
+`leads` e de `challenge_insights` é admin-only (`has_role(auth.uid(),'admin')`),
+então um autenticado não-admin não levaria 403: levaria ZERO LINHAS, e o modelo
+afirmaria o zero como fato. As Edge Functions de origem já chamavam
+`requireAdmin` — portar com `usuario_atual` seria regressão. Não afrouxe de volta.
+
+⚠️ E as ferramentas rodam pela MESMA `sessao()` do request, com o papel de quem
+perguntou. Nunca `service_role`: o analista lê dado a pedido de uma pessoa, e
+isso é request de usuário.
 """
 
 import json
@@ -1509,7 +1515,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 from app.ia import analista
 from app.ia.cliente import IANaoConfigurada, exigir_cliente
 
@@ -1521,9 +1527,9 @@ class MensagemIn(BaseModel):
 
 
 @router.get("/conversas")
-async def listar_conversas(usuario: Usuario = Depends(usuario_atual)):
+async def listar_conversas(usuario: Usuario = Depends(admin_atual)):
     """As conversas de QUEM PERGUNTA, não as de todo mundo."""
-    async with sessao(usuario_id=usuario.id) as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT id::text, title, created_at, updated_at
                  FROM ai_chat_conversations
@@ -1534,8 +1540,8 @@ async def listar_conversas(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.post("/conversas", status_code=status.HTTP_201_CREATED)
-async def criar_conversa(usuario: Usuario = Depends(usuario_atual)):
-    async with sessao(usuario_id=usuario.id) as conn:
+async def criar_conversa(usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             """INSERT INTO ai_chat_conversations (user_id)
                VALUES ($1::uuid)
@@ -1544,8 +1550,8 @@ async def criar_conversa(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/conversas/{conversa_id}")
-async def ler_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_atual)):
-    async with sessao(usuario_id=usuario.id) as conn:
+async def ler_conversa(conversa_id: str, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         dona = await conn.fetchval(
             "SELECT user_id::text FROM ai_chat_conversations WHERE id = $1::uuid",
             conversa_id)
@@ -1564,8 +1570,8 @@ async def ler_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_atua
 
 
 @router.delete("/conversas/{conversa_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def apagar_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_atual)):
-    async with sessao(usuario_id=usuario.id) as conn:
+async def apagar_conversa(conversa_id: str, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         apagadas = await conn.execute(
             "DELETE FROM ai_chat_conversations WHERE id = $1::uuid AND user_id = $2::uuid",
             conversa_id, usuario.id)
@@ -1575,14 +1581,14 @@ async def apagar_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_a
 
 @router.post("/conversas/{conversa_id}/mensagens")
 async def enviar_mensagem(conversa_id: str, dados: MensagemIn,
-                          usuario: Usuario = Depends(usuario_atual)):
+                          usuario: Usuario = Depends(admin_atual)):
     """Grava a pergunta, responde com ferramentas, grava a resposta."""
     try:
         cliente = await exigir_cliente()
     except IANaoConfigurada as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
-    async with sessao(usuario_id=usuario.id) as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         dona = await conn.fetchval(
             "SELECT user_id::text FROM ai_chat_conversations WHERE id = $1::uuid",
             conversa_id)
@@ -1621,10 +1627,12 @@ async def enviar_mensagem(conversa_id: str, dados: MensagemIn,
     return resultado
 ```
 
-⚠️ **Confira a assinatura de `sessao()`** em `backend/app/database.py` antes de
-escrever. O plano assume `sessao(usuario_id=...)`; se o nome do parâmetro for
-outro, use o que existe — e se `sessao()` não aceitar identificar o usuário,
-**pare e me reporte**, porque isso muda quem o `auth.uid()` enxerga.
+✅ **A assinatura real é `sessao(role: str = "anon", user_id: str | None = None)`** —
+conferida no banco e no código em 03/09/2026. O rascunho deste plano escrevia
+`sessao(usuario_id=...)`, que não existe. Use
+`sessao(role="authenticated", user_id=usuario.id)`, e **nunca** `sessao()` puro:
+o padrão é `anon`, e sob `anon` várias políticas `TO authenticated` não se
+aplicam — a query devolve zero linhas em vez de erro.
 
 - [ ] **Passo 5: Registrar o router**
 
@@ -1892,7 +1900,7 @@ async def _analisar(sistema: str, pergunta: str, esquema: dict) -> dict:
 
 
 @router.post("/analisar-leads")
-async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
+async def analisar_leads(usuario: Usuario = Depends(admin_atual)):
     """Substitui `analyze-leads`.
 
     ⚠️ Diferente do original, a tela NÃO manda os leads no corpo. O servidor
@@ -1902,7 +1910,7 @@ async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
     """
     from app.ia import ferramentas
 
-    async with sessao(usuario_id=usuario.id) as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         perfil = {
             "total": (await ferramentas.contar_contatos(conn))["total"],
             "cargos": (await ferramentas.distribuir_contatos(conn, "cargo"))["distribuicao"],
@@ -1920,11 +1928,11 @@ async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.post("/analisar-desafios")
-async def analisar_desafios(usuario: Usuario = Depends(usuario_atual)):
+async def analisar_desafios(usuario: Usuario = Depends(admin_atual)):
     """Substitui `analyze-challenges`."""
     from app.ia import ferramentas
 
-    async with sessao(usuario_id=usuario.id) as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         amostra = (await ferramentas.desafios_frequentes(conn, limite=50))["desafios"]
 
     if not amostra:
@@ -1942,9 +1950,9 @@ async def analisar_desafios(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/insights-de-desafios")
-async def listar_insights(usuario: Usuario = Depends(usuario_atual)):
+async def listar_insights(usuario: Usuario = Depends(admin_atual)):
     """O histórico gravado, que a tela mostra sem precisar reanalisar."""
-    async with sessao(usuario_id=usuario.id) as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT id::text, insights, leads_analyzed, created_at
                  FROM challenge_insights
@@ -1960,8 +1968,8 @@ class InsightIn(BaseModel):
 
 @router.post("/insights-de-desafios", status_code=status.HTTP_201_CREATED)
 async def gravar_insight(dados: InsightIn,
-                         usuario: Usuario = Depends(usuario_atual)):
-    async with sessao(usuario_id=usuario.id) as conn:
+                         usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             """INSERT INTO challenge_insights (insights, leads_analyzed, created_by)
                VALUES ($1::jsonb, $2, $3::uuid)
@@ -2016,6 +2024,24 @@ ferramentas do analista."
 (`dashboard_settings`, chave/valor em jsonb). Um par de rotas serve os dois — não
 escreva dois conjuntos.
 
+⚠️⚠️ **DUAS CORREÇÕES A ESTE PLANO, medidas contra o banco em 03/09/2026 durante
+a execução. O código abaixo já está corrigido; isto explica por quê, para
+ninguém "simplificar" de volta.**
+
+**1. Nunca `sessao()` sem argumento aqui.** O padrão de `sessao()` é o papel
+**`anon`**. Medido: sob `anon`, `SELECT count(*) FROM contact_events` devolve
+**0**; sob `authenticated`, **2.931** — a política é `TO authenticated` e sob
+`anon` ela nem se aplica. Com `sessao()` puro, a rota de agendamentos devolveria
+lista vazia **sem erro nenhum**, e o painel mostraria zero reuniões.
+
+**2. `admin_atual`, não `usuario_atual`.** `contact_events` e
+`dashboard_settings` são admin-only (`has_role(auth.uid(), 'admin')`). Um
+autenticado não-admin não levaria 403 — levaria **zero linhas**. É o mesmo
+defeito que as nove rotas de `/ia` tiveram e que a Task 5 consertou.
+
+✅ **O índice único de `setting_key` existe** (`dashboard_settings_setting_key_key`
+e `..._unique`, dois, herança do dump). O `ON CONFLICT` funciona. Não mexa neles.
+
 - [ ] **Passo 1: Escrever o router**
 
 Criar `backend/app/routers/painel.py`:
@@ -2035,7 +2061,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 router = APIRouter(prefix="/painel", tags=["painel"])
 
@@ -2046,11 +2072,11 @@ CHAVES = {"lead_goal", "dashboard_cards"}
 
 
 @router.get("/config/{chave}")
-async def ler_config(chave: str, _: Usuario = Depends(usuario_atual)):
+async def ler_config(chave: str, usuario: Usuario = Depends(admin_atual)):
     if chave not in CHAVES:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"Configuração '{chave}' não existe.")
-    async with sessao() as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         valor = await conn.fetchval(
             "SELECT setting_value FROM dashboard_settings WHERE setting_key = $1",
             chave)
@@ -2062,12 +2088,12 @@ async def ler_config(chave: str, _: Usuario = Depends(usuario_atual)):
 
 @router.put("/config/{chave}")
 async def gravar_config(chave: str, valor: Any = Body(...),
-                        _: Usuario = Depends(usuario_atual)):
+                        usuario: Usuario = Depends(admin_atual)):
     if chave not in CHAVES:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"Configuração '{chave}' não existe.")
     import json
-    async with sessao() as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         gravado = await conn.fetchval(
             """INSERT INTO dashboard_settings (setting_key, setting_value)
                VALUES ($1, $2::jsonb)
@@ -2080,14 +2106,14 @@ async def gravar_config(chave: str, valor: Any = Body(...),
 
 
 @router.get("/agendamentos")
-async def listar_agendamentos(_: Usuario = Depends(usuario_atual)):
+async def listar_agendamentos(usuario: Usuario = Depends(admin_atual)):
     """Os eventos de agendamento, que o painel usa para contar reuniões.
 
     ⚠️ Os dois tipos legados (`scheduling_widget_booked`, `meeting_scheduled`)
     são a mesma regra que o `/enriquecimento` de leitura_contatos.py aplica —
     ver o comentário de lá antes de mexer nesta lista.
     """
-    async with sessao() as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT id::text, lead_id::text, dnia_id::text, event_type,
                       metadata, created_at

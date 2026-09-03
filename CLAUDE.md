@@ -46,8 +46,23 @@ cd backend && ./.venv/bin/pytest -q
 cd frontend && npx vite --port 8080
 
 # migrations
-bash scripts/aplicar-migrations.sh    # NÃO é idempotente; ver o cabeçalho
+bash scripts/aplicar-migrations.sh    # SÓ num banco vazio; ver o aviso abaixo
 ```
+
+⚠️ **`aplicar-migrations.sh` não roda duas vezes.** Ele reaplica desde a
+`001_schema_origem.sql`, que é dump bruto do Supabase sem `IF NOT EXISTS`, e
+morre em `type "app_role" already exists`. **O cabeçalho do próprio script diz
+"Idempotente" e mente.** Migration nova se aplica sozinha:
+
+```bash
+set -a; . ~/marketinghs.env; set +a
+PGPASSWORD="$POSTGRES_PASSWORD" psql \
+  "postgresql://${POSTGRES_USER}@${POSTGRES_HOST_EXTERNO}:${POSTGRES_PORTA_EXTERNA}/${POSTGRES_DB}" \
+  -v ON_ERROR_STOP=1 -f backend/migrations/0NN_arquivo.sql
+```
+
+Ela ainda precisa tolerar reaplicação (`IF NOT EXISTS`, `DROP ... IF EXISTS`
+antes de `ADD`) — rode duas vezes para provar.
 
 ## As regras que não se quebram
 
@@ -60,6 +75,21 @@ RLS por definição**, e as 65 políticas herdadas viram decoração.
 
 **`role="service_role"` tem `BYPASSRLS`.** Só para operação interna (bootstrap,
 job agendado). Nunca para request de usuário.
+
+⚠️ **O padrão de `sessao()` é o papel `anon`.** `sessao()` sem argumento **não**
+é "o papel de quem está logado" — é anônimo. E política escrita `TO
+authenticated` **não se aplica** ao anônimo: a query devolve **zero linhas, sem
+erro**. Medido em 03/09/2026: `count(*) FROM contact_events` dá 0 sob `anon` e
+2.931 sob `authenticated`. Para request de usuário, escreva sempre
+`sessao(role="authenticated", user_id=usuario.id)`.
+
+⚠️ **Permissão, neste banco, falha devolvendo NADA — não devolvendo erro.** É o
+mesmo desfecho para papel de banco errado e para usuário sem direito: zero
+linhas. Num sistema de marketing isso é pior que quebrar, porque painel zerado
+parece mês fraco e ninguém investiga. Por isso a regra abaixo ("cada rota
+autoriza sozinha") não é burocracia: é o que transforma silêncio em 403. Se a
+tabela tem política admin-only, a rota é `admin_atual` — senão o não-admin vê
+zero e acredita.
 
 **Nenhum endpoint depende do RLS para autorizar.** Cada rota autoriza sozinha,
 via `usuario_atual` / `admin_atual`. O RLS é segunda linha. RLS que ninguém
