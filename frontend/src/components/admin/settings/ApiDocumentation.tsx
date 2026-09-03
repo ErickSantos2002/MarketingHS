@@ -293,31 +293,6 @@ const ENDPOINTS = [
     notes: 'UTMs e source são incluídos no metadata do evento contact_synced/contact_updated. Em leads existentes, só preenchem campos vazios (imutabilidade CRM).',
   },
   {
-    id: 'merge-identities',
-    method: 'POST',
-    path: '/merge-identities',
-    title: 'Mesclar duas identidades',
-    description: 'Unifica dois registros mantendo o keep_id. Re-aponta leads, eventos e campanhas para a identidade preservada.',
-    params: [
-      { name: 'keep_id', type: 'uuid', required: 'Sim', description: 'DN.IA ID que será mantido' },
-      { name: 'discard_id', type: 'uuid', required: 'Sim', description: 'DN.IA ID que será descartado e mesclado' },
-    ],
-    curl: `curl -X POST \\
-  '${BASE_URL}/merge-identities' \\
-  -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "keep_id": "uuid-a-manter",
-    "discard_id": "uuid-a-descartar"
-  }'`,
-    response: JSON.stringify({
-      dnia_id: "uuid-a-manter",
-      merged_from: "uuid-a-descartar",
-      stage: "opportunity"
-    }, null, 2),
-    notes: 'Operação irreversível. Requer permissão admin.',
-  },
-  {
     id: 'contacts-list',
     method: 'GET',
     path: '/publico/contatos',

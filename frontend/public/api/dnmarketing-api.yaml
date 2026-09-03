@@ -552,58 +552,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /merge-identities:
-    post:
-      operationId: mergeIdentities
-      summary: Mesclar duas identidades
-      description: Unifica dois registros mantendo o keep_id. Re-aponta leads, eventos e campanhas.
-      tags:
-        - Identidade
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - keep_id
-                - discard_id
-              properties:
-                keep_id:
-                  type: string
-                  format: uuid
-                discard_id:
-                  type: string
-                  format: uuid
-      responses:
-        '200':
-          description: Identidades mescladas
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  dnia_id:
-                    type: string
-                    format: uuid
-                  merged_from:
-                    type: string
-                    format: uuid
-                  stage:
-                    type: string
-        '400':
-          description: Dados inválidos
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          description: Token inválido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
   /contacts-list:
     get:
       operationId: contactsList

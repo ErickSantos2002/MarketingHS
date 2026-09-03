@@ -1,17 +1,17 @@
 # Continuar aqui
 
-**Atualizado:** 2 de setembro de 2026
+**Atualizado:** 3 de setembro de 2026
 **Branch:** `reconstrucao` — **ainda não pushada**
 
 ## Onde paramos
 
-**Lotes 0 a 4 fechados, mais o 5B e o 5D.** O lote 5 foi partido em quatro:
+**Lotes 0 a 4 fechados, mais o 5B, o 5C e o 5D.** O lote 5 foi partido em quatro:
 
 | | | |
 |---|---|---|
 | **5A** | Handoff → GrowthHS | ⏸ **bloqueado** — ver abaixo |
 | **5B** | Contatos do DataCore | ✅ concluído (02/09/2026) |
-| **5C** | Identidade unificada, Meta CAPI | a fazer |
+| **5C** | Identidade unificada, Meta CAPI | ✅ concluído (03/09/2026) |
 | **5D** | Limpeza das sobras | ✅ concluído (02/09/2026) |
 
 ## 🎨 O trabalho de visual já pode começar
@@ -28,7 +28,7 @@ livres do toco do Supabase** e podem ser redesenhadas agora:
 |---|---|
 | **Visão Geral** e **Analytics** | o lote 6 as reescreve por dentro — trabalho de visual agora seria refeito |
 | **Páginas** | lote 7 |
-| **Configurações** | falta o `NexusCard` (5A, bloqueado) e o `MetaCard` (5C) |
+| **Configurações** | falta só o `NexusCard` (5A, bloqueado) — o `MetaCard` (5C) já chegou |
 
 ⚠️ O design system da HS **vive no Claude Design** — ler de lá (DesignSync)
 antes de desenhar, em vez de inventar.
@@ -82,12 +82,37 @@ consentimento para marketing, e ligar é decisão do Erick e do Nicholson.
    desfaz no teardown; um `timeout` deixou a linha e o índice único derrubou a
    rodada seguinte inteira. A fixture agora limpa antes de inserir.
 
+## O que o 5C entregou
+
+O defeito dos 2.080 fechou por gatilho, não por backfill: a correção age em
+toda escrita futura, não repontua o passado de uma vez só. `dndash_lead_id` é o
+**contato canônico** de uma identidade, não uma cópia — e que N contatos
+apontem para a mesma identidade é decisão já tomada no lote 1C, não algo que o
+5C reabriu.
+
+O Meta Conversions API nasce **parametrizado e desligado**: pixel, token e
+`test_event_code` têm lugar na tela e no banco, mas sem credencial gravada
+nada dispara. A pergunta "a HS faz anúncio no Meta?" continua em aberto — ver
+"Antes de continuar, o que depende do Erick".
+
+A tela de **Configurações** agora só espera o `NexusCard` (5A, bloqueado) para
+liberar o trabalho de visual — o `MetaCard` do 5C já chegou.
+
+O portão fechou as três functions de identidade e Meta
+(`merge-identities`, `meta-config`, `send-to-meta-capi`): pela quarta vez no
+projeto, a documentação (tela de Documentação da API + `dnmarketing-api.yaml`)
+ainda ensinava uma URL morta a integradores depois de a tela real já ter
+migrado. Placar da pasta de especificação: **26 functions portadas** e **6
+descartadas** (números que não se somam), restando **22**.
+
 ## Migrations aplicadas
 
 | | |
 |---|---|
 | **010–012** | lote 4 (jornadas) |
 | **013** | `ecosystem_identities.datacore_cliente_id` + índice único parcial |
+| **014** | lote 5D (imagens de e-mail) |
+| **015** | lote 5C — gatilho do contato canônico (defeito dos 2.080) |
 
 ## Antes de continuar, o que depende do Erick
 
@@ -101,6 +126,25 @@ consentimento para marketing, e ligar é decisão do Erick e do Nicholson.
 6. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
    ⚠️ Antes de pushar, ver o `SETUP-CLAUDE.md` (não versionado): o `.env` da
    dn.ia com credenciais do Supabase está no histórico do git.
+7. **Decidir se a HS faz anúncio no Meta** — sem isso o CAPI fica configurado e
+   desligado, que é um estado válido.
+8. ⚠️ **`scripts/aplicar-migrations.sh` não roda de novo.** Ele reaplica desde
+   a `001_schema_origem.sql`, que é dump bruto do Supabase sem `IF NOT EXISTS`,
+   e morre em `type "app_role" already exists`. O cabeçalho do próprio script
+   diz "Idempotente: pode rodar de novo sem estragar o que já existe" — mentira,
+   é o `CLAUDE.md` do repo que está certo ao dizer o contrário. A `015` deste
+   lote foi aplicada direto por `psql` e conferida rodando duas vezes. Decidir:
+   conserta o script, ou conserta o cabeçalho.
+9. ⚠️ **`frontend/index.html` ainda chama a dn.ia**, nas linhas ~228-280, em
+   toda página do admin: o tracker do Supabase **da dn.ia**
+   (`luinwzmegsdjckjxoimx.supabase.co/functions/v1/tracker`, com o `pid` da
+   dn.ia), o tracker do **Lovable** (`lovableproject.com/api/v1/tracker.js`),
+   o **Google Analytics `G-P6GLV8VVNR`** e o **`GTM-59T4XHKS`** no `noscript`.
+   O `CLAUDE.md` do repo abre dizendo "o Lovable e o Supabase saíram" — saíram
+   do código, não daqui, e isso também desmente ao pé da letra a frase do
+   portão de que nenhuma tela fala com o Supabase: o `index.html` fala, antes
+   de qualquer tela carregar. Nenhuma tarefa do lote 5C tem escopo sobre esse
+   arquivo — arrancar analytics é decisão do Erick, não foi consertado aqui.
 
 ## Como subir o que existe
 
