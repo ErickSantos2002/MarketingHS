@@ -86,6 +86,13 @@ async def test_listar_contatos_respeita_o_teto(conexao):
         {"filtros": {"tipo": "teto-6"}, "limite": 999})
     assert len(r["contatos"]) <= ferramentas.LIMITE_MAXIMO
     assert r["limite_aplicado"] == ferramentas.LIMITE_MAXIMO
+    # ⚠️ Prova que o LIMIT do SQL sai do argumento, e não só do relatado: com 5
+    # contatos e limite=2 têm de voltar 2. Sem isto, uma implementação que
+    # relatasse o teto e mandasse `LIMIT 999` ao banco passaria no teste.
+    r2 = await ferramentas.executar(
+        conexao, "listar_contatos",
+        {"filtros": {"tipo": "teto-6"}, "limite": 2})
+    assert len(r2["contatos"]) == 2
 
 
 @pytest.mark.asyncio
@@ -97,9 +104,16 @@ async def test_listar_contatos_nao_devolve_dado_sensivel(conexao):
         conexao, "listar_contatos", {"filtros": {"tipo": "sens-6"}})
     assert r["contatos"], "o contato de teste não voltou"
     for c in r["contatos"]:
+        # O que NÃO vai: identifica uma pessoa e ficaria gravado no histórico.
+        assert "nome" not in c
         assert "email" not in c
         assert "whatsapp" not in c
         assert "phone_normalized" not in c
+        # O que VAI, de propósito: `empresa` é a unidade de análise em B2B e
+        # não há dimensão `empresa` para agrupar. Decisão registrada aqui para
+        # não ser desfeita por engano.
+        assert "empresa" in c
+        assert "cargo" in c
 
 
 # ── Os números ───────────────────────────────────────────────────────────────
@@ -172,3 +186,36 @@ def test_todo_esquema_e_estrito_e_fechado():
 def test_todo_esquema_tem_executor():
     for e in ferramentas.ESQUEMAS:
         assert e["name"] in ferramentas.EXECUTORES, e["name"]
+    # E o sentido inverso: executor sem esquema é ferramenta invisível para a
+    # API — o modelo nunca saberia que ela existe, mas `executar` a chamaria.
+    assert set(ferramentas.EXECUTORES) == {e["name"] for e in ferramentas.ESQUEMAS}
+
+
+# ── A revisão ────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_distribuir_contatos_nao_infla_percentual(conexao):
+    """O denominador tem de ser o total real, não a soma do que voltou —
+    poucos grupos aqui, todos abaixo de LIMITE_DE_GRUPOS, então nada é
+    truncado e total_geral bate exatamente com a soma das linhas."""
+    await _lead(conexao, tipo="pct-6", cargo="Gerente")
+    await _lead(conexao, tipo="pct-6", cargo="Gerente")
+    await _lead(conexao, tipo="pct-6", cargo="Analista")
+    r = await ferramentas.executar(
+        conexao, "distribuir_contatos",
+        {"dimensao": "cargo", "filtros": {"tipo": "pct-6"}})
+    assert r["total_geral"] == 3
+    assert r["truncado"] is False
+    assert r["nao_mostrados"] == 0
+    assert sum(l["total"] for l in r["distribuicao"]) == r["total_geral"]
+    linhas = {l["valor"]: l["percentual"] for l in r["distribuicao"]}
+    assert linhas["Gerente"] == pytest.approx(66.7, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_argumento_desconhecido_e_recusado(conexao):
+    """`executar` tem de fechar o contrato que promete — nome/argumento fora
+    do que a ferramenta aceita vira ArgumentoRecusado, não TypeError cru."""
+    with pytest.raises(ferramentas.ArgumentoRecusado):
+        await ferramentas.executar(
+            conexao, "contar_contatos", {"bobagem": 1})

@@ -19,6 +19,7 @@ valendo como segunda linha, que é a regra da casa.
 """
 
 import datetime as dt
+import inspect
 import re
 
 # ── Allowlists ───────────────────────────────────────────────────────────────
@@ -80,6 +81,12 @@ LIMITE_MAXIMO = 50
 # 365 dias: recorte máximo de uma série temporal, para uma pergunta ingênua não
 # devolver mil pontos que ninguém lê e que enchem o contexto.
 PONTOS_MAXIMOS = 365
+
+# 30 grupos: o suficiente para o modelo ver os maiores. `cargo` é texto livre
+# e `ddd` tem ~67 valores possíveis na base real — sem um teto nomeado aqui
+# (e sem os campos `truncado`/`total_geral` no retorno), o modelo não teria
+# como saber que viu só uma parte.
+LIMITE_DE_GRUPOS = 30
 
 
 class FerramentaDesconhecida(ValueError):
@@ -168,6 +175,12 @@ async def distribuir_contatos(conn, dimensao: str,
                               filtros: dict | None = None) -> dict:
     coluna = _dimensao(dimensao)
     onde, parametros = _onde(filtros)
+    # ⚠️ O denominador é o total REAL, não a soma das linhas que voltaram. Com
+    # mais de LIMITE_DE_GRUPOS valores distintos (cargo é texto livre; ddd tem
+    # ~67), somar o que voltou infla todo percentual — e o modelo afirma o
+    # número inflado com convicção.
+    total = await conn.fetchval(
+        f"SELECT count(*) FROM leads l WHERE {onde}", *parametros)
     linhas = await conn.fetch(
         f"""SELECT COALESCE({coluna}::text, '(sem valor)') AS valor,
                    count(*) AS total
@@ -175,10 +188,15 @@ async def distribuir_contatos(conn, dimensao: str,
              WHERE {onde}
              GROUP BY 1
              ORDER BY 2 DESC, 1
-             LIMIT 30""", *parametros)
-    total = sum(l["total"] for l in linhas)
+             LIMIT {LIMITE_DE_GRUPOS}""", *parametros)
+    mostrados = sum(l["total"] for l in linhas)
     return {
         "dimensao": dimensao,
+        "total_geral": total,
+        # ⚠️ `truncado` existe para o modelo saber que NÃO viu a distribuição
+        # inteira. Sem isso ele conclui sobre o todo tendo visto uma parte.
+        "truncado": mostrados < total,
+        "nao_mostrados": total - mostrados,
         "distribuicao": [
             {"valor": l["valor"], "total": l["total"],
              "percentual": round(100 * l["total"] / total, 1) if total else 0.0}
@@ -195,16 +213,22 @@ async def serie_temporal(conn, granularidade: str = "dia",
             f"Granularidade {granularidade!r} não existe. "
             f"As que existem: {', '.join(sorted(GRANULARIDADES))}.")
     onde, parametros = _onde(filtros)
+    # ⚠️ `ORDER BY 1 DESC` — os RECENTES são o que interessa quando a série
+    # excede PONTOS_MAXIMOS. `ORDER BY 1 LIMIT N` sem o DESC pegaria os pontos
+    # mais ANTIGOS e descartaria os recentes, que é o oposto do que uma
+    # pergunta de análise quer numa base com mais de um ano de histórico.
     linhas = await conn.fetch(
         f"""SELECT date_trunc('{unidade}', l.created_at)::date AS periodo,
                    count(*) AS total
               FROM leads l
              WHERE {onde}
              GROUP BY 1
-             ORDER BY 1
+             ORDER BY 1 DESC
              LIMIT {PONTOS_MAXIMOS}""", *parametros)
+    linhas = list(reversed(linhas))
     return {
         "granularidade": granularidade,
+        "truncado": len(linhas) >= PONTOS_MAXIMOS,
         "pontos": [{"periodo": l["periodo"].isoformat(), "total": l["total"]}
                    for l in linhas],
     }
@@ -214,17 +238,21 @@ async def listar_contatos(conn, filtros: dict | None = None,
                           limite: int = 20) -> dict:
     """Uma AMOSTRA, nunca a base.
 
-    ⚠️ Sem e-mail, sem telefone. O resultado desta ferramenta entra no contexto
-    do modelo e fica gravado em `ai_chat_messages` — dado de contato aqui é
-    vazamento com retenção. O modelo não precisa do e-mail para raciocinar sobre
-    perfil.
+    ⚠️ Sem nome, sem e-mail, sem telefone: identificam uma pessoa, e o
+    resultado desta ferramenta entra no contexto do modelo e fica gravado em
+    `ai_chat_messages` — dado de contato aqui é vazamento com retenção. O
+    modelo não precisa do nome nem do e-mail para raciocinar sobre perfil.
+
+    `empresa` FICA, de propósito: em B2B a empresa é a unidade de análise, não
+    identifica uma pessoa, e não há dimensão `empresa` em `DIMENSOES` para
+    agrupar por ela — sem isto o modelo não teria nenhuma leitura de setor.
     """
-    if not isinstance(limite, int) or limite < 1:
+    if isinstance(limite, bool) or not isinstance(limite, int) or limite < 1:
         raise ArgumentoRecusado("O limite tem de ser um inteiro positivo.")
     limite = min(limite, LIMITE_MAXIMO)
     onde, parametros = _onde(filtros)
     linhas = await conn.fetch(
-        f"""SELECT l.nome, l.empresa, l.cargo, l.faturamento, l.funcionarios,
+        f"""SELECT l.empresa, l.cargo, l.faturamento, l.funcionarios,
                    l.etiqueta, l.status, l.lead_score, l.utm_source,
                    l.desafios, l.created_at::date AS entrou_em
               FROM leads l
@@ -283,7 +311,7 @@ async def desafios_frequentes(conn, filtros: dict | None = None,
 
     ⚠️ Devolve o texto do desafio, não o autor. O tema é o que interessa.
     """
-    if not isinstance(limite, int) or limite < 1:
+    if isinstance(limite, bool) or not isinstance(limite, int) or limite < 1:
         raise ArgumentoRecusado("O limite tem de ser um inteiro positivo.")
     limite = min(limite, LIMITE_MAXIMO)
     filtros = dict(filtros or {})
@@ -309,13 +337,24 @@ EXECUTORES = {
 
 
 async def executar(conn, nome: str, argumentos: dict) -> dict:
-    """Despacha pelo nome. Levanta se o nome não existir."""
+    """Despacha pelo nome. Levanta se o nome ou os argumentos não existirem."""
     funcao = EXECUTORES.get(nome)
     if funcao is None:
         raise FerramentaDesconhecida(
             f"Não existe a ferramenta {nome!r}. "
             f"As que existem: {', '.join(sorted(EXECUTORES))}.")
-    return await funcao(conn, **(argumentos or {}))
+    argumentos = argumentos or {}
+    if not isinstance(argumentos, dict):
+        raise ArgumentoRecusado("Os argumentos têm de vir como objeto.")
+    # ⚠️ Sem esta guarda, argumento desconhecido vira TypeError cru e quem
+    # chama não consegue distinguir "o modelo errou" de "o sistema quebrou".
+    aceitos = set(inspect.signature(funcao).parameters) - {"conn"}
+    sobrando = set(argumentos) - aceitos
+    if sobrando:
+        raise ArgumentoRecusado(
+            f"A ferramenta {nome!r} não aceita {', '.join(sorted(sobrando))}. "
+            f"Aceita: {', '.join(sorted(aceitos))}.")
+    return await funcao(conn, **argumentos)
 
 
 # ── Os esquemas que vão para a API ───────────────────────────────────────────
@@ -350,7 +389,10 @@ ESQUEMAS: list[dict] = [
     {
         "name": "distribuir_contatos",
         "description": ("Contagem agrupada por uma dimensão. Dimensões: "
-                        + ", ".join(sorted(DIMENSOES)) + "."),
+                        + ", ".join(sorted(DIMENSOES)) + f". Devolve no máximo "
+                        f"os {LIMITE_DE_GRUPOS} maiores grupos — confira "
+                        "'truncado' e 'total_geral' antes de falar em "
+                        "percentual do todo."),
         "strict": True,
         "input_schema": {
             "type": "object",
@@ -379,8 +421,9 @@ ESQUEMAS: list[dict] = [
     {
         "name": "listar_contatos",
         "description": (f"Uma amostra de até {LIMITE_MAXIMO} contatos, sem "
-                        "e-mail nem telefone. Para examinar exemplos, não para "
-                        "exportar a base."),
+                        "nome, e-mail nem telefone — só empresa e atributos de "
+                        "perfil. Para examinar exemplos, não para exportar a "
+                        "base."),
         "strict": True,
         "input_schema": {
             "type": "object",
