@@ -5,6 +5,44 @@
 
 ## Onde paramos
 
+### ⏸ Lote 6 em andamento — parado no meio (03/09/2026)
+
+**Cinco das nove tarefas do lote 6 estão prontas e revisadas.** O trabalho
+segue no `HEAD` da `reconstrucao` (`5864cca`), que é commit coerente e verde:
+**122 testes passando**.
+
+O que já entrou:
+
+| | |
+|---|---|
+| **1** | A migration 016 apagou a `execute_readonly_query` — a IA não escreve mais SQL |
+| **2** | Cliente da API da Claude, com a chave configurável em Configurações → IA |
+| **3** | As seis ferramentas nomeadas, com allowlist e teto |
+| **4** | O laço de ferramentas e as cinco rotas do chat |
+| **5** | As duas análises, com o formato de saída garantido pela API |
+
+⚠️ **A Task 6 foi interrompida no meio.** O trabalho parcial está em
+`git stash@{0}` e **não compila** — `useAgendamentos.tsx` ainda referencia o
+toco do Supabase. Ou se retoma com `git stash pop`, ou se descarta o stash e
+se redespacha a tarefa do zero.
+
+**O mapa para retomar** está em
+`.superpowers/sdd/2026-09-03-marketinghs-lote-6-analytics-e-ia/progress.md`
+(fora do git). Ele tem o estado tarefa a tarefa, as decisões que foram tomadas
+no caminho, e — importante — **duas correções ao plano da Task 6** que só
+aparecem se alguém medir contra o banco. Ler antes de retomar.
+
+Faltam as tarefas **6** (painel: metas, cartões, agendamentos), **7** (telas de
+IA), **8** (a tarja dos dez mil) e **9** (o portão).
+
+⚠️ **Nada da IA foi provado de ponta a ponta**, porque não há chave da
+Anthropic gravada. O caminho de "não configurado" está testado e responde 400
+com mensagem que explica; o resto espera a chave.
+
+---
+
+## Onde paramos
+
 **Lotes 0 a 4 fechados, mais o 5B, o 5C e o 5D.** O lote 5 foi partido em quatro:
 
 | | | |
