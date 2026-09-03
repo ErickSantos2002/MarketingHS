@@ -124,3 +124,228 @@ async def enviar_mensagem(conversa_id: str, dados: MensagemIn,
             conversa_id)
 
     return resultado
+
+
+# ── As duas análises ─────────────────────────────────────────────────────────
+# ⚠️ Porte FIEL: mesmo prompt, mesma forma de saída. O que muda é que o formato
+# passa a ser garantido pela API em vez de pedido no prompt — o original dizia
+# "IMPORTANTE: Retorne APENAS um JSON válido, sem markdown" e torcia.
+#
+# ⚠️ Os nomes de campo são os que o frontend JÁ LÊ. Renomear um deles aqui
+# quebra a tela sem erro de compilação. Ver useAIAnalysis.tsx e
+# ChallengesAIInsights.tsx.
+
+def _lista_de_texto(descricao: str) -> dict:
+    return {"type": "array", "items": {"type": "string"}, "description": descricao}
+
+
+_CONTAGEM = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "count": {"type": "integer"},
+            "percentage": {"type": "number"},
+        },
+        "required": ["name", "count", "percentage"],
+        "additionalProperties": False,
+    },
+}
+
+ESQUEMA_LEADS = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string",
+                    "description": "Resumo executivo de 2-3 frases."},
+        "demographics": {
+            "type": "object",
+            "properties": {"cargos": _CONTAGEM, "faturamentos": _CONTAGEM,
+                           "funcionarios": _CONTAGEM},
+            "required": ["cargos", "faturamentos", "funcionarios"],
+            "additionalProperties": False,
+        },
+        "patterns": {
+            "type": "object",
+            "properties": {
+                "bestDays": _lista_de_texto("Dias da semana com mais conversão."),
+                "bestHours": _lista_de_texto("Faixas de horário."),
+                "conversionInsights": {"type": "string"},
+            },
+            "required": ["bestDays", "bestHours", "conversionInsights"],
+            "additionalProperties": False,
+        },
+        "challenges": {
+            "type": "object",
+            "properties": {
+                "mainThemes": _lista_de_texto("Temas principais dos desafios."),
+                "opportunities": _lista_de_texto("Oportunidades identificadas."),
+            },
+            "required": ["mainThemes", "opportunities"],
+            "additionalProperties": False,
+        },
+        "recommendations": _lista_de_texto("3 a 5 recomendações práticas."),
+        "icp": {"type": "string",
+                "description": "Perfil do cliente ideal, a partir dos dados."},
+    },
+    "required": ["summary", "demographics", "patterns", "challenges",
+                 "recommendations", "icp"],
+    "additionalProperties": False,
+}
+
+ESQUEMA_DESAFIOS = {
+    "type": "object",
+    "properties": {
+        "patterns": _lista_de_texto("3 a 5 padrões nos desafios."),
+        "copyRecommendations": _lista_de_texto("3 a 5 sugestões de copy."),
+        "contentSuggestions": _lista_de_texto("3 a 5 ideias de conteúdo."),
+        "gems": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "response": {"type": "string",
+                                 "description": "Trecho da resposta destacada."},
+                    "reason": {"type": "string",
+                               "description": "Por que essa resposta é valiosa."},
+                },
+                "required": ["response", "reason"],
+                "additionalProperties": False,
+            },
+            "description": "2 a 3 respostas excepcionais.",
+        },
+        "opportunities": _lista_de_texto("3 a 5 oportunidades de produto."),
+    },
+    "required": ["patterns", "copyRecommendations", "contentSuggestions",
+                 "gems", "opportunities"],
+    "additionalProperties": False,
+}
+
+SISTEMA_LEADS = """\
+Você é um analista de marketing especializado em análise de leads B2B da Health \
+& Safety. Responda sempre em português do Brasil. Seja específico e prático: \
+recomendação que serve para qualquer empresa não serve para nenhuma.\
+"""
+
+SISTEMA_DESAFIOS = """\
+Você é um analista de marketing especializado em leads B2B. Analise os desafios \
+relatados pelos contatos e devolva conclusões acionáveis, em português do \
+Brasil. Foque em padrões que dêem para usar em campanha — não em observações \
+genéricas.\
+"""
+
+
+async def _analisar(sistema: str, pergunta: str, esquema: dict) -> dict:
+    try:
+        cliente = await exigir_cliente()
+    except IANaoConfigurada as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+    from app.ia.cliente import MODELO
+    try:
+        resposta = await cliente.messages.create(
+            model=MODELO,
+            max_tokens=16000,
+            system=sistema,
+            messages=[{"role": "user", "content": pergunta}],
+            output_config={"format": {"type": "json_schema", "schema": esquema}},
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"A IA não respondeu: {e}")
+
+    # ⚠️ `output_config.format` garante que o primeiro bloco de texto é JSON
+    # válido conforme o schema. Sem isso, este `json.loads` seria uma aposta.
+    texto = next((b.text for b in resposta.content if b.type == "text"), "")
+    return json.loads(texto)
+
+
+@router.post("/analisar-leads")
+async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
+    """Substitui `analyze-leads`.
+
+    ⚠️ Diferente do original, a tela NÃO manda os leads no corpo. O servidor
+    busca pelas mesmas ferramentas do analista — a tela mandar a base inteira
+    para o servidor, que a mandava para a IA, era caminho longo e um jeito de o
+    navegador vazar dado que ele nem precisava ter.
+    """
+    from app.ia import ferramentas
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        cargos = await ferramentas.distribuir_contatos(conn, "cargo")
+        faturamentos = await ferramentas.distribuir_contatos(conn, "faturamento")
+        funcionarios = await ferramentas.distribuir_contatos(conn, "funcionarios")
+        origens = await ferramentas.distribuir_contatos(conn, "origem")
+        por_dia = await ferramentas.serie_temporal(conn, "dia")
+        perfil = {
+            "total": (await ferramentas.contar_contatos(conn))["total"],
+            "cargos": cargos["distribuicao"],
+            # ⚠️ `truncado` viaja com cada dimensão: cargo é texto livre e passa
+            # fácil de LIMITE_DE_GRUPOS (30). Sem isto o modelo conclui sobre o
+            # todo tendo visto só os maiores grupos.
+            "cargos_truncado": cargos["truncado"],
+            "faturamentos": faturamentos["distribuicao"],
+            "faturamentos_truncado": faturamentos["truncado"],
+            "funcionarios": funcionarios["distribuicao"],
+            "funcionarios_truncado": funcionarios["truncado"],
+            "origens": origens["distribuicao"],
+            "origens_truncado": origens["truncado"],
+            "por_dia": por_dia["pontos"],
+            "por_dia_truncado": por_dia["truncado"],
+            "amostra_de_desafios": (await ferramentas.desafios_frequentes(conn))["desafios"],
+        }
+
+    pergunta = (
+        "Analise o perfil abaixo da base de contatos e devolva as conclusões.\n\n"
+        + json.dumps(perfil, ensure_ascii=False, default=str))
+    return await _analisar(SISTEMA_LEADS, pergunta, ESQUEMA_LEADS)
+
+
+@router.post("/analisar-desafios")
+async def analisar_desafios(usuario: Usuario = Depends(usuario_atual)):
+    """Substitui `analyze-challenges`."""
+    from app.ia import ferramentas
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        amostra = (await ferramentas.desafios_frequentes(conn, limite=50))["desafios"]
+
+    if not amostra:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Nenhum contato preencheu o campo de desafio ainda — não há o que "
+            "analisar.")
+
+    linhas = "\n".join(
+        f'- "{d["desafios"]}" (Cargo: {d["cargo"] or "N/A"}, '
+        f'Faturamento: {d["faturamento"] or "N/A"})' for d in amostra)
+    pergunta = (f"Analise os desafios relatados por {len(amostra)} contatos:\n\n"
+                f"{linhas}")
+    return await _analisar(SISTEMA_DESAFIOS, pergunta, ESQUEMA_DESAFIOS)
+
+
+@router.get("/insights-de-desafios")
+async def listar_insights(usuario: Usuario = Depends(usuario_atual)):
+    """O histórico gravado, que a tela mostra sem precisar reanalisar."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """SELECT id::text, insights, leads_analyzed, created_at
+                 FROM challenge_insights
+                ORDER BY created_at DESC
+                LIMIT 10""")
+    return [dict(l) for l in linhas]
+
+
+class InsightIn(BaseModel):
+    insights: dict
+    leads_analyzed: int = Field(ge=0)
+
+
+@router.post("/insights-de-desafios", status_code=status.HTTP_201_CREATED)
+async def gravar_insight(dados: InsightIn,
+                         usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            """INSERT INTO challenge_insights (insights, leads_analyzed, created_by)
+               VALUES ($1::jsonb, $2, $3::uuid)
+               RETURNING id::text, insights, leads_analyzed, created_at""",
+            json.dumps(dados.insights), dados.leads_analyzed, usuario.id)
+    return dict(linha)
