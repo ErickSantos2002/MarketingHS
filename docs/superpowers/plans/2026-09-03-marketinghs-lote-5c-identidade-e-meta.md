@@ -163,7 +163,7 @@ isso que dois lotes seguidos esqueceram de preenchê-lo.
 
 **Arquivos:**
 - Criar: `backend/migrations/015_contato_canonico.sql`
-- Criar: `backend/tests/test_contato_canonico.py`
+- Criar: `backend/tests/test_contato_canonico.py` (8 testes)
 
 **Interfaces:**
 - Consome: nada.
@@ -251,6 +251,40 @@ async def test_repontar_o_dnia_id_elege_na_identidade_destino(conexao):
 
 
 @pytest.mark.asyncio
+async def test_repontar_limpa_o_canonico_da_identidade_de_origem(conexao):
+    """A origem não pode continuar apontando para um contato que já não é dela.
+
+    Dentro de `merge_identities` isso não aparece, porque a identidade descartada
+    é apagada logo depois. Mas um UPDATE manual em `leads.dnia_id` existe fora
+    dela — e a ficha 360° da origem passaria a mostrar a pessoa errada.
+    """
+    origem = await _identidade(conexao, "origem")
+    destino = await _identidade(conexao, "destino")
+    lead = await _lead(conexao, origem, "canonico-5c-6@exemplo.invalid")
+    assert await _canonico(conexao, origem) == lead
+
+    await conexao.execute("UPDATE leads SET dnia_id = $1 WHERE id = $2",
+                          destino, lead)
+    assert await _canonico(conexao, origem) is None
+    assert await _canonico(conexao, destino) == lead
+
+
+@pytest.mark.asyncio
+async def test_repontar_elege_o_que_sobrou_na_origem(conexao):
+    """Se a origem ainda tem outro contato, ele assume — não fica nula."""
+    origem = await _identidade(conexao, "origem")
+    destino = await _identidade(conexao, "destino")
+    primeiro = await _lead(conexao, origem, "canonico-5c-7a@exemplo.invalid")
+    segundo = await _lead(conexao, origem, "canonico-5c-7b@exemplo.invalid")
+    assert await _canonico(conexao, origem) == primeiro
+
+    await conexao.execute("UPDATE leads SET dnia_id = $1 WHERE id = $2",
+                          destino, primeiro)
+    assert await _canonico(conexao, origem) == segundo
+    assert await _canonico(conexao, destino) == primeiro
+
+
+@pytest.mark.asyncio
 async def test_apagar_o_canonico_elege_o_que_sobrou(conexao):
     """Sem este braço, o ON DELETE SET NULL reabre o buraco em silêncio."""
     ident = await _identidade(conexao)
@@ -288,9 +322,9 @@ async def test_fk_recusa_ponteiro_para_contato_inexistente(conexao):
 cd backend && ./.venv/bin/pytest tests/test_contato_canonico.py -q
 ```
 
-Esperado: **6 falhas**. As cinco primeiras por `dndash_lead_id` vir `None` (ou o
-valor antigo); a última por `asyncpg.ForeignKeyViolationError` nunca ser
-levantada — não existe `FK`.
+Esperado: **8 falhas**. As sete primeiras por `dndash_lead_id` vir `None`
+ou com o valor antigo; a última por `asyncpg.ForeignKeyViolationError` nunca
+ser levantada — não existe `FK`.
 
 - [ ] **Passo 3: Escrever a migration**
 
@@ -364,6 +398,25 @@ BEGIN
     RETURN OLD;
   END IF;
 
+  -- UPDATE que TIROU o lead de uma identidade: se ele era o canônico de lá, a
+  -- origem fica apontando para um contato que já não é dela — e a ficha 360°
+  -- daquela identidade passa a mostrar a pessoa errada.
+  --
+  -- ⚠️ Não aparece dentro de `merge_identities` porque lá a origem é apagada
+  -- logo depois. Mas o caminho existe fora dela, e um UPDATE manual em
+  -- `leads.dnia_id` é exatamente o que o caso 3 do fundir_contatos faz.
+  IF TG_OP = 'UPDATE' AND OLD.dnia_id IS NOT NULL
+     AND OLD.dnia_id IS DISTINCT FROM NEW.dnia_id THEN
+    UPDATE ecosystem_identities e
+       SET dndash_lead_id = (
+             SELECT l.id FROM leads l
+              WHERE l.dnia_id = e.dnia_id
+              ORDER BY l.created_at, l.id
+              LIMIT 1)
+     WHERE e.dnia_id = OLD.dnia_id
+       AND e.dndash_lead_id = NEW.id;
+  END IF;
+
   -- INSERT, ou UPDATE que mudou o dnia_id (é o que merge_identities dispara).
   --
   -- ⚠️ A guarda `dndash_lead_id IS NULL` é o ponto. Sem ela, o caso 3 do
@@ -411,7 +464,7 @@ isso. Se alguma falhar, **pare e leia o erro** — não é esta tarefa.
 cd backend && ./.venv/bin/pytest tests/test_contato_canonico.py -q
 ```
 
-Esperado: **6 passed**.
+Esperado: **8 passed**.
 
 - [ ] **Passo 6: Conferir que o backfill consertou os 2.080 de verdade**
 
@@ -433,7 +486,7 @@ Esperado: `com_canonico` = `total` = **2083**. Era 3 de 2.083 antes.
 cd backend && ./.venv/bin/pytest -q
 ```
 
-Esperado: tudo que passava antes continua passando, mais os 6 novos.
+Esperado: tudo que passava antes continua passando, mais os 8 novos.
 ⚠️ Preste atenção em `test_sincronizacao_datacore.py` e `test_importacao.py` —
 são os que escrevem em `leads` e agora disparam o gatilho novo.
 
@@ -1478,7 +1531,9 @@ print(n, 'pontos de acesso direto')"
 grep -rn "functions\.invoke" frontend/src --include=*.ts --include=*.tsx | wc -l
 ```
 
-Esperado: **22** functions restantes (eram 25), **27** pontos de acesso direto
+Esperado: **22** functions restantes (eram 25) — a pasta veio com 55 entradas,
+que são 54 functions mais o `_shared`, então 22 restantes significam **26
+portadas + 6 descartadas**. **27** pontos de acesso direto
 (inalterado — o 5C não mexe em `.from()`), e **as invocações do MetaCard já não
 aparecem**.
 
@@ -1525,7 +1580,7 @@ Quarta vez neste projeto.
 A fusão de identidade NÃO vira endpoint público: é destrutiva, não há
 integrador externo, e Contatos → Duplicatas já faz isso autenticada.
 
-Placar: 51 functions portadas + 6 descartadas · 22 na especificação."
+Placar: 26 functions portadas + 6 descartadas · 22 na especificação."
 ```
 
 ---
@@ -1556,4 +1611,7 @@ nas duas tabelas mais importantes do sistema. Ela entra primeiro de propósito:
 se o gatilho quebrar algo, quebra com a suíte inteira rodando atrás (Task 1,
 passo 7) e antes de qualquer trabalho de Meta estar em cima. O ponto mais sutil
 — a ordem entre o gatilho da `FK` e o nosso — está coberto por
-`test_apagar_o_canonico_elege_o_que_sobrou` e o `WHERE` aceita as duas ordens.
+`test_apagar_o_canonico_elege_o_que_sobrou`, e o `WHERE` aceita as duas ordens.
+O braço que limpa a identidade de origem num repontamento entrou no scan de
+pré-voo, não no rascunho: `test_repontar_limpa_o_canonico_da_identidade_de_origem`
+é dele.
