@@ -69,3 +69,18 @@ def esquecer(nome: str) -> None:
     """Descarta o cache de um segredo. Chamado depois de gravar um valor novo,
     para a rotação valer na hora em vez de esperar o TTL."""
     _cache.pop(nome, None)
+
+
+async def apagar_segredo(nome: str) -> bool:
+    """Remove o segredo e invalida o cache. Devolve se havia algo para remover.
+
+    ⚠️ Apagar do banco NÃO garante que o segredo sumiu: `ler_segredo` cai para
+    `os.environ` em seguida. É o comportamento certo — a instalação que ainda
+    usa ambiente continua funcionando — mas quem chama precisa saber, para não
+    dizer ao usuário que removeu quando o valor do ambiente segue valendo.
+    """
+    async with sessao(role="service_role") as conn:
+        resultado = await conn.execute(
+            "DELETE FROM public.integration_secrets WHERE name = $1", nome)
+    esquecer(nome)
+    return resultado != "DELETE 0"

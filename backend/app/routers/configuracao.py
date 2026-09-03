@@ -1,6 +1,9 @@
 """Configuração do sistema. Tira do navegador o acesso direto a scoring_config
 e a tags — dois dos 68 pontos que a spec mandou fechar."""
 
+import re
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -359,3 +362,121 @@ async def gravar_config_resend(dados: ResendIn, _: Usuario = Depends(admin_atual
             await gravar_segredo(nome, valor.strip())
             gravados.append(campo)
     return {"gravados": gravados}
+
+
+# ── Configuração do Meta ─────────────────────────────────────────────────────
+# Mesmo desenho do Resend: os segredos moram em `integration_secrets`, e a
+# leitura NUNCA devolve o valor.
+#
+# ⚠️ A tabela `meta_config` do dump não é usada. Ela tem 0 linhas e ter dois
+# lugares de segredo é o defeito que o app/integracoes.py existe para acabar.
+
+class MetaIn(BaseModel):
+    # Opcionais, como no Resend: campo ausente ou vazio é "não mexi", nunca
+    # "apague". Para apagar existe `limpar`.
+    pixel_id: str | None = None
+    access_token: str | None = None
+    test_event_code: str | None = None
+    limpar: list[str] = []
+
+
+SEGREDOS_META = {
+    "pixel_id": "META_PIXEL_ID",
+    "access_token": "META_ACCESS_TOKEN",
+    "test_event_code": "META_TEST_EVENT_CODE",
+}
+
+
+@router.get("/config/meta")
+async def ler_config_meta(_: Usuario = Depends(admin_atual)):
+    """O que está configurado.
+
+    ⚠️ `access_token` NUNCA volta inteiro — é ele que autoriza postar conversão
+    no pixel da HS. `pixel_id` e `test_event_code` voltam: o pixel id aparece no
+    HTML de qualquer página que carrega o Pixel, e o código de teste só vale no
+    Events Manager. Esconder os dois só atrapalharia quem confere.
+    """
+    from app.dominio import meta_capi
+
+    creds = await meta_capi.credenciais()
+    token = creds.access_token or ""
+    return {
+        "pixel_id": creds.pixel_id,
+        "access_token": {"configurado": bool(token),
+                         "ultimos4": token[-4:] if len(token) >= 4 else None},
+        "test_event_code": creds.test_event_code,
+        "configurado": creds.configurado,
+    }
+
+
+@router.put("/config/meta")
+async def gravar_config_meta(dados: MetaIn, _: Usuario = Depends(admin_atual)):
+    """Grava só o que veio preenchido; apaga só o que veio em `limpar`."""
+    from app.integracoes import apagar_segredo, gravar_segredo
+
+    if dados.pixel_id and dados.pixel_id.strip():
+        if not re.fullmatch(r"\d{6,25}", dados.pixel_id.strip()):
+            # O pixel id é numérico. Colar a URL do Events Manager inteira, ou o
+            # nome do dataset, faz todo evento ser recusado por 404 no Graph —
+            # e a mensagem do Meta não diz que o problema é o id.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "O Pixel ID é só números (6 a 25 dígitos), como aparece em "
+                "Events Manager → Fontes de dados.")
+
+    desconhecidos = [c for c in dados.limpar if c not in SEGREDOS_META]
+    if desconhecidos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Campos desconhecidos: {', '.join(desconhecidos)}")
+
+    gravados, limpados = [], []
+    for campo, nome in SEGREDOS_META.items():
+        if campo in dados.limpar:
+            await apagar_segredo(nome)
+            limpados.append(campo)
+            continue
+        valor = getattr(dados, campo)
+        if valor and valor.strip():
+            await gravar_segredo(nome, valor.strip())
+            gravados.append(campo)
+    return {"gravados": gravados, "limpados": limpados}
+
+
+@router.post("/config/meta/testar")
+async def testar_config_meta(_: Usuario = Depends(admin_atual)):
+    """Manda um evento de teste ao Events Manager.
+
+    ⚠️ EXIGE `test_event_code`. Sem ele o evento entraria na conta de verdade e
+    contaria como conversão — um lead que não existe, na base de otimização de
+    campanha. Recusar é o certo.
+    """
+    from app.dominio import meta_capi
+
+    creds = await meta_capi.credenciais()
+    if not creds.configurado:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Preencha o Pixel ID e o access token antes de testar.")
+    if not creds.test_event_code:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Preencha o test event code. Sem ele o evento de teste entraria na "
+            "conta de verdade e contaria como conversão.")
+
+    evento = meta_capi.montar_evento(
+        "Lead",
+        email="teste-marketinghs@exemplo.invalid",
+        custom_data={"origem": "teste de configuração do MarketingHS"})
+    try:
+        resposta = await meta_capi.enviar([evento], creds=creds)
+    except httpx.HTTPStatusError as e:
+        # A mensagem do Meta é específica e útil (token expirado, pixel
+        # inexistente, permissão faltando). Repassá-la poupa uma ida ao log.
+        detalhe = e.response.text[:500]
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"O Meta recusou o evento ({e.response.status_code}): {detalhe}")
+    except httpx.HTTPError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"Não foi possível falar com o Meta: {e}")
+    return {"enviado": True, "resposta": resposta}
