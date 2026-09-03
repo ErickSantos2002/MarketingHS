@@ -5,7 +5,22 @@ e o schema tem de bater exatamente com o que o frontend já lê, senão a tela
 quebra em silêncio.
 """
 
+from app.dependencies import admin_atual
 from app.routers import ia
+
+
+def test_todas_as_rotas_de_ia_exigem_admin():
+    """`leads` só é legível por admin sob RLS (migration de origem). Com
+    `usuario_atual` um não-admin não levaria 403 — levaria ZERO linhas, e o
+    modelo afirmaria o zero como fato. Varre `ia.router.routes` em vez de
+    listar rota por rota: uma rota nova que nasça com `usuario_atual` quebra
+    este teste em vez de passar despercebida."""
+    rotas = list(ia.router.routes)
+    assert rotas, "o router de IA não tem rota nenhuma — o teste não provaria nada"
+    for rota in rotas:
+        dependencias = [d.call for d in rota.dependant.dependencies]
+        assert admin_atual in dependencias, (
+            f"{rota.methods} {rota.path} não depende de admin_atual")
 
 
 def test_o_schema_de_leads_bate_com_o_que_a_tela_le():

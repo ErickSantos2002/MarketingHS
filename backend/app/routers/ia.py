@@ -1,11 +1,27 @@
 """As rotas de IA. Substituem `ai-data-analyst`, `analyze-leads` e
 `analyze-challenges`.
 
-⚠️ Todas exigem `usuario_atual` — e as ferramentas rodam pela MESMA `sessao()`
-do request, com o papel de quem perguntou (`role="authenticated"`,
-`user_id=usuario.id`). Nunca `service_role`: `service_role` tem BYPASSRLS e é
-só para operação interna (bootstrap, job agendado) — o analista lê dado a
-pedido de uma pessoa, e isso é request de usuário.
+⚠️ Todas exigem `admin_atual`, não `usuario_atual` — as NOVE rotas, inclusive
+as cinco de conversa. Toda operação com sentido aqui lê `leads` pelas
+ferramentas do analista (`app/ia/ferramentas.py`), e a política de RLS de
+`leads` só permite SELECT para quem tem o papel `admin`
+(`has_role(auth.uid(), 'admin')`, migration de origem). Com `usuario_atual`,
+um não-admin não levaria 403: a query voltaria ZERO linhas por causa do RLS, e
+o modelo afirmaria o zero como fato — "você tem 0 contatos" — em vez de
+recusar. É o erro silencioso que este lote inteiro existe para matar, um nível
+acima. As functions de origem (`analyze-leads/index.ts:28`,
+`analyze-challenges/index.ts:23`) já chamavam `requireAdmin`; `admin_atual`
+aqui não é aperto novo, é preservar o que já existia — não afrouxe de volta.
+
+Deixar o CRUD de conversa (`/conversas*`) em `usuario_atual` também seria
+furo: um não-admin criaria e leria conversas que nunca teriam resposta útil,
+pelo mesmo motivo. Uma decisão só, aplicada às nove rotas por igual.
+
+As ferramentas rodam pela MESMA `sessao()` do request, com o papel de quem
+perguntou (`role="authenticated"`, `user_id=usuario.id`) — o RLS continua
+como segunda linha, não a primeira. Nunca `service_role`: `service_role` tem
+BYPASSRLS e é só para operação interna (bootstrap, job agendado) — o analista
+lê dado a pedido de uma pessoa, e isso é request de usuário.
 """
 
 import json
@@ -14,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 from app.ia import analista
 from app.ia.cliente import IANaoConfigurada, exigir_cliente
 
@@ -26,7 +42,7 @@ class MensagemIn(BaseModel):
 
 
 @router.get("/conversas")
-async def listar_conversas(usuario: Usuario = Depends(usuario_atual)):
+async def listar_conversas(usuario: Usuario = Depends(admin_atual)):
     """As conversas de QUEM PERGUNTA, não as de todo mundo."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -39,7 +55,7 @@ async def listar_conversas(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.post("/conversas", status_code=status.HTTP_201_CREATED)
-async def criar_conversa(usuario: Usuario = Depends(usuario_atual)):
+async def criar_conversa(usuario: Usuario = Depends(admin_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             """INSERT INTO ai_chat_conversations (user_id)
@@ -49,7 +65,7 @@ async def criar_conversa(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/conversas/{conversa_id}")
-async def ler_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def ler_conversa(conversa_id: str, usuario: Usuario = Depends(admin_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         dona = await conn.fetchval(
             "SELECT user_id::text FROM ai_chat_conversations WHERE id = $1::uuid",
@@ -69,7 +85,7 @@ async def ler_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_atua
 
 
 @router.delete("/conversas/{conversa_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def apagar_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def apagar_conversa(conversa_id: str, usuario: Usuario = Depends(admin_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         apagadas = await conn.execute(
             "DELETE FROM ai_chat_conversations WHERE id = $1::uuid AND user_id = $2::uuid",
@@ -80,7 +96,7 @@ async def apagar_conversa(conversa_id: str, usuario: Usuario = Depends(usuario_a
 
 @router.post("/conversas/{conversa_id}/mensagens")
 async def enviar_mensagem(conversa_id: str, dados: MensagemIn,
-                          usuario: Usuario = Depends(usuario_atual)):
+                          usuario: Usuario = Depends(admin_atual)):
     """Grava a pergunta, responde com ferramentas, grava a resposta."""
     try:
         cliente = await exigir_cliente()
@@ -260,7 +276,7 @@ async def _analisar(sistema: str, pergunta: str, esquema: dict) -> dict:
 
 
 @router.post("/analisar-leads")
-async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
+async def analisar_leads(usuario: Usuario = Depends(admin_atual)):
     """Substitui `analyze-leads`.
 
     ⚠️ Diferente do original, a tela NÃO manda os leads no corpo. O servidor
@@ -301,7 +317,7 @@ async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.post("/analisar-desafios")
-async def analisar_desafios(usuario: Usuario = Depends(usuario_atual)):
+async def analisar_desafios(usuario: Usuario = Depends(admin_atual)):
     """Substitui `analyze-challenges`."""
     from app.ia import ferramentas
 
@@ -323,7 +339,7 @@ async def analisar_desafios(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/insights-de-desafios")
-async def listar_insights(usuario: Usuario = Depends(usuario_atual)):
+async def listar_insights(usuario: Usuario = Depends(admin_atual)):
     """O histórico gravado, que a tela mostra sem precisar reanalisar."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -341,7 +357,7 @@ class InsightIn(BaseModel):
 
 @router.post("/insights-de-desafios", status_code=status.HTTP_201_CREATED)
 async def gravar_insight(dados: InsightIn,
-                         usuario: Usuario = Depends(usuario_atual)):
+                         usuario: Usuario = Depends(admin_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             """INSERT INTO challenge_insights (insights, leads_analyzed, created_by)
