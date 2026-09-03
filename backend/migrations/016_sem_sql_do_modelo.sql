@@ -1,0 +1,32 @@
+-- 016: o modelo não escreve mais SQL.
+--
+-- `execute_readonly_query(text)` era o motor do analista de IA de origem: o
+-- modelo escrevia a query e esta função executava. Conferido no banco em
+-- 03/09/2026: SECURITY DEFINER, dono `administrador`, `rolsuper = true`. Ou
+-- seja, o SQL do modelo rodava como SUPERUSUÁRIO — e superusuário ignora RLS
+-- por definição, então as 65 políticas herdadas não valiam nada ali dentro.
+--
+-- A defesa era uma LISTA NEGRA: começar com select/with, e não conter
+-- insert|update|delete|drop|alter|create|truncate|grant|revoke.
+--
+-- O que a lista negra não bloqueia:
+--
+--     SELECT value FROM integration_secrets
+--
+-- Começa com `select`, não tem palavra proibida. Essa tabela guarda, em texto
+-- puro, o UNSUBSCRIBE_SECRET (a chave do HMAC dos links de descadastro) e o
+-- RESEND_WEBHOOK_SECRET. Vazar o primeiro é poder forjar descadastro de
+-- qualquer contato; o segundo, forjar evento de entrega e abertura. Quando o
+-- Resend e o Meta forem configurados pela tela, RESEND_API_KEY e
+-- META_ACCESS_TOKEN entram na mesma tabela. Também alcançava auth.users, onde
+-- moram os hashes de senha, e api_keys.
+--
+-- ⚠️ Não estava explorável no MarketingHS: a tela morre no toco do Supabase
+-- antes de chegar aqui, e nenhum código portado chamava a RPC. Mas a função
+-- estava viva no banco — uma primitiva de leitura irrestrita como superusuário
+-- esperando um chamador.
+--
+-- O substituto NÃO é uma lista negra melhor. É o modelo não escrever SQL:
+-- app/ia/ferramentas.py expõe seis ferramentas nomeadas, com allowlist de
+-- campos, executadas pela sessao() com o papel de quem perguntou.
+DROP FUNCTION IF EXISTS public.execute_readonly_query(text);
