@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     META_ACCESS_TOKEN: str = ""
     META_TEST_EVENT_CODE: str = ""
 
+    # IA (API da Claude). Como as do Resend e do Meta: o valor de verdade mora
+    # em `integration_secrets` e é gravado pela tela; declarar aqui é o que
+    # impede o pydantic-settings de derrubar o boot se a chave estiver no .env.
+    ANTHROPIC_API_KEY: str = ""
+
     # O motor de fila. Visibilidade é por quanto tempo uma mensagem reivindicada
     # fica escondida dos outros workers; se o envio demorar mais que isso, outro
     # worker a pega — e o índice único de campaign_sends é o que impede o e-mail

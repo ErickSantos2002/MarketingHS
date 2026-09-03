@@ -480,3 +480,57 @@ async def testar_config_meta(_: Usuario = Depends(admin_atual)):
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             f"Não foi possível falar com o Meta: {e}")
     return {"enviado": True, "resposta": resposta}
+
+
+# ── Configuração da IA ───────────────────────────────────────────────────────
+# Mesmo desenho do Resend e do Meta: o segredo mora em `integration_secrets` e
+# a leitura NUNCA devolve o valor.
+
+class IAIn(BaseModel):
+    api_key: str | None = None
+    limpar: bool = False
+
+
+@router.get("/config/ia")
+async def ler_config_ia(_: Usuario = Depends(admin_atual)):
+    """O que está configurado. Nunca a chave.
+
+    O modelo volta porque não é segredo e é o que a pessoa precisa conferir para
+    saber o que vai ser cobrado.
+    """
+    from app.ia import cliente as ia_cliente
+    from app.integracoes import ler_segredo
+
+    chave = await ler_segredo(ia_cliente.SEGREDO_CHAVE) or ""
+    return {
+        "anthropic_api_key": {"configurado": bool(chave),
+                              "ultimos4": chave[-4:] if len(chave) >= 4 else None},
+        "modelo": ia_cliente.MODELO,
+    }
+
+
+@router.put("/config/ia")
+async def gravar_config_ia(dados: IAIn, _: Usuario = Depends(admin_atual)):
+    """Grava só o que veio preenchido; apaga só se `limpar` vier verdadeiro."""
+    from app.ia import cliente as ia_cliente
+    from app.integracoes import apagar_segredo, gravar_segredo
+
+    if dados.limpar:
+        await apagar_segredo(ia_cliente.SEGREDO_CHAVE)
+        return {"gravado": False, "limpado": True}
+
+    if not dados.api_key or not dados.api_key.strip():
+        # String vazia é "não mexi", não "apague" — mesma regra do Resend.
+        return {"gravado": False, "limpado": False}
+
+    valor = dados.api_key.strip()
+    if not valor.startswith("sk-ant-"):
+        # A chave da Anthropic começa com sk-ant-. Colar a do Resend ou o token
+        # do Meta aqui faria toda chamada dar 401, e a mensagem da Anthropic não
+        # diz que o problema é a chave ser de outro serviço.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            'A chave da Anthropic começa com "sk-ant-". Confira se você não '
+            "colou a chave de outro serviço.")
+    await gravar_segredo(ia_cliente.SEGREDO_CHAVE, valor)
+    return {"gravado": True, "limpado": False}
