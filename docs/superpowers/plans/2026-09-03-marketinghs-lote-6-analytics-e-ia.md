@@ -1503,6 +1503,8 @@ do request, com o papel de quem perguntou. Nunca `service_role`: o analista lê
 dado a pedido de uma pessoa, e isso é request de usuário.
 """
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -1866,8 +1868,6 @@ genéricas.\
 
 
 async def _analisar(sistema: str, pergunta: str, esquema: dict) -> dict:
-    import json
-
     try:
         cliente = await exigir_cliente()
     except IANaoConfigurada as e:
@@ -1913,7 +1913,6 @@ async def analisar_leads(usuario: Usuario = Depends(usuario_atual)):
             "amostra_de_desafios": (await ferramentas.desafios_frequentes(conn))["desafios"],
         }
 
-    import json
     pergunta = (
         "Analise o perfil abaixo da base de contatos e devolva as conclusões.\n\n"
         + json.dumps(perfil, ensure_ascii=False, default=str))
@@ -1967,8 +1966,7 @@ async def gravar_insight(dados: InsightIn,
             """INSERT INTO challenge_insights (insights, leads_analyzed, created_by)
                VALUES ($1::jsonb, $2, $3::uuid)
                RETURNING id::text, insights, leads_analyzed, created_at""",
-            __import__("json").dumps(dados.insights), dados.leads_analyzed,
-            usuario.id)
+            json.dumps(dados.insights), dados.leads_analyzed, usuario.id)
     return dict(linha)
 ```
 
@@ -2433,7 +2431,7 @@ caem de 27 para **8** (sobram os do `usePages` e do `leadConversion.ts`, que sã
 do lote 7).
 
 ⚠️ **Os dois números nunca se somam.** A pasta veio com 55 entradas — 54
-functions mais o `_shared`. 18 restantes significam **30 portadas + 7
+functions mais o `_shared`. 18 restantes significam **29 portadas + 7
 descartadas**.
 
 - [ ] **Passo 5: Abrir a tela de Documentação no navegador**
@@ -2480,7 +2478,7 @@ analytics-api descartada (nenhum chamador, como Nexus e Pingback); as três de I
 portadas. O passo 2 do portão pegou de novo a documentação ensinando URL morta —
 sétima vez.
 
-Placar: 30 portadas + 7 descartadas · 18 na especificação."
+Placar: 29 portadas + 7 descartadas · 18 na especificação."
 ```
 
 ---
