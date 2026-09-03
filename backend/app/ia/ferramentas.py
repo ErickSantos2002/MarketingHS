@@ -429,8 +429,14 @@ ESQUEMAS: list[dict] = [
             "type": "object",
             "properties": {
                 "filtros": _FILTROS_SCHEMA,
-                "limite": {"type": "integer", "minimum": 1,
-                           "maximum": LIMITE_MAXIMO},
+                # ⚠️ Sem `minimum`/`maximum`: constraint numérica pode não ser
+                # suportada em schema `strict: true`, e não há como conferir
+                # sem chave da Anthropic — se não for suportada, a primeira
+                # chamada de verdade volta 400. O teto continua na
+                # `description` (o modelo continua sabendo) e a defesa real é
+                # a validação de servidor em `listar_contatos`, já coberta por
+                # teste.
+                "limite": {"type": "integer"},
             },
             "required": [],
             "additionalProperties": False,
@@ -465,8 +471,9 @@ ESQUEMAS: list[dict] = [
             "type": "object",
             "properties": {
                 "filtros": _FILTROS_SCHEMA,
-                "limite": {"type": "integer", "minimum": 1,
-                           "maximum": LIMITE_MAXIMO},
+                # ⚠️ Ver o comentário em `listar_contatos` acima — mesmo
+                # motivo, mesma ausência proposital de `minimum`/`maximum`.
+                "limite": {"type": "integer"},
             },
             "required": [],
             "additionalProperties": False,
