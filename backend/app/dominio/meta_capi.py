@@ -168,8 +168,13 @@ async def enviar(eventos: list[dict], *, creds: Credenciais,
         corpo["test_event_code"] = codigo
 
     url = f"https://graph.facebook.com/{VERSAO_API}/{creds.pixel_id}/events"
+    # ⚠️ O token vai no CABEÇALHO, nunca em `params`. `app.main` liga o logger
+    # raiz em INFO, e o httpx loga `request.url` — a URL INTEIRA, com query
+    # string — em toda chamada, inclusive quando dá certo. Um `access_token`
+    # em `params` vazaria para o log a cada envio. A Graph API aceita
+    # `Authorization: Bearer`, então não há motivo para arriscar.
     async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
         resposta = await cliente.post(
-            url, params={"access_token": creds.access_token}, json=corpo)
+            url, headers={"Authorization": f"Bearer {creds.access_token}"}, json=corpo)
     resposta.raise_for_status()
     return resposta.json()

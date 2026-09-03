@@ -11,12 +11,14 @@ info:
     url: https://dnia.ai
 
 servers:
-  - url: https://{project_id}.supabase.co/functions/v1
-    description: Produção
+  - url: https://{host}/api
+    description: >-
+      API do MarketingHS. ⚠️ O host de produção ainda não foi preenchido —
+      ver docs/CONTINUAR-AQUI.md. Em desenvolvimento é http://127.0.0.1:8100.
     variables:
-      project_id:
-        default: '[PROJECT_ID]'
-        description: ID do projeto Supabase
+      host:
+        default: PREENCHER-O-HOST-DE-PRODUCAO
+        description: Host de produção do MarketingHS — ainda não decidido.
 
 security:
   - BearerAuth: []

@@ -7,6 +7,7 @@ conversão. Um teste que só verificasse "respondeu 200" não provaria nada.
 
 import hashlib
 
+import httpx
 import pytest
 
 from app.dominio import meta_capi
@@ -121,3 +122,37 @@ async def test_credenciais_ausentes_nao_levantam():
     conversão jamais pode derrubar a captura de um lead."""
     creds = await meta_capi.credenciais()
     assert isinstance(creds.configurado, bool)
+
+
+@pytest.mark.asyncio
+async def test_access_token_vai_no_header_e_nunca_na_url(monkeypatch):
+    """Fixa a decisão do C1: `app.main` liga o logger raiz em INFO e o httpx
+    loga `request.url` inteira — query string incluída — em toda chamada,
+    inclusive quando dá certo. Um `access_token` em `params` vazaria para o
+    log a cada envio. Nada de rede: o transporte é trocado por um
+    `MockTransport` via monkeypatch em `httpx.AsyncClient`, sem mexer na
+    assinatura de `enviar`."""
+    capturada: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        capturada["url"] = str(request.url)
+        capturada["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={"events_received": 1})
+
+    transporte = httpx.MockTransport(handler)
+
+    class ClienteComTransporteFalso(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = transporte
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", ClienteComTransporteFalso)
+
+    creds = meta_capi.Credenciais(
+        pixel_id="123456", access_token="EAAG_SEGREDO_SECRETO", test_event_code=None)
+    resultado = await meta_capi.enviar([{"event_name": "Lead"}], creds=creds)
+
+    assert "access_token" not in capturada["url"]
+    assert "EAAG_SEGREDO_SECRETO" not in capturada["url"]
+    assert capturada["auth"] == "Bearer EAAG_SEGREDO_SECRETO"
+    assert resultado == {"events_received": 1}

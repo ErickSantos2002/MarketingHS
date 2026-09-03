@@ -105,6 +105,62 @@ ainda ensinava uma URL morta a integradores depois de a tela real já ter
 migrado. Placar da pasta de especificação: **26 functions portadas** e **6
 descartadas** (números que não se somam), restando **22**.
 
+## O que a revisão final do 5C achou
+
+Seis achados. Nenhum vira código agora — todos descrevem comportamento herdado
+que o 5C não piorou.
+
+1. **I1** — A FK nova mudou o contrato de `POST /publico/identidade`. O
+   `IdentidadeIn` (`backend/app/routers/publico.py:34-42`) não valida
+   `source_app`, ao contrário do `EventoIn`, que tem `pattern`. Um integrador
+   que omite `source_app` e manda o `local_id` do sistema dele cai no ramo
+   `marketinghs` da `resolve_or_create_identity`, que grava esse id em
+   `dndash_lead_id` — e agora leva `ForeignKeyViolationError` sem
+   `try/except`, virando 500 com mensagem de Postgres. Antes da 015 isso
+   gravava lixo em silêncio e a visão 360° vinha vazia, então falhar é melhor
+   que o que havia; o que falta é falhar com 400 e mensagem. Conserto natural
+   no lote 7: o mesmo `pattern` do `EventoIn`, mais 400 quando o `local_id`
+   não resolve.
+2. **I3** — A migration 015 promete uma guarda que outro caminho contorna. O
+   comentário do gatilho diz que a guarda `dndash_lead_id IS NULL` impede
+   roubar o canônico; mas a `resolve_or_create_identity` (migration 007), no
+   passo 5, faz `dndash_lead_id = COALESCE(p_local_id, dndash_lead_id)` sem
+   guarda nenhuma. Importar um CSV cuja linha case por telefone ou e-mail com
+   identidade que já tem canônico troca o canônico em silêncio. Não é
+   regressão do 5C — é herdado —, mas as duas implementações discordam sobre
+   quem é dono do canônico.
+3. **M1** — O gatilho não vê a exclusão pela ficha, que é soft delete
+   (`escrita_contatos.py:379` faz `UPDATE leads SET deleted_at`). O gatilho é
+   `UPDATE OF dnia_id` e não dispara, então a identidade segue apontando para
+   contato excluído — e o `COMMENT ON FUNCTION` diz "apontando para um
+   contato **vivo**". Zero casos hoje, conferido. Ampliar para
+   `UPDATE OF dnia_id, deleted_at` resolveria, mas muda o significado de
+   "canônico" e merece decisão própria.
+4. **M2** — `apagar_segredo` documenta uma obrigação que seu único chamador
+   ignora. O docstring avisa que apagar do banco não garante que o segredo
+   sumiu (o `ler_segredo` cai para `os.environ`) e que quem chama precisa
+   saber, "para não dizer ao usuário que removeu". O `gravar_config_meta`
+   descarta o booleano e devolve `limpados` incondicionalmente; o card mostra
+   "Valor removido". Com `META_ACCESS_TOKEN` no ambiente, a pessoa vê o card
+   continuar "configurado" sem explicação.
+5. **M4** — Sobrou um buraco na carga do DataCore que o gatilho não fecha. O
+   passo 2 termina em `ON CONFLICT (email) DO NOTHING`: quando o e-mail
+   colide, nenhuma linha é inserida, o gatilho não dispara, e aquela
+   identidade fica sem canônico para sempre — e o backfill da 015 também não
+   a alcança, porque o lead que existe está sob outra identidade. Zero casos
+   hoje.
+6. **M5** — A 015 inverteu a ordem de aquisição de lock dentro de
+   `merge_identities` (antes K depois D; agora D depois K, adquirido dentro
+   do gatilho). Não é classe nova de deadlock —
+   `merge_identities(A,B)` concorrente com `(B,A)` já era simétrico —, mas
+   agora o lock é invisível para quem lê o corpo da função.
+
+⚠️ **Uma dependência de ordem que hoje só existe por sorte.** Na sincronização
+do DataCore, o passo 1 insere as identidades e o passo 2 insere os leads. É
+essa ordem que faz o gatilho funcionar — quando ele roda, a identidade já
+existe. Se alguém inverter os dois passos, o gatilho não acha linha nenhuma e
+o defeito dos 2.080 volta, calado.
+
 ## Migrations aplicadas
 
 | | |
@@ -135,16 +191,31 @@ descartadas** (números que não se somam), restando **22**.
    é o `CLAUDE.md` do repo que está certo ao dizer o contrário. A `015` deste
    lote foi aplicada direto por `psql` e conferida rodando duas vezes. Decidir:
    conserta o script, ou conserta o cabeçalho.
-9. ⚠️ **`frontend/index.html` ainda chama a dn.ia**, nas linhas ~228-280, em
-   toda página do admin: o tracker do Supabase **da dn.ia**
+9. ⚠️ **`frontend/index.html` ainda manda telemetria do admin interno para
+   terceiros da dn.ia**, nas linhas ~228-280, em toda página do admin: o
+   tracker do Supabase **da dn.ia**
    (`luinwzmegsdjckjxoimx.supabase.co/functions/v1/tracker`, com o `pid` da
-   dn.ia), o tracker do **Lovable** (`lovableproject.com/api/v1/tracker.js`),
-   o **Google Analytics `G-P6GLV8VVNR`** e o **`GTM-59T4XHKS`** no `noscript`.
-   O `CLAUDE.md` do repo abre dizendo "o Lovable e o Supabase saíram" — saíram
-   do código, não daqui, e isso também desmente ao pé da letra a frase do
-   portão de que nenhuma tela fala com o Supabase: o `index.html` fala, antes
-   de qualquer tela carregar. Nenhuma tarefa do lote 5C tem escopo sobre esse
-   arquivo — arrancar analytics é decisão do Erick, não foi consertado aqui.
+   dn.ia) e o tracker do **Lovable** (`lovableproject.com/api/v1/tracker.js`).
+   Não são analytics — o `CLAUDE.md` do repo abre dizendo "o Lovable e o
+   Supabase saíram" — saíram do código, não daqui, e isso também desmente ao
+   pé da letra a frase do portão de que nenhuma tela fala com o Supabase: o
+   `index.html` fala, antes de qualquer tela carregar. Estes dois saem sem
+   discussão — não é decisão de marketing, é parar de mandar telemetria da
+   casa para um terceiro. Nenhuma tarefa do lote 5C tem escopo sobre esse
+   arquivo.
+10. **Decidir sobre o Google Analytics (`G-P6GLV8VVNR`) e o GTM
+    (`GTM-59T4XHKS`)**, no mesmo `frontend/index.html`. Ao contrário do item
+    9, isto É decisão de negócio — alguém na casa pode ler aqueles
+    relatórios. Empacotar os quatro rastreadores como um item só (como a
+    versão anterior deste documento fazia) prende essa decisão de marketing a
+    dois trackers que não têm nada a ver com ela.
+11. **Preencher o host de produção do `frontend/public/api/dnmarketing-api.yaml`**
+    — o bloco `servers:` hoje é um placeholder explícito
+    (`PREENCHER-O-HOST-DE-PRODUCAO`) porque ninguém aqui sabia o host real.
+    Até ele ser preenchido, o arquivo público que ensina a API a
+    integradores externos aponta para um valor que não resolve — o que é
+    melhor que ensinar o host morto do Supabase da dn.ia, mas ainda não é a
+    resposta certa.
 
 ## Como subir o que existe
 
