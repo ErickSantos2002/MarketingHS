@@ -34,3 +34,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 .vite/
+
+# Saída efêmera do Playwright MCP (logs e snapshots das conferências de tela).
+.playwright-mcp/
