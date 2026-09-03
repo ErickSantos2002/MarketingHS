@@ -138,3 +138,42 @@ async def test_rodar_duas_vezes_sem_email_tambem_nao_duplica(conexao):
              JOIN ecosystem_identities i ON i.dnia_id = l.dnia_id
             WHERE i.datacore_cliente_id = '50000000000001'""")
     assert n == 1, f"a segunda carga duplicou o lead ({n} linhas)"
+
+
+@pytest.mark.asyncio
+async def test_identidade_aponta_de_volta_para_o_contato(conexao):
+    """A asserção que faltava em 02/09/2026.
+
+    A sincronização insere a identidade e depois o lead com o `dnia_id`, e nunca
+    volta para carimbar o `dndash_lead_id`. Ela continua não carimbando — quem
+    carimba é o gatilho da migration 015. O que este teste prova é o RESULTADO,
+    não o mecanismo: quem sincroniza não precisa lembrar de nada.
+
+    Sem isto, `/publico/identidade` e `/publico/contato` (publico.py:94 e :361)
+    devolvem a visão 360° vazia — foi o que aconteceu com os 2.080 clientes do
+    ERP.
+    """
+    c = _cliente(cpf_cnpj="55444333000122", email="volta-5c@exemplo.invalid")
+    r = await sincronizar(conexao, [c])
+    assert r.criados == 1, r.erros
+
+    linha = await conexao.fetchrow(
+        """SELECT l.id AS lead_id, i.dndash_lead_id
+             FROM ecosystem_identities i
+             JOIN leads l ON l.dnia_id = i.dnia_id
+            WHERE i.datacore_cliente_id = $1""", c.cpf_cnpj)
+    assert linha["dndash_lead_id"] == linha["lead_id"]
+
+
+@pytest.mark.asyncio
+async def test_cliente_sem_email_tambem_aponta_de_volta(conexao):
+    """~91% da base do ERP não tem e-mail. Se o elo dependesse do e-mail, o
+    conserto valeria para 185 dos 2.080 — e ninguém perceberia a diferença."""
+    c = _cliente(cpf_cnpj="55444333000133", email=None)
+    r = await sincronizar(conexao, [c])
+    assert r.criados == 1, r.erros
+
+    canonico = await conexao.fetchval(
+        """SELECT i.dndash_lead_id FROM ecosystem_identities i
+            WHERE i.datacore_cliente_id = $1""", c.cpf_cnpj)
+    assert canonico is not None
