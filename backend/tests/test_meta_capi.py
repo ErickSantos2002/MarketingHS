@@ -34,13 +34,34 @@ def test_telefone_que_ja_tem_codigo_do_pais_nao_ganha_outro():
     assert evento["user_data"]["ph"] == [_sha("5581999998888")]
 
 
+def test_celular_de_ddd_55_ganha_o_ddi_mesmo_comecando_por_55():
+    """⚠️ O DDD 55 é o Rio Grande do Sul. Uma implementação que decidisse por
+    `startswith('55')` em vez de contar dígitos passaria em todos os outros
+    testes e quebraria só aqui — o número ficaria com 11 dígitos em vez de 13 e
+    a conversão não seria atribuída."""
+    evento = meta_capi.montar_evento("Lead", phone="55 99123-4567")
+    assert evento["user_data"]["ph"] == [_sha("5555991234567")]
+
+
 def test_campo_ausente_nao_vira_hash_de_string_vazia():
     """Mandar sha256('') é pior que não mandar: o Meta trata como identificador
     e ele bate com todo mundo que também mandou vazio."""
     evento = meta_capi.montar_evento("Lead", email="a@b.com")
     assert "ph" not in evento["user_data"]
     assert "fn" not in evento["user_data"]
+    assert "ln" not in evento["user_data"]
     assert "external_id" not in evento["user_data"]
+
+
+def test_nome_vai_como_escalar_e_nao_como_lista():
+    """⚠️ `em`, `ph` e `external_id` o Meta espera como LISTA; `fn` e `ln`, como
+    escalar. Mandar `fn` dentro de lista não dá erro — o Meta aceita o evento e
+    descarta o campo na atribuição. É o erro calado que este módulo existe para
+    não cometer."""
+    evento = meta_capi.montar_evento("Lead", first_name="Erick", last_name="Santos")
+    assert evento["user_data"]["fn"] == _sha("erick")
+    assert evento["user_data"]["ln"] == _sha("santos")
+    assert not isinstance(evento["user_data"]["fn"], list)
 
 
 def test_fbc_e_fbp_vao_crus():

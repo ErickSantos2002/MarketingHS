@@ -73,6 +73,13 @@ def _telefone(bruto: str) -> str:
     ⚠️ 10 ou 11 dígitos é número brasileiro sem código de país (fixo e celular).
     Já com 12 ou 13 o código está lá e acrescentar outro produziria um número
     que não existe — e o Meta não reclama, só não atribui.
+
+    ⚠️ LIMITE HERDADO: a regra é por comprimento, não por validade. Um número
+    estrangeiro de 10 ou 11 dígitos (um `2125550199` dos EUA, por exemplo) leva
+    um `55` na frente por engano e o hash sai errado — calado, como sempre. Não
+    dá para distinguir: um fixo americano de 10 dígitos e um fixo brasileiro de
+    10 dígitos são a mesma string. Vem do original (send-to-meta-capi). Se o
+    lote 7 passar a captar lead de fora do Brasil, é aqui que se mexe.
     """
     digitos = re.sub(r"\D", "", bruto)
     if len(digitos) in (10, 11):
