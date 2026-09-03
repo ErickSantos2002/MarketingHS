@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Trash2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Loader2, Save, Trash2, Send } from 'lucide-react';
+import { api, ErroApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 type Field = 'pixel_id' | 'access_token' | 'test_event_code';
@@ -34,12 +34,18 @@ const FIELDS: { key: Field; label: string; hint: string; placeholder: string; re
   },
 ];
 
-type ConfigState = Record<string, unknown> & { updated_at?: string };
+type ConfigMeta = {
+  pixel_id: string | null;
+  access_token: { configurado: boolean; ultimos4: string | null };
+  test_event_code: string | null;
+  configurado: boolean;
+};
 
 export default function MetaCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [config, setConfig] = useState<ConfigState | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [config, setConfig] = useState<ConfigMeta | null>(null);
   const [inputs, setInputs] = useState<Record<Field, string>>({
     pixel_id: '',
     access_token: '',
@@ -49,12 +55,13 @@ export default function MetaCard() {
   const loadConfig = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('meta-config', { method: 'GET' });
-      if (error) throw error;
-      setConfig(data as ConfigState);
+      const dados = await api.get<ConfigMeta>('/config/meta');
+      setConfig(dados);
       setInputs({ pixel_id: '', access_token: '', test_event_code: '' });
-    } catch (e: any) {
-      toast.error('Falha ao carregar configuração do Meta', { description: e?.message });
+    } catch (e) {
+      toast.error('Falha ao carregar configuração do Meta', {
+        description: e instanceof ErroApi ? e.message : undefined,
+      });
     } finally {
       setLoading(false);
     }
@@ -65,26 +72,29 @@ export default function MetaCard() {
   }, []);
 
   const requiredFields = FIELDS.filter((f) => f.required);
-  const configuredCount = requiredFields.filter((f) => config?.[`has_${f.key}`]).length;
+  const configuredCount = [
+    Boolean(config?.pixel_id),
+    Boolean(config?.access_token?.configurado),
+  ].filter(Boolean).length;
 
   const handleSave = async () => {
+    const corpo: Record<string, string> = {};
+    for (const f of FIELDS) {
+      if (inputs[f.key].trim().length > 0) corpo[f.key] = inputs[f.key].trim();
+    }
+    if (Object.keys(corpo).length === 0) {
+      toast.info('Nenhuma alteração para salvar');
+      return;
+    }
     setSaving(true);
     try {
-      const body: Record<string, unknown> = {};
-      for (const f of FIELDS) {
-        if (inputs[f.key].trim().length > 0) body[f.key] = inputs[f.key].trim();
-      }
-      if (Object.keys(body).length === 0) {
-        toast.info('Nenhuma alteração para salvar');
-        return;
-      }
-      const { data, error } = await supabase.functions.invoke('meta-config', { method: 'PUT', body });
-      if (error) throw error;
-      setConfig(data as ConfigState);
-      setInputs({ pixel_id: '', access_token: '', test_event_code: '' });
+      await api.put('/config/meta', corpo);
+      await loadConfig();
       toast.success('Credenciais do Meta salvas');
-    } catch (e: any) {
-      toast.error('Falha ao salvar', { description: e?.message });
+    } catch (e) {
+      toast.error('Falha ao salvar', {
+        description: e instanceof ErroApi ? e.message : undefined,
+      });
     } finally {
       setSaving(false);
     }
@@ -93,17 +103,34 @@ export default function MetaCard() {
   const handleClear = async (field: Field) => {
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('meta-config', {
-        method: 'PUT',
-        body: { clear: { [field]: true } },
-      });
-      if (error) throw error;
-      setConfig(data as ConfigState);
+      await api.put('/config/meta', { limpar: [field] });
+      await loadConfig();
       toast.success('Valor removido');
-    } catch (e: any) {
-      toast.error('Falha ao remover', { description: e?.message });
+    } catch (e) {
+      toast.error('Falha ao remover', {
+        description: e instanceof ErroApi ? e.message : undefined,
+      });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      await api.post('/config/meta/testar');
+      toast.success('Evento de teste enviado', {
+        description: 'Confira em Events Manager → Eventos de teste.',
+      });
+    } catch (e) {
+      // ⚠️ A mensagem do backend repassa a do Meta e diz o que fazer (token
+      // expirado, pixel inexistente, falta o test event code). Engoli-la
+      // deixaria a pessoa sem saber por que não funcionou.
+      toast.error('O teste não passou', {
+        description: e instanceof ErroApi ? e.message : 'Erro desconhecido',
+      });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -137,9 +164,9 @@ export default function MetaCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Credenciais usadas pela função <code className="font-mono">send-to-meta-capi</code> para
-          enviar os eventos de conversão server-side. Enquanto um campo estiver vazio, o sistema
-          continua usando o valor configurado no ambiente.
+          Credenciais do Meta Conversions API. O disparo é feito pelo servidor, no
+          caminho de captura do lead — o navegador não fala com o Meta pelo nosso
+          backend. O evento de teste exige o <em>test event code</em> preenchido.
         </p>
 
         {loading ? (
@@ -149,11 +176,16 @@ export default function MetaCard() {
         ) : (
           <div className="space-y-3">
             {FIELDS.map((f) => {
-              const saved = Boolean(config?.[`has_${f.key}`]);
+              const saved =
+                f.key === 'access_token'
+                  ? Boolean(config?.access_token?.configurado)
+                  : Boolean(config?.[f.key as 'pixel_id' | 'test_event_code']);
               const shown =
                 f.key === 'access_token'
-                  ? (config?.access_token_masked as string | null)
-                  : (config?.[f.key] as string | null);
+                  ? config?.access_token?.ultimos4
+                    ? `•••• ${config.access_token.ultimos4}`
+                    : null
+                  : (config?.[f.key as 'pixel_id' | 'test_event_code'] ?? null);
               return (
                 <div key={f.key} className="space-y-1.5">
                   <Label htmlFor={`meta-${f.key}`} className="text-xs">
@@ -201,6 +233,16 @@ export default function MetaCard() {
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {saving ? 'Salvando…' : 'Salvar'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-7 text-xs"
+            onClick={handleTest}
+            disabled={testing || saving || loading}
+          >
+            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {testing ? 'Enviando…' : 'Enviar evento de teste'}
           </Button>
         </div>
       </CardContent>
