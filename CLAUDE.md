@@ -117,7 +117,7 @@ TI, admin reseta a de quem esquecer. Um caminho de acesso a menos.
 
 ## O portão de pronto
 
-Uma tela só está portada quando **as duas** condições valem:
+Uma tela só está portada quando **as quatro** condições valem:
 
 ```bash
 # 1. a tela não fala mais com o Supabase
@@ -128,9 +128,26 @@ grep -rn "<nome-da-function>" frontend/src
 
 # 3. a tela foi aberta e conferida no navegador (Playwright, Vite em 127.0.0.1)
 
+# 4. a tela ainda FAZ O QUE FAZIA — comparar capacidade por capacidade
+git diff <commit antes do porte> -- frontend/src/<a tela>
+
 # só então a function sai da especificação
 git rm -r backend/supabase/functions/<nome>
 ```
+
+⚠️ **O passo 4 nasceu no lote 6, que o violou três vezes num lote só** — e os
+três passariam pelos passos 1, 2 e 3 sem tropeço:
+
+- o botão de **apagar insight** sumiu da aba Desafios porque não havia rota de
+  DELETE e o mapa de rotas do plano só listava GET e POST;
+- o teto de **agendamentos caiu de 20.000 para 500**, porque a rota nova nasceu
+  com `LIMIT` fixo onde o hook antigo paginava;
+- **`dashboard_cards` deixou de ser por usuário** e virou global.
+
+O padrão: **é a própria portagem que introduz o corte silencioso.** Não é
+código herdado ruim — é o substituto nascendo menor que o substituído, e o
+portão como estava não fazia essa pergunta. Os dois primeiros foram desfeitos
+dentro do lote; o terceiro virou pergunta ao Erick.
 
 ⚠️ **O passo 2 não é redundante.** No lote 1A a tela de importação estava
 limpa, mas `apply-lead-tag` continuava sendo chamada pelo caminho de conversão
@@ -149,6 +166,17 @@ n = sum(len(re.findall(r'supabase\s*\.?\s*\n?\s*\.(from|rpc)\(', f.read_text()))
         for f in pathlib.Path('frontend/src').rglob('*.ts*')
         if 'integrations/supabase' not in str(f))
 print(n, 'pontos de acesso direto')"
+```
+
+⚠️ **E esse script AINDA subconta.** Medido em 04/09/2026: ele não reconhece o
+alias `const db = supabase as any`, que é como `useAbConfig.tsx` e
+`useAbTests.tsx` (telas de Experiments) alcançam o banco — **9 pontos reais**
+fora da conta. Não é regressão nova: estavam invisíveis antes também, o que
+significa que **os placares dos lotes anteriores também estavam otimistas**.
+Ao medir progresso, procure o alias além do nome:
+
+```bash
+grep -rn "supabase as any\|= supabase;" frontend/src --include=*.ts --include=*.tsx
 ```
 
 > **A lição do HS.OS, e que já se repetiu aqui.** Ter o substituto pronto não é

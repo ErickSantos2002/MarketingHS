@@ -1,15 +1,31 @@
 # Continuar aqui
 
 **Atualizado:** 4 de setembro de 2026
-**Branch:** `reconstrucao` — **ainda não pushada**
+**Branch:** `main` — a `reconstrucao` foi mergeada e apagada. **Nada pushado.**
+
+⚠️ **A `reconstrucao` não existe mais.** O lote 6 fechou com merge local em
+`main` (fast-forward, sem commit de merge), suíte conferida no resultado
+mergeado, e a branch removida. Se precisar dela de volta:
+`git branch reconstrucao 6926d4d`.
+
+`main` está **121 commits à frente de `origin/main`** e o remoto continua
+parado em 31/08, no último commit do Lovable — conferido com `fetch` antes do
+merge. O push segue sendo decisão do Erick, com o mesmo alerta de sempre (item
+6 abaixo).
 
 ## Onde paramos
 
 ### ✅ Lote 6 concluído (04/09/2026)
 
-As nove tarefas fecharam. Suíte de backend em **126 testes**, `tsc --noEmit`
-limpo, e o portão (tarefa 9) abriu a tela de Documentação da API no navegador
-sem erro.
+As nove tarefas fecharam, mais uma revisão final do lote inteiro (os 18 commits
+lidos juntos) e uma onda de correção de 12 itens. Suíte de backend em **127
+testes**, `tsc --noEmit` limpo, e o portão (tarefa 9) abriu a tela de
+Documentação da API no navegador sem erro.
+
+**As decisões tomadas durante a execução estão em
+`docs/superpowers/plans/2026-09-04-lote-6-estado-da-execucao.md`** — inclusive
+as seis vezes em que o plano errou e a execução pegou, e as três capacidades
+que a portagem derrubou em silêncio. Vale ler antes do lote 7.
 
 O que entrou:
 
@@ -111,6 +127,37 @@ e o script não reconhece o alias — são **9 pontos de acesso reais** que o
 número 8 não inclui. Não são novos nem deste lote; estavam fora da vista do
 script antes também. Registrado para quem for portar Experiments não se
 surpreender com o número.
+
+---
+
+## 👉 O próximo passo — lote 7 (Páginas)
+
+**Abrir a sessão dentro do repo:** `cl MarketingHS` (ou Meta+C), nunca de fora.
+
+O lote 7 é o das **Páginas** — `usePages.tsx` e `leadConversion.ts` são os
+pontos de acesso direto ao Supabase que sobraram de propósito, e a tela de
+Páginas é uma das duas que ainda não podem receber trabalho de visual.
+
+O que já se sabe antes de começar:
+
+- ⚠️ **O "quanto falta" publicado é otimista.** O script do placar não enxerga
+  `const db = supabase as any` (telas de Experiments) nem chamadas quebradas em
+  várias linhas. São ~9 pontos além dos 8 contados. Medir com busca multilinha
+  E procurar o alias, não confiar no número herdado.
+- ⚠️ **O portão de pronto do `CLAUDE.md` tem um buraco que o lote 6 expôs
+  três vezes:** ele pergunta se a tela ainda fala com o Supabase e se alguém
+  mais chama a function, mas **não pergunta se a tela ainda faz o que fazia**.
+  As três capacidades perdidas no lote 6 (botão de apagar insight, teto de
+  agendamentos de 20.000 → 500, `dashboard_cards` por usuário → global)
+  passariam pelo portão como ele está escrito. No lote 7, comparar a tela
+  contra o commit anterior, capacidade por capacidade.
+- **`PageConfigEditor.tsx`** guarda a configuração do Clarity por página e foi
+  deixado intocado de propósito no lote 6 — é do lote 7.
+- O `ApiDocumentation.tsx` e o `dnmarketing-api.yaml` já ensinaram URL morta
+  **sete vezes**. Conferir os dois antes de apagar qualquer function.
+
+Depois do 7 fica o **5A** (handoff → GrowthHS), que segue bloqueado esperando
+resposta do `hsgrowth-sistema` — ver abaixo.
 
 ---
 
@@ -292,9 +339,13 @@ o defeito dos 2.080 volta, calado.
 3. Preencher `POSTGRES_HOST_INTERNO` em `~/marketinghs.env`
 4. **Passar o contrato do 5A** para o agente do `hsgrowth-sistema`
 5. Decidir sobre `DATACORE_EMAIL_DE_NOTAS` (190 → 327 contatos alcançáveis)
-6. Decidir sobre o **push da branch**: ele é o que rompe o sync com o Lovable.
+6. Decidir sobre o **push do `main`** (era "push da branch", até o merge de
+   04/09): ele é o que rompe o sync com o Lovable. São **121 commits** locais
+   que o remoto não tem.
    ⚠️ Antes de pushar, ver o `SETUP-CLAUDE.md` (não versionado): o `.env` da
-   dn.ia com credenciais do Supabase está no histórico do git.
+   dn.ia com credenciais do Supabase está no histórico do git desde o commit
+   inicial do remix. Pushar publica esse histórico — reescrevê-lo é mais
+   barato antes do primeiro push que depois.
 7. **Decidir se a HS faz anúncio no Meta** — sem isso o CAPI fica configurado e
    desligado, que é um estado válido.
 8. ⚠️ **`scripts/aplicar-migrations.sh` não roda de novo.** Ele reaplica desde
@@ -433,7 +484,10 @@ Vale ler antes do próximo lote, porque o padrão se repete:
 Nenhum desses estava no plano. Todos apareceram porque o portão tem três partes
 e a terceira é abrir no navegador.
 
-## O próximo passo
+### O que era "o próximo passo" quando o lote 3 fechou
+
+⚠️ **Histórico — não é o próximo passo de hoje.** O de hoje está lá em cima,
+e é o lote 7 (Páginas). Os lotes 4 e 5 já fecharam.
 
 **Lote 4 (Jornadas)** ou **lote 5 (Integrações HS)**. O 4 depende do motor, que
 agora existe; o 5 traz os 2.077 clientes do DataCore e ⚠️ **exige trocar a senha
