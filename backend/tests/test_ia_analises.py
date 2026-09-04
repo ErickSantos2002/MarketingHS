@@ -5,7 +5,13 @@ e o schema tem de bater exatamente com o que o frontend já lê, senão a tela
 quebra em silêncio.
 """
 
-from app.dependencies import admin_atual
+import uuid
+
+import pytest
+from fastapi import HTTPException
+
+from app import database as db
+from app.dependencies import Usuario, admin_atual
 from app.routers import ia
 
 
@@ -65,3 +71,56 @@ def test_os_schemas_sao_fechados():
 
     conferir(ia.ESQUEMA_LEADS)
     conferir(ia.ESQUEMA_DESAFIOS)
+
+
+async def _algum_admin() -> str | None:
+    """Um `user_id` real com o papel `admin` em `user_roles` — a política de
+    origem ("Admins can delete challenge insights") checa `has_role`, não
+    aceita qualquer uuid. Sem isso o DELETE bateria em RLS e o teste
+    confundiria "sem permissão" com "a rota está errada"."""
+    await db.init_db()
+    if db._pool is None:
+        return None
+    async with db.sessao(role="service_role") as conn:
+        return await conn.fetchval(
+            "SELECT user_id::text FROM user_roles WHERE role = 'admin' LIMIT 1")
+
+
+@pytest.mark.asyncio
+async def test_apagar_insight_remove_a_linha():
+    """DELETE de verdade: insere comitado (por fora da rota, com
+    service_role), chama a rota e confere que a linha sumiu."""
+    admin_id = await _algum_admin()
+    if admin_id is None:
+        pytest.skip("sem DATABASE_URL, ou nenhum admin em user_roles")
+
+    async with db.sessao(role="service_role") as conn:
+        insight_id = await conn.fetchval(
+            """INSERT INTO challenge_insights (insights, leads_analyzed)
+               VALUES ($1::jsonb, 3) RETURNING id::text""",
+            '{"patterns": ["teste"]}')
+
+    usuario = Usuario(id=admin_id, email="teste@exemplo.invalid", papel="admin")
+    await ia.apagar_insight(insight_id, usuario)
+
+    async with db.sessao(role="service_role") as conn:
+        restante = await conn.fetchval(
+            "SELECT id FROM challenge_insights WHERE id = $1::uuid", insight_id)
+    assert restante is None
+    await db.close_db()
+
+
+@pytest.mark.asyncio
+async def test_apagar_insight_inexistente_da_404_nao_200():
+    """⚠️ Devolver 200 para um DELETE que não apagou nada é a mesma falha
+    silenciosa — permissão errada e ausência viram a mesma resposta — que o
+    resto deste router existe para não repetir, agora na escrita."""
+    admin_id = await _algum_admin()
+    if admin_id is None:
+        pytest.skip("sem DATABASE_URL, ou nenhum admin em user_roles")
+
+    usuario = Usuario(id=admin_id, email="teste@exemplo.invalid", papel="admin")
+    with pytest.raises(HTTPException) as excinfo:
+        await ia.apagar_insight(str(uuid.uuid4()), usuario)
+    assert excinfo.value.status_code == 404
+    await db.close_db()

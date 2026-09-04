@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Brain, Loader2, AlertCircle, Users, TrendingUp, Lightbulb, Target } from 'lucide-react';
-import { useAIAnalysis, type AIAnalysisResult } from '@/hooks/useAIAnalysis';
+import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 import type { Lead } from '@/hooks/useLeads';
 
 interface AIAnalysisProps {

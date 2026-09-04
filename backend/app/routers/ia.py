@@ -365,3 +365,20 @@ async def gravar_insight(dados: InsightIn,
                RETURNING id::text, insights, leads_analyzed, created_at""",
             json.dumps(dados.insights), dados.leads_analyzed, usuario.id)
     return dict(linha)
+
+
+@router.delete("/insights-de-desafios/{insight_id}",
+               status_code=status.HTTP_204_NO_CONTENT)
+async def apagar_insight(insight_id: str, usuario: Usuario = Depends(admin_atual)):
+    """Sem dono: a política de origem ("Admins can delete challenge insights")
+    é por PAPEL, não por `created_by` — qualquer admin apaga o insight de
+    qualquer admin, igual a tela já deixava antes desta rota existir.
+
+    ⚠️ 404 quando o id não bate com nenhuma linha — não 200. Devolver sucesso
+    para um DELETE que não apagou nada é a mesma falha silenciosa que este
+    router inteiro existe para evitar, só que na direção de escrita."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        apagadas = await conn.execute(
+            "DELETE FROM challenge_insights WHERE id = $1::uuid", insight_id)
+    if apagadas == "DELETE 0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Insight não encontrado.")

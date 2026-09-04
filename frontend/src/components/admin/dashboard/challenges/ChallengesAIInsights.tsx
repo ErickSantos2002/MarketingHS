@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   History,
+  Trash2,
 } from 'lucide-react';
 import { api, ErroApi } from '@/lib/api';
 import { toast } from 'sonner';
@@ -23,6 +24,17 @@ import {
   Collapsible,
   CollapsibleContent,
 } from '@/components/ui/collapsible';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import type { Lead } from '@/hooks/useLeads';
 
 interface ChallengesAIInsightsProps {
@@ -113,6 +125,32 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const deleteInsight = async (id: string) => {
+    try {
+      await api.delete(`/ia/insights-de-desafios/${id}`);
+
+      // If deleted the current one, load the next one or clear
+      if (id === currentInsightId) {
+        const remaining = storedInsights.filter(s => s.id !== id);
+        if (remaining.length > 0) {
+          setInsights(remaining[0].insights);
+          setCurrentInsightId(remaining[0].id);
+        } else {
+          setInsights(null);
+          setCurrentInsightId(null);
+        }
+      }
+
+      await loadStoredInsights();
+      toast.success('Insight excluído com sucesso!');
+    } catch (error) {
+      console.error('Error deleting insight:', error);
+      toast.error('Erro ao excluir insight', {
+        description: error instanceof ErroApi ? error.message : undefined,
+      });
     }
   };
 
@@ -230,6 +268,30 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                         )}
                       </div>
                     </button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir insight?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta ação não pode ser desfeita. O insight será permanentemente excluído.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteInsight(stored.id)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Excluir
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 ))}
               </div>
