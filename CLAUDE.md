@@ -83,6 +83,14 @@ erro**. Medido em 03/09/2026: `count(*) FROM contact_events` dá 0 sob `anon` e
 2.931 sob `authenticated`. Para request de usuário, escreva sempre
 `sessao(role="authenticated", user_id=usuario.id)`.
 
+⚠️ Esta regra é direção, não descrição do código de hoje. Medido em
+04/09/2026: **128** pontos de acesso usam `role="service_role"` contra **16**
+com `role="authenticated"` — a maioria dos 16 é do lote 6 (`/ia`, `/painel`).
+O resto do repositório é anterior à regra e está sendo convertido lote a
+lote; abrir `campanhas.py` (10 ocorrências de `service_role`) ou
+`leitura_contatos.py` (13) e achar `service_role` não é sinal de que a regra
+mudou.
+
 ⚠️ **Permissão, neste banco, falha devolvendo NADA — não devolvendo erro.** É o
 mesmo desfecho para papel de banco errado e para usuário sem direito: zero
 linhas. Num sistema de marketing isso é pior que quebrar, porque painel zerado

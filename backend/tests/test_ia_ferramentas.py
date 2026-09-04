@@ -61,6 +61,26 @@ async def test_dimensao_com_injecao_e_recusada(conexao):
 
 
 @pytest.mark.asyncio
+async def test_valor_de_filtro_com_injecao_e_tratado_como_literal(conexao):
+    """O nome do filtro é allowlist; o VALOR nunca foi testado indo direto
+    para `$n` como parâmetro em vez de string concatenada.
+
+    `{"tipo": "x' OR 1=1 --"}` é o valor, não o nome do campo — se ele fosse
+    interpolado na query em vez de ir como parâmetro do asyncpg, a cláusula
+    `OR 1=1` derrubaria o `WHERE` e `contar_contatos` devolveria a base
+    inteira (ou o SQL quebraria na sintaxe). Parametrizado, é só um texto que
+    não bate com nenhum `tipo` gravado: `total == 0`, sem levantar.
+
+    ⚠️ A fixture `conexao` faz `SET LOCAL ROLE service_role` (BYPASSRLS) —
+    este teste prova que a MONTAGEM DA QUERY parametriza o valor, não que o
+    RLS bloquearia o payload. Não leia isto como prova de RLS.
+    """
+    r = await ferramentas.executar(
+        conexao, "contar_contatos", {"filtros": {"tipo": "x' OR 1=1 --"}})
+    assert r["total"] == 0
+
+
+@pytest.mark.asyncio
 async def test_filtro_fora_da_allowlist_e_recusado(conexao):
     with pytest.raises(ferramentas.ArgumentoRecusado, match="filtro"):
         await ferramentas.executar(

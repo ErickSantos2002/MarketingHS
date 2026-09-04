@@ -76,12 +76,15 @@ configurar a meta de verdade pela tela — ver a lista abaixo. (A terceira
 linha, `...:colunas-contatos`, é preferência de usuário de verdade — não
 mexer.)
 
-**O item 9 da lista de pendências antiga está confirmado ao vivo.** O portão
-do navegador mediu que a única chamada a `supabase.co` na tela do admin é
-`luinwzmegsdjckjxoimx.supabase.co/functions/v1/get-tests`, sem nenhuma
-referência em `frontend/src` — ela vem de `frontend/index.html`. Nenhuma tela
-fala com o Supabase; a casca da página ainda fala, antes de qualquer tela
-carregar.
+**O item 9 da lista de pendências antiga está confirmado ao vivo — com a
+contagem corrigida.** Reproduzido ao vivo em 04/09/2026: são **duas**
+chamadas a `supabase.co` na tela do admin, não uma. `frontend/index.html:268`
+carrega `luinwzmegsdjckjxoimx.supabase.co/functions/v1/tracker`, e é esse
+script que dispara a segunda, `.../functions/v1/get-tests` — a versão
+anterior deste parágrafo só via a segunda e não sabia de onde ela vinha. A
+afirmação de fundo continua verdadeira e é o que sustenta o item 9 da lista
+abaixo: nenhuma tela em `frontend/src` fala com o Supabase — é a casca da
+página, em `index.html`, quem fala, antes de qualquer tela carregar.
 
 **Um corte pequeno e silencioso, registrado para não ser redescoberto:** o
 título das conversas. O código antigo gravava os 50 primeiros caracteres da
@@ -335,6 +338,49 @@ o defeito dos 2.080 volta, calado.
     meta de verdade pela tela. Enquanto ninguém decide, o medidor de meta do
     painel mostra o padrão de 1.000 porque o payload de teste não tem a
     chave `goal`.
+14. ⚠️ **O modelo de permissão de `backend/app/routers/escrita_contatos.py`
+    pede uma resposta de negócio, não de código.** `mudar_status`,
+    `status_em_lote`, `tags_em_lote` e `editar_contato` autorizam por
+    `usuario_atual` — QUALQUER usuário logado, não só admin — mas rodam sob
+    `sessao(role="service_role")`, que tem `BYPASSRLS`; só `fundir_contatos`
+    e `excluir_contato` exigem `admin_atual`. Uma revisão da tarefa 5
+    apontou isso como Crítico; a decisão foi NÃO mexer, porque o corte é um
+    modelo de permissão coerente — mudar status, tag e campo de um contato é
+    trabalho do dia a dia de marketing, fundir e excluir são operação
+    destrutiva de admin — e chamar isso de furo pressupõe uma resposta a uma
+    pergunta de negócio que não é do código responder. Essa decisão
+    permanece. O que fica em aberto para o Erick: **um usuário não-admin
+    deveria poder mudar status, tag ou campo de um contato?** Fato, para a
+    decisão: `service_role` tira a segunda linha de defesa (RLS) desses
+    quatro caminhos, e `leads` não tem política de UPDATE nenhuma —
+    conferido em `001_schema_origem.sql`, só há `Admins can delete leads` e
+    `Admins can read all leads`. Hoje existe exatamente **um** usuário, e é
+    admin — nada está exposto ainda, mas o dia que existir um segundo
+    usuário não-admin (lote 0 já tem a tela de Usuários), a resposta importa.
+15. **`dashboard_cards` virou preferência global; era por usuário.** Antes
+    deste lote a chave era `card_prefs_${user.id}_${tabName}`, uma por
+    pessoa; a portagem colapsou para uma chave só,
+    `dashboard_cards`, compartilhada por todo mundo. O docstring do código
+    (`useDashboardCards` / rota de `/painel`) chama isso de intencional —
+    "escolha de cartões são do painel da empresa, não da pessoa" — mas essa é
+    uma leitura de negócio de quem escreveu o plano, não uma decisão que o
+    Erick tomou. Vale notar que o mecanismo por usuário já existe e não foi
+    usado: `/preferencias/{chave}` (`configuracao.py`) compõe a chave com o
+    id do usuário autenticado — é o que a linha sobrevivente
+    `...:colunas-contatos` prova que funciona. Latente hoje, com um usuário
+    só; no dia em que a tela de Usuários do lote 0 criar um segundo admin,
+    um admin escondendo um cartão some com ele do painel do outro, sem
+    explicação nenhuma na tela.
+16. **O chat de IA segura uma conexão do pool e uma transação aberta durante
+    a conversa inteira com o modelo.** O pool abre com `max_size=10`
+    (`database.py:32`); `enviar_mensagem` (`/ia`) abre `sessao()` — uma
+    transação — e só fecha depois de `analista.responder`, que encadeia até
+    `MAX_VOLTAS = 8` idas e vindas ao modelo, cada uma com `TIMEOUT = 120`s,
+    mais as re-tentativas do SDK, sem prazo total para a chamada inteira. Dez
+    conversas de chat simultâneas esgotam o pool inteiro e travam qualquer
+    outro request — inclusive login. Não alcançável hoje com um usuário só;
+    merece decisão (prazo total, ou tirar a query do modelo de dentro da
+    transação) antes de o sistema ter vários.
 
 ## Como subir o que existe
 

@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # IA (API da Claude). Como as do Resend e do Meta: o valor de verdade mora
     # em `integration_secrets` e é gravado pela tela; declarar aqui é o que
     # impede o pydantic-settings de derrubar o boot se a chave estiver no .env.
+    #
+    # ⚠️ A chave se configura em Configurações → IA — colocá-la em `.env` NÃO
+    # FUNCIONA por este caminho. `ler_segredo` (app/integracoes.py) cai para
+    # `os.environ` quando `integration_secrets` está vazio, mas ninguém aqui
+    # chama `load_dotenv()`: o pydantic-settings lê `.env` e preenche este
+    # `Settings.ANTHROPIC_API_KEY`, não o `os.environ` do processo. Uma chave
+    # só em `.env` fica invisível pelos dois caminhos, e o chat continua
+    # respondendo `400 "não está configurada"`.
     ANTHROPIC_API_KEY: str = ""
 
     # O motor de fila. Visibilidade é por quanto tempo uma mensagem reivindicada

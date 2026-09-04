@@ -336,7 +336,7 @@ EXECUTORES = {
 }
 
 
-async def executar(conn, nome: str, argumentos: dict) -> dict:
+async def executar(conn, nome: str, argumentos: object) -> dict:
     """Despacha pelo nome. Levanta se o nome ou os argumentos não existirem."""
     funcao = EXECUTORES.get(nome)
     if funcao is None:

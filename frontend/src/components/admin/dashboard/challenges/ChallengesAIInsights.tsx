@@ -50,6 +50,10 @@ interface AIInsights {
     reason: string;
   }>;
   opportunities: string[];
+  // Tamanho real da amostra que o SERVIDOR analisou (até 50 — ver
+  // `desafios_frequentes` no backend), nunca o `leads.length` do navegador.
+  // A rota sempre preenche este campo.
+  sampleSize: number;
 }
 
 interface StoredInsight {
@@ -106,9 +110,15 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
       const newInsights = await api.post<AIInsights>('/ia/analisar-desafios');
 
       // Save to database
+      // ⚠️ `leads_analyzed` vem de `newInsights.sampleSize` — o tamanho real
+      // da amostra que o servidor analisou —, nunca de
+      // `leadsWithChallenges.length`. Esse é o `length` da lista carregada no
+      // navegador, que pode ser muito maior que a amostra (o servidor limita
+      // a 50); mandar esse número fazia o card afirmar "1.243 leads
+      // analisados" quando o modelo só viu 50.
       const savedData = await api.post<StoredInsight>('/ia/insights-de-desafios', {
         insights: newInsights,
-        leads_analyzed: leadsWithChallenges.length,
+        leads_analyzed: newInsights.sampleSize,
       });
 
       setInsights(newInsights);
@@ -315,7 +325,10 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
           <div className="text-center py-8">
             <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
-              Analisando {leadsWithChallenges.length} respostas...
+              {/* Sem número aqui de propósito: o tamanho real da amostra só
+                  é conhecido quando a resposta volta (o servidor limita a
+                  50, não `leadsWithChallenges.length`). */}
+              Analisando os desafios relatados...
             </p>
             <p className="text-xs mt-2 text-muted-foreground opacity-70">
               Isso pode levar alguns segundos

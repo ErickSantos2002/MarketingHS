@@ -25,6 +25,7 @@ lê dado a pedido de uma pessoa, e isso é request de usuário.
 """
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -33,6 +34,8 @@ from app.database import sessao
 from app.dependencies import Usuario, admin_atual
 from app.ia import analista
 from app.ia.cliente import IANaoConfigurada, exigir_cliente
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ia", tags=["ia"])
 
@@ -110,12 +113,25 @@ async def enviar_mensagem(conversa_id: str, dados: MensagemIn,
         if dona != usuario.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
 
+        # ⚠️ `ORDER BY created_at DESC` — os RECENTES são o que interessa
+        # quando a conversa excede 40 mensagens (mesmo raciocínio de
+        # `ferramentas.py:207-211` para a série temporal). Sem o DESC, a
+        # partir da 21ª troca o modelo veria sempre as trocas 1-20 mais a
+        # pergunta nova, e nunca o meio — sem erro, sem aviso, respondendo com
+        # contexto de dezenas de turnos atrás. Depois de buscar, a lista volta
+        # para a ordem cronológica: o modelo espera a conversa na ordem em que
+        # ela aconteceu.
+        #
+        # ⚠️ 40 é par e as mensagens gravadas alternam user/assistant estrito
+        # — preservar isso é o que garante que a janela sempre contém trocas
+        # INTEIRAS (pergunta+resposta), nunca uma pergunta sem resposta no
+        # início. Mudar esse número para um ímpar quebraria a alternância.
         anteriores = await conn.fetch(
             """SELECT role, content FROM ai_chat_messages
-                WHERE conversation_id = $1::uuid ORDER BY created_at
+                WHERE conversation_id = $1::uuid ORDER BY created_at DESC
                 LIMIT 40""", conversa_id)
         historico = [{"role": m["role"], "content": m["content"]}
-                     for m in anteriores]
+                     for m in reversed(anteriores)]
         historico.append({"role": "user", "content": dados.conteudo})
 
         await conn.execute(
@@ -125,11 +141,26 @@ async def enviar_mensagem(conversa_id: str, dados: MensagemIn,
         try:
             resultado = await analista.responder(cliente, conn, historico)
         except Exception as e:  # noqa: BLE001
-            # A pergunta já foi gravada; a resposta não veio. Melhor um 502 com
-            # a pergunta salva do que perder a pergunta junto.
+            # A pergunta gravada acima e a resposta que não veio estão na
+            # MESMA transação (`sessao()` abre uma só, `database.py:113`): um
+            # 502 aqui reverte o INSERT da pergunta junto, não a preserva. Não
+            # é a mesma coisa que "melhor um 502 com a pergunta salva do que
+            # perder a pergunta junto" — essa frase descrevia um comportamento
+            # que este código nunca teve.
+            #
+            # Gravar a pergunta na sua própria transação, antes de chamar o
+            # modelo, deixaria essa parte verdadeira — mas quebraria a
+            # alternância estrita user/assistant de que a janela do histórico
+            # acima depende: um 502 deixaria a pergunta gravada SEM resposta,
+            # e a próxima chamada mandaria dois turnos de 'user' seguidos para
+            # a API do modelo. Trocar um comentário falso por uma conversa
+            # quebrada não é conserto — por isso o código fica como está e só
+            # o comentário muda.
+            logger.warning("A IA não respondeu na conversa %s: %s",
+                           conversa_id, e)
             raise HTTPException(
                 status.HTTP_502_BAD_GATEWAY,
-                f"A IA não respondeu: {e}")
+                "A IA não respondeu. Tente de novo em instantes.")
 
         await conn.execute(
             """INSERT INTO ai_chat_messages (conversation_id, role, content)
@@ -272,6 +303,13 @@ async def _analisar(sistema: str, pergunta: str, esquema: dict) -> dict:
     # ⚠️ `output_config.format` garante que o primeiro bloco de texto é JSON
     # válido conforme o schema. Sem isso, este `json.loads` seria uma aposta.
     texto = next((b.text for b in resposta.content if b.type == "text"), "")
+    if not texto:
+        # Sem bloco de texto, `json.loads("")` levanta `JSONDecodeError` — que
+        # não é `HTTPException` e passaria direto por cima do try/except
+        # acima, virando 500 cru em vez do 502 que os caminhos vizinhos dão.
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "A IA respondeu sem conteúdo de texto.")
     return json.loads(texto)
 
 
@@ -335,7 +373,16 @@ async def analisar_desafios(usuario: Usuario = Depends(admin_atual)):
         f'Faturamento: {d["faturamento"] or "N/A"})' for d in amostra)
     pergunta = (f"Analise os desafios relatados por {len(amostra)} contatos:\n\n"
                 f"{linhas}")
-    return await _analisar(SISTEMA_DESAFIOS, pergunta, ESQUEMA_DESAFIOS)
+    resultado = await _analisar(SISTEMA_DESAFIOS, pergunta, ESQUEMA_DESAFIOS)
+    # ⚠️ `sampleSize` é o tamanho REAL da amostra que o servidor buscou (até
+    # 50, `ferramentas.desafios_frequentes`), não o `leads.length` que a tela
+    # tem carregado no navegador. A tela chegou a mandar de volta o próprio
+    # `leadsWithChallenges.length` como `leads_analyzed` ao gravar o insight —
+    # com a base grande, o card afirmava "1.243 leads analisados" quando o
+    # modelo só viu 50. Fora do `ESQUEMA_DESAFIOS` de propósito: é metadado do
+    # servidor sobre a chamada, não algo que o modelo decide.
+    resultado["sampleSize"] = len(amostra)
+    return resultado
 
 
 @router.get("/insights-de-desafios")

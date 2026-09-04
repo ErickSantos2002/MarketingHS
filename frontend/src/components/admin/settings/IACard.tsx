@@ -118,6 +118,7 @@ export default function IACard() {
               <div className="flex gap-2">
                 <Input
                   id="ia-api-key"
+                  type="password"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={
