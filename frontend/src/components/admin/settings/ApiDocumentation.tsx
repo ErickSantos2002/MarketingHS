@@ -742,33 +742,6 @@ curl -X POST \\
     }, null, 2),
     notes: 'PATCH /publico/automacoes/{id} para ativar/desativar regras.',
   },
-  {
-    id: 'analytics-api',
-    method: 'GET',
-    path: '/analytics-api',
-    title: 'KPIs e métricas',
-    description: 'Retorna métricas agregadas. Tipos: overview, leads, sources, pages. Suporta filtro de período.',
-    params: [
-      { name: 'type', type: 'string', required: 'Sim', description: 'overview | leads | sources | pages' },
-      { name: 'period', type: 'string', required: 'Não', description: '7d | 15d | 30d | 90d | all (default: 30d)' },
-    ],
-    curl: `curl -X GET \\
-  '${BASE_URL}/analytics-api?type=overview' \\
-  -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
-    response: JSON.stringify({
-      total_leads: 1247,
-      hotleads: 89,
-      warm_leads: 312,
-      raw_leads: 846,
-      leads_hoje: 12,
-      leads_semana: 67,
-      score_medio: 42,
-      taxa_hotlead: "7.1%",
-      leads_no_nexus: 45,
-      clientes_ativos: 23
-    }, null, 2),
-    notes: 'Tipos disponíveis: overview (KPIs gerais), leads (evolução por dia), sources (por utm_source), pages (por página).',
-  },
 ];
 
 const ENV_VARS = [

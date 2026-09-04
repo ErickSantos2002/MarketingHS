@@ -1,17 +1,17 @@
 # Continuar aqui
 
-**Atualizado:** 3 de setembro de 2026
+**Atualizado:** 4 de setembro de 2026
 **Branch:** `reconstrucao` — **ainda não pushada**
 
 ## Onde paramos
 
-### ⏸ Lote 6 em andamento — parado no meio (03/09/2026)
+### ✅ Lote 6 concluído (04/09/2026)
 
-**Cinco das nove tarefas do lote 6 estão prontas e revisadas.** O trabalho
-segue no `HEAD` da `reconstrucao` (`5864cca`), que é commit coerente e verde:
-**122 testes passando**.
+As nove tarefas fecharam. Suíte de backend em **126 testes**, `tsc --noEmit`
+limpo, e o portão (tarefa 9) abriu a tela de Documentação da API no navegador
+sem erro.
 
-O que já entrou:
+O que entrou:
 
 | | |
 |---|---|
@@ -20,30 +20,100 @@ O que já entrou:
 | **3** | As seis ferramentas nomeadas, com allowlist e teto |
 | **4** | O laço de ferramentas e as cinco rotas do chat |
 | **5** | As duas análises, com o formato de saída garantido pela API |
+| **6** | Painel: metas, cartões e agendamentos, saindo do toco do Supabase |
+| **7** | Telas de IA (chat e as duas análises) portadas |
+| **8** | A tarja dos dez mil |
+| **9** | O portão — quatro functions a menos, documentação sem URL morta |
 
-⚠️ **A Task 6 foi interrompida no meio.** O trabalho parcial está em
-`git stash@{0}` e **não compila** — `useAgendamentos.tsx` ainda referencia o
-toco do Supabase. Ou se retoma com `git stash pop`, ou se descarta o stash e
-se redespacha a tarefa do zero.
+**O buraco que o lote fechou:** `execute_readonly_query` era `SECURITY
+DEFINER` de dono superusuário e executava qualquer SELECT que a IA gerasse; a
+defesa era lista negra de palavras, que não bloqueia
+`SELECT value FROM integration_secrets`. Não estava explorável (a tela morria
+no toco antes), mas estava viva no banco. Apagada pela migration 016.
 
-**O mapa para retomar** está em
-`.superpowers/sdd/2026-09-03-marketinghs-lote-6-analytics-e-ia/progress.md`
-(fora do git). Ele tem o estado tarefa a tarefa, as decisões que foram tomadas
-no caminho, e — importante — **duas correções ao plano da Task 6** que só
-aparecem se alguém medir contra o banco. Ler antes de retomar.
+**O que substituiu:** seis ferramentas nomeadas com allowlist de campos,
+executadas pela `sessao()` de quem perguntou. O modelo não escreve SQL.
 
-Faltam as tarefas **6** (painel: metas, cartões, agendamentos), **7** (telas de
-IA), **8** (a tarja dos dez mil) e **9** (o portão).
+⚠️ **A lição, para os próximos lotes:** o defeito não era o modelo escrever
+SQL ruim — era a **lista negra**. Toda vez que a defesa for "proibir o que é
+ruim" em vez de "permitir só o que é bom", é o mesmo desenho.
 
-⚠️ **Nada da IA foi provado de ponta a ponta**, porque não há chave da
-Anthropic gravada. O caminho de "não configurado" está testado e responde 400
-com mensagem que explica; o resto espera a chave.
+**Que a spec errava:** os painéis já estavam fora do Supabase desde o lote 1B;
+o lote 6 foi IA e configuração, não Analytics.
+
+**A tarja dos dez mil**, e que ela é um remendo honesto: a agregação no
+servidor continua não existindo, e o dia que a base passar de 10 mil o painel
+fica lento antes de ficar errado.
+
+⚠️ **A IA não está provada de ponta a ponta, e não deve ser lida como se
+estivesse.** Não há chave da Anthropic gravada — conferido na tela em
+Configurações → IA, que mostra "não configurado" — então o chat e as duas
+análises foram verificados só até a fronteira do `400 "não está
+configurada"`. É o honesto-parcial mais importante do lote: o código está
+pronto (rotas, ferramentas, formato de saída garantido), mas ninguém viu o
+modelo responder de verdade.
+
+**A tarefa 7 restaurou uma capacidade que a portagem tinha derrubado:** o
+botão de apagar insight (ícone de lixeira + confirmação) na aba Desafios. A
+tarefa 5 nunca escreveu a rota DELETE e o mapa de rotas do plano só listava
+GET e POST — a portagem perdeu um botão que o usuário tinha, em silêncio.
+Agora existe `DELETE /ia/insights-de-desafios/{id}`, devolvendo 404 (não um
+200 sem efeito) quando o id não bate com nenhuma linha.
+
+**A tarefa 6 introduziu um corte silencioso que a tarefa 8 desfez.** A nova
+`GET /painel/agendamentos` nasceu com um `LIMIT 500` fixo; o hook do Supabase
+que ela substituiu paginava até 20.000. A tarefa 8 restaurou o teto de 20.000
+e fez a rota avisar quando corta. Vale registrar como padrão: é a própria
+portagem que introduz teto silencioso.
+
+**Duas linhas de dado de teste são hoje a configuração viva do painel.**
+`dashboard_settings` guarda `lead_goal = {"monthly":100}` e `dashboard_cards
+= {"overview":["leads","conversao"]}`, ambas criadas em 03/09 pelos próprios
+curls do Passo 2 do plano, não por uma pessoa. O payload não tem a chave
+`goal`, que é o que `useGoalSettings` lê, então o medidor de meta cai no
+padrão de 1.000. É decisão do Erick: apagar as duas linhas de teste, ou
+configurar a meta de verdade pela tela — ver a lista abaixo. (A terceira
+linha, `...:colunas-contatos`, é preferência de usuário de verdade — não
+mexer.)
+
+**O item 9 da lista de pendências antiga está confirmado ao vivo.** O portão
+do navegador mediu que a única chamada a `supabase.co` na tela do admin é
+`luinwzmegsdjckjxoimx.supabase.co/functions/v1/get-tests`, sem nenhuma
+referência em `frontend/src` — ela vem de `frontend/index.html`. Nenhuma tela
+fala com o Supabase; a casca da página ainda fala, antes de qualquer tela
+carregar.
+
+**Um corte pequeno e silencioso, registrado para não ser redescoberto:** o
+título das conversas. O código antigo gravava os 50 primeiros caracteres da
+primeira pergunta em `ai_chat_conversations.title`; a rota do servidor só
+toca `updated_at`. Zero efeito hoje porque não existe tela de lista de
+conversas, mas vai importar para quem construir uma.
+
+O portão apagou as quatro functions que sobravam
+(`analytics-api`, `ai-data-analyst`, `analyze-leads`, `analyze-challenges`):
+pela **sétima vez** no projeto, a documentação (tela de Documentação da API +
+`dnmarketing-api.yaml`) ainda ensinava uma URL morta a integradores —
+`/analytics-api`, checado e removido dos dois lugares antes de apagar a
+function. Placar da pasta de especificação: **29 functions portadas** e **7
+descartadas** (números que não se somam), restando **18**. Pontos de acesso
+direto ao Supabase medidos pelo mesmo script do lote anterior: **8** (script
+que não enxerga o alias `const db = supabase as any` das telas de
+Experiments — ver a nota abaixo).
+
+⚠️ **O script do placar tem um ponto cego.** `usePages.tsx` e
+`leadConversion.ts` (lote 7) chamam `supabase.from(`/`.rpc(` direto, e o
+script os conta. `useAbConfig.tsx` e `useAbTests.tsx` (as telas de
+Experiments) chamam a mesma coisa por trás de `const db = supabase as any`,
+e o script não reconhece o alias — são **9 pontos de acesso reais** que o
+número 8 não inclui. Não são novos nem deste lote; estavam fora da vista do
+script antes também. Registrado para quem for portar Experiments não se
+surpreender com o número.
 
 ---
 
 ## Onde paramos
 
-**Lotes 0 a 4 fechados, mais o 5B, o 5C e o 5D.** O lote 5 foi partido em quatro:
+**Lotes 0 a 4 fechados, mais o 5B, o 5C, o 5D e o 6.** O lote 5 foi partido em quatro:
 
 | | | |
 |---|---|---|
@@ -51,20 +121,22 @@ com mensagem que explica; o resto espera a chave.
 | **5B** | Contatos do DataCore | ✅ concluído (02/09/2026) |
 | **5C** | Identidade unificada, Meta CAPI | ✅ concluído (03/09/2026) |
 | **5D** | Limpeza das sobras | ✅ concluído (02/09/2026) |
+| **6** | IA (chat, análises) e painel | ✅ concluído (04/09/2026) |
 
 ## 🎨 O trabalho de visual já pode começar
 
-Era para isto que o 5D existiu. **Doze das dezesseis telas do admin estão 100%
-livres do toco do Supabase** e podem ser redesenhadas agora:
+Era para isto que o 5D existiu, e o lote 6 liberou mais duas. **Quatorze das
+dezesseis telas do admin estão 100% livres do toco do Supabase** e podem ser
+redesenhadas agora:
 
 > Automações · Campanhas · Contatos · Experiments (as três) · Importar ·
-> Construtor de fluxo · Login · Segmentos · Preview de template · Templates
+> Construtor de fluxo · Login · Segmentos · Preview de template · Templates ·
+> Visão Geral · Analytics
 
-⚠️ **Não redesenhe estas quatro ainda:**
+⚠️ **Não redesenhe estas duas ainda:**
 
 | Tela | Por quê |
 |---|---|
-| **Visão Geral** e **Analytics** | o lote 6 as reescreve por dentro — trabalho de visual agora seria refeito |
 | **Páginas** | lote 7 |
 | **Configurações** | falta só o `NexusCard` (5A, bloqueado) — o `MetaCard` (5C) já chegou |
 
@@ -254,6 +326,15 @@ o defeito dos 2.080 volta, calado.
     integradores externos aponta para um valor que não resolve — o que é
     melhor que ensinar o host morto do Supabase da dn.ia, mas ainda não é a
     resposta certa.
+12. **Gravar a chave da Anthropic** em Configurações → IA — sem ela o chat de
+    dados e as duas análises (leads e desafios) respondem 400. Custo
+    estimado: **~$15/mês**, para saber o que esperar na fatura.
+13. **Decidir sobre as duas linhas de teste em `dashboard_settings`**
+    (`lead_goal` e `dashboard_cards`, gravadas em 03/09/2026 pelos curls do
+    plano do lote 6, não por uma pessoa) — apagar as duas, ou configurar a
+    meta de verdade pela tela. Enquanto ninguém decide, o medidor de meta do
+    painel mostra o padrão de 1.000 porque o payload de teste não tem a
+    chave `goal`.
 
 ## Como subir o que existe
 
