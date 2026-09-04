@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api, ErroApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import type { Json } from '@/integrations/supabase/types';
 
 export interface GoalSettings {
   goal: number;
@@ -17,6 +16,8 @@ const DEFAULT_SETTINGS: GoalSettings = {
   whatsapp_group: 0,
 };
 
+const CHAVE = 'lead_goal';
+
 export function useGoalSettings() {
   const [settings, setSettings] = useState<GoalSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,25 +26,24 @@ export function useGoalSettings() {
 
   const fetchSettings = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('dashboard_settings')
-        .select('setting_value')
-        .eq('setting_key', 'lead_goal')
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data?.setting_value) {
-        const value = data.setting_value as unknown as GoalSettings;
+      const { setting_value } = await api.get<{ setting_value: GoalSettings }>(
+        `/painel/config/${CHAVE}`,
+      );
+      if (setting_value) {
         setSettings({
-          goal: value.goal || DEFAULT_SETTINGS.goal,
-          start_date: value.start_date || DEFAULT_SETTINGS.start_date,
-          end_date: value.end_date || DEFAULT_SETTINGS.end_date,
-          whatsapp_group: value.whatsapp_group || DEFAULT_SETTINGS.whatsapp_group,
+          goal: setting_value.goal || DEFAULT_SETTINGS.goal,
+          start_date: setting_value.start_date || DEFAULT_SETTINGS.start_date,
+          end_date: setting_value.end_date || DEFAULT_SETTINGS.end_date,
+          whatsapp_group: setting_value.whatsapp_group || DEFAULT_SETTINGS.whatsapp_group,
         });
       }
     } catch (error) {
-      console.error('Error fetching goal settings:', error);
+      // 404 é normal: a meta ainda não foi definida. Fica no padrão, sem erro.
+      if (error instanceof ErroApi && error.status === 404) {
+        // segue com DEFAULT_SETTINGS
+      } else {
+        console.error('Error fetching goal settings:', error);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -56,44 +56,9 @@ export function useGoalSettings() {
   const updateSettings = useCallback(async (newSettings: Partial<GoalSettings>) => {
     setIsSaving(true);
     const updatedSettings = { ...settings, ...newSettings };
-    const jsonValue: Json = {
-      goal: updatedSettings.goal,
-      start_date: updatedSettings.start_date,
-      end_date: updatedSettings.end_date,
-      whatsapp_group: updatedSettings.whatsapp_group,
-    };
-    
+
     try {
-      // First check if setting exists
-      const { data: existing } = await supabase
-        .from('dashboard_settings')
-        .select('id')
-        .eq('setting_key', 'lead_goal')
-        .maybeSingle();
-
-      let error;
-      if (existing) {
-        // Update existing
-        const result = await supabase
-          .from('dashboard_settings')
-          .update({
-            setting_value: jsonValue,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('setting_key', 'lead_goal');
-        error = result.error;
-      } else {
-        // Insert new
-        const result = await supabase
-          .from('dashboard_settings')
-          .insert([{
-            setting_key: 'lead_goal',
-            setting_value: jsonValue,
-          }]);
-        error = result.error;
-      }
-
-      if (error) throw error;
+      await api.put(`/painel/config/${CHAVE}`, updatedSettings);
 
       setSettings(updatedSettings);
       toast({

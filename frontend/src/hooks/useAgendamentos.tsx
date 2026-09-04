@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { parseISO, format } from 'date-fns';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
@@ -14,9 +14,10 @@ export interface AgendamentoEvent {
   event_type: string;
 }
 
-const AGENDAMENTO_TYPES = ['meeting_scheduled', 'scheduling_widget_booked'];
-const PAGE = 1000;
-const MAX = 20000;
+// ⚠️ `/painel/agendamentos` já devolve tudo (LIMIT 500 no backend, filtrado
+// pelos dois tipos legados) numa chamada só — não pagina. A base tem hoje só
+// 2 eventos deste tipo; se um dia passar de 500, a rota precisa de paginação
+// de verdade, não este hook.
 
 /**
  * Fetches all "agendamento" contact_events (meeting_scheduled / scheduling_widget_booked).
@@ -31,31 +32,14 @@ export function useAgendamentos() {
 
     const fetchAll = async () => {
       try {
-        const all: AgendamentoEvent[] = [];
-        let from = 0;
-        // paginated load
-        while (from < MAX) {
-          const { data, error } = await supabase
-            .from('contact_events')
-            .select('id, lead_id, occurred_at, event_type')
-            .in('event_type', AGENDAMENTO_TYPES)
-            .order('occurred_at', { ascending: false })
-            .range(from, from + PAGE - 1);
-          if (error) {
-            console.error('useAgendamentos:', error);
-            break;
-          }
-          const batch = (data || []).filter(e => e.occurred_at) as AgendamentoEvent[];
-          all.push(...batch);
-          if (!data || data.length < PAGE) break;
-          from += PAGE;
-        }
+        const data = await api.get<AgendamentoEvent[]>('/painel/agendamentos');
+        const all = (data || []).filter(e => e.occurred_at);
         if (!cancelled) {
           setEvents(all);
           setIsLoading(false);
         }
       } catch (e) {
-        console.error(e);
+        console.error('useAgendamentos:', e);
         if (!cancelled) setIsLoading(false);
       }
     };
@@ -153,28 +137,17 @@ export function useMqlReuniaoAgendadaToday() {
 
     const fetchToday = async () => {
       try {
-        // Agregacao no banco: a RPC devolve apenas os lead_ids distintos do dia
-        // (fuso America/Sao_Paulo), em vez de baixar as linhas de evento.
-        const { data, error } = await (supabase.rpc as any)('mql_reuniao_agendada_today');
-
-        if (error) {
-          console.error('useMqlReuniaoAgendadaToday:', error);
-          if (!cancelled) setIsLoading(false);
-          return;
-        }
-
-        const ids = new Set<string>(
-          ((data || []) as { lead_id: string | null }[])
-            .map(row => row.lead_id)
-            .filter((id): id is string => !!id),
-        );
+        // Agregação no banco: a rota devolve apenas os lead_ids distintos do
+        // dia (fuso America/Sao_Paulo), em vez de baixar as linhas de evento.
+        const data = await api.get<string[]>('/painel/agendamentos/mql-hoje');
+        const ids = new Set<string>((data || []).filter((id): id is string => !!id));
 
         if (!cancelled) {
           setLeadIds(ids);
           setIsLoading(false);
         }
       } catch (e) {
-        console.error(e);
+        console.error('useMqlReuniaoAgendadaToday:', e);
         if (!cancelled) setIsLoading(false);
       }
     };

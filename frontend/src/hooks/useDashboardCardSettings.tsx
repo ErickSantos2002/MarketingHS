@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api, ErroApi } from '@/lib/api';
 
 export interface CardConfig {
   key: string;
@@ -8,6 +8,15 @@ export interface CardConfig {
 }
 
 const STORAGE_PREFIX = 'dashboard-cards-';
+
+// ⚠️ Uma chave só em `dashboard_settings` ("dashboard_cards"), GLOBAL — não
+// por usuário (ver o docstring de backend/app/routers/painel.py: escolha de
+// cartões é do painel da empresa, não da pessoa). O valor guardado é um
+// objeto ÚNICO `{ [tabName]: chaves visíveis[] }`, para as seis abas do
+// painel continuarem com conjuntos independentes dentro dessa única chave.
+const CHAVE = 'dashboard_cards';
+
+type ValorGuardado = Record<string, string[]>;
 
 function loadFromLocalStorage(tabName: string, allCards: CardConfig[]): string[] {
   try {
@@ -23,6 +32,19 @@ function loadFromLocalStorage(tabName: string, allCards: CardConfig[]): string[]
   return allCards.filter(c => c.defaultVisible).map(c => c.key);
 }
 
+async function lerValorGuardado(): Promise<ValorGuardado> {
+  try {
+    const { setting_value } = await api.get<{ setting_value: ValorGuardado }>(
+      `/painel/config/${CHAVE}`,
+    );
+    return setting_value || {};
+  } catch (error) {
+    // 404 é normal: ninguém definiu cartões visíveis ainda.
+    if (error instanceof ErroApi && error.status === 404) return {};
+    throw error;
+  }
+}
+
 export function useDashboardCardSettings(tabName: string, allCards: CardConfig[]) {
   const [visibleCards, setVisibleCards] = useState<string[]>(() =>
     loadFromLocalStorage(tabName, allCards)
@@ -32,23 +54,18 @@ export function useDashboardCardSettings(tabName: string, allCards: CardConfig[]
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
+      try {
+        const valor = await lerValorGuardado();
+        if (cancelled) return;
 
-      const settingKey = `card_prefs_${user.id}_${tabName}`;
-      const { data } = await supabase
-        .from('dashboard_settings')
-        .select('setting_value')
-        .eq('setting_key', settingKey)
-        .maybeSingle();
-
-      if (data?.setting_value && !cancelled) {
         const allKeys = allCards.map(c => c.key);
-        const dbCards = (data.setting_value as string[]).filter(k => allKeys.includes(k));
+        const dbCards = (valor[tabName] || []).filter(k => allKeys.includes(k));
         if (dbCards.length > 0) {
           setVisibleCards(dbCards);
           localStorage.setItem(STORAGE_PREFIX + tabName, JSON.stringify(dbCards));
         }
+      } catch (error) {
+        console.error('useDashboardCardSettings:', error);
       }
     })();
     return () => { cancelled = true; };
@@ -58,17 +75,16 @@ export function useDashboardCardSettings(tabName: string, allCards: CardConfig[]
     setVisibleCards(newVisible);
     localStorage.setItem(STORAGE_PREFIX + tabName, JSON.stringify(newVisible));
 
-    // Persist to DB (fire-and-forget)
+    // Persist to DB (fire-and-forget). Lê o objeto inteiro, atualiza só a
+    // própria aba e regrava — outras abas continuam com o que já tinham.
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const settingKey = `card_prefs_${user.id}_${tabName}`;
-      await supabase
-        .from('dashboard_settings')
-        .upsert(
-          { setting_key: settingKey, setting_value: newVisible as any, updated_at: new Date().toISOString() },
-          { onConflict: 'setting_key' }
-        );
+      try {
+        const atual = await lerValorGuardado();
+        const proximo: ValorGuardado = { ...atual, [tabName]: newVisible };
+        await api.put(`/painel/config/${CHAVE}`, proximo);
+      } catch (error) {
+        console.error('useDashboardCardSettings: falha ao salvar', error);
+      }
     })();
   }, [tabName]);
 
