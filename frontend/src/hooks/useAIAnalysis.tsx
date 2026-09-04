@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import type { Lead } from './useLeads';
+import { api, ErroApi } from '@/lib/api';
 
 export interface AIAnalysisResult {
   summary: string;
@@ -27,32 +26,19 @@ export function useAIAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const analyzeLeads = async (leads: Lead[]) => {
-    if (leads.length === 0) {
-      setError('Nenhum lead disponível para análise');
-      return;
-    }
-
+  // ⚠️ Sem corpo: o servidor busca os leads sozinho, pelas mesmas ferramentas
+  // do analista. Mandar a base inteira daqui era caminho longo e vazava dado
+  // que o navegador nem precisava ter.
+  const analyzeLeads = async () => {
     setIsAnalyzing(true);
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('analyze-leads', {
-        body: { leads }
-      });
-
-      if (fnError) {
-        throw fnError;
-      }
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setAnalysis(data.analysis);
+      const data = await api.post<AIAnalysisResult>('/ia/analisar-leads');
+      setAnalysis(data);
     } catch (err) {
       console.error('Error analyzing leads:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao analisar leads');
+      setError(err instanceof ErroApi ? err.message : 'Erro ao analisar leads');
     } finally {
       setIsAnalyzing(false);
     }

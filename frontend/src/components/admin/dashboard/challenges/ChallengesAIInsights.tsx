@@ -3,20 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Sparkles, 
-  Loader2, 
-  Lightbulb, 
-  Target, 
-  FileText, 
+import {
+  Sparkles,
+  Loader2,
+  Lightbulb,
+  Target,
+  FileText,
   Gem,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   History,
-  Trash2
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { api, ErroApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,17 +23,6 @@ import {
   Collapsible,
   CollapsibleContent,
 } from '@/components/ui/collapsible';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import type { Lead } from '@/hooks/useLeads';
 
 interface ChallengesAIInsightsProps {
@@ -78,26 +66,13 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
   const loadStoredInsights = async () => {
     setIsLoadingHistory(true);
     try {
-      const { data, error } = await supabase
-        .from('challenge_insights')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const typedData = (data || []).map(item => ({
-        id: item.id,
-        insights: item.insights as unknown as AIInsights,
-        leads_analyzed: item.leads_analyzed,
-        created_at: item.created_at
-      }));
-
-      setStoredInsights(typedData);
+      const data = await api.get<StoredInsight[]>('/ia/insights-de-desafios');
+      setStoredInsights(data);
 
       // Load most recent insight if available
-      if (typedData.length > 0) {
-        setInsights(typedData[0].insights);
-        setCurrentInsightId(typedData[0].id);
+      if (data.length > 0) {
+        setInsights(data[0].insights);
+        setCurrentInsightId(data[0].id);
       }
     } catch (error) {
       console.error('Error loading insights:', error);
@@ -114,96 +89,30 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
 
     setIsLoading(true);
     try {
-      // Prepare challenges data for analysis
-      const challengesData = leadsWithChallenges.slice(0, 100).map(l => ({
-        desafio: l.desafios,
-        cargo: l.cargo,
-        faturamento: l.faturamento,
-        empresa: l.empresa
-      }));
-
-      const { data, error } = await supabase.functions.invoke('analyze-challenges', {
-        body: { challenges: challengesData }
-      });
-
-      if (error) {
-        // Check for rate limiting or payment issues
-        if (error.message?.includes('429') || error.message?.includes('rate')) {
-          toast.error('Limite de requisições excedido. Tente novamente em alguns minutos.');
-        } else if (error.message?.includes('402') || error.message?.includes('payment')) {
-          toast.error('Créditos insuficientes. Adicione créditos na sua conta.');
-        } else {
-          throw error;
-        }
-        return;
-      }
-
-      if (data.error) {
-        if (data.error.includes('Rate limit')) {
-          toast.error('Limite de requisições excedido. Tente novamente em alguns minutos.');
-        } else if (data.error.includes('Payment required')) {
-          toast.error('Créditos insuficientes. Adicione créditos à sua conta.');
-        } else {
-          throw new Error(data.error);
-        }
-        return;
-      }
-
-      const newInsights = data as AIInsights;
+      // ⚠️ Sem corpo: o servidor busca a amostra de desafios sozinho, pelas
+      // mesmas ferramentas do analista.
+      const newInsights = await api.post<AIInsights>('/ia/analisar-desafios');
 
       // Save to database
-      const { data: savedData, error: saveError } = await supabase
-        .from('challenge_insights')
-        .insert({
-          insights: JSON.parse(JSON.stringify(newInsights)),
-          leads_analyzed: leadsWithChallenges.length
-        })
-        .select()
-        .single();
-
-      if (saveError) throw saveError;
+      const savedData = await api.post<StoredInsight>('/ia/insights-de-desafios', {
+        insights: newInsights,
+        leads_analyzed: leadsWithChallenges.length,
+      });
 
       setInsights(newInsights);
       setCurrentInsightId(savedData.id);
-      
+
       // Reload history
       await loadStoredInsights();
 
       toast.success('Insights gerados e salvos com sucesso!');
     } catch (error) {
       console.error('Error generating insights:', error);
-      toast.error('Erro ao gerar insights. Tente novamente.');
+      toast.error('Erro ao gerar insights', {
+        description: error instanceof ErroApi ? error.message : 'Tente novamente.',
+      });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const deleteInsight = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('challenge_insights')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      // If deleted the current one, load the next one or clear
-      if (id === currentInsightId) {
-        const remaining = storedInsights.filter(s => s.id !== id);
-        if (remaining.length > 0) {
-          setInsights(remaining[0].insights);
-          setCurrentInsightId(remaining[0].id);
-        } else {
-          setInsights(null);
-          setCurrentInsightId(null);
-        }
-      }
-
-      await loadStoredInsights();
-      toast.success('Insight excluído com sucesso!');
-    } catch (error) {
-      console.error('Error deleting insight:', error);
-      toast.error('Erro ao excluir insight');
     }
   };
 
@@ -298,8 +207,8 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                   <div
                     key={stored.id}
                     className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                      stored.id === currentInsightId 
-                        ? 'bg-primary/10 border-primary' 
+                      stored.id === currentInsightId
+                        ? 'bg-primary/10 border-primary'
                         : 'bg-background hover:bg-muted/50'
                     }`}
                   >
@@ -321,30 +230,6 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                         )}
                       </div>
                     </button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir insight?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta ação não pode ser desfeita. O insight será permanentemente excluído.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteInsight(stored.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
                   </div>
                 ))}
               </div>
@@ -383,7 +268,7 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
               const Icon = section.icon;
               const isExpanded = expandedSection === section.id;
               const items = section.data || [];
-              
+
               return (
                 <div key={section.id} className="border border-border/50 rounded-lg overflow-hidden">
                   <button
@@ -403,11 +288,11 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     )}
                   </button>
-                  
+
                   {isExpanded && items.length > 0 && (
                     <div className="p-4 pt-0 space-y-2">
                       {items.map((item, idx) => (
-                        <div 
+                        <div
                           key={idx}
                           className="flex items-start gap-2 p-3 bg-muted/30 rounded-md"
                         >
@@ -443,12 +328,12 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                     <ChevronDown className="h-4 w-4 text-amber-500" />
                   )}
                 </button>
-                
+
                 {expandedSection === 'gems' && (
                   <ScrollArea className="max-h-[300px]">
                     <div className="p-4 pt-0 space-y-3">
                       {insights.gems.map((gem, idx) => (
-                        <div 
+                        <div
                           key={idx}
                           className="p-4 bg-amber-500/10 rounded-lg border border-amber-500/20"
                         >

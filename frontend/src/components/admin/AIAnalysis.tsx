@@ -13,7 +13,7 @@ export function AIAnalysis({ leads }: AIAnalysisProps) {
   const { analysis, isAnalyzing, error, analyzeLeads, clearAnalysis } = useAIAnalysis();
 
   const handleAnalyze = () => {
-    analyzeLeads(leads);
+    analyzeLeads();
   };
 
   if (error) {

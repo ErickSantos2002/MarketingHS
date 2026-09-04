@@ -10,6 +10,7 @@ import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings
 import NexusCard from '@/components/admin/settings/NexusCard';
 import ResendConfigCard from '@/components/admin/settings/ResendConfigCard';
 import MetaCard from '@/components/admin/settings/MetaCard';
+import IACard from '@/components/admin/settings/IACard';
 
 import ApiKeysManagement from '@/components/admin/settings/ApiKeysManagement';
 import UserManagement from '@/components/admin/settings/UserManagement';
@@ -156,7 +157,8 @@ export default function SettingsPage() {
             {/* Meta Card */}
             <MetaCard />
 
-
+            {/* IA Card */}
+            <IACard />
 
             {/* Mentoria Card */}
             <Card className="border-border/40">
