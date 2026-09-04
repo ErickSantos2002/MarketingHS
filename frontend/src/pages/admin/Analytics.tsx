@@ -20,10 +20,17 @@ type TabKey = typeof TABS[number]['key'];
 export default function Analytics() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') as TabKey) || 'profile';
-  const { filteredLeads } = useAdminData();
+  const { filteredLeads, truncado, teto } = useAdminData();
 
   return (
     <div className="space-y-6">
+      {truncado && (
+        <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+          ⚠️ Os números abaixo foram calculados sobre os {teto.toLocaleString('pt-BR')} contatos
+          mais recentes, não sobre a base inteira. O painel calcula no navegador e
+          esse é o teto que ele aguenta.
+        </div>
+      )}
       {/* Sub-navigation tabs */}
       <div className="border-b border-border/40">
         <nav className="flex gap-1 -mb-px">

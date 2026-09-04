@@ -89,6 +89,7 @@ export function useLeads(filters: LeadsFilters = {}) {
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [truncado, setTruncado] = useState(false);
   const filtersRef = useRef(filters);
 
   // Keep filters ref updated
@@ -112,6 +113,11 @@ export function useLeads(filters: LeadsFilters = {}) {
       const collected: Lead[] = [];
       let page = 0;
       let hasMore = true;
+      // ⚠️ Cru, sem o `&& collected.length < MAX_LEADS` que `hasMore` carrega
+      // logo abaixo — senão, bem na página que bate o teto, `hasMore` já sai
+      // false por causa do comprimento, e pareceria que "acabou" quando na
+      // verdade o servidor ainda tinha mais (`resposta.tem_mais`).
+      let temMaisNoServidor = false;
 
       while (hasMore && collected.length < MAX_LEADS) {
         const from = page * PAGE_SIZE;
@@ -121,15 +127,21 @@ export function useLeads(filters: LeadsFilters = {}) {
 
         if (resposta.itens.length > 0) {
           collected.push(...resposta.itens);
+          temMaisNoServidor = resposta.tem_mais;
           // O teto de MAX_LEADS continua valendo: o painel inteiro filtra em
           // memória, e trazer mais que isso trava o navegador antes de ajudar.
           hasMore = resposta.tem_mais && collected.length < MAX_LEADS;
           page++;
         } else {
+          temMaisNoServidor = false;
           hasMore = false;
         }
       }
 
+      // ⚠️ `temMaisNoServidor` (o que o servidor disse na última página) +
+      // termos batido no teto = truncamos. Se o servidor tivesse dito que
+      // acabou, paramos porque acabou, que é o caso normal.
+      setTruncado(temMaisNoServidor && collected.length >= MAX_LEADS);
       setAllLeads(collected);
     } catch (err) {
       console.error('Error fetching leads:', err);
@@ -175,6 +187,6 @@ export function useLeads(filters: LeadsFilters = {}) {
     fetchAllLeads(false);
   }, [fetchAllLeads]);
 
-  return { leads, allLeads, isLoading, error, refetch };
+  return { leads, allLeads, isLoading, error, refetch, truncado, teto: MAX_LEADS };
 }
 

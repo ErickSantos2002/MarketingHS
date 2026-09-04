@@ -365,7 +365,7 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
   );
 
   // Agendamentos (meeting_scheduled + scheduling_widget_booked)
-  const { events: agendamentoEvents } = useAgendamentos();
+  const { events: agendamentoEvents, truncado: agendamentosTruncado, teto: agendamentosTeto } = useAgendamentos();
   const filteredLeadIds = useMemo(() => new Set(enrichedLeads.map(l => l.id)), [enrichedLeads]);
   const allLeadIds = useMemo(() => new Set(allLeads.map(l => l.id)), [allLeads]);
 
@@ -445,6 +445,13 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {agendamentosTruncado && (
+        <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+          ⚠️ Os agendamentos abaixo foram calculados sobre os {agendamentosTeto.toLocaleString('pt-BR')} eventos
+          mais recentes, não sobre a base inteira. O painel calcula no navegador e
+          esse é o teto que ele aguenta.
+        </div>
+      )}
       {/* Card Selector */}
       <div className="flex justify-end">
         <DashboardCardSelector cards={OVERVIEW_CARDS} visibleCards={visibleCards} onToggle={toggleCard} onReset={resetCards} />

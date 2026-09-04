@@ -14,10 +14,17 @@ export interface AgendamentoEvent {
   event_type: string;
 }
 
-// ⚠️ `/painel/agendamentos` já devolve tudo (LIMIT 500 no backend, filtrado
+interface RespostaAgendamentos {
+  events: AgendamentoEvent[];
+  truncado: boolean;
+  teto: number;
+}
+
+// ⚠️ `/painel/agendamentos` devolve até `teto` eventos (hoje 20.000, filtrado
 // pelos dois tipos legados) numa chamada só — não pagina. A base tem hoje só
-// 2 eventos deste tipo; se um dia passar de 500, a rota precisa de paginação
-// de verdade, não este hook.
+// 2 eventos deste tipo. Se um dia passar do teto, a rota já avisa: `truncado`
+// vem `true` e este hook repassa `truncado`/`teto` para quem quiser mostrar a
+// tarja (mesma distinção "acabou" x "bati no teto" que `useLeads` faz).
 
 /**
  * Fetches all "agendamento" contact_events (meeting_scheduled / scheduling_widget_booked).
@@ -26,16 +33,20 @@ export interface AgendamentoEvent {
 export function useAgendamentos() {
   const [events, setEvents] = useState<AgendamentoEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [truncado, setTruncado] = useState(false);
+  const [teto, setTeto] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     const fetchAll = async () => {
       try {
-        const data = await api.get<AgendamentoEvent[]>('/painel/agendamentos');
-        const all = (data || []).filter(e => e.occurred_at);
+        const data = await api.get<RespostaAgendamentos>('/painel/agendamentos');
+        const all = (data?.events || []).filter(e => e.occurred_at);
         if (!cancelled) {
           setEvents(all);
+          setTruncado(Boolean(data?.truncado));
+          setTeto(data?.teto ?? 0);
           setIsLoading(false);
         }
       } catch (e) {
@@ -53,7 +64,7 @@ export function useAgendamentos() {
   }, []);
 
 
-  return { events, isLoading };
+  return { events, isLoading, truncado, teto };
 }
 
 /**

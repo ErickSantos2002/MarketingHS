@@ -11,7 +11,9 @@ interface AdminDataContextType {
   allLeads: ReturnType<typeof useLeads>['allLeads'];
   isLoading: boolean;
   refetch: () => void;
-  
+  truncado: boolean;
+  teto: number;
+
   // Legacy filters (for Contacts/Leads table)
   legacyFilters: LeadsFilters;
   setLegacyFilters: React.Dispatch<React.SetStateAction<LeadsFilters>>;
@@ -37,7 +39,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [legacyFilters, setLegacyFilters] = useState<LeadsFilters>({});
   const [showHotMetrics, setShowHotMetrics] = useState(false);
   const columnSettings = useColumnSettings();
-  const { leads, allLeads, isLoading, refetch } = useLeads(legacyFilters);
+  const { leads, allLeads, isLoading, refetch, truncado, teto } = useLeads(legacyFilters);
   const dashboardFilters = useDashboardFilters();
   const utmContentHistoryMap = useLeadConversionUtmContents();
   
@@ -70,7 +72,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
   return (
     <AdminDataContext.Provider value={{
-      leads, allLeads, isLoading, refetch,
+      leads, allLeads, isLoading, refetch, truncado, teto,
       legacyFilters, setLegacyFilters,
       dashboardFilters,
       filteredLeads, allEnrichedLeads,

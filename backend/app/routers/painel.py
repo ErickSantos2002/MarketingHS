@@ -38,6 +38,13 @@ router = APIRouter(prefix="/painel", tags=["painel"])
 # guardando seu próprio conjunto de cartões visíveis dentro desse objeto.
 CHAVES = {"lead_goal", "dashboard_cards"}
 
+# Teto de `/agendamentos`, no lugar do `LIMIT 500` fixo que o lote 6 introduziu
+# ao portar `useAgendamentos` do Supabase. 500 era 40x menor que o que a versão
+# anterior (paginação no cliente, `PAGE=1000`/`MAX=20000`) aguentava — e cortava
+# em silêncio. 20000 restaura o teto antigo, e a rota agora AVISA quando bate
+# nele, em vez de só truncar (ver `test_painel.py`).
+TETO_AGENDAMENTOS = 20000
+
 
 @router.get("/config/{chave}")
 async def ler_config(chave: str, usuario: Usuario = Depends(admin_atual)):
@@ -88,16 +95,29 @@ async def listar_agendamentos(usuario: Usuario = Depends(admin_atual)):
     ⚠️ A coluna é `occurred_at`, não `created_at` — `contact_events` não tem
     coluna `created_at` (conferido no schema de origem). O nome no retorno
     casa com o que o hook do frontend já esperava.
+
+    A resposta deixou de ser uma lista nua: `truncado` distingue "parei porque
+    acabou" (normal, silencioso) de "parei porque bati no teto" (`teto`
+    eventos, ordenados pelo mais recente — os mais antigos ficam de fora). O
+    hook do frontend (`useAgendamentos`) repassa os dois para quem quiser
+    avisar, do mesmo jeito que `useLeads` faz para o teto de 10 mil leads.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        total = await conn.fetchval(
+            """SELECT count(*) FROM contact_events
+                WHERE event_type IN ('scheduling_widget_booked', 'meeting_scheduled')""")
         linhas = await conn.fetch(
             """SELECT id::text, lead_id::text, dnia_id::text, event_type,
                       metadata, occurred_at::text
                  FROM contact_events
                 WHERE event_type IN ('scheduling_widget_booked', 'meeting_scheduled')
                 ORDER BY occurred_at DESC
-                LIMIT 500""")
-    return [dict(l) for l in linhas]
+                LIMIT $1""", TETO_AGENDAMENTOS)
+    return {
+        "events": [dict(l) for l in linhas],
+        "truncado": total > TETO_AGENDAMENTOS,
+        "teto": TETO_AGENDAMENTOS,
+    }
 
 
 @router.get("/agendamentos/mql-hoje")
