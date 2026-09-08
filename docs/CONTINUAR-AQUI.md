@@ -1,18 +1,18 @@
 # Continuar aqui
 
 **Atualizado:** 8 de setembro de 2026
-**Branch de trabalho:** `lote-7` — 14 commits à frente de `main`, que parou em
-`e4a709a` (o commit do plano). **Ainda não mergeada.**
+**Branch:** `main` — a `lote-7` foi mergeada e apagada. **Nada pushado.**
 
-⚠️ **A `reconstrucao` não existe mais desde o lote 6.** Fechou com merge local
-em `main` (fast-forward, sem commit de merge), suíte conferida no resultado
-mergeado, e a branch removida. Se precisar dela de volta:
+⚠️ **A `lote-7` não existe mais.** Fechou com merge local em `main`
+(fast-forward, sem commit de merge), suíte conferida no resultado mergeado
+(**138 passed**) e `tsc` limpo, e a branch removida. Se precisar dela de volta:
+`git branch lote-7 7ae95d2`. A `reconstrucao`, do lote 6, saiu do mesmo jeito:
 `git branch reconstrucao 6926d4d`.
 
-`main` está **123 commits à frente de `origin/main`**, e a `lote-7` soma mais
-14 em cima disso — o remoto continua parado em 31/08, no último commit do
-Lovable. O push, e o merge de `lote-7` em `main`, seguem sendo decisão do
-Erick, com o mesmo alerta de sempre (item 6 abaixo).
+`main` está **140 commits à frente de `origin/main`** — o remoto continua parado
+em 31/08, no último commit do Lovable, conferido com `fetch` antes do merge
+(`origin/main` é ancestral de `main`; não há nada a puxar). O push segue sendo
+decisão do Erick, com o mesmo alerta de sempre (item 6 abaixo).
 
 ## Onde paramos
 
@@ -567,6 +567,21 @@ o defeito dos 2.080 volta, calado.
     array `config.utm_presets`: a rota pública grava
     `utm_source`/`utm_medium`; a tela grava `source`/`medium`/`name`.
     Herdado da `pages-api`. Medido ao vivo em 08/09/2026.
+    ⚠️ A consequência que não é óbvia: preset gravado pela rota pública
+    aparece na tela com os **campos em branco**, e o botão "Copiar link"
+    entrega uma URL sem parâmetro nenhum — o `UTMPresetsModal` lê
+    `p.source`/`p.medium`, não `p.utm_source`/`p.utm_medium`.
+21. **A fusão de contatos move as conversões e não recalcula a data.**
+    `backend/app/routers/escrita_contatos.py:305` reatribui as
+    `lead_conversions` do contato descartado para o mantido, mas
+    `last_conversion_date` não está em `_CAMPOS_HERDAVEIS` e nada recalcula
+    depois — o mantido fica com a data antiga mesmo herdando conversões mais
+    recentes. **É anterior ao lote 7 e não é regressão dele**; entrou aqui
+    porque a revisão final do lote o encontrou e porque agora existe
+    `_recalcular_datas` (em `publico.py`), o que reduz a correção a uma
+    chamada. Mesma família do defeito que o lote 7 consertou em
+    `POST /publico/conversao`: neste banco, data de última conversão errada
+    não dá erro, dá número de painel plausível.
 
 ## Como subir o que existe
 
