@@ -8,6 +8,7 @@ import base64
 import hmac
 import json
 import logging
+import re
 
 import asyncpg
 
@@ -917,3 +918,159 @@ async def editar_automacao_publico(regra_id: str, dados: RegraPatch,
     uma regra. É a rota que mais é chamada de fora; não pode sumir."""
     await atualizar_regra(regra_id, dados)
     return {"success": True, "rule": {"id": regra_id}}
+
+
+# ---------------------------------------------------------------------------
+# Conversões — o que era register-/update-/unregister-conversion
+# ---------------------------------------------------------------------------
+
+# Herdado de `apply-lead-tag`, e fica. O slug chega pelo corpo do request; sem
+# guarda, `tags.name` vira campo de texto livre escrito de fora.
+TAG_VALIDA = re.compile(r"^[a-z0-9][a-z0-9._\-/]*$")
+TAG_MAX = 60
+
+
+class ConversaoIn(BaseModel):
+    """O corpo de `POST /publico/conversao`.
+
+    ⚠️ `ab_test`/`ab_var`/`ab_vid` não existiam na function `register-conversion`
+    — quem gravava as três colunas era `frontend/src/lib/leadConversion.ts`, que
+    este lote apaga. Elas entram aqui para que apagar o cliente não leve junto
+    a atribuição de teste A/B: as colunas existem em `lead_conversions` e a
+    landing do próximo lote vai precisar delas. É exatamente o corte silencioso
+    que o portão do lote 6 deixou passar três vezes.
+    """
+    lead_id: str | None = None
+    dnia_id: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    tipo: str = Field(min_length=1, max_length=80)
+    page_slug: str = Field(min_length=1, max_length=200)
+    session_id: str | None = None
+    converted_at: str | None = None
+    utm_source: str | None = None
+    utm_medium: str | None = None
+    utm_campaign: str | None = None
+    utm_term: str | None = None
+    utm_content: str | None = None
+    source: str | None = None
+    ab_test: str | None = None
+    ab_var: str | None = None
+    ab_vid: str | None = None
+    apply_tag: bool = True
+
+
+async def _resolver_lead(conn, dados: ConversaoIn) -> str | None:
+    """As quatro estratégias do `register-conversion`, na ordem da origem.
+
+    A ordem não é arbitrária e não pode ser trocada: `dnia_id` é exato; o
+    e-mail é o mais frágil (a mesma pessoa pode ter várias linhas — daí o
+    `ORDER BY created_at DESC`, que faz vencer a mais recente); o telefone
+    tenta o normalizado antes do cru; e a quarta é a rede de segurança para
+    lead criado por `/publico/identidade` antes de qualquer normalização.
+
+    Devolve `None` quando não acha — quem chama transforma em 404. Não invente
+    lead: criar contato aqui faria a rota de conversão virar rota de captura.
+    """
+    if dados.lead_id:
+        return dados.lead_id
+
+    email = dados.email.strip().lower() if dados.email else None
+    telefone_cru = str(dados.phone).strip() if dados.phone else None
+    telefone = None
+    if telefone_cru:
+        telefone = await conn.fetchval(
+            "SELECT normalize_phone_br($1)", telefone_cru)
+
+    if dados.dnia_id:
+        achado = await conn.fetchval(
+            "SELECT id::text FROM leads WHERE dnia_id = $1::uuid LIMIT 1",
+            dados.dnia_id)
+        if achado:
+            return achado
+
+    if email:
+        achado = await conn.fetchval(
+            """SELECT id::text FROM leads WHERE lower(email) = $1
+                ORDER BY created_at DESC LIMIT 1""", email)
+        if achado:
+            return achado
+
+    if telefone:
+        achado = await conn.fetchval(
+            """SELECT id::text FROM leads WHERE phone_normalized = $1
+                ORDER BY created_at DESC LIMIT 1""", telefone)
+        if achado:
+            return achado
+
+    if telefone_cru:
+        achado = await conn.fetchval(
+            """SELECT id::text FROM leads WHERE whatsapp = $1
+                ORDER BY created_at DESC LIMIT 1""", telefone_cru)
+        if achado:
+            return achado
+
+    if email or telefone:
+        # ⚠️ E-mail tem precedência sobre telefone, como na origem: quando os
+        # dois vêm, procura só por e-mail. Trocar isso muda qual lead recebe a
+        # conversão em base com telefone repetido.
+        linha = await conn.fetchrow(
+            """SELECT dnia_id::text AS dnia_id,
+                      dndash_lead_id::text AS lead_id
+                 FROM ecosystem_identities
+                WHERE ($1::text IS NOT NULL AND lower(email) = $1)
+                   OR ($1::text IS NULL AND $2::text IS NOT NULL AND phone = $2)
+                LIMIT 1""", email, telefone)
+        if linha:
+            if linha["lead_id"]:
+                return linha["lead_id"]
+            if linha["dnia_id"]:
+                return await conn.fetchval(
+                    """SELECT id::text FROM leads WHERE dnia_id = $1::uuid
+                        ORDER BY created_at DESC LIMIT 1""", linha["dnia_id"])
+    return None
+
+
+async def _aplicar_tag_do_slug(conn, lead_id: str, page_slug: str) -> str | None:
+    """A tag derivada do slug, aplicada na MESMA transação da conversão.
+
+    Era a function `apply-lead-tag`, chamada por HTTP e fire-and-forget: se
+    falhasse, ninguém ficava sabendo e a conversão ficava sem tag. Aqui, ou as
+    duas coisas acontecem, ou nenhuma.
+
+    Devolve a tag aplicada, ou `None` quando o slug não passa na guarda — e
+    não levanta: tag é efeito secundário da conversão, e recusar a conversão
+    inteira por causa de um slug estranho seria pior que não etiquetar.
+    """
+    tag = page_slug.lstrip("/").strip().lower()
+    if not tag or len(tag) > TAG_MAX or not TAG_VALIDA.match(tag):
+        return None
+    tag_id = await conn.fetchval(
+        """INSERT INTO tags (name) VALUES ($1)
+           ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id""", tag)
+    await conn.execute(
+        """INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2)
+           ON CONFLICT (lead_id, tag_id) DO NOTHING""", lead_id, tag_id)
+    return tag
+
+
+async def _recalcular_datas(conn, lead_ids: list[str]) -> None:
+    """Recalcula `leads.last_conversion_date` do zero para os leads dados.
+
+    ⚠️ Isto NÃO é redundante com o gatilho. `trg_update_last_conversion_date`
+    é AFTER INSERT e usa `greatest()`: ele só sobe a data. Depois de apagar ou
+    de mover uma conversão para trás, é preciso recalcular, senão a data fica
+    apontando para uma conversão que não existe mais — sem erro, sem aviso.
+
+    Uma instrução para o conjunto todo, e não o laço por lead da function
+    original: o `unregister-conversion` fazia duas consultas por lead afetado.
+    """
+    if not lead_ids:
+        return
+    await conn.execute(
+        """UPDATE leads l
+              SET last_conversion_date = (SELECT max(c.converted_at)
+                                            FROM lead_conversions c
+                                           WHERE c.lead_id = l.id)
+            WHERE l.id = ANY($1::uuid[])""", lead_ids)
