@@ -152,6 +152,22 @@ body {
   outline-offset: 2px;
 }
 
+/* Confirmação de envio — substitui o formulário, visível sem rolar */
+.captura-sucesso {
+  padding: 6px 0 2px;
+}
+
+.captura-sucesso p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--landing-fg);
+}
+
+.captura-sucesso strong {
+  color: var(--landing-accent);
+}
+
 @media (min-width: 640px) {
   .hero {
     padding: 36px 32px;
