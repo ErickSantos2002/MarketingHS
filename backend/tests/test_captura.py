@@ -98,3 +98,149 @@ def test_higienizar_aceita_numero_e_booleano():
     saida = vcampos.higienizar({"funcionarios": "500", "interesse_formacao": True})
     assert saida["funcionarios"] == "500"
     assert saida["interesse_formacao"] is True
+
+
+import pytest_asyncio
+
+from app import database as db
+
+EMAIL_SONDA = "sonda-captura@exemplo.invalid"
+SLUG_SONDA = "sonda-captura"
+
+
+@pytest_asyncio.fixture
+async def pagina_sonda(monkeypatch):
+    """Uma página real para a captura ter slug, apagada no fim.
+
+    ⚠️ Limpa ANTES de inserir, como a fixture `envio`: esta fixture COMMITA e
+    só desfaz no teardown; se o pytest morrer no meio, a linha fica e o
+    `pages_slug_key` derruba a rodada seguinte no setup.
+
+    ⚠️ **Divergência achada rodando, não prevista no brief.** `EMAIL_SONDA`
+    usa o domínio `exemplo.invalid` — reservado pela RFC 2606, garantidamente
+    sem MX nem A de verdade. `validar_dominio` (Tarefa 2) faz consulta DNS de
+    verdade, então sem este monkeypatch a captura recusa TODO lead de sonda
+    com 400 antes de chegar perto do banco — os quatro testes que dependem
+    desta fixture falhavam nisso, não no que pretendiam medir. Segue o mesmo
+    padrão dos testes de `validar_dominio` acima (`monkeypatch.setattr(vemail,
+    "_tem_mx", ...)`); a recusa de `mailinator.com` continua íntegra porque a
+    lista de descartáveis é checada ANTES da consulta de MX.
+    """
+    from app.captura import email as vemail
+
+    async def sempre_tem_mx(_dominio):
+        return True
+
+    monkeypatch.setattr(vemail, "_tem_mx", sempre_tem_mx)
+    vemail._limpar_cache()
+
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+
+    async def limpar():
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute(
+                "DELETE FROM lead_conversions WHERE lead_id IN "
+                "(SELECT id FROM leads WHERE email = $1)", EMAIL_SONDA)
+            await conn.execute("DELETE FROM leads WHERE email = $1", EMAIL_SONDA)
+            await conn.execute("DELETE FROM pages WHERE slug = $1", SLUG_SONDA)
+            await conn.execute("DELETE FROM tags WHERE name = $1", SLUG_SONDA)
+
+    await limpar()
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            """INSERT INTO pages (name, slug, component_name, page_type, status, config)
+               VALUES ('Sonda da captura', $1, 'SondaCaptura', 'landing', 'active', $2)""",
+            SLUG_SONDA, {"redirect_url": "https://exemplo.invalid/obrigado"})
+    yield SLUG_SONDA
+    await limpar()
+    # ⚠️ NÃO chame `db.close_db()` aqui. A fixture `cliente` já fecha o pool no
+    # teardown dela, e a `envio` — o padrão desta casa para fixture que commita
+    # — deliberadamente não fecha. Fechar nas duas faz o teardown fechar um pool
+    # já fechado quando a função usa as duas ao mesmo tempo, que é exatamente o
+    # caso de todos os testes desta tarefa.
+
+
+async def test_captura_cria_lead_pontuado_com_conversao_e_tag(cliente, pagina_sonda):
+    """O caminho inteiro numa chamada — é o que a landing faz.
+
+    O modo de falhar é silencioso em cada etapa: lead sem score (o gatilho não
+    viu campo que pontua), sem identidade (a visão 360° vem vazia), sem
+    conversão (o painel não conta o lead) ou sem tag (o segmento não o pega).
+    """
+    resposta = await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA,
+        "page_slug": pagina_sonda,
+        "fields": {"nome": "Carla Sonda", "cargo": "Gerente de SESMT",
+                   "empresa": "Transportes Exemplo", "whatsapp": "85999991234"},
+    })
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["ok"] is True
+    assert corpo["redirect_url"] == "https://exemplo.invalid/obrigado"
+
+    async with db.sessao(role="service_role") as conn:
+        lead = await conn.fetchrow(
+            "SELECT id, nome, lead_score, etiqueta, dnia_id FROM leads WHERE email = $1",
+            EMAIL_SONDA)
+        assert lead is not None, "a captura não gravou o contato"
+        assert lead["nome"] == "Carla Sonda"
+        assert lead["lead_score"] > 0, "o gatilho de pontuação não viu campo que pontua"
+        assert lead["dnia_id"] is not None, "a identidade não foi resolvida"
+
+        conversoes = await conn.fetchval(
+            "SELECT count(*) FROM lead_conversions WHERE lead_id = $1", lead["id"])
+        assert conversoes == 1, "a conversão não foi registrada"
+
+        tags = await conn.fetchval(
+            "SELECT count(*) FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id "
+            "WHERE lt.lead_id = $1 AND t.name = $2", lead["id"], pagina_sonda)
+        assert tags == 1, "a tag do slug não foi aplicada"
+
+
+async def test_captura_nao_devolve_dado_pessoal(cliente, pagina_sonda):
+    """⚠️ A rota é ANÔNIMA. Se ela devolver o lead, qualquer pessoa extrai nome,
+    telefone e empresa da base mandando e-mails, um por vez."""
+    await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda,
+        "fields": {"nome": "Carla Sonda", "whatsapp": "85999991234"}})
+    resposta = await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda, "fields": {}})
+    corpo = resposta.json()
+    assert set(corpo.keys()) <= {"ok", "redirect_url"}
+    texto = resposta.text.lower()
+    assert "carla" not in texto and "85999991234" not in texto
+
+
+async def test_captura_recusa_descartavel(cliente, pagina_sonda):
+    resposta = await cliente.post("/publico/captura", json={
+        "email": "alguem@mailinator.com", "page_slug": pagina_sonda, "fields": {}})
+    assert resposta.status_code == 400
+
+
+async def test_captura_reativa_contato_excluido(cliente, pagina_sonda):
+    await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda, "fields": {"nome": "Carla"}})
+    async with db.sessao(role="service_role") as conn:
+        # ⚠️ `deleted_by` é `uuid` na tabela `leads`, não `text` — o brief
+        # original usava o literal 'teste', que a coluna recusa com
+        # `invalid input syntax for type uuid: "teste"` antes mesmo de chegar
+        # à rota (medido em 08/09/2026, rodando o UPDATE isolado). Um uuid de
+        # verdade prova a mesma coisa sem depender do valor.
+        await conn.execute(
+            "UPDATE leads SET deleted_at = now(), deleted_by = gen_random_uuid() "
+            "WHERE email = $1",
+            EMAIL_SONDA)
+
+    await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda, "fields": {"nome": "Carla"}})
+
+    async with db.sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT id, deleted_at FROM leads WHERE email = $1", EMAIL_SONDA)
+        assert linha["deleted_at"] is None, "reconverter deveria reativar o contato"
+        evento = await conn.fetchval(
+            "SELECT count(*) FROM contact_events "
+            "WHERE lead_id = $1 AND event_type = 'contact_reactivated'", linha["id"])
+        assert evento == 1, "a reativação precisa deixar rastro"
