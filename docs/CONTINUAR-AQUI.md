@@ -18,9 +18,24 @@
 >    ele não alcança `127.0.0.1`. O combinado é o Erick abrir e relatar. O
 >    roteiro e o script que cria a página de teste estão no ledger da sessão,
 >    em `.superpowers/sdd/2026-09-08-marketinghs-captacao-a-landing/`.
-> 2. **Passo 5 do portão:** `git rm -r` em `backend/supabase/functions/lead-capture`
+> 2. **Dois achados da verificação do portão, que chegaram depois do
+>    encerramento e ainda NÃO foram tratados:**
+>    - ⚠️ **corte silencioso:** o evento `contact_reactivated` deixou de gravar
+>      `dnia_id` em `contact_events` (`backend/app/routers/captura.py:215-223`)
+>      — a coluna existe, é indexada e o valor está à mão. Corrigir antes de
+>      fechar;
+>    - ⚠️ **sobrou código morto do remix:** `frontend/src/lib/leadCapture.ts:39`
+>      e `frontend/src/lib/emailValidation.ts:41` ainda chamam
+>      `supabase.functions.invoke`. Nada os importa, mas são os clientes de
+>      navegador das duas functions que este subprojeto substitui — os análogos
+>      exatos do `leadConversion.ts` do lote 7. Devem sair no portão.
+>
+>    (Mais dois menores, no ledger: e-mail >320 caracteres agora dá 422 em vez
+>    de 400, e `session_id` >100 caracteres rejeita a requisição inteira em vez
+>    de descartar o campo.)
+> 3. **Passo 5 do portão:** `git rm -r` em `backend/supabase/functions/lead-capture`
 >    e `.../validate-email-domain` — só DEPOIS do clique.
-> 3. **Tarefa 9:** atualizar este documento de verdade (placar 36/7/11, os itens
+> 4. **Tarefa 9:** atualizar este documento de verdade (placar 36/7/11, os itens
 >    22 a 24 da lista do Erick) e apagar esta caixa.
 >
 > ⚠️ **O design system da HS não foi consultado** — a ferramenta não estava
