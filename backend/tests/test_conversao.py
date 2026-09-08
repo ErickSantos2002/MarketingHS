@@ -12,8 +12,13 @@ BAIXA a data. Apagar a conversão mais recente sem recalcular deixa
 `leads.last_conversion_date` mentindo para sempre, e nada avisa.
 """
 
-import pytest
+from datetime import datetime, timedelta, timezone
 
+import pytest
+import pytest_asyncio
+
+import app.database as db
+from app.chave_api import gerar_chave
 from app.routers.publico import (
     ConversaoIn, _aplicar_tag_do_slug, _recalcular_datas, _resolver_lead,
 )
@@ -30,6 +35,84 @@ async def _lead(conexao, **campos):
     return str(await conexao.fetchval(
         f"INSERT INTO leads ({nomes}) VALUES ({marcas}) RETURNING id",
         *campos.values()))
+
+
+EMAIL_E2E = "conversao-e2e@exemplo.invalid"
+
+
+@pytest_asyncio.fixture
+async def chamador():
+    """Um lead e uma chave de API de escopo `write`, gravados de verdade para
+    exercitar `POST /publico/conversao` pelo `cliente` (que COMMITA — ver o
+    docstring da fixture `cliente` em conftest.py). Apagado no teardown,
+    mesmo padrão de `envio` em conftest.py.
+
+    Devolve `(lead_id, chave_crua)`.
+    """
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL — os testes de conversão e2e exigem banco")
+    crua, hash_, prefixo = gerar_chave()
+    async with db.sessao(role="service_role") as conn:
+        # ⚠️ Limpa ANTES de inserir — mesmo motivo do comentário de `envio`:
+        # se o pytest morrer no meio (timeout, Ctrl-C), a linha fica e
+        # `leads_email_unique`/o hash da chave derrubam a rodada seguinte no
+        # setup, com um erro que aponta para o índice e não para o motivo.
+        await conn.execute("DELETE FROM leads WHERE email = $1", EMAIL_E2E)
+        await conn.execute("DELETE FROM api_keys WHERE key_hash = $1", hash_)
+        lead = await conn.fetchval(
+            "INSERT INTO leads (nome, email, tipo) VALUES "
+            "('Conversão e2e', $1, 'teste') RETURNING id", EMAIL_E2E)
+        await conn.execute(
+            "INSERT INTO api_keys (name, key_hash, key_prefix, permissions) "
+            "VALUES ('teste e2e de conversão', $1, $2, 'write')", hash_, prefixo)
+    yield str(lead), crua
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM lead_conversions WHERE lead_id = $1::uuid", lead)
+        await conn.execute("DELETE FROM lead_tags WHERE lead_id = $1::uuid", lead)
+        await conn.execute("DELETE FROM leads WHERE id = $1::uuid", lead)
+        await conn.execute("DELETE FROM api_keys WHERE key_hash = $1", hash_)
+
+
+async def test_post_conversao_recalcula_a_data_que_o_default_deixa_no_futuro(
+        cliente, chamador):
+    """Fim a fim: `POST /publico/conversao` pelo cliente ASGI de verdade —
+    não a chamada direta a `_recalcular_datas` que o teste anterior fazia.
+
+    O lead nasce com `last_conversion_date = DEFAULT now()` (migrations/001).
+    Uma conversão registrada com `converted_at` no passado não baixa isso
+    sozinha: o gatilho `trg_update_last_conversion_date` é AFTER INSERT e usa
+    `greatest()`, que nunca vê o passado como maior que o default. Sem a
+    chamada a `_recalcular_datas` dentro do handler `registrar_conversao`
+    (backend/app/routers/publico.py), a data fica presa no DEFAULT now() —
+    sem erro e sem aviso. Comentar aquela linha faz este teste FALHAR: é o
+    que prova que ele protege a correção do commit 4d625fd, e não só o código
+    velho de `_recalcular_datas` (que os dois testes abaixo já cobrem
+    isoladamente).
+    """
+    lead_id, chave = chamador
+    converted_at = datetime.now(timezone.utc) - timedelta(days=10)
+
+    resposta = await cliente.post(
+        "/publico/conversao",
+        json={
+            "lead_id": lead_id,
+            "tipo": "diagnostico",
+            "page_slug": "humanoseagentes",
+            "converted_at": converted_at.isoformat(),
+            "apply_tag": False,
+        },
+        headers={"Authorization": f"Bearer {chave}"},
+    )
+    assert resposta.status_code == 201, resposta.text
+
+    async with db.sessao(role="service_role") as conn:
+        last_conversion_date = await conn.fetchval(
+            "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead_id)
+
+    assert last_conversion_date == converted_at, (
+        "last_conversion_date ficou na data do DEFAULT now() em vez da "
+        "conversão registrada — a rota deixou de recalcular depois do INSERT")
 
 
 async def test_acha_por_email_ignorando_maiuscula(conexao):
@@ -136,41 +219,6 @@ async def test_recalculo_baixa_a_data_que_o_gatilho_nao_baixa(conexao):
     depois = await conexao.fetchval(
         "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
     assert depois < antes, "sem recálculo a data fica na conversão apagada"
-
-
-async def test_recalculo_assenta_a_data_que_o_default_deixa_no_futuro(conexao):
-    """`leads.last_conversion_date` tem `DEFAULT now()` (migrations/001). Um
-    lead recém-criado já nasce com a data "no futuro" em relação a uma
-    conversão que se registre depois com `converted_at` no passado — e o
-    gatilho, que só SOBE a data (`greatest()`), não conserta isso: ele nunca
-    vê a conversão como maior que o default. Sem o recálculo depois do
-    INSERT, a data fica maior que qualquer conversão que exista, sem erro e
-    sem aviso. É o cenário que `registrar_conversao` (POST /publico/conversao)
-    agora fecha chamando `_recalcular_datas` no fim do handler."""
-    lead = await _lead(conexao, nome="Nasce com o default no futuro")
-    default_now = await conexao.fetchval(
-        "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
-    assert default_now is not None, "a coluna precisa nascer preenchida pelo DEFAULT now()"
-
-    conversao_passada = await conexao.fetchval(
-        "INSERT INTO lead_conversions (lead_id, tipo, converted_at, page_slug) "
-        "VALUES ($1::uuid, 't', now() - interval '10 days', 'p') "
-        "RETURNING converted_at", lead)
-
-    # o gatilho rodou (AFTER INSERT) e não baixou a data: greatest(default, passado) = default
-    depois_do_gatilho = await conexao.fetchval(
-        "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
-    assert depois_do_gatilho == default_now, (
-        "o gatilho nunca baixa a data — se este assert falhar, o cenário do "
-        "DEFAULT now() deixou de existir e o teste deve ser revisto")
-
-    await _recalcular_datas(conexao, [lead])
-
-    depois_do_recalculo = await conexao.fetchval(
-        "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
-    assert depois_do_recalculo == conversao_passada, (
-        "o recálculo precisa assentar a data na conversão real, não deixá-la "
-        "no DEFAULT now() que o gatilho não questiona")
 
 
 async def test_recalculo_zera_quando_nao_sobra_conversao(conexao):
