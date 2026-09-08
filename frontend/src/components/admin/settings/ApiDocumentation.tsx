@@ -206,21 +206,22 @@ const ENDPOINTS = [
   {
     id: 'lead-capture',
     method: 'POST',
-    path: '/lead-capture',
+    path: '/publico/captura',
     title: 'Captura de lead (formulários públicos)',
-    description: 'Endpoint usado pelos formulários públicos do site. Resolve a identidade automaticamente (gera/encontra dnia_id). Idempotente por email: se já existir lead com o mesmo email, atualiza.',
+    description: 'A porta da landing pública. É rota nova, com contrato próprio — não uma troca de nome da captura antiga, que era autenticada: esta não exige autenticação, page_slug é novo e obrigatório, e a resposta não devolve nada sobre o lead. Idempotente por email (case-insensitive): se já existir lead com o mesmo email, atualiza e reativa se estava na lixeira.',
     params: [
       { name: 'email', type: 'string', required: 'Sim', description: 'Email do lead (chave de idempotência)' },
-      { name: 'sessionId', type: 'string', required: 'Não', description: 'ID da sessão (max 100 chars)' },
+      { name: 'page_slug', type: 'string', required: 'Sim', description: 'Slug da página que capturou. Precisa existir com status=active — senão 404. Não existia no contrato anterior desta rota.' },
+      { name: 'session_id', type: 'string', required: 'Não', description: 'ID da sessão (max 100 chars)' },
       { name: 'fields', type: 'object', required: 'Não', description: 'Objeto com campos do lead (whitelist abaixo). Chaves fora da whitelist são silenciosamente descartadas.' },
     ],
     curl: `curl -X POST \\
-  '${BASE_URL}/lead-capture' \\
-  -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
+  '${BASE_URL}/publico/captura' \\
   -H 'Content-Type: application/json' \\
   -d '{
     "email": "joao@empresa.com",
-    "sessionId": "abc123",
+    "page_slug": "programadeiaficacao",
+    "session_id": "abc123",
     "fields": {
       "nome": "João Silva",
       "whatsapp": "(11) 99999-9999",
@@ -235,12 +236,31 @@ const ENDPOINTS = [
     }
   }'`,
     response: JSON.stringify({
-      id: "uuid",
-      dnia_id: "uuid",
-      phone_normalized: "+5511999999999",
-      etiqueta: "warm"
+      ok: true,
+      redirect_url: null
     }, null, 2),
-    notes: 'Whitelist de fields: nome, whatsapp, cargo, empresa, faturamento, funcionarios, desafios, tipo, tipo_participante, source, presenca, origem_campanha, indicacao, interesse_formacao, interesse_ecossistema, interesse_mtia, data_interesse, status, utm_source, utm_medium, utm_campaign, utm_term, utm_content, ab_test, ab_var, ab_vid.',
+    notes: '⚠️ Sem Authorization: a rota é anônima, por desenho — é a landing pública chamando, e qualquer credencial no navegador estaria publicada. E é por isso que a resposta não traz id, dnia_id nem isNew: devolver qualquer projeção do lead responderia "este e-mail está na base?" para quem perguntasse, um e-mail por vez. mode="update_only" da versão anterior não existe mais — sem consumidor conhecido; quem precisar dele depende de uma rota autenticada nova, decisão do dono do projeto. Whitelist de fields: nome, whatsapp, cargo, empresa, faturamento, funcionarios, desafios, tipo, tipo_participante, source, presenca, origem_campanha, indicacao, interesse_formacao, interesse_ecossistema, interesse_mtia, data_interesse, status, utm_source, utm_medium, utm_campaign, utm_term, utm_content, ab_test, ab_var, ab_vid. 400 se o e-mail for inválido; 404 se page_slug não corresponder a uma página ativa.',
+  },
+  {
+    id: 'validar-email',
+    method: 'POST',
+    path: '/publico/validar-email',
+    title: 'Conferência de e-mail antes do envio',
+    description: 'Rota anônima, pensada para ser chamada a cada pausa de digitação no formulário. Devolve sempre 200 — inclusive quando o e-mail é inválido — porque um 4xx aqui viraria erro no console a cada tecla.',
+    params: [
+      { name: 'email', type: 'string', required: 'Sim', description: 'Email a conferir' },
+    ],
+    curl: `curl -X POST \\
+  '${BASE_URL}/publico/validar-email' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "email": "joao@empresa.com"
+  }'`,
+    response: JSON.stringify({
+      valido: true,
+      motivo: null
+    }, null, 2),
+    notes: 'Sempre 200, válido ou não — motivo só vem preenchido quando valido=false. Fail-open por decisão: erro de DNS, timeout ou exceção inesperada é tratado como válido, porque nenhuma instabilidade nossa pode recusar um lead real. Isenta do limite de 30/min por IP que vale para as outras rotas de /publico — não escreve nada, mas é chamada com muito mais frequência do que o envio de verdade.',
   },
   {
     id: 'identity-upsert',

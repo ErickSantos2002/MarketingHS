@@ -478,14 +478,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /lead-capture:
+  /publico/captura:
     post:
-      operationId: leadCapture
+      operationId: capturaPublica
       summary: Captura de lead (formulários públicos)
+      security: []
       description: |
-        Endpoint usado pelos formulários públicos do site para criar/atualizar leads.
-        Resolve a identidade automaticamente (gera/encontra `dnia_id`).
-        Idempotente por `email`: se já existir lead com o mesmo email, atualiza.
+        A porta da landing pública. Contrato próprio, distinto da captura
+        anterior — não uma simples troca de nome:
+
+        - **Não exige autenticação, por desenho.** É a landing pública
+          chamando; qualquer credencial que chegasse ao navegador estaria
+          publicada. A captura anterior exigia chave publicável.
+        - **`page_slug` é novo e obrigatório.** A página precisa existir e
+          estar com `status = 'active'` — senão 404.
+        - **A resposta não devolve nada sobre o lead** (nem `id`, nem
+          `isNew`). Ver a descrição do 200 abaixo.
+        - **`mode: "update_only"` não existe mais.** Era o fluxo de
+          reconversão da dn.ia e não tem consumidor conhecido hoje. Quem
+          depender dele precisa de uma rota autenticada nova — decisão do
+          dono do projeto, não implícita aqui.
+
+        Idempotente por `email` (case-insensitive): se já existir lead com
+        o mesmo email, atualiza os campos enviados e reativa o contato se
+        estava na lixeira.
       tags:
         - Leads
       requestBody:
@@ -496,13 +512,18 @@ paths:
               type: object
               required:
                 - email
+                - page_slug
               properties:
                 email:
                   type: string
                   format: email
-                sessionId:
+                page_slug:
+                  type: string
+                  description: Slug da landing page que capturou o lead. Precisa corresponder a uma página com status=active.
+                session_id:
                   type: string
                   maxLength: 100
+                  nullable: true
                 fields:
                   type: object
                   description: |
@@ -532,25 +553,86 @@ paths:
                     utm_campaign: { type: string }
                     utm_term: { type: string }
                     utm_content: { type: string }
+                    ab_test: { type: string, description: "Slug do teste A/B." }
+                    ab_var: { type: string, description: "Variante atribuída (A, B, ...)." }
+                    ab_vid: { type: string, description: "ID anônimo do visitante do Teste A/B." }
       responses:
         '200':
-          description: Lead criado ou atualizado
+          description: |
+            Lead capturado. A resposta NÃO traz nada sobre o lead — nem um
+            booleano de "é novo?". A rota é anônima: devolver qualquer
+            projeção do lead (inclusive `isNew`) responderia "este e-mail
+            está na base?" para quem perguntasse, um e-mail por vez — um
+            oráculo de enumeração.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  id: { type: string, format: uuid }
-                  dnia_id: { type: string, format: uuid }
-                  phone_normalized: { type: string, nullable: true }
-                  etiqueta: { type: string, nullable: true }
+                  ok:
+                    type: boolean
+                  redirect_url:
+                    type: string
+                    nullable: true
+                    description: Vem de pages.config.redirect_url, quando a página tiver um. Senão, null.
         '400':
-          description: "Dados inválidos (ex: email ausente)"
+          description: "E-mail inválido: formato quebrado, descartável conhecido, ou domínio sem MX/A"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: page_slug não corresponde a nenhuma página com status=active
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /publico/validar-email:
+    post:
+      operationId: validarEmail
+      summary: Conferência de e-mail antes do envio
+      security: []
+      description: |
+        Rota anônima, pensada para ser chamada a cada pausa de digitação no
+        formulário — devolve **sempre 200**, inclusive quando o e-mail é
+        inválido. Um 4xx aqui viraria erro no console do navegador a cada
+        tecla de quem preenche.
+
+        *Fail-open* por decisão: erro de DNS, timeout ou qualquer exceção
+        inesperada é tratado como válido — a regra é que nenhuma
+        instabilidade nossa pode recusar um lead real.
+
+        Isenta do limite de 30/min por IP que vale para as outras rotas de
+        `/publico`: ela não escreve nada, mas é chamada com muito mais
+        frequência do que o envio de verdade.
+      tags:
+        - Leads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Sempre 200, e-mail válido ou não
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valido:
+                    type: boolean
+                  motivo:
+                    type: string
+                    nullable: true
+                    description: Preenchido só quando valido=false
 
   /publico/contatos:
     get:
