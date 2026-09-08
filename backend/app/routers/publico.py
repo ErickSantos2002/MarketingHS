@@ -1163,6 +1163,18 @@ APP_DA_CONVERSAO = "marketinghs"
 
 
 @router.patch("/conversao")
+# ⚠️ Alias de compatibilidade: `update-conversion`, a function de origem,
+# aceitava PATCH OU POST na MESMA url — e é o que a documentação publicada em
+# `ApiDocumentation.tsx` promete a quem integra ("Aceita PATCH ou POST"). O
+# alias não pode viver em `POST /conversao`: esse caminho já é
+# `registrar_conversao` (a criação), e o FastAPI/Starlette não escolhe entre
+# duas rotas pelo corpo — quando duas rotas competem pelo MESMO (método,
+# caminho), só a registrada primeiro no arquivo é alcançável; a segunda vira
+# código morto (medido com `TestClient`: um POST de atualização mandado para
+# `/conversao` sempre caiu no handler de criação e voltou 422 por falta de
+# `tipo`/`page_slug`). Por isso o alias mora em `/conversao/atualizar`, um
+# caminho que não colide com nada.
+@router.post("/conversao/atualizar")
 async def atualizar_conversao(dados: ConversaoPatch,
                               _: ChaveApi = Depends(chave_api("write"))):
     """Move a data de todas as conversões de uma sessão. Era `update-conversion`."""
@@ -1208,26 +1220,45 @@ async def atualizar_conversao(dados: ConversaoPatch,
 
 
 @router.delete("/conversao")
-async def remover_conversao(dados: ConversaoDelete,
-                            _: ChaveApi = Depends(chave_api("write"))):
+# ⚠️ Mesmo motivo do alias de `atualizar_conversao` acima: `POST /conversao`
+# já é a criação, então o alias de `unregister-conversion` ("Aceita DELETE ou
+# POST") mora em `/conversao/remover` — caminho que não compete com nada.
+@router.post("/conversao/remover")
+async def remover_conversao(
+    dados: ConversaoDelete | None = None,
+    session_id: str | None = Query(None),
+    _: ChaveApi = Depends(chave_api("write")),
+):
     """Apaga as conversões de uma sessão. Era `unregister-conversion`.
 
     ⚠️ O recálculo depois do DELETE é obrigatório e é o motivo de esta rota
     existir em vez de um DELETE cru: o gatilho da tabela só sobe a data.
+
+    ⚠️ `session_id` aceita corpo OU query string — é o que a documentação
+    publicada promete ("body ou query param") e o que a function original
+    fazia (`body.session_id || url.searchParams.get('session_id')`). Quando
+    os dois vierem, o CORPO VENCE, na mesma ordem da origem. O corpo é
+    OPCIONAL por isso: a origem tolerava corpo ausente (`content-length`
+    vazio), e `DELETE /conversao?session_id=xxx` sem corpo nenhum precisa
+    continuar funcionando.
     """
+    sid = (dados.session_id if dados else None) or session_id
+    if not sid:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Informe 'session_id'.")
+
     async with sessao(role="service_role") as conn:
         antes = await conn.fetch(
             """SELECT id::text, lead_id::text, converted_at::text,
                       tipo, page_slug, session_id
                  FROM lead_conversions WHERE session_id = $1""",
-            dados.session_id)
+            sid)
         if not antes:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND,
                 "Nenhuma conversão para o session_id informado.")
 
         await conn.execute(
-            "DELETE FROM lead_conversions WHERE session_id = $1", dados.session_id)
+            "DELETE FROM lead_conversions WHERE session_id = $1", sid)
 
         leads = sorted({l["lead_id"] for l in antes if l["lead_id"]})
         await _recalcular_datas(conn, leads)
@@ -1239,8 +1270,8 @@ async def remover_conversao(dados: ConversaoDelete,
                        (lead_id, source_app, event_type, title, metadata)
                    VALUES ($1::uuid, $2, 'conversion_unregistered', $3, $4)""",
                 lead_id, APP_DA_CONVERSAO,
-                f"Conversão removida (session_id: {dados.session_id})",
-                {"session_id": dados.session_id,
+                f"Conversão removida (session_id: {sid})",
+                {"session_id": sid,
                  "removed_count": len(removidas), "removed": removidas})
 
     return {"success": True, "affected": len(antes),
