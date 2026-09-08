@@ -9,7 +9,9 @@ lead sem pontuação, sem identidade ou sem conversão — tudo silencioso.
 """
 
 import pytest
+import pytest_asyncio
 
+from app import database as db
 from app.captura import email as vemail
 
 # ⚠️ SEM `pytestmark = pytest.mark.asyncio` neste arquivo, ao contrário do
@@ -100,10 +102,6 @@ def test_higienizar_aceita_numero_e_booleano():
     assert saida["interesse_formacao"] is True
 
 
-import pytest_asyncio
-
-from app import database as db
-
 EMAIL_SONDA = "sonda-captura@exemplo.invalid"
 SLUG_SONDA = "sonda-captura"
 
@@ -155,6 +153,14 @@ async def pagina_sonda(monkeypatch):
             SLUG_SONDA, {"redirect_url": "https://exemplo.invalid/obrigado"})
     yield SLUG_SONDA
     await limpar()
+    # ⚠️ Limpa o cache de DNS nos DOIS lados, não só no setup. O monkeypatch
+    # do resolvedor é revertido pelo pytest no teardown, mas a ENTRADA que
+    # ele produziu (`exemplo.invalid -> (True, None, expira em 1h)`) fica no
+    # dict de módulo `vemail._cache` — que não sabe que o resolvedor era
+    # falso. Sem isto, o próximo teste do processo que consultar
+    # `exemplo.invalid` sem monkeypatch (fora deste arquivo, por exemplo)
+    # herdaria um "válido" fabricado por até uma hora.
+    vemail._limpar_cache()
     # ⚠️ NÃO chame `db.close_db()` aqui. A fixture `cliente` já fecha o pool no
     # teardown dela, e a `envio` — o padrão desta casa para fixture que commita
     # — deliberadamente não fecha. Fechar nas duas faz o teardown fechar um pool
@@ -244,3 +250,53 @@ async def test_captura_reativa_contato_excluido(cliente, pagina_sonda):
             "SELECT count(*) FROM contact_events "
             "WHERE lead_id = $1 AND event_type = 'contact_reactivated'", linha["id"])
         assert evento == 1, "a reativação precisa deixar rastro"
+
+
+async def test_captura_sobrevive_a_falha_real_na_identidade(cliente, pagina_sonda,
+                                                              monkeypatch):
+    """⚠️ Rodada 1 de correção — o Crítico. `sessao()` entrega a conexão já
+    dentro de uma transação; `capturar()` inteiro é uma transação só. Um
+    `except Exception` comum ao redor de `resolve_or_create_identity` NÃO
+    basta: quando o erro é DE BANCO, o Postgres aborta o bloco de transação
+    inteiro, e a instrução seguinte (o INSERT em `lead_conversions`) morre com
+    `InFailedSQLTransactionError` sem tratamento — 500, lead real recusado.
+
+    Para provar isso de verdade — não só que uma exceção Python foi engolida
+    — este teste força um erro REAL de Postgres dentro da transação: troca o
+    SQL de `_resolver_identidade` por uma chamada a uma function que não
+    existe (`UndefinedFunctionError`), o mesmo jeito de a transação abortar
+    que uma violação de `ecosystem_identities_phone_key` produziria. Se o
+    SAVEPOINT aninhado de `_resolver_identidade` estiver certo, a captura
+    continua 200 e a conversão e a tag sobrevivem; se não estiver, a rota
+    devolve 500 e este teste falha exatamente como falhava antes da correção.
+    """
+    import app.routers.captura as captura_router
+
+    monkeypatch.setattr(
+        captura_router, "_SQL_RESOLVE_IDENTIDADE",
+        "SELECT resolve_or_create_identity_que_nao_existe($1, $2, $3, $4, $5::uuid, $6, $7)")
+
+    resposta = await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda,
+        "fields": {"nome": "Carla Sonda"}})
+    assert resposta.status_code == 200, \
+        "a falha de identidade não pode virar 500 — a transação tem que sobreviver"
+    corpo = resposta.json()
+    assert corpo["ok"] is True
+
+    async with db.sessao(role="service_role") as conn:
+        lead = await conn.fetchrow(
+            "SELECT id, dnia_id FROM leads WHERE email = $1", EMAIL_SONDA)
+        assert lead is not None, "a captura não gravou o contato"
+        assert lead["dnia_id"] is None, \
+            "identidade deveria ter falhado e ficado vazia, não travar a captura"
+
+        conversoes = await conn.fetchval(
+            "SELECT count(*) FROM lead_conversions WHERE lead_id = $1", lead["id"])
+        assert conversoes == 1, \
+            "a conversão precisa sobreviver à falha de identidade (SAVEPOINT)"
+
+        tags = await conn.fetchval(
+            "SELECT count(*) FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id "
+            "WHERE lt.lead_id = $1 AND t.name = $2", lead["id"], pagina_sonda)
+        assert tags == 1, "a tag precisa sobreviver à falha de identidade (SAVEPOINT)"

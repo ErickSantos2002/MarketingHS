@@ -62,7 +62,14 @@ app.add_middleware(
     # gera milhares de eventos em minutos. Limitá-lo faria o provedor levar 429
     # e re-tentar cada evento por 10 horas. Ele se autentica por assinatura
     # Svix — ver o cabeçalho do middleware.
-    isentos=("/publico/webhook/",),
+    #
+    # ⚠️ `/publico/validar-email` também é isenta: ela não escreve nada no
+    # banco e tem cache de domínio por 1h (`app/captura/email.py`), mas é
+    # chamada a cada pausa de digitação no formulário — dividir o balde de
+    # 30/min com `/publico/captura` faria a conferência gastar o orçamento do
+    # ENVIO de verdade, e a pessoa levaria 429 na hora de mandar o formulário
+    # que preencheu direitinho. Mesma classe de defeito que recusar lead real.
+    isentos=("/publico/webhook/", "/publico/validar-email"),
 )
 
 
