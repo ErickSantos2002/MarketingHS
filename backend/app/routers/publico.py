@@ -1074,3 +1074,71 @@ async def _recalcular_datas(conn, lead_ids: list[str]) -> None:
                                             FROM lead_conversions c
                                            WHERE c.lead_id = l.id)
             WHERE l.id = ANY($1::uuid[])""", lead_ids)
+
+
+@router.post("/conversao", status_code=status.HTTP_201_CREATED)
+async def registrar_conversao(dados: ConversaoIn,
+                              _: ChaveApi = Depends(chave_api("write"))):
+    """Registra uma conversão. Era a function `register-conversion`.
+
+    ⚠️ `role="service_role"`: o chamador é máquina, autenticada por chave de
+    API — não há `user_id` para pôr em `auth.uid()`, então a RLS de
+    `lead_conversions` não tem como expressar esta autorização. Quem autoriza
+    é o escopo `write` da chave, aqui na rota. É o mesmo desenho das outras
+    rotas de `/publico`.
+
+    ⚠️ `last_conversion_date` NÃO é escrito aqui. O gatilho
+    `trg_update_last_conversion_date` já grava, e com `greatest()`. A function
+    original escrevia por cima, sem `greatest()` — o que fazia uma conversão
+    registrada com `converted_at` no passado BAIXAR a data do lead. Deixar o
+    gatilho ser o dono do campo conserta isso de graça.
+    """
+    if not (dados.lead_id or dados.dnia_id or dados.email or dados.phone):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Informe 'lead_id', 'dnia_id', 'email' ou 'phone' para identificar o lead.")
+
+    async with sessao(role="service_role") as conn:
+        lead_id = await _resolver_lead(conn, dados)
+        if lead_id is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead não encontrado.")
+
+        conversao = await conn.fetchrow(
+            """INSERT INTO lead_conversions
+                   (lead_id, tipo, converted_at, page_slug, session_id,
+                    utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+                    source, ab_test, ab_var, ab_vid)
+               VALUES ($1::uuid, $2, COALESCE($3::text::timestamptz, now()), $4, $5,
+                       $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING id::text, lead_id::text, tipo, converted_at::text,
+                      page_slug, session_id, source,
+                      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+                      ab_test, ab_var, ab_vid""",
+            lead_id, dados.tipo, dados.converted_at, dados.page_slug,
+            dados.session_id, dados.utm_source, dados.utm_medium,
+            dados.utm_campaign, dados.utm_term, dados.utm_content,
+            dados.source, dados.ab_test, dados.ab_var, dados.ab_vid)
+
+        # As mesmas colunas que a function carimbava no lead — e só quando o
+        # valor veio. `COALESCE` guarda o que já estava lá.
+        await conn.execute(
+            """UPDATE leads SET
+                   source       = COALESCE($2, source),
+                   tipo         = COALESCE($3, tipo),
+                   utm_source   = COALESCE($4, utm_source),
+                   utm_medium   = COALESCE($5, utm_medium),
+                   utm_campaign = COALESCE($6, utm_campaign),
+                   utm_term     = COALESCE($7, utm_term),
+                   utm_content  = COALESCE($8, utm_content)
+                 WHERE id = $1::uuid""",
+            lead_id, dados.source or None, dados.tipo or None,
+            dados.utm_source or None, dados.utm_medium or None,
+            dados.utm_campaign or None, dados.utm_term or None,
+            dados.utm_content or None)
+
+        tag = None
+        if dados.apply_tag:
+            tag = await _aplicar_tag_do_slug(conn, lead_id, dados.page_slug)
+
+    return {"success": True, "lead_id": lead_id,
+            "conversion": dict(conversao), "tag": tag}
