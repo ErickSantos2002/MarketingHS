@@ -74,3 +74,27 @@ async def test_o_cache_evita_a_segunda_consulta(monkeypatch):
     await vemail.validar_dominio("a@empresa.com.br")
     await vemail.validar_dominio("b@empresa.com.br")
     assert chamadas == ["empresa.com.br"], "o domínio deveria ser consultado uma vez"
+
+
+from app.captura import campos as vcampos
+
+
+def test_higienizar_descarta_campo_fora_da_lista():
+    saida = vcampos.higienizar({"nome": "Carla", "lead_score": 999, "etiqueta": "hotlead"})
+    assert saida == {"nome": "Carla"}, "score e etiqueta são do gatilho, não do formulário"
+
+
+def test_higienizar_apara_e_descarta_vazio():
+    saida = vcampos.higienizar({"nome": "  Carla  ", "cargo": "", "empresa": None})
+    assert saida == {"nome": "Carla"}
+
+
+def test_higienizar_corta_texto_gigante():
+    saida = vcampos.higienizar({"desafios": "x" * 5000})
+    assert len(saida["desafios"]) == 2000
+
+
+def test_higienizar_aceita_numero_e_booleano():
+    saida = vcampos.higienizar({"funcionarios": "500", "interesse_formacao": True})
+    assert saida["funcionarios"] == "500"
+    assert saida["interesse_formacao"] is True
