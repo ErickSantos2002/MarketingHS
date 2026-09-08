@@ -34,7 +34,13 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
   const [campaign, setCampaign] = useState('');
   const [content, setContent] = useState('');
 
-  const baseUrl = `https://dnia.ai/${page.slug}`;
+  // O host de produção do MarketingHS ainda não foi decidido (pendência do
+  // Erick; frontend/public/api/dnmarketing-api.yaml tem
+  // PREENCHER-O-HOST-DE-PRODUCAO em `servers:`). window.location.origin é a
+  // única base verdadeira que esta tela tem à mão — mesma decisão que a rota
+  // PATCH /publico/paginas/{slug} já tomou no backend, trocando o link
+  // absoluto por caminho relativo.
+  const baseUrl = `${window.location.origin}/${page.slug}`;
 
   const buildUrl = (s: string, m: string, c: string, ct?: string) => {
     const params = new URLSearchParams();
