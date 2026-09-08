@@ -428,7 +428,7 @@ const ENDPOINTS = [
   {
     id: 'register-conversion',
     method: 'POST',
-    path: '/register-conversion',
+    path: '/publico/conversao',
     title: 'Registrar conversão',
     description: 'Registra uma nova conversão para um lead existente. Atualiza last_conversion_date e aplica tag automaticamente.',
     params: [
@@ -449,7 +449,7 @@ const ENDPOINTS = [
       { name: 'apply_tag', type: 'boolean', required: 'Não', description: 'Aplica tag do page_slug (default: true)' },
     ],
     curl: `curl -X POST \\
-  '${BASE_URL}/register-conversion' \\
+  '${BASE_URL}/publico/conversao' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -481,15 +481,25 @@ const ENDPOINTS = [
   },
   {
     id: 'unregister-conversion',
-    method: 'DELETE',
-    path: '/unregister-conversion',
+    method: 'DELETE / POST',
+    path: '/publico/conversao',
     title: 'Remover conversão',
-    description: 'Remove uma conversão pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir conversões enviadas incorretamente. Aceita DELETE ou POST.',
+    description: 'Remove uma conversão pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir conversões enviadas incorretamente. DELETE /publico/conversao é a rota principal; POST /publico/conversao/remover é um alias com a mesma semântica, para quem integra por cliente HTTP que lida mal com corpo em DELETE.',
     params: [
-      { name: 'session_id', type: 'string', required: 'Sim', description: 'ID da sessão da conversão a remover (body ou query param)' },
+      { name: 'session_id', type: 'string', required: 'Sim', description: 'ID da sessão da conversão a remover. No DELETE, aceito no corpo OU na query string — quando os dois vierem, o corpo vence. No alias POST, só no corpo.' },
     ],
-    curl: `curl -X DELETE \\
-  '${BASE_URL}/unregister-conversion' \\
+    curl: `# DELETE em /publico/conversao (corpo opcional; aceita query string)
+curl -X DELETE \\
+  '${BASE_URL}/publico/conversao' \\
+  -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "session_id": "uuid-da-sessao"
+  }'
+
+# POST em /publico/conversao/remover (alias — mesma semântica)
+curl -X POST \\
+  '${BASE_URL}/publico/conversao/remover' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -507,20 +517,31 @@ const ENDPOINTS = [
         session_id: "uuid-da-sessao"
       }]
     }, null, 2),
-    notes: 'Retorna 404 se nenhuma conversão for encontrada para o session_id. Todas as linhas com aquele session_id são removidas. Um evento conversion_unregistered é registrado na timeline do contato para auditoria.',
+    notes: 'Retorna 404 se nenhuma conversão for encontrada para o session_id. Todas as linhas com aquele session_id são removidas. Um evento conversion_unregistered é registrado na timeline do contato para auditoria. O alias POST vive em /publico/conversao/remover, e não em POST /publico/conversao, porque esse caminho já é a rota de criação de conversão.',
   },
   {
     id: 'update-conversion',
-    method: 'PATCH',
-    path: '/update-conversion',
+    method: 'PATCH / POST',
+    path: '/publico/conversao',
     title: 'Atualizar data da conversão',
-    description: 'Atualiza o converted_at de uma conversão existente pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir datas enviadas incorretamente sem perder o registro. Aceita PATCH ou POST.',
+    description: 'Atualiza o converted_at de uma conversão existente pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir datas enviadas incorretamente sem perder o registro. PATCH /publico/conversao é a rota principal; POST /publico/conversao/atualizar é um alias com a mesma semântica.',
     params: [
       { name: 'session_id', type: 'string', required: 'Sim', description: 'ID da sessão da conversão a atualizar' },
       { name: 'converted_at', type: 'ISO 8601', required: 'Sim', description: 'Nova data/hora da conversão (timestamp ISO 8601)' },
     ],
-    curl: `curl -X PATCH \\
-  '${BASE_URL}/update-conversion' \\
+    curl: `# PATCH em /publico/conversao
+curl -X PATCH \\
+  '${BASE_URL}/publico/conversao' \\
+  -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "session_id": "uuid-da-sessao",
+    "converted_at": "2026-05-12T10:00:00Z"
+  }'
+
+# POST em /publico/conversao/atualizar (alias — mesma semântica)
+curl -X POST \\
+  '${BASE_URL}/publico/conversao/atualizar' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -539,7 +560,7 @@ const ENDPOINTS = [
         session_id: "uuid-da-sessao"
       }]
     }, null, 2),
-    notes: 'Retorna 404 se nenhuma conversão for encontrada. Um evento conversion_updated com os valores antigo e novo é registrado na timeline para auditoria.',
+    notes: 'Retorna 404 se nenhuma conversão for encontrada. Um evento conversion_updated com os valores antigo e novo é registrado na timeline para auditoria. O alias POST vive em /publico/conversao/atualizar, e não em POST /publico/conversao, porque esse caminho já é a rota de criação de conversão.',
   },
   {
     id: 'contact-status-update',
@@ -694,14 +715,14 @@ curl -X POST \\
   {
     id: 'pages-api',
     method: 'GET',
-    path: '/pages-api',
+    path: '/publico/paginas',
     title: 'Listar páginas',
     description: 'Lista landing pages com métricas de leads. POST para criar, PATCH para atualizar config e UTMs.',
     params: [
-      { name: 'slug', type: 'string', required: 'Não', description: 'Slug da página para detalhes' },
+      { name: 'slug', type: 'string (path)', required: 'Não', description: 'Em GET /publico/paginas/{slug}, traz a ficha completa de uma página' },
     ],
     curl: `curl -X GET \\
-  '${BASE_URL}/pages-api' \\
+  '${BASE_URL}/publico/paginas' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]'`,
     response: JSON.stringify({
       data: [{
@@ -714,7 +735,7 @@ curl -X POST \\
         last_lead_at: "2026-03-30T10:00:00Z"
       }]
     }, null, 2),
-    notes: 'PATCH /pages-api?slug=xxx para atualizar config e UTM presets.',
+    notes: 'GET /publico/paginas/{slug} traz a ficha completa de uma página. POST /publico/paginas cria — a página nasce sempre inativa. PATCH /publico/paginas/{slug} atualiza config e UTM presets, e FUNDE o config enviado com o existente (não substitui).',
   },
   {
     id: 'automacoes',
@@ -1036,7 +1057,7 @@ export default function ApiDocumentation() {
 
           <Step n={2} title="Ao criar um contato no Nexus">
             <p className="mb-2">Envie os dados do contato para criar/vincular a identidade unificada:</p>
-            <CodeBlock code={`POST /identity-upsert
+            <CodeBlock code={`POST /publico/identidade
 {
   "phone": "+5511999999999",
   "email": "joao@empresa.com",
@@ -1049,11 +1070,11 @@ export default function ApiDocumentation() {
           </Step>
 
           <Step n={3} title="Registrar atividades">
-            <p>Chame <code className="bg-muted/50 px-1 py-0.5 rounded font-mono">/receive-contact-event</code> para cada evento relevante: reunião agendada, proposta enviada, deal movido.</p>
+            <p>Chame <code className="bg-muted/50 px-1 py-0.5 rounded font-mono">/publico/evento-de-contato</code> para cada evento relevante: reunião agendada, proposta enviada, deal movido.</p>
           </Step>
 
           <Step n={4} title="Ao fechar um deal">
-            <CodeBlock code={`POST /receive-contact-event
+            <CodeBlock code={`POST /publico/evento-de-contato
 {
    "dnia_id": "[DNIA_ID]",
   "source_app": "nexus",
@@ -1074,7 +1095,7 @@ export default function ApiDocumentation() {
           </Step>
 
           <Step n={2} title="Ao receber um cliente fechado">
-            <CodeBlock code={`POST /identity-upsert
+            <CodeBlock code={`POST /publico/identidade
 {
   "phone": "+5511999999999",
   "source_app": "mentoria",
@@ -1084,7 +1105,7 @@ export default function ApiDocumentation() {
           </Step>
 
           <Step n={3} title="Ao iniciar onboarding">
-            <CodeBlock code={`POST /receive-contact-event
+            <CodeBlock code={`POST /publico/evento-de-contato
 {
    "dnia_id": "[DNIA_ID]",
   "source_app": "mentoria",
@@ -1094,7 +1115,7 @@ export default function ApiDocumentation() {
           </Step>
 
           <Step n={4} title="Atualizações periódicas de health score">
-            <CodeBlock code={`POST /receive-contact-event
+            <CodeBlock code={`POST /publico/evento-de-contato
 {
   "dnia_id": "[DNIA_ID]",
   "source_app": "mentoria",

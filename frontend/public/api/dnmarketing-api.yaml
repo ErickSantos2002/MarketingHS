@@ -310,7 +310,7 @@ components:
           format: date-time
 
 paths:
-  /identity-lookup:
+  /publico/identidade:
     get:
       operationId: identityLookup
       summary: Buscar identidade
@@ -364,82 +364,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-  /lead-capture:
-    post:
-      operationId: leadCapture
-      summary: Captura de lead (formulários públicos)
-      description: |
-        Endpoint usado pelos formulários públicos do site para criar/atualizar leads.
-        Resolve a identidade automaticamente (gera/encontra `dnia_id`).
-        Idempotente por `email`: se já existir lead com o mesmo email, atualiza.
-      tags:
-        - Leads
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-              properties:
-                email:
-                  type: string
-                  format: email
-                sessionId:
-                  type: string
-                  maxLength: 100
-                fields:
-                  type: object
-                  description: |
-                    Campos do lead. Apenas as chaves abaixo (whitelist) são aceitas;
-                    qualquer outra é silenciosamente descartada.
-                  properties:
-                    nome: { type: string }
-                    whatsapp: { type: string, description: "BR no formato (DD) 9XXXX-XXXX" }
-                    cargo: { type: string }
-                    empresa: { type: string }
-                    faturamento: { type: string }
-                    funcionarios: { type: string }
-                    desafios: { type: string }
-                    tipo: { type: string }
-                    tipo_participante: { type: string }
-                    source: { type: string, description: "Origem de negócio (ex: nome da landing)" }
-                    presenca: { type: string }
-                    origem_campanha: { type: string }
-                    indicacao: { type: string }
-                    interesse_formacao: { type: string }
-                    interesse_ecossistema: { type: string }
-                    interesse_mtia: { type: string }
-                    data_interesse: { type: string }
-                    status: { type: string }
-                    utm_source: { type: string }
-                    utm_medium: { type: string }
-                    utm_campaign: { type: string }
-                    utm_term: { type: string }
-                    utm_content: { type: string }
-      responses:
-        '200':
-          description: Lead criado ou atualizado
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string, format: uuid }
-                  dnia_id: { type: string, format: uuid }
-                  phone_normalized: { type: string, nullable: true }
-                  etiqueta: { type: string, nullable: true }
-        '400':
-          description: "Dados inválidos (ex: email ausente)"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-
-  /identity-upsert:
     post:
       operationId: identityUpsert
       summary: Criar ou atualizar identidade
@@ -554,7 +478,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /contacts-list:
+  /lead-capture:
+    post:
+      operationId: leadCapture
+      summary: Captura de lead (formulários públicos)
+      description: |
+        Endpoint usado pelos formulários públicos do site para criar/atualizar leads.
+        Resolve a identidade automaticamente (gera/encontra `dnia_id`).
+        Idempotente por `email`: se já existir lead com o mesmo email, atualiza.
+      tags:
+        - Leads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                sessionId:
+                  type: string
+                  maxLength: 100
+                fields:
+                  type: object
+                  description: |
+                    Campos do lead. Apenas as chaves abaixo (whitelist) são aceitas;
+                    qualquer outra é silenciosamente descartada.
+                  properties:
+                    nome: { type: string }
+                    whatsapp: { type: string, description: "BR no formato (DD) 9XXXX-XXXX" }
+                    cargo: { type: string }
+                    empresa: { type: string }
+                    faturamento: { type: string }
+                    funcionarios: { type: string }
+                    desafios: { type: string }
+                    tipo: { type: string }
+                    tipo_participante: { type: string }
+                    source: { type: string, description: "Origem de negócio (ex: nome da landing)" }
+                    presenca: { type: string }
+                    origem_campanha: { type: string }
+                    indicacao: { type: string }
+                    interesse_formacao: { type: string }
+                    interesse_ecossistema: { type: string }
+                    interesse_mtia: { type: string }
+                    data_interesse: { type: string }
+                    status: { type: string }
+                    utm_source: { type: string }
+                    utm_medium: { type: string }
+                    utm_campaign: { type: string }
+                    utm_term: { type: string }
+                    utm_content: { type: string }
+      responses:
+        '200':
+          description: Lead criado ou atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  dnia_id: { type: string, format: uuid }
+                  phone_normalized: { type: string, nullable: true }
+                  etiqueta: { type: string, nullable: true }
+        '400':
+          description: "Dados inválidos (ex: email ausente)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+
+  /publico/contatos:
     get:
       operationId: contactsList
       summary: Listar contatos
@@ -650,7 +648,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /receive-contact-event:
+  /publico/evento-de-contato:
     post:
       operationId: receiveContactEvent
       summary: Registrar evento na timeline
@@ -755,7 +753,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /contact-details:
+  /publico/contato:
     get:
       operationId: contactDetails
       summary: Contexto completo de um contato
@@ -1603,19 +1601,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /pages-api:
+  /publico/paginas:
     get:
       operationId: pagesList
       summary: Listar páginas com métricas
       description: Lista todas as páginas com contagem de leads e hotleads.
       tags:
         - Páginas
-      parameters:
-        - name: slug
-          in: query
-          schema:
-            type: string
-          description: Slug da página para detalhes
       responses:
         '200':
           description: Lista de páginas
@@ -1682,17 +1674,44 @@ paths:
                     type: boolean
                   page:
                     type: object
+
+  /publico/paginas/{slug}:
+    get:
+      operationId: pagesDetails
+      summary: Detalhes de uma página
+      description: Traz a ficha completa de uma página pelo slug, com métricas de leads.
+      tags:
+        - Páginas
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Página encontrada
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Página não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     patch:
       operationId: pagesUpdate
       summary: Atualizar página
       description: |
-        Atualiza config (merge), status e adiciona UTM presets.
+        Atualiza config (merge, não substitui), status e adiciona UTM presets.
         Se utm_preset vier, retorna o link UTM gerado.
       tags:
         - Páginas
       parameters:
         - name: slug
-          in: query
+          in: path
           required: true
           schema:
             type: string
@@ -1733,6 +1752,12 @@ paths:
                   utm_link:
                     type: string
                     nullable: true
+        '404':
+          description: Página não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /publico/automacoes:
     get:
@@ -1888,7 +1913,7 @@ paths:
                   rule:
                     type: object
 
-  /register-conversion:
+  /publico/conversao:
     post:
       operationId: registerConversion
       summary: Registrar conversão de lead
@@ -1993,54 +2018,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-  /unregister-conversion:
-    delete:
-      operationId: unregisterConversion
-      summary: Remover conversão por session_id
-      description: |
-        Remove uma conversão existente pelo `session_id`. Recalcula
-        automaticamente o `last_conversion_date` do lead com base nas
-        conversões restantes. Registra evento `conversion_unregistered`
-        na timeline do contato para auditoria. Aceita DELETE ou POST.
-      tags:
-        - Conversões
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - session_id
-              properties:
-                session_id:
-                  type: string
-                  description: ID da sessão da conversão a remover
-      responses:
-        '200':
-          description: Conversão removida com sucesso
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  affected:
-                    type: integer
-                  deleted:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Conversion'
-        '400':
-          description: session_id ausente
-        '401':
-          description: Token inválido ou sem permissão de escrita
-        '404':
-          description: Nenhuma conversão encontrada para o session_id
-
-  /update-conversion:
     patch:
       operationId: updateConversion
       summary: Atualizar converted_at de uma conversão
@@ -2048,7 +2025,11 @@ paths:
         Atualiza o `converted_at` de uma conversão existente pelo `session_id`.
         Recalcula automaticamente o `last_conversion_date` do lead. Registra
         evento `conversion_updated` (com valores antigo e novo) na timeline
-        para auditoria. Aceita PATCH ou POST.
+        para auditoria.
+
+        Alias com a mesma semântica: `POST /publico/conversao/atualizar` —
+        para clientes que preferem POST. O alias não pode viver em `POST
+        /publico/conversao`, porque esse caminho já é a criação de conversão.
       tags:
         - Conversões
       requestBody:
@@ -2086,6 +2067,162 @@ paths:
                       $ref: '#/components/schemas/Conversion'
         '400':
           description: session_id ou converted_at ausente/ inválido
+        '401':
+          description: Token inválido ou sem permissão de escrita
+        '404':
+          description: Nenhuma conversão encontrada para o session_id
+    delete:
+      operationId: unregisterConversion
+      summary: Remover conversão por session_id
+      description: |
+        Remove uma conversão existente pelo `session_id`. Recalcula
+        automaticamente o `last_conversion_date` do lead com base nas
+        conversões restantes. Registra evento `conversion_unregistered`
+        na timeline do contato para auditoria.
+
+        `session_id` é aceito no corpo OU na query string; quando os dois
+        vierem, o corpo vence. O corpo é opcional — `DELETE
+        /publico/conversao?session_id=xxx` sem corpo nenhum também funciona.
+
+        Alias com a mesma semântica: `POST /publico/conversao/remover` —
+        para clientes HTTP que lidam mal com corpo em DELETE. O alias não
+        pode viver em `POST /publico/conversao`, porque esse caminho já é a
+        criação de conversão.
+      tags:
+        - Conversões
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ID da sessão da conversão a remover (alternativa ao corpo; o corpo vence quando os dois vierem)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id:
+                  type: string
+                  description: ID da sessão da conversão a remover
+      responses:
+        '200':
+          description: Conversão removida com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  affected:
+                    type: integer
+                  deleted:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversion'
+        '400':
+          description: session_id ausente (nem no corpo, nem na query)
+        '401':
+          description: Token inválido ou sem permissão de escrita
+        '404':
+          description: Nenhuma conversão encontrada para o session_id
+
+  /publico/conversao/atualizar:
+    post:
+      operationId: updateConversionAlias
+      summary: Atualizar converted_at de uma conversão (alias POST)
+      description: |
+        Alias de `PATCH /publico/conversao`, mesma semântica, mesmo corpo,
+        mesma resposta. Existe porque a documentação original prometia
+        "Aceita PATCH ou POST" e este caminho não podia ser `POST
+        /publico/conversao` — esse já é a rota de criação de conversão.
+      tags:
+        - Conversões
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+                - converted_at
+              properties:
+                session_id:
+                  type: string
+                  description: ID da sessão da conversão a atualizar
+                converted_at:
+                  type: string
+                  format: date-time
+                  description: Nova data/hora da conversão (ISO 8601)
+      responses:
+        '200':
+          description: Conversão atualizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  affected:
+                    type: integer
+                  updated:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversion'
+        '400':
+          description: session_id ou converted_at ausente/ inválido
+        '401':
+          description: Token inválido ou sem permissão de escrita
+        '404':
+          description: Nenhuma conversão encontrada para o session_id
+
+  /publico/conversao/remover:
+    post:
+      operationId: unregisterConversionAlias
+      summary: Remover conversão por session_id (alias POST)
+      description: |
+        Alias de `DELETE /publico/conversao`, mesma semântica. Existe porque
+        a documentação original prometia "Aceita DELETE ou POST" e DELETE com
+        corpo é mal suportado por muitos clientes HTTP. Aqui `session_id` só
+        é aceito no corpo — sem query string, porque POST não costuma carregar
+        parâmetro de identificação na URL.
+      tags:
+        - Conversões
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  description: ID da sessão da conversão a remover
+      responses:
+        '200':
+          description: Conversão removida com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  affected:
+                    type: integer
+                  deleted:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conversion'
+        '400':
+          description: session_id ausente
         '401':
           description: Token inválido ou sem permissão de escrita
         '404':
