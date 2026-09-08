@@ -1,5 +1,36 @@
 # Continuar aqui
 
+> ## ⏸ EM ANDAMENTO — subprojeto A da captação pública (08/09/2026)
+>
+> **Você está na branch `captacao-a`, e ela NÃO está mergeada.** O trabalho parou
+> por decisão do Erick no fim do dia, com sete das nove tarefas fechadas.
+>
+> **Pronto e revisado:** validação de e-mail (*fail-open*), lista branca de
+> campos, `POST /publico/captura`, `POST /publico/validar-email`, a casca
+> `GET /p/{slug}`, o segundo bundle do Vite, o renderizador da landing, e a
+> documentação. **158 testes**, `tsc` limpo, bundle público em 144 KB.
+>
+> **Falta:**
+>
+> 1. **O passo 3 do portão — abrir a landing e enviar o formulário.** É a única
+>    coisa que impede fechar. ⚠️ O Chrome que o Claude controla **não roda nesta
+>    máquina** (conferido: `pgrep` não acha processo de navegador algum), então
+>    ele não alcança `127.0.0.1`. O combinado é o Erick abrir e relatar. O
+>    roteiro e o script que cria a página de teste estão no ledger da sessão,
+>    em `.superpowers/sdd/2026-09-08-marketinghs-captacao-a-landing/`.
+> 2. **Passo 5 do portão:** `git rm -r` em `backend/supabase/functions/lead-capture`
+>    e `.../validate-email-domain` — só DEPOIS do clique.
+> 3. **Tarefa 9:** atualizar este documento de verdade (placar 36/7/11, os itens
+>    22 a 24 da lista do Erick) e apagar esta caixa.
+>
+> ⚠️ **O design system da HS não foi consultado** — a ferramenta não estava
+> disponível na sessão que escreveu o `landing.css`. O CSS é sóbrio e
+> **provisório**, não uma decisão visual tomada.
+>
+> **O banco está limpo:** 0 páginas, 0 conversões, 0 contatos de teste, 0 chaves
+> de escrita. Nenhum servidor no ar.
+
+
 **Atualizado:** 8 de setembro de 2026
 **Branch:** `main` — a `lote-7` foi mergeada e apagada. **Nada pushado.**
 
