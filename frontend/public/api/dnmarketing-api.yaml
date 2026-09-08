@@ -2188,19 +2188,26 @@ paths:
       description: |
         Alias de `DELETE /publico/conversao`, mesma semântica. Existe porque
         a documentação original prometia "Aceita DELETE ou POST" e DELETE com
-        corpo é mal suportado por muitos clientes HTTP. Aqui `session_id` só
-        é aceito no corpo — sem query string, porque POST não costuma carregar
-        parâmetro de identificação na URL.
+        corpo é mal suportado por muitos clientes HTTP.
+
+        `session_id` é aceito no corpo OU na query string, igual ao DELETE —
+        o parâmetro de query é compartilhado pelos dois métodos na mesma rota.
+        Quando os dois vierem, o corpo vence.
       tags:
         - Conversões
+      parameters:
+        - name: session_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ID da sessão da conversão a remover (alternativa ao corpo; o corpo vence quando os dois vierem)
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required:
-                - session_id
               properties:
                 session_id:
                   type: string
@@ -2222,7 +2229,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Conversion'
         '400':
-          description: session_id ausente
+          description: session_id ausente (nem no corpo, nem na query)
         '401':
           description: Token inválido ou sem permissão de escrita
         '404':

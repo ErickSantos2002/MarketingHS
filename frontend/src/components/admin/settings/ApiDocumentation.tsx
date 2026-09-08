@@ -486,7 +486,7 @@ const ENDPOINTS = [
     title: 'Remover conversão',
     description: 'Remove uma conversão pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir conversões enviadas incorretamente. DELETE /publico/conversao é a rota principal; POST /publico/conversao/remover é um alias com a mesma semântica, para quem integra por cliente HTTP que lida mal com corpo em DELETE.',
     params: [
-      { name: 'session_id', type: 'string', required: 'Sim', description: 'ID da sessão da conversão a remover. No DELETE, aceito no corpo OU na query string — quando os dois vierem, o corpo vence. No alias POST, só no corpo.' },
+      { name: 'session_id', type: 'string', required: 'Sim', description: 'ID da sessão da conversão a remover. Aceito no corpo OU na query string, tanto no DELETE quanto no alias POST — quando os dois vierem, o corpo vence.' },
     ],
     curl: `# DELETE em /publico/conversao (corpo opcional; aceita query string)
 curl -X DELETE \\

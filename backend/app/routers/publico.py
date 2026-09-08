@@ -1416,9 +1416,21 @@ async def atualizar_pagina_publico(slug: str, dados: PaginaPublicaPatch,
     comportamento da `pages-api` e integrador externo depende dele.
 
     ⚠️ O link de UTM devolvido apontava para `https://dnia.ai/{slug}` — domínio
-    da dn.ia, cravado no código da function. Aqui ele sai do host do próprio
-    request, que é o único valor correto que a rota tem à mão enquanto o host
-    de produção não estiver decidido (item 11 da lista do Erick).
+    da dn.ia, cravado no código da function. Aqui ele NÃO lê o `Host` do
+    request — o código nunca fez isso — e devolve caminho relativo
+    (`/{slug}?...`), que resolve contra o host de quem consome. É deliberado:
+    o host de produção deste sistema é pendência aberta (por isso
+    `dnmarketing-api.yaml` tem `PREENCHER-O-HOST-DE-PRODUCAO`), e cravar um
+    host aqui seria repetir o mesmo defeito da origem com outro valor. O
+    commit `dcc0742` corrigiu a mesma cravação no frontend por este motivo —
+    os dois lados precisam concordar.
+
+    ⚠️ `active` é booleano, mas o banco tem três estados (`active`, `draft`,
+    `inactive`). `{"active": false}` sobre uma página Rascunho grava
+    `'inactive'` — a página nunca esteve inativa e passa a aparecer como se
+    tivesse estado. Comportamento herdado da `pages-api` e preservado porque
+    integrador externo pode depender dele; ver `PATCH /paginas/{id}/status`
+    (rota de admin) para o vocabulário de três estados.
     """
     async with sessao(role="service_role") as conn:
         # FOR UPDATE: lê, funde em Python e escreve dentro da mesma
