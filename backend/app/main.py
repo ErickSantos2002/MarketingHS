@@ -21,6 +21,7 @@ from app.routers.ia import router as ia_router
 from app.routers.imagens import router as imagens_router
 from app.routers.jornadas import router as jornadas_router
 from app.routers.leitura_contatos import router as leitura_contatos_router
+from app.routers.paginas import router as paginas_router
 from app.routers.painel import router as painel_router
 from app.routers.publico import router as publico_router
 from app.routers.webhook import router as webhook_router
@@ -96,5 +97,6 @@ app.include_router(datacore_router)
 app.include_router(ia_router)
 app.include_router(imagens_router)
 app.include_router(painel_router)
+app.include_router(paginas_router)
 app.include_router(publico_router)
 app.include_router(webhook_router)
