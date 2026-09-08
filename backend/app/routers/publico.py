@@ -1276,3 +1276,155 @@ async def remover_conversao(
 
     return {"success": True, "affected": len(antes),
             "deleted": [dict(l) for l in antes]}
+
+
+# ⚠️ Declarado ANTES das classes: `Field(pattern=...)` é avaliado quando a
+# classe é definida, não quando a rota roda. Constante embaixo dá NameError no
+# import e derruba o boot inteiro.
+#
+# Repetido de `paginas.py` de propósito: `publico.py` não importa router de
+# admin, e a autoridade sobre os dois é o CHECK do banco.
+TIPOS_DE_PAGINA = "^(landing|thankyou|form|admin)$"
+
+
+class PaginaPublicaIn(BaseModel):
+    """⚠️ O vocabulário desta rota é o da `pages-api`, não o da tela: aqui o
+    nome da página é `title`, e o estado é o booleano `active`. Traduzir para
+    `name`/`status` quebraria integrador que já usa. A rota de admin
+    (`/paginas`) usa o vocabulário do banco."""
+    title: str = Field(min_length=1, max_length=200)
+    slug: str = Field(min_length=1, max_length=200)
+    page_type: str = Field(default="landing", pattern=TIPOS_DE_PAGINA)
+    template_base: str | None = None
+    config: dict = Field(default_factory=dict)
+    description: str | None = None
+
+
+class PaginaPublicaPatch(BaseModel):
+    config: dict | None = None
+    active: bool | None = None
+    utm_preset: dict | None = None
+
+
+@router.get("/paginas")
+async def listar_paginas_publico(_: ChaveApi = Depends(chave_api("read"))):
+    """⚠️ Conta lead por `leads.source = slug` — que NÃO é como a view
+    `page_stats` conta (ela usa `lead_conversions.page_slug`). As duas
+    definições vêm da origem e são preservadas; a divergência está registrada
+    no CONTINUAR-AQUI como pergunta ao Erick.
+
+    A origem fazia três consultas POR PÁGINA (total, hotlead, último lead).
+    Aqui é uma consulta só, com LATERAL — mesma resposta.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            """SELECT p.id::text, p.slug, p.name AS title,
+                      (p.status = 'active') AS active,
+                      COALESCE(c.total, 0) AS total_leads,
+                      COALESCE(c.quentes, 0) AS hot_leads,
+                      c.ultimo::text AS last_lead_at,
+                      p.config
+                 FROM pages p
+                 LEFT JOIN LATERAL (
+                     SELECT count(*) AS total,
+                            count(*) FILTER (WHERE l.etiqueta = 'hotlead') AS quentes,
+                            max(l.created_at) AS ultimo
+                       FROM leads l
+                      WHERE l.source = p.slug
+                 ) c ON true
+                ORDER BY p.created_at DESC""")
+    return {"data": [dict(l) for l in linhas]}
+
+
+@router.get("/paginas/{slug}")
+async def pagina_publico(slug: str, _: ChaveApi = Depends(chave_api("read"))):
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            """SELECT p.id::text, p.name, p.slug, p.component_name, p.page_type,
+                      p.status, (p.status = 'active') AS active,
+                      p.description, p.webhook_url, p.whatsapp_group_url,
+                      p.meta_title, p.meta_description, p.config,
+                      p.template_base,
+                      p.created_at::text, p.updated_at::text,
+                      COALESCE(c.total, 0) AS total_leads,
+                      COALESCE(c.quentes, 0) AS hot_leads
+                 FROM pages p
+                 LEFT JOIN LATERAL (
+                     SELECT count(*) AS total,
+                            count(*) FILTER (WHERE l.etiqueta = 'hotlead') AS quentes
+                       FROM leads l WHERE l.source = p.slug
+                 ) c ON true
+                WHERE p.slug = $1""", slug)
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Página não encontrada.")
+    return dict(linha)
+
+
+@router.post("/paginas", status_code=status.HTTP_201_CREATED)
+async def criar_pagina_publico(dados: PaginaPublicaIn,
+                               _: ChaveApi = Depends(chave_api("write"))):
+    """⚠️ Nasce com `status = 'inactive'`, como na origem: página criada de fora
+    não entra no ar sozinha."""
+    async with sessao(role="service_role") as conn:
+        try:
+            linha = await conn.fetchrow(
+                """INSERT INTO pages (name, slug, component_name, page_type,
+                                      template_base, config, status, description)
+                   VALUES ($1, $2, $2, $3, $4, $5, 'inactive', $6)
+                RETURNING id::text, name, slug, component_name, page_type,
+                          status, config, template_base, description,
+                          created_at::text, updated_at::text""",
+                dados.title, dados.slug, dados.page_type,
+                dados.template_base, dados.config, dados.description)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Já existe uma página com o slug '{dados.slug}'.")
+    return {"success": True, "page": dict(linha)}
+
+
+@router.patch("/paginas/{slug}")
+async def atualizar_pagina_publico(slug: str, dados: PaginaPublicaPatch,
+                                   _: ChaveApi = Depends(chave_api("write"))):
+    """⚠️ FUNDE o config, ao contrário da rota de admin, que substitui. É o
+    comportamento da `pages-api` e integrador externo depende dele.
+
+    ⚠️ O link de UTM devolvido apontava para `https://dnia.ai/{slug}` — domínio
+    da dn.ia, cravado no código da function. Aqui ele sai do host do próprio
+    request, que é o único valor correto que a rota tem à mão enquanto o host
+    de produção não estiver decidido (item 11 da lista do Erick).
+    """
+    async with sessao(role="service_role") as conn:
+        atual = await conn.fetchrow(
+            "SELECT id, config FROM pages WHERE slug = $1", slug)
+        if atual is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Página não encontrada.")
+
+        config = dict(atual["config"] or {})
+        if dados.config:
+            config.update(dados.config)
+        link_utm = None
+        if dados.utm_preset:
+            presets = list(config.get("utm_presets") or [])
+            presets.append(dados.utm_preset)
+            config["utm_presets"] = presets
+            partes = "&".join(
+                f"{chave}={valor}"
+                for chave in ("utm_source", "utm_medium", "utm_campaign",
+                              "utm_term", "utm_content")
+                if (valor := dados.utm_preset.get(chave)))
+            link_utm = f"/{slug}?{partes}" if partes else f"/{slug}"
+
+        mudou_config = bool(dados.config or dados.utm_preset)
+        await conn.execute(
+            """UPDATE pages
+                  SET config = CASE WHEN $2 THEN $3::jsonb ELSE config END,
+                      status = CASE WHEN $4::bool IS NULL THEN status
+                                    WHEN $4 THEN 'active' ELSE 'inactive' END
+                WHERE id = $1""",
+            atual["id"], mudou_config, config, dados.active)
+
+    resposta = {"success": True, "page_slug": slug}
+    if link_utm:
+        resposta["utm_link"] = link_utm
+    return resposta
