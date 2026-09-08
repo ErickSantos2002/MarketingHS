@@ -481,7 +481,7 @@ const ENDPOINTS = [
   },
   {
     id: 'unregister-conversion',
-    method: 'DELETE / POST',
+    method: 'DELETE',
     path: '/publico/conversao',
     title: 'Remover conversão',
     description: 'Remove uma conversão pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir conversões enviadas incorretamente. DELETE /publico/conversao é a rota principal; POST /publico/conversao/remover é um alias com a mesma semântica, para quem integra por cliente HTTP que lida mal com corpo em DELETE.',
@@ -521,7 +521,7 @@ curl -X POST \\
   },
   {
     id: 'update-conversion',
-    method: 'PATCH / POST',
+    method: 'PATCH',
     path: '/publico/conversao',
     title: 'Atualizar data da conversão',
     description: 'Atualiza o converted_at de uma conversão existente pelo session_id. Recalcula automaticamente o last_conversion_date do lead. Útil para corrigir datas enviadas incorretamente sem perder o registro. PATCH /publico/conversao é a rota principal; POST /publico/conversao/atualizar é um alias com a mesma semântica.',
@@ -794,7 +794,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Endpoints',
-    items: ENDPOINTS.map(e => ({ id: e.id, label: `${e.method} /${e.id}` })),
+    items: ENDPOINTS.map(e => ({ id: e.id, label: `${e.method} ${e.path}` })),
   },
   {
     title: 'Guia de Integração',

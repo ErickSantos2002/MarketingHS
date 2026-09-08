@@ -35,7 +35,7 @@ components:
         
         Permissões das API Keys:
         - read: endpoints GET
-        - write: endpoints POST/PATCH
+        - write: endpoints POST/PATCH/DELETE
         - read_write: acesso completo (padrão)
         
         Header: Authorization: Bearer <token>
