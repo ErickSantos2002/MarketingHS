@@ -8,6 +8,9 @@ A captura em si é testada ponta a ponta porque o modo de falhar dela é gravar
 lead sem pontuação, sem identidade ou sem conversão — tudo silencioso.
 """
 
+import json
+import re
+
 import pytest
 import pytest_asyncio
 
@@ -328,14 +331,39 @@ async def test_casca_traz_as_meta_tags_da_config(cliente, pagina_sonda):
     corpo = resposta.text
     assert "<title>Bafômetro conectado</title>" in corpo
     assert 'property="og:title" content="Bafômetro conectado"' in corpo
-    assert "Teste de alcoolemia com registro auditável" in corpo
+    assert ('name="description" content="Teste de alcoolemia com registro '
+            'auditável"' in corpo), \
+        "essa string também está no JSON embutido — o teste tem que provar " \
+        "a TAG, não só a presença da string em algum lugar do corpo"
+
+
+async def test_casca_prefere_config_mas_cai_na_coluna_de_seo(cliente, pagina_sonda):
+    """`pages` tem duas superfícies de edição pro mesmo SEO: o diálogo de
+    página grava nas COLUNAS `meta_title`/`meta_description`; o editor de
+    config do construtor grava as mesmas chaves dentro de `config`. Esta
+    sonda grava só nas colunas — é o caminho do diálogo, o mais usado — e
+    prova que a casca não depende de `config` estar preenchida.
+    """
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE pages SET config = $2, meta_title = $3, meta_description = $4 "
+            "WHERE slug = $1", pagina_sonda, {},
+            "Bafômetro pela coluna", "Descrição pela coluna")
+
+    corpo = (await cliente.get(f"/p/{pagina_sonda}")).text
+    assert "<title>Bafômetro pela coluna</title>" in corpo
+    assert 'property="og:title" content="Bafômetro pela coluna"' in corpo
+    assert 'name="description" content="Descrição pela coluna"' in corpo
 
 
 async def test_casca_escapa_conteudo_do_admin(cliente, pagina_sonda):
     """⚠️ A config é campo EDITÁVEL na tela indo para dentro de HTML.
 
     O `</script>` é o caso que mais morde: ele fecha o bloco JSON embutido e o
-    resto vira marcação executável na página.
+    resto vira marcação executável na página. A propriedade a provar é essa —
+    o bloco não pode ceder o estado "script data" do tokenizador HTML — não a
+    ausência de qualquer fragmento de aparência suspeita: dentro do bloco,
+    sem `<`, nada ali forma tag nem atributo, então é texto inerte.
     """
     async with db.sessao(role="service_role") as conn:
         await conn.execute(
@@ -346,13 +374,33 @@ async def test_casca_escapa_conteudo_do_admin(cliente, pagina_sonda):
     corpo = (await cliente.get(f"/p/{pagina_sonda}")).text
     assert "<script>alert(1)</script>" not in corpo
     assert "</script><img" not in corpo
-    assert "onerror=alert(1)" not in corpo
+
+    # ⚠️ `</script` legítimo aparece DUAS vezes na página de verdade — o
+    # fechamento do próprio bloco de config e o de `main.js` — então checar
+    # "</script" contra o corpo inteiro dá falso positivo. A propriedade real
+    # é sobre o CONTEÚDO do bloco JSON: sem `<` sobrando ali dentro, nada
+    # forma `</script` nenhum, legítimo ou não.
+    bloco = re.search(r'id="config-da-pagina">(.*?)</script>', corpo, re.S).group(1)
+    assert "<" not in bloco
 
 
 async def test_casca_embute_a_config_como_json(cliente, pagina_sonda):
+    """Não basta ter `id`/`type` de bloco JSON — o CONTEÚDO precisa
+    continuar sendo o JSON de verdade depois do escape, round-trip incluído,
+    porque `_json_seguro` mexe na string serializada com `replace` cegos e
+    este é o único teste que cobre isso.
+    """
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE pages SET config = $2 WHERE slug = $1", pagina_sonda,
+            {"headline": "</script><img src=x onerror=alert(1)>"})
+
     corpo = (await cliente.get(f"/p/{pagina_sonda}")).text
     assert 'id="config-da-pagina"' in corpo
     assert 'type="application/json"' in corpo
+
+    bloco = re.search(r'id="config-da-pagina">(.*?)</script>', corpo, re.S).group(1)
+    assert json.loads(bloco)["headline"] == "</script><img src=x onerror=alert(1)>"
 
 
 async def test_casca_404_para_pagina_inexistente(cliente):

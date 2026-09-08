@@ -22,7 +22,7 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
 from app.database import sessao
@@ -32,57 +32,98 @@ router = APIRouter(tags=["landing"])
 
 # A landing é anônima e não passa pelo limite de taxa — visitante atrás de NAT
 # corporativo divide IP, e limitar visualização derrubaria gente de verdade. O
-# cache de processo é o que impede uma ida ao banco por acesso.
+# cache de processo é o que impede uma ida ao banco por acesso, tanto no
+# caminho feliz quanto no 404 (ver `_config_da_pagina`).
 TTL_SEGUNDOS = 60
+TTL_NEGATIVO_SEGUNDOS = 10
 _cache: dict[str, tuple[dict, float]] = {}
+_cache_negativo: dict[str, float] = {}
 
 
 def _limpar_cache() -> None:
     _cache.clear()
+    _cache_negativo.clear()
 
 
-async def _config_da_pagina(slug: str) -> dict:
+async def _config_da_pagina(slug: str) -> dict | None:
+    """Devolve a config da página, ou `None` se ela não existe ou não está
+    `active`.
+
+    ⚠️ **`pages` tem DUAS superfícies de edição para o mesmo SEO.** O diálogo
+    de página (`PageFormDialog.tsx`, via `paginas.py`) grava `meta_title` e
+    `meta_description` nas COLUNAS de mesmo nome — é o caminho mais usado. O
+    editor de config do construtor (`PageConfigEditor.tsx`) grava as mesmas
+    duas chaves dentro de `config`. `config` vence quando as duas existem; a
+    coluna é o fallback; o nome da página é o último recurso. Sem o fallback,
+    toda página criada pelo diálogo (a maioria) cai no `<title>` genérico e
+    serve `description`/`og:description` vazias — exatamente o preview
+    genérico que esta rota existe para eliminar.
+
+    ⚠️ **Cache negativo de 10s, deliberadamente mais curto que o positivo
+    (60s).** `/p/{slug}` é o único caminho público, anônimo e sem limite de
+    taxa até o banco neste sistema — sem cache negativo, `GET /p/<slug
+    aleatório>` bateria no banco a cada requisição, sem teto. Curto de
+    propósito: uma página recém-publicada não pode ficar presa em 404 por um
+    minuto inteiro.
+    """
     em_cache = _cache.get(slug)
     if em_cache and em_cache[1] > time.monotonic():
-        return em_cache[0]
+        return dict(em_cache[0])
+
+    expira_negativo = _cache_negativo.get(slug)
+    if expira_negativo and expira_negativo > time.monotonic():
+        return None
 
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
-            "SELECT name, config FROM pages WHERE slug = $1 AND status = 'active'",
-            slug)
+            "SELECT name, meta_title, meta_description, config FROM pages "
+            "WHERE slug = $1 AND status = 'active'", slug)
     if linha is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Página não encontrada.")
+        _cache_negativo[slug] = time.monotonic() + TTL_NEGATIVO_SEGUNDOS
+        return None
 
     config = dict(linha["config"] or {})
+    if not config.get("meta_title"):
+        config["meta_title"] = linha["meta_title"]
+    if not config.get("meta_description"):
+        config["meta_description"] = linha["meta_description"]
     config.setdefault("nome_da_pagina", linha["name"])
+
     _cache[slug] = (config, time.monotonic() + TTL_SEGUNDOS)
-    return config
+    return dict(config)
 
 
 def _json_seguro(dados: dict) -> str:
     """JSON para dentro de `<script type="application/json">`.
 
-    ⚠️ `</script>` digitado numa headline fecha o bloco e o resto da string vira
-    marcação. Escapar `<`, `>` e `&` resolve o fechamento do bloco, e continua
-    sendo JSON válido — `\\u003c` é o mesmo caractere para qualquer parser.
+    A única propriedade que este bloco precisa garantir é não encerrar o
+    estado "script data" do tokenizador HTML — a única saída dele é a
+    sequência literal `</script` seguida de espaço, `/` ou `>`. Dentro de
+    script data o parser **não forma tags, não forma atributos e não
+    decodifica referência de caractere nenhuma**; e `type="application/json"`
+    não é MIME de JavaScript, então o navegador não executa o bloco de jeito
+    nenhum.
 
-    ⚠️ **Divergência achada rodando o teste de escape, não prevista no
-    brief.** Fechar o bloco não é o único jeito de um pedaço do payload
-    sobreviver: `onerror=alert(1)` não tem `<`, `>` nem `&` — nenhum desses
-    três escapes toca nele — e sai inteiro no HTML, ainda que inerte (texto
-    dentro de `<script type="application/json">` não é HTML nem JS
-    executado). `=`, `(` e `)` também não são sintaxe de JSON, então trocá-los
-    por `\\uXXXX` é igualmente seguro e, como o parser de JSON decodifica
-    `\\uXXXX` de volta ao caractere original, o dado que a página recebe via
-    `JSON.parse` não muda em nada — só o texto-fonte que some.
+    ⚠️ **`<` é o escape OBRIGATÓRIO** — é ele que fecha a porta do `</script`
+    (e dos estados de "escaped"/"double escaped" que o tokenizador entra ao
+    ver `<!--` dentro de script data). `>` e `&` são cinto-e-suspensório
+    barato, não a defesa em si. Trocar os três por `\\uXXXX` continua sendo
+    JSON válido — o parser decodifica de volta ao caractere original.
+
+    ⚠️ **Não amplie este conjunto sem necessidade.** Uma rodada anterior
+    chegou a escapar `=`, `(` e `)` também, para satisfazer um teste que
+    exigia a ausência literal de `onerror=alert(1)` no HTML — revisão
+    posterior achou que isso não fecha buraco nenhum (a string já é inerte
+    sem `<`, dentro de um bloco que o navegador não executa) e tem custo
+    real: `config` carrega `redirect_url`, com `?utm_source=...&utm_medium=...`
+    — escapar `=` e `&` incha essa URL ~5x — e o `<`, que é a única entrada
+    que sustenta a segurança, some enterrado entre cinco escapes
+    indistinguíveis para quem for mexer aqui depois.
     """
     saida = json.dumps(dados, ensure_ascii=False)
-    for caractere, escapado in (
-        ("<", "\\u003c"), (">", "\\u003e"), ("&", "\\u0026"),
-        ("=", "\\u003d"), ("(", "\\u0028"), (")", "\\u0029"),
-    ):
-        saida = saida.replace(caractere, escapado)
-    return saida
+    return (saida.replace("<", "\\u003c")
+                 .replace(">", "\\u003e")
+                 .replace("&", "\\u0026"))
 
 
 def montar_casca(slug: str, config: dict) -> str:
@@ -115,7 +156,24 @@ def montar_casca(slug: str, config: dict) -> str:
 </html>"""
 
 
+# ⚠️ 404 de uma rota HTML respondendo JSON (`{"detail": ...}`, o padrão do
+# FastAPI para HTTPException) é o que quem clicou num link de anúncio vê na
+# tela. Resposta HTML simples, mesmo status.
+_HTML_404 = """<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Página não encontrada</title>
+</head>
+<body>
+<h1>Página não encontrada.</h1>
+</body>
+</html>"""
+
+
 @router.get("/p/{slug}", response_class=HTMLResponse)
 async def landing(slug: str):
     config = await _config_da_pagina(slug)
+    if config is None:
+        return HTMLResponse(_HTML_404, status_code=404)
     return HTMLResponse(montar_casca(slug, config))
