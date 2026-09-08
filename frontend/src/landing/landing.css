@@ -1,0 +1,159 @@
+/* landing.css
+ *
+ * ⚠️ O design system da HS (Claude Design / DesignSync) NÃO foi consultado
+ * nesta implementação — a ferramenta não estava disponível nesta sessão.
+ * Este é um estilo sóbrio e neutro, deliberadamente sem identidade visual
+ * elaborada, para não inventar uma decisão que é do dono do produto. Cumpre
+ * só os três critérios objetivos do brief: legível no celular, alvo de
+ * toque de 44px, e contraste do CTA mesmo com cta_color clara.
+ */
+
+:root {
+  --landing-bg: #f7f7f8;
+  --landing-fg: #1a1a1f;
+  --landing-fg-muted: #52525b;
+  --landing-accent: #1e3a5f;
+  --landing-accent-fg: #ffffff;
+  --landing-border: #d4d4d8;
+  --landing-erro: #b3261e;
+  --landing-erro-bg: #fdecea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--landing-bg);
+  color: var(--landing-fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.landing {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.hero {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border: 1px solid var(--landing-border);
+  border-radius: 12px;
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.4rem, 4.5vw, 1.9rem);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--landing-fg);
+}
+
+.hero .sub {
+  margin: 0 0 12px;
+  font-size: clamp(0.95rem, 3vw, 1.05rem);
+  line-height: 1.5;
+  color: var(--landing-fg-muted);
+}
+
+.captura {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.captura label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--landing-fg);
+}
+
+.captura input {
+  /* alvo de toque de pelo menos 44px, mesmo em telas pequenas */
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-weight: 400;
+  border: 1px solid var(--landing-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--landing-fg);
+}
+
+.captura input:focus {
+  outline: 2px solid var(--landing-accent);
+  outline-offset: 1px;
+}
+
+.captura .erro {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--landing-erro-bg);
+  color: var(--landing-erro);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.captura button {
+  min-height: 44px;
+  padding: 12px 20px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 8px;
+  background: var(--landing-accent);
+  color: var(--landing-accent-fg);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  /* ⚠️ config.cta_color entra por style inline no <button> e pode ser
+   * qualquer cor, inclusive clara — não há como calcular contraste real
+   * (WCAG) em CSS puro sem JS lendo a cor recebida. A saída aqui é um
+   * "halo" de sombra escura ao redor do texto branco: funciona como
+   * legenda de vídeo, mantém o texto legível tanto sobre cor escura
+   * quanto sobre cor clara, sem depender do valor exato do fundo. Um
+   * anel de contorno sutil (box-shadow) reforça a borda do botão nos
+   * casos em que cta_color se aproxima do branco da página. */
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.85),
+    0 0 4px rgba(0, 0, 0, 0.65),
+    0 1px 1px rgba(0, 0, 0, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.captura button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.captura button:focus-visible {
+  outline: 2px solid var(--landing-fg);
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .hero {
+    padding: 36px 32px;
+  }
+}
