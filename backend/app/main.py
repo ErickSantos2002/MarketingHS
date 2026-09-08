@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.auth.router import router as auth_router
@@ -21,6 +23,7 @@ from app.routers.escrita_contatos import router as escrita_contatos_router
 from app.routers.ia import router as ia_router
 from app.routers.imagens import router as imagens_router
 from app.routers.jornadas import router as jornadas_router
+from app.routers.landing import router as landing_router
 from app.routers.leitura_contatos import router as leitura_contatos_router
 from app.routers.paginas import router as paginas_router
 from app.routers.painel import router as painel_router
@@ -31,6 +34,7 @@ from app.routers.templates import router as templates_router
 from app.routers.usuarios import router as usuarios_router
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -109,3 +113,13 @@ app.include_router(paginas_router)
 app.include_router(captura_router)
 app.include_router(publico_router)
 app.include_router(webhook_router)
+app.include_router(landing_router)
+
+# O bundle público da landing, construído por `npm run build:landing`. Fora do
+# ar em desenvolvimento até alguém rodar o build — a casca continua servindo, a
+# página fica em branco, e isso é honesto.
+_LANDING = Path(__file__).resolve().parents[2] / "frontend" / "dist-landing"
+if _LANDING.is_dir():
+    app.mount("/landing", StaticFiles(directory=_LANDING), name="landing")
+else:
+    logger.warning("dist-landing não existe — rode `npm run build:landing`")

@@ -123,14 +123,26 @@ async def pagina_sonda(monkeypatch):
     padrão dos testes de `validar_dominio` acima (`monkeypatch.setattr(vemail,
     "_tem_mx", ...)`); a recusa de `mailinator.com` continua íntegra porque a
     lista de descartáveis é checada ANTES da consulta de MX.
+
+    ⚠️ **Segunda divergência, achada na Tarefa 4.** `landing.py` (a casca de
+    `GET /p/{slug}`) tem cache de processo por slug (TTL de 60s) — e o slug
+    aqui é sempre o mesmo, `SLUG_SONDA`. Sem limpar esse cache também, um
+    teste da casca que rode dentro da mesma janela de 60s que outro herda a
+    config ou o status QUE JÁ FOI APAGADO, porque a chave do cache não sabe
+    que a linha por trás foi recriada. `test_casca_404_para_rascunho` pegou
+    isso na prática: rodando depois de outro teste da casca, via um 200 em
+    vez do 404 esperado, porque o cache ainda tinha a config `active` de
+    antes. Mesmo padrão do cache de DNS acima — limpa nos dois lados.
     """
     from app.captura import email as vemail
+    from app.routers import landing as vlanding
 
     async def sempre_tem_mx(_dominio):
         return True
 
     monkeypatch.setattr(vemail, "_tem_mx", sempre_tem_mx)
     vemail._limpar_cache()
+    vlanding._limpar_cache()
 
     await db.init_db()
     if db._pool is None:
@@ -161,6 +173,7 @@ async def pagina_sonda(monkeypatch):
     # `exemplo.invalid` sem monkeypatch (fora deste arquivo, por exemplo)
     # herdaria um "válido" fabricado por até uma hora.
     vemail._limpar_cache()
+    vlanding._limpar_cache()
     # ⚠️ NÃO chame `db.close_db()` aqui. A fixture `cliente` já fecha o pool no
     # teardown dela, e a `envio` — o padrão desta casa para fixture que commita
     # — deliberadamente não fecha. Fechar nas duas faz o teardown fechar um pool
@@ -300,3 +313,56 @@ async def test_captura_sobrevive_a_falha_real_na_identidade(cliente, pagina_sond
             "SELECT count(*) FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id "
             "WHERE lt.lead_id = $1 AND t.name = $2", lead["id"], pagina_sonda)
         assert tags == 1, "a tag precisa sobreviver à falha de identidade (SAVEPOINT)"
+
+
+async def test_casca_traz_as_meta_tags_da_config(cliente, pagina_sonda):
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE pages SET config = $2 WHERE slug = $1", pagina_sonda,
+            {"meta_title": "Bafômetro conectado", "headline": "Registre e prove",
+             "meta_description": "Teste de alcoolemia com registro auditável"})
+
+    resposta = await cliente.get(f"/p/{pagina_sonda}")
+    assert resposta.status_code == 200
+    assert "text/html" in resposta.headers["content-type"]
+    corpo = resposta.text
+    assert "<title>Bafômetro conectado</title>" in corpo
+    assert 'property="og:title" content="Bafômetro conectado"' in corpo
+    assert "Teste de alcoolemia com registro auditável" in corpo
+
+
+async def test_casca_escapa_conteudo_do_admin(cliente, pagina_sonda):
+    """⚠️ A config é campo EDITÁVEL na tela indo para dentro de HTML.
+
+    O `</script>` é o caso que mais morde: ele fecha o bloco JSON embutido e o
+    resto vira marcação executável na página.
+    """
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE pages SET config = $2 WHERE slug = $1", pagina_sonda,
+            {"meta_title": '"><script>alert(1)</script>',
+             "headline": "</script><img src=x onerror=alert(1)>"})
+
+    corpo = (await cliente.get(f"/p/{pagina_sonda}")).text
+    assert "<script>alert(1)</script>" not in corpo
+    assert "</script><img" not in corpo
+    assert "onerror=alert(1)" not in corpo
+
+
+async def test_casca_embute_a_config_como_json(cliente, pagina_sonda):
+    corpo = (await cliente.get(f"/p/{pagina_sonda}")).text
+    assert 'id="config-da-pagina"' in corpo
+    assert 'type="application/json"' in corpo
+
+
+async def test_casca_404_para_pagina_inexistente(cliente):
+    assert (await cliente.get("/p/nao-existe-mesmo")).status_code == 404
+
+
+async def test_casca_404_para_rascunho(cliente, pagina_sonda):
+    """Página em rascunho não está no ar — servir seria publicar o que ninguém
+    publicou."""
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("UPDATE pages SET status = 'draft' WHERE slug = $1",
+                           pagina_sonda)
+    assert (await cliente.get(f"/p/{pagina_sonda}")).status_code == 404
