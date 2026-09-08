@@ -150,7 +150,12 @@ import pytest
 
 from app.captura import email as vemail
 
-pytestmark = pytest.mark.asyncio
+# ⚠️ SEM `pytestmark = pytest.mark.asyncio` neste arquivo, ao contrário do
+# `test_conversao.py`. O `pytest.ini` tem `asyncio_mode = auto`, que já marca as
+# funções `async def` sozinho — e aqui há testes SÍNCRONOS misturados
+# (`test_formato_recusa_o_obvio`, e os três da Task 2). O marcador de módulo
+# alcançaria também os síncronos, e o pytest-asyncio recusa marcar função que
+# não é corrotina.
 
 
 def test_formato_recusa_o_obvio():
@@ -545,7 +550,11 @@ async def pagina_sonda():
             SLUG_SONDA, {"redirect_url": "https://exemplo.invalid/obrigado"})
     yield SLUG_SONDA
     await limpar()
-    await db.close_db()
+    # ⚠️ NÃO chame `db.close_db()` aqui. A fixture `cliente` já fecha o pool no
+    # teardown dela, e a `envio` — o padrão desta casa para fixture que commita
+    # — deliberadamente não fecha. Fechar nas duas faz o teardown fechar um pool
+    # já fechado quando a função usa as duas ao mesmo tempo, que é exatamente o
+    # caso de todos os testes desta tarefa.
 
 
 async def test_captura_cria_lead_pontuado_com_conversao_e_tag(cliente, pagina_sonda):
