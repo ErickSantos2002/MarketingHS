@@ -1142,3 +1142,106 @@ async def registrar_conversao(dados: ConversaoIn,
 
     return {"success": True, "lead_id": lead_id,
             "conversion": dict(conversao), "tag": tag}
+
+
+class ConversaoPatch(BaseModel):
+    session_id: str = Field(min_length=1, max_length=200)
+    converted_at: str = Field(min_length=1)
+
+
+class ConversaoDelete(BaseModel):
+    session_id: str = Field(min_length=1, max_length=200)
+
+
+# ⚠️ `source_app` do evento de auditoria: 'marketinghs', não o 'dnmarketing'
+# que as functions escreviam. Os dois passam no gatilho
+# `validate_contact_event_source_app`. Escolhido 'marketinghs' porque é este
+# sistema que escreve agora, e porque não há linha anterior para ficar
+# incoerente: `lead_conversions` está vazia, logo nunca houve evento
+# 'conversion_updated' nem 'conversion_unregistered'.
+APP_DA_CONVERSAO = "marketinghs"
+
+
+@router.patch("/conversao")
+async def atualizar_conversao(dados: ConversaoPatch,
+                              _: ChaveApi = Depends(chave_api("write"))):
+    """Move a data de todas as conversões de uma sessão. Era `update-conversion`."""
+    async with sessao(role="service_role") as conn:
+        antes = await conn.fetch(
+            """SELECT id::text, lead_id::text, converted_at::text
+                 FROM lead_conversions WHERE session_id = $1""",
+            dados.session_id)
+        if not antes:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "Nenhuma conversão para o session_id informado.")
+
+        try:
+            atualizadas = await conn.fetch(
+                """UPDATE lead_conversions SET converted_at = $2::text::timestamptz
+                    WHERE session_id = $1
+                RETURNING id::text, lead_id::text, converted_at::text,
+                          tipo, page_slug, session_id""",
+                dados.session_id, dados.converted_at)
+        except (asyncpg.DataError, ValueError):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "'converted_at' precisa ser um timestamp ISO 8601 válido.")
+
+        leads = sorted({l["lead_id"] for l in antes if l["lead_id"]})
+        await _recalcular_datas(conn, leads)
+
+        for lead_id in leads:
+            await conn.execute(
+                """INSERT INTO contact_events
+                       (lead_id, source_app, event_type, title, metadata)
+                   VALUES ($1::uuid, $2, 'conversion_updated', $3, $4)""",
+                lead_id, APP_DA_CONVERSAO,
+                f"Conversão atualizada (session_id: {dados.session_id})",
+                {"session_id": dados.session_id,
+                 "new_converted_at": dados.converted_at,
+                 "previous": [{"id": l["id"], "converted_at": l["converted_at"]}
+                              for l in antes if l["lead_id"] == lead_id]})
+
+    return {"success": True, "affected": len(antes),
+            "updated": [dict(l) for l in atualizadas]}
+
+
+@router.delete("/conversao")
+async def remover_conversao(dados: ConversaoDelete,
+                            _: ChaveApi = Depends(chave_api("write"))):
+    """Apaga as conversões de uma sessão. Era `unregister-conversion`.
+
+    ⚠️ O recálculo depois do DELETE é obrigatório e é o motivo de esta rota
+    existir em vez de um DELETE cru: o gatilho da tabela só sobe a data.
+    """
+    async with sessao(role="service_role") as conn:
+        antes = await conn.fetch(
+            """SELECT id::text, lead_id::text, converted_at::text,
+                      tipo, page_slug, session_id
+                 FROM lead_conversions WHERE session_id = $1""",
+            dados.session_id)
+        if not antes:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "Nenhuma conversão para o session_id informado.")
+
+        await conn.execute(
+            "DELETE FROM lead_conversions WHERE session_id = $1", dados.session_id)
+
+        leads = sorted({l["lead_id"] for l in antes if l["lead_id"]})
+        await _recalcular_datas(conn, leads)
+
+        for lead_id in leads:
+            removidas = [dict(l) for l in antes if l["lead_id"] == lead_id]
+            await conn.execute(
+                """INSERT INTO contact_events
+                       (lead_id, source_app, event_type, title, metadata)
+                   VALUES ($1::uuid, $2, 'conversion_unregistered', $3, $4)""",
+                lead_id, APP_DA_CONVERSAO,
+                f"Conversão removida (session_id: {dados.session_id})",
+                {"session_id": dados.session_id,
+                 "removed_count": len(removidas), "removed": removidas})
+
+    return {"success": True, "affected": len(antes),
+            "deleted": [dict(l) for l in antes]}
