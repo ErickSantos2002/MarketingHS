@@ -1,19 +1,128 @@
 # Continuar aqui
 
-**Atualizado:** 4 de setembro de 2026
-**Branch:** `main` — a `reconstrucao` foi mergeada e apagada. **Nada pushado.**
+**Atualizado:** 8 de setembro de 2026
+**Branch de trabalho:** `lote-7` — 14 commits à frente de `main`, que parou em
+`e4a709a` (o commit do plano). **Ainda não mergeada.**
 
-⚠️ **A `reconstrucao` não existe mais.** O lote 6 fechou com merge local em
-`main` (fast-forward, sem commit de merge), suíte conferida no resultado
+⚠️ **A `reconstrucao` não existe mais desde o lote 6.** Fechou com merge local
+em `main` (fast-forward, sem commit de merge), suíte conferida no resultado
 mergeado, e a branch removida. Se precisar dela de volta:
 `git branch reconstrucao 6926d4d`.
 
-`main` está **121 commits à frente de `origin/main`** e o remoto continua
-parado em 31/08, no último commit do Lovable — conferido com `fetch` antes do
-merge. O push segue sendo decisão do Erick, com o mesmo alerta de sempre (item
-6 abaixo).
+`main` está **123 commits à frente de `origin/main`**, e a `lote-7` soma mais
+14 em cima disso — o remoto continua parado em 31/08, no último commit do
+Lovable. O push, e o merge de `lote-7` em `main`, seguem sendo decisão do
+Erick, com o mesmo alerta de sempre (item 6 abaixo).
 
 ## Onde paramos
+
+### ✅ Lote 7 concluído (08/09/2026)
+
+As dez tarefas fecharam. Suíte de backend em **137 testes** (127 do lote 6 +
+10 novos, `test_conversao.py`), `tsc --noEmit` limpo, e o portão (tarefa 9)
+abriu a tela de Páginas no navegador contra o banco real.
+
+O que entrou:
+
+| | |
+|---|---|
+| **1** | Rotas de admin do cadastro de páginas (`backend/app/routers/paginas.py`), com `admin_atual` + `sessao(role="authenticated")` — `pages` é admin-only por RLS e `page_stats` é view `security_invoker=true` |
+| **2** | Resolução de lead, tag aplicada na mesma transação, recálculo de `last_conversion_date` |
+| **3** | `POST /publico/conversao` no lugar de `register-conversion` |
+| **4** | `PATCH` + `DELETE /publico/conversao`, com os aliases `POST /publico/conversao/atualizar` e `POST /publico/conversao/remover` |
+| **5** | `/publico/paginas` no lugar de `pages-api` |
+| **6** | `usePages.tsx` fora do toco do Supabase; a tela de Páginas portada |
+| **7** | `leadConversion.ts` apagado — sem chamador |
+| **8** | Documentação corrigida — na tela (`ApiDocumentation.tsx`, inclusive a navegação lateral) e no `dnmarketing-api.yaml` |
+| **9** | O portão — cinco functions a menos |
+
+⚠️ **O brief original deste lote listava três rotas de conversão. São
+cinco.** `update-conversion` virou **duas** (`PATCH /publico/conversao` e o
+alias `POST /publico/conversao/atualizar`); `unregister-conversion` virou
+**duas** (`DELETE /publico/conversao` e o alias
+`POST /publico/conversao/remover`). Os aliases existem porque a documentação
+publicada já prometia "Aceita PATCH ou POST" / "Aceita DELETE ou POST" e a
+portagem tinha derrubado isso em silêncio — restaurado numa rodada de
+correção (`4d45d86`). Não couberam no mesmo caminho do método principal
+porque `POST /publico/conversao` já é a criação. `DELETE /publico/conversao`
+aceita `session_id` no corpo **ou** em query string, com o corpo vencendo
+quando os dois vierem.
+
+⚠️ **"Zero pontos de acesso" é a frase mais fácil de ler errado deste
+projeto — em letra grande.** O script do placar agora marca **0**. Os 8
+pontos que ele via no lote 6 eram exatamente `usePages` (6) e
+`leadConversion` (2), e os dois saíram do código. Mas o toco
+(`integrations/supabase/client.ts`) **continua sem poder ser apagado**:
+sobram os **9 pontos reais** do alias `const db = supabase as any`, em
+`useAbConfig.tsx:9` e `useAbTests.tsx:8` (as três telas de Experiments) — o
+script não os enxerga. Medido em 08/09/2026:
+
+```bash
+python3 -c "
+import pathlib, re
+n = sum(len(re.findall(r'supabase\s*\.?\s*\n?\s*\.(from|rpc)\(', f.read_text()))
+        for f in pathlib.Path('frontend/src').rglob('*.ts*')
+        if 'integrations/supabase' not in str(f))
+print(n, 'pontos pelo script')"
+# → 0 pontos pelo script
+
+grep -rn "supabase as any\|= supabase;" frontend/src --include=*.ts --include=*.tsx
+# → useAbTests.tsx:8 e useAbConfig.tsx:9
+```
+
+⚠️ **A lista de telas liberadas para trabalho de visual estava errada.**
+Dizia quatorze de dezesseis, contando Experiments como portada — não estava.
+As três telas de Experiments ainda falam com o Supabase pelo alias. Eram
+**onze**; com Páginas, que este lote libera, são **doze**. Continuam fora:
+**Experiments** (três telas) e **Configurações** (espera o `NexusCard` do
+5A, bloqueado). Lista atualizada mais abaixo.
+
+⚠️ **A perna de A/B da conversão ficou pendente, e o commit `46f2a07`
+generaliza demais.** `leadConversion.ts` fazia quatro coisas. Três têm
+substituto em `POST /publico/conversao`, e duas ficaram melhores: a tag
+agora é aplicada na mesma transação em vez do fire-and-forget que falhava
+calada, e `last_conversion_date` agora vem de um gatilho `AFTER INSERT` com
+`greatest()` — o que conserta a function original, que BAIXAVA a data
+quando a conversão chegava com `converted_at` no passado. Mas a quarta —
+`recordAbConversion("lead_criado", ...)`, o disparo de conversão A/B **no
+navegador** — **não tem, e não pode ter, substituto numa rota de
+servidor**. O commit diz "o que ele fazia vive agora em
+`POST /publico/conversao`", e isso é verdade só para as colunas do banco
+(`ab_*`, que a rota grava). Registrado aqui para ninguém ler o commit
+sozinho no futuro e concluir paridade.
+
+⚠️ **O lote 7 NÃO é a "Captação pública" que a spec descreve.** A spec
+(linha 238) chama o lote 7 de "Captação pública — landing modelo da HS,
+conversões, OG estático, teste A/B". Por decisão do Erick em 08/09/2026,
+este lote foi **só o porte**. `pages` e `lead_conversions` seguem
+**vazias**. "Lote 7 concluído" não quer dizer que a captação está de pé.
+
+**O que a conferência no navegador provou (passo 3 do portão, 08/09/2026):**
+listar, estatísticas, duplicar, busca, alternar status, editor de config
+(com persistência após reload), presets de UTM, e excluir pela própria
+tela — tudo contra o banco real, sem sobrar teste no banco.
+
+⚠️ **E o clique achou o que nenhum `grep` acharia.**
+`UTMPresetsModal.tsx:37` montava `https://dnia.ai/${page.slug}` cravado — o
+link que o botão "Copiar link" entrega para colar em anúncio, mandando
+**tráfego real para o domínio da dn.ia**. Corrigido para
+`window.location.origin` no commit `dcc0742`. Vale registrar como lição
+junto do portão: os passos 1 e 2 são `grep`, e esse defeito não era uma
+chamada — era um literal montando uma URL. Só apareceu porque alguém abriu
+a tela e clicou.
+
+O portão fechou as cinco functions que a tela de Páginas e a conversão
+seguravam (`pages-api`, `register-conversion`, `unregister-conversion`,
+`update-conversion`, `apply-lead-tag`): pela **oitava vez** no projeto, a
+documentação (tela + `dnmarketing-api.yaml`) ainda ensinava URL morta —
+desta vez até na navegação lateral, que montava o rótulo visível a partir
+do `id` do bloco em vez do `path`, sobrevivendo dentro da própria tarefa
+que existia para eliminá-la (`b43ccc0`). Placar da pasta de especificação:
+**34 functions portadas** e **7 descartadas** (números que não se somam),
+restando **13**: `ab-events`, `contact-status-update`,
+`contact-tags-sync`, `contact-update`, `get-nexus-stages`, `go`,
+`handoff-to-nexus`, `lead-capture`, `nexus-config`, `resend-config`,
+`resend-config-check`, `resend-webhook`, `validate-email-domain`.
 
 ### ✅ Lote 6 concluído (04/09/2026)
 
@@ -130,40 +239,38 @@ surpreender com o número.
 
 ---
 
-## 👉 O próximo passo — lote 7 (Páginas)
+## 👉 O próximo passo — captação pública
 
 **Abrir a sessão dentro do repo:** `cl MarketingHS` (ou Meta+C), nunca de fora.
 
-O lote 7 é o das **Páginas** — `usePages.tsx` e `leadConversion.ts` são os
-pontos de acesso direto ao Supabase que sobraram de propósito, e a tela de
-Páginas é uma das duas que ainda não podem receber trabalho de visual.
+A **captação pública** é a parte da spec (linha 238) que o lote 7 deixou de
+fora por decisão do Erick: landing modelo da HS (com `/humanoseagentes` como
+molde), `lead-capture`, `validate-email-domain`, OG estático, e o teste A/B
+(`go`, `ab-events`, as três telas de Experiments e os 9 pontos do alias
+`const db = supabase as any`).
+
+⚠️ **Precisa de brainstorm de produto antes do plano** — a spec, na linha
+439, diz explicitamente que não decide o desenho da landing. E o A/B depende
+de conta Cloudflare da HS, que é pendência do Erick — ver a lista abaixo.
 
 O que já se sabe antes de começar:
 
-- ⚠️ **O "quanto falta" publicado é otimista.** O script do placar não enxerga
-  `const db = supabase as any` (telas de Experiments) nem chamadas quebradas em
-  várias linhas. São ~9 pontos além dos 8 contados. Medir com busca multilinha
-  E procurar o alias, não confiar no número herdado.
-- ⚠️ **O portão de pronto do `CLAUDE.md` tem um buraco que o lote 6 expôs
-  três vezes:** ele pergunta se a tela ainda fala com o Supabase e se alguém
-  mais chama a function, mas **não pergunta se a tela ainda faz o que fazia**.
-  As três capacidades perdidas no lote 6 (botão de apagar insight, teto de
-  agendamentos de 20.000 → 500, `dashboard_cards` por usuário → global)
-  passariam pelo portão como ele está escrito. No lote 7, comparar a tela
-  contra o commit anterior, capacidade por capacidade.
-- **`PageConfigEditor.tsx`** guarda a configuração do Clarity por página e foi
-  deixado intocado de propósito no lote 6 — é do lote 7.
-- O `ApiDocumentation.tsx` e o `dnmarketing-api.yaml` já ensinaram URL morta
-  **sete vezes**. Conferir os dois antes de apagar qualquer function.
+- `pages` e `lead_conversions` seguem **vazias** — o lote 7 portou o
+  mecanismo, não populou dado real.
+- **A tela de Páginas não consegue criar a primeira página** sem uma para
+  clonar (`NewPageDialog.tsx:52`). A landing modelo, quando existir, resolve
+  isso sozinha — ver item 18 da lista abaixo.
+- `ApiDocumentation.tsx` e `dnmarketing-api.yaml` já ensinaram URL morta
+  **oito vezes**. Conferir os dois antes de apagar qualquer function.
 
-Depois do 7 fica o **5A** (handoff → GrowthHS), que segue bloqueado esperando
+Depois dele fica o **5A** (handoff → GrowthHS), que segue bloqueado esperando
 resposta do `hsgrowth-sistema` — ver abaixo.
 
 ---
 
 ## Onde paramos
 
-**Lotes 0 a 4 fechados, mais o 5B, o 5C, o 5D e o 6.** O lote 5 foi partido em quatro:
+**Lotes 0 a 4 fechados, mais o 5B, o 5C, o 5D, o 6 e o 7.** O lote 5 foi partido em quatro:
 
 | | | |
 |---|---|---|
@@ -172,22 +279,28 @@ resposta do `hsgrowth-sistema` — ver abaixo.
 | **5C** | Identidade unificada, Meta CAPI | ✅ concluído (03/09/2026) |
 | **5D** | Limpeza das sobras | ✅ concluído (02/09/2026) |
 | **6** | IA (chat, análises) e painel | ✅ concluído (04/09/2026) |
+| **7** | Páginas e conversões | ✅ concluído (08/09/2026) — branch `lote-7`, ainda não mergeada |
 
 ## 🎨 O trabalho de visual já pode começar
 
-Era para isto que o 5D existiu, e o lote 6 liberou mais duas. **Quatorze das
-dezesseis telas do admin estão 100% livres do toco do Supabase** e podem ser
-redesenhadas agora:
+Era para isto que o 5D existiu, o lote 6 liberou mais duas, e o lote 7 libera
+mais uma (Páginas). **Doze das dezesseis telas do admin estão 100% livres do
+toco do Supabase** e podem ser redesenhadas agora:
 
-> Automações · Campanhas · Contatos · Experiments (as três) · Importar ·
-> Construtor de fluxo · Login · Segmentos · Preview de template · Templates ·
-> Visão Geral · Analytics
+> Automações · Campanhas · Contatos · Importar · Construtor de fluxo · Login ·
+> Segmentos · Preview de template · Templates · Visão Geral · Analytics ·
+> Páginas
 
-⚠️ **Não redesenhe estas duas ainda:**
+⚠️ **A lista publicada até 04/09 estava errada — contava Experiments (as
+três telas) como portada.** Não estava: `useAbConfig.tsx` e `useAbTests.tsx`
+alcançam o Supabase pelo alias `const db = supabase as any`, que o script do
+placar não enxerga. Eram onze telas livres, não quatorze.
+
+⚠️ **Não redesenhe estas ainda:**
 
 | Tela | Por quê |
 |---|---|
-| **Páginas** | lote 7 |
+| **Experiments** (as três) | ainda falam com o Supabase pelo alias `const db = supabase as any` — os 9 pontos que sobram no toco. Aguarda o próximo lote (captação pública / teste A/B) |
 | **Configurações** | falta só o `NexusCard` (5A, bloqueado) — o `MetaCard` (5C) já chegou |
 
 ⚠️ O design system da HS **vive no Claude Design** — ler de lá (DesignSync)
@@ -278,9 +391,12 @@ que o 5C não piorou.
    `dndash_lead_id` — e agora leva `ForeignKeyViolationError` sem
    `try/except`, virando 500 com mensagem de Postgres. Antes da 015 isso
    gravava lixo em silêncio e a visão 360° vinha vazia, então falhar é melhor
-   que o que havia; o que falta é falhar com 400 e mensagem. Conserto natural
-   no lote 7: o mesmo `pattern` do `EventoIn`, mais 400 quando o `local_id`
-   não resolve.
+   que o que havia; o que falta é falhar com 400 e mensagem. ⚠️ Esta nota
+   previa "conserto natural no lote 7" — não aconteceu. Conferido em
+   08/09/2026: `IdentidadeIn.source_app` (`publico.py:39`) continua
+   `str | None = None`, sem o `pattern` que `EventoIn` já tem. Ainda em
+   aberto para um próximo lote: o mesmo `pattern` do `EventoIn`, mais 400
+   quando o `local_id` não resolve.
 2. **I3** — A migration 015 promete uma guarda que outro caminho contorna. O
    comentário do gatilho diz que a guarda `dndash_lead_id IS NULL` impede
    roubar o canônico; mas a `resolve_or_create_identity` (migration 007), no
@@ -340,8 +456,9 @@ o defeito dos 2.080 volta, calado.
 4. **Passar o contrato do 5A** para o agente do `hsgrowth-sistema`
 5. Decidir sobre `DATACORE_EMAIL_DE_NOTAS` (190 → 327 contatos alcançáveis)
 6. Decidir sobre o **push do `main`** (era "push da branch", até o merge de
-   04/09): ele é o que rompe o sync com o Lovable. São **121 commits** locais
-   que o remoto não tem.
+   04/09): ele é o que rompe o sync com o Lovable. São **123 commits** locais
+   que o remoto não tem — e a branch `lote-7` soma mais **14** em cima disso,
+   ainda não mergeada em `main` (08/09/2026).
    ⚠️ Antes de pushar, ver o `SETUP-CLAUDE.md` (não versionado): o `.env` da
    dn.ia com credenciais do Supabase está no histórico do git desde o commit
    inicial do remix. Pushar publica esse histórico — reescrevê-lo é mais
@@ -432,6 +549,24 @@ o defeito dos 2.080 volta, calado.
     outro request — inclusive login. Não alcançável hoje com um usuário só;
     merece decisão (prazo total, ou tirar a query do modelo de dentro da
     transação) antes de o sistema ter vários.
+17. **`page_stats` e `/publico/paginas` discordam sobre o que é "lead da
+    página".** A view conta por `lead_conversions.page_slug`; a rota pública
+    conta por `leads.source = slug`. As duas foram portadas como estavam —
+    mudar qualquer uma alteraria número que alguém pode estar lendo. Qual das
+    duas é a definição certa é pergunta de negócio.
+18. **A tela de Páginas não consegue criar a primeira página.**
+    `NewPageDialog.tsx:52` exige `cloneFrom`, e com a tabela vazia não há de
+    onde clonar. Herdado — fazia sentido com as 26 landings da dn.ia. Some
+    sozinho quando a landing da HS existir; até lá, página nova só por
+    `POST /publico/paginas`.
+19. **`frontend/index.html` continua mandando telemetria do admin para
+    terceiros da dn.ia** (item 9, que segue aberto) — repetido aqui porque
+    este lote passou perto e não resolveu; não era escopo de nenhuma tarefa
+    do plano do lote 7.
+20. **Os presets de UTM são gravados em duas formas diferentes** no mesmo
+    array `config.utm_presets`: a rota pública grava
+    `utm_source`/`utm_medium`; a tela grava `source`/`medium`/`name`.
+    Herdado da `pages-api`. Medido ao vivo em 08/09/2026.
 
 ## Como subir o que existe
 
@@ -487,7 +622,7 @@ e a terceira é abrir no navegador.
 ### O que era "o próximo passo" quando o lote 3 fechou
 
 ⚠️ **Histórico — não é o próximo passo de hoje.** O de hoje está lá em cima,
-e é o lote 7 (Páginas). Os lotes 4 e 5 já fecharam.
+e é a captação pública. Os lotes 4, 5 e 7 já fecharam.
 
 **Lote 4 (Jornadas)** ou **lote 5 (Integrações HS)**. O 4 depende do motor, que
 agora existe; o 5 traz os 2.077 clientes do DataCore e ⚠️ **exige trocar a senha
