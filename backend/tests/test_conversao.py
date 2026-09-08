@@ -138,6 +138,41 @@ async def test_recalculo_baixa_a_data_que_o_gatilho_nao_baixa(conexao):
     assert depois < antes, "sem recálculo a data fica na conversão apagada"
 
 
+async def test_recalculo_assenta_a_data_que_o_default_deixa_no_futuro(conexao):
+    """`leads.last_conversion_date` tem `DEFAULT now()` (migrations/001). Um
+    lead recém-criado já nasce com a data "no futuro" em relação a uma
+    conversão que se registre depois com `converted_at` no passado — e o
+    gatilho, que só SOBE a data (`greatest()`), não conserta isso: ele nunca
+    vê a conversão como maior que o default. Sem o recálculo depois do
+    INSERT, a data fica maior que qualquer conversão que exista, sem erro e
+    sem aviso. É o cenário que `registrar_conversao` (POST /publico/conversao)
+    agora fecha chamando `_recalcular_datas` no fim do handler."""
+    lead = await _lead(conexao, nome="Nasce com o default no futuro")
+    default_now = await conexao.fetchval(
+        "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
+    assert default_now is not None, "a coluna precisa nascer preenchida pelo DEFAULT now()"
+
+    conversao_passada = await conexao.fetchval(
+        "INSERT INTO lead_conversions (lead_id, tipo, converted_at, page_slug) "
+        "VALUES ($1::uuid, 't', now() - interval '10 days', 'p') "
+        "RETURNING converted_at", lead)
+
+    # o gatilho rodou (AFTER INSERT) e não baixou a data: greatest(default, passado) = default
+    depois_do_gatilho = await conexao.fetchval(
+        "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
+    assert depois_do_gatilho == default_now, (
+        "o gatilho nunca baixa a data — se este assert falhar, o cenário do "
+        "DEFAULT now() deixou de existir e o teste deve ser revisto")
+
+    await _recalcular_datas(conexao, [lead])
+
+    depois_do_recalculo = await conexao.fetchval(
+        "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead)
+    assert depois_do_recalculo == conversao_passada, (
+        "o recálculo precisa assentar a data na conversão real, não deixá-la "
+        "no DEFAULT now() que o gatilho não questiona")
+
+
 async def test_recalculo_zera_quando_nao_sobra_conversao(conexao):
     lead = await _lead(conexao, nome="Zerado")
     await conexao.execute(

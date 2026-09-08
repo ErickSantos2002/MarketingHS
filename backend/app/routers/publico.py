@@ -946,7 +946,13 @@ class ConversaoIn(BaseModel):
     phone: str | None = None
     tipo: str = Field(min_length=1, max_length=80)
     page_slug: str = Field(min_length=1, max_length=200)
-    session_id: str | None = None
+    # ⚠️ Mesmo contrato de `ConversaoPatch`/`ConversaoDelete` (que já exigiam
+    # min_length=1, max_length=200) e da coluna (`varchar(255)`). Sem isto, um
+    # POST com session_id de 201 a 255 caracteres grava uma conversão que o
+    # PATCH/DELETE recusam com 422 — órfã para sempre — e acima de 255 vira
+    # StringDataRightTruncation não tratada (500). `or None` no handler já
+    # cuida da string vazia antes de chegar na validação de tamanho.
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
     converted_at: str | None = None
     utm_source: str | None = None
     utm_medium: str | None = None
@@ -1087,11 +1093,19 @@ async def registrar_conversao(dados: ConversaoIn,
     é o escopo `write` da chave, aqui na rota. É o mesmo desenho das outras
     rotas de `/publico`.
 
-    ⚠️ `last_conversion_date` NÃO é escrito aqui. O gatilho
-    `trg_update_last_conversion_date` já grava, e com `greatest()`. A function
-    original escrevia por cima, sem `greatest()` — o que fazia uma conversão
+    ⚠️ `last_conversion_date` NÃO é escrito aqui — o gatilho
+    `trg_update_last_conversion_date` já grava, com `greatest()`. A function
+    original escrevia por cima, sem `greatest()`, o que fazia uma conversão
     registrada com `converted_at` no passado BAIXAR a data do lead. Deixar o
-    gatilho ser o dono do campo conserta isso de graça.
+    gatilho ser o dono do campo conserta ESSE rebaixamento — mas só metade do
+    problema: a coluna tem `DEFAULT now()`, então um lead criado hoje já nasce
+    com a data no "futuro" em relação a qualquer conversão real que se
+    registre depois. `greatest(hoje, converted_at_passado)` fica em hoje, sem
+    erro e sem aviso — um NÃO-rebaixamento tão errado quanto o rebaixamento
+    que o gatilho resolve. Por isso o handler chama `_recalcular_datas` no
+    fim, dentro da mesma transação: ela assenta o campo em `max(converted_at)`
+    de verdade, e os três caminhos de escrita (POST, PATCH, DELETE) passam a
+    concordar sobre o que o campo significa.
     """
     if not (dados.lead_id or dados.dnia_id or dados.email or dados.phone):
         raise HTTPException(
@@ -1103,6 +1117,12 @@ async def registrar_conversao(dados: ConversaoIn,
         if lead_id is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead não encontrado.")
 
+        # ⚠️ `or None` nos campos que a origem normalizava (`session_id`,
+        # `source`, `utm_*`) — igual ao UPDATE logo abaixo. `tipo` e
+        # `page_slug` ficam de fora: são obrigatórios e o pydantic já garante
+        # que não chegam vazios. Sem isto, `""` gravava como string vazia
+        # aqui e como `NULL` no UPDATE — a mesma função com duas convenções —
+        # e `WHERE utm_source IS NULL` perdia essas linhas caladamente.
         conversao = await conn.fetchrow(
             """INSERT INTO lead_conversions
                    (lead_id, tipo, converted_at, page_slug, session_id,
@@ -1115,9 +1135,10 @@ async def registrar_conversao(dados: ConversaoIn,
                       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
                       ab_test, ab_var, ab_vid""",
             lead_id, dados.tipo, dados.converted_at, dados.page_slug,
-            dados.session_id, dados.utm_source, dados.utm_medium,
-            dados.utm_campaign, dados.utm_term, dados.utm_content,
-            dados.source, dados.ab_test, dados.ab_var, dados.ab_vid)
+            dados.session_id or None, dados.utm_source or None,
+            dados.utm_medium or None, dados.utm_campaign or None,
+            dados.utm_term or None, dados.utm_content or None,
+            dados.source or None, dados.ab_test, dados.ab_var, dados.ab_vid)
 
         # As mesmas colunas que a function carimbava no lead — e só quando o
         # valor veio. `COALESCE` guarda o que já estava lá.
@@ -1139,6 +1160,11 @@ async def registrar_conversao(dados: ConversaoIn,
         tag = None
         if dados.apply_tag:
             tag = await _aplicar_tag_do_slug(conn, lead_id, dados.page_slug)
+
+        # O gatilho só SOBE a data (greatest()); o DEFAULT now() da coluna faz
+        # com que isso não baste sozinho (ver docstring acima). O recálculo
+        # assenta o campo em max(converted_at) de verdade.
+        await _recalcular_datas(conn, [lead_id])
 
     return {"success": True, "lead_id": lead_id,
             "conversion": dict(conversao), "tag": tag}
@@ -1395,8 +1421,14 @@ async def atualizar_pagina_publico(slug: str, dados: PaginaPublicaPatch,
     de produção não estiver decidido (item 11 da lista do Erick).
     """
     async with sessao(role="service_role") as conn:
+        # FOR UPDATE: lê, funde em Python e escreve dentro da mesma
+        # transação — sem a trava, dois PATCH concorrentes na mesma página
+        # perdem um `utm_preset` um do outro. O mesmo lote moveu a inversão
+        # do status para dentro do SQL em `PATCH /paginas/{id}/status`
+        # exatamente para matar uma corrida desta família; deixar esta rota
+        # irmã sem trava seria incoerência interna.
         atual = await conn.fetchrow(
-            "SELECT id, config FROM pages WHERE slug = $1", slug)
+            "SELECT id, config FROM pages WHERE slug = $1 FOR UPDATE", slug)
         if atual is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Página não encontrada.")
 
