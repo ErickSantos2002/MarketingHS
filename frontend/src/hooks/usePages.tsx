@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
 export interface PageStat {
@@ -53,46 +53,27 @@ export interface PageFormData {
 export function usePages() {
   const queryClient = useQueryClient();
 
+  const invalidar = () => {
+    queryClient.invalidateQueries({ queryKey: ['pages'] });
+    queryClient.invalidateQueries({ queryKey: ['page-stats'] });
+  };
+
   const { data: pages = [], isLoading, refetch } = useQuery({
     queryKey: ['pages'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pages')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      return data as Page[];
-    },
+    queryFn: () => api.get<Page[]>('/paginas'),
   });
 
-  // Page stats from the view (via RPC since views aren't in types)
+  // A tabela da tela mostra a view page_stats; a edição usa a linha cheia.
+  // São duas formas diferentes, e por isso duas queries — era assim antes.
   const { data: pageStats = [] } = useQuery({
     queryKey: ['page-stats'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .rpc('execute_readonly_query', {
-          query_text: `SELECT id, slug, name, status, config, template_base, page_type, created_at, updated_at, total_leads, hot_leads, last_lead_at FROM page_stats ORDER BY created_at ASC`
-        });
-      if (error) throw error;
-      return (data as unknown as PageStat[] | null) || [];
-    },
+    queryFn: () => api.get<PageStat[]>('/paginas/estatisticas'),
   });
 
   const createPage = useMutation({
-    mutationFn: async (pageData: PageFormData) => {
-      const { data, error } = await supabase
-        .from('pages')
-        .insert([pageData])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
+    mutationFn: (pageData: PageFormData) => api.post<Page>('/paginas', pageData),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pages'] });
-      queryClient.invalidateQueries({ queryKey: ['page-stats'] });
+      invalidar();
       toast.success('Página criada com sucesso!');
     },
     onError: (error: Error) => {
@@ -101,53 +82,24 @@ export function usePages() {
   });
 
   const updatePage = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<PageFormData> }) => {
-      const { data: result, error } = await supabase
-        .from('pages')
-        .update(data)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pages'] });
-      queryClient.invalidateQueries({ queryKey: ['page-stats'] });
-    },
+    mutationFn: ({ id, data }: { id: string; data: Partial<PageFormData> }) =>
+      api.patch<Page>(`/paginas/${id}`, data),
+    onSuccess: invalidar,
     onError: (error: Error) => {
       toast.error(`Erro ao atualizar página: ${error.message}`);
     },
   });
 
   const updatePageConfig = useMutation({
-    mutationFn: async ({ slug, config }: { slug: string; config: Record<string, any> }) => {
-      const { error } = await supabase
-        .from('pages')
-        .update({ config } as any)
-        .eq('slug', slug);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pages'] });
-      queryClient.invalidateQueries({ queryKey: ['page-stats'] });
-    },
+    mutationFn: ({ slug, config }: { slug: string; config: Record<string, any> }) =>
+      api.patch<Page>(`/paginas/por-slug/${encodeURIComponent(slug)}/config`, config),
+    onSuccess: invalidar,
   });
 
   const deletePage = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('pages')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => api.delete<void>(`/paginas/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pages'] });
-      queryClient.invalidateQueries({ queryKey: ['page-stats'] });
+      invalidar();
       toast.success('Página excluída com sucesso!');
     },
     onError: (error: Error) => {
@@ -155,20 +107,13 @@ export function usePages() {
     },
   });
 
+  // ⚠️ Recebe só o id: quem inverte o status é o banco, na mesma instrução do
+  // UPDATE. Antes o valor novo era calculado aqui e mandado pronto, e duas
+  // abas abertas mandavam o mesmo valor.
   const toggleStatus = useMutation({
-    mutationFn: async ({ id, currentStatus }: { id: string; currentStatus: string }) => {
-      const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-      const { error } = await supabase
-        .from('pages')
-        .update({ status: newStatus })
-        .eq('id', id);
-
-      if (error) throw error;
-      return newStatus;
-    },
+    mutationFn: (id: string) => api.patch<{ status: string }>(`/paginas/${id}/status`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pages'] });
-      queryClient.invalidateQueries({ queryKey: ['page-stats'] });
+      invalidar();
       toast.success('Status alterado com sucesso!');
     },
     onError: (error: Error) => {

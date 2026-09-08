@@ -50,7 +50,7 @@ export function PagesManagement() {
     if (page.status === 'active') {
       setConfirmDialog({ open: true, pageId: page.id, pageName: page.name, action: 'deactivate' });
     } else {
-      toggleStatus.mutate({ id: page.id, currentStatus: page.status || 'inactive' });
+      toggleStatus.mutate(page.id);
     }
   };
 
@@ -62,7 +62,7 @@ export function PagesManagement() {
   const handleConfirm = () => {
     if (!confirmDialog) return;
     if (confirmDialog.action === 'deactivate') {
-      toggleStatus.mutate({ id: confirmDialog.pageId, currentStatus: 'active' });
+      toggleStatus.mutate(confirmDialog.pageId);
     } else {
       deletePage.mutate(confirmDialog.pageId);
     }

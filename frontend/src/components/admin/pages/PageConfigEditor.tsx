@@ -111,7 +111,7 @@ export default function PageConfigEditor() {
 
   const confirmPublish = () => {
     if (!page) return;
-    toggleStatus.mutate({ id: page.id, currentStatus: page.status });
+    toggleStatus.mutate(page.id);
     setPublishDialog(null);
   };
 
