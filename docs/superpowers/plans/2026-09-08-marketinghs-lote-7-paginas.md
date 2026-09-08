@@ -74,6 +74,14 @@ Valem para **toda** tarefa deste plano.
   `timeout`, dê pelo menos 600s.
 - **Tipagem do frontend:** `cd frontend && npx tsc --noEmit` limpo antes de
   cada commit que toque `.ts`/`.tsx`.
+- ⚠️ **Timestamp que chega como texto vai para o SQL como `$N::text::timestamptz`,
+  nunca `$N::timestamptz`.** Escrever só `::timestamptz` faz o asyncpg inferir
+  o tipo do parâmetro como timestamptz e exigir um `datetime` do Python — a
+  string do corpo do request derruba a rota com
+  `DataError: invalid input for query argument`. Medido em 08/09/2026, contra
+  o banco. `$N::uuid` com string funciona (o codec de uuid aceita str), e
+  `ANY($N::uuid[])` com lista de strings também — só o timestamp precisa da
+  escada dupla.
 
 ---
 
@@ -840,7 +848,7 @@ async def registrar_conversao(dados: ConversaoIn,
                    (lead_id, tipo, converted_at, page_slug, session_id,
                     utm_source, utm_medium, utm_campaign, utm_term, utm_content,
                     source, ab_test, ab_var, ab_vid)
-               VALUES ($1::uuid, $2, COALESCE($3::timestamptz, now()), $4, $5,
+               VALUES ($1::uuid, $2, COALESCE($3::text::timestamptz, now()), $4, $5,
                        $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING id::text, lead_id::text, tipo, converted_at::text,
                       page_slug, session_id, source,
@@ -973,7 +981,7 @@ async def atualizar_conversao(dados: ConversaoPatch,
 
         try:
             atualizadas = await conn.fetch(
-                """UPDATE lead_conversions SET converted_at = $2::timestamptz
+                """UPDATE lead_conversions SET converted_at = $2::text::timestamptz
                     WHERE session_id = $1
                 RETURNING id::text, lead_id::text, converted_at::text,
                           tipo, page_slug, session_id""",
