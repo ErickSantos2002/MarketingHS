@@ -209,3 +209,55 @@ async def atualizar_contato(
             "updated_fields": atualizados,
             "lead_score": final["lead_score"] or 0,
             "etiqueta": final["etiqueta"]}
+
+
+class StatusApiIn(BaseModel):
+    dnia_id: UUID
+    status: str = Field(min_length=1, max_length=60)
+
+
+@router.api_route("/contato/status", methods=["PATCH", "POST"])
+async def atualizar_status(dados: StatusApiIn,
+                           _: ChaveApi = Depends(chave_api("write"))):
+    """O que era `contact-status-update`. PATCH é a rota; POST é alias, como na
+    origem — mesmo caminho, porque aqui POST não colide com nada.
+
+    ⚠️ O estágio da identidade NÃO avança para `opportunity`, e o handoff para
+    o CRM não é disparado. A origem fazia os dois; a rota do admin deixou de
+    fazer (`escrita_contatos.py:166-169`) porque a régua é decisão de produto,
+    e as duas portas de escrita têm de concordar. O handoff é o lote 8D.
+    """
+    if not dados.status.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            'Campo "status" não pode ser vazio.')
+    dnia_id = str(dados.dnia_id)
+
+    async with sessao(role="service_role") as conn:
+        novo = await _resolver_status(conn, dados.status)
+
+        identidade = await conn.fetchrow(
+            "SELECT dndash_lead_id::text AS lead_id FROM ecosystem_identities "
+            "WHERE dnia_id = $1::uuid", dnia_id)
+        if identidade is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "dnia_id não encontrado.")
+        lead_id = identidade["lead_id"]
+        if not lead_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                "Identidade não possui contato vinculado no MarketingHS.")
+
+        linha = await conn.fetchrow("SELECT status FROM leads WHERE id = $1::uuid", lead_id)
+        if linha is None:
+            # A origem respondia sucesso sem gravar nada.
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                "O contato vinculado a esta identidade não existe mais.")
+        anterior = linha["status"]
+
+        await conn.execute("UPDATE leads SET status = $2 WHERE id = $1::uuid", lead_id, novo)
+        await _registrar_mudanca(conn, lead_id, anterior, novo,
+                                 origem="api", descricao=DESCRICAO_API)
+
+    return {"success": True, "dnia_id": dnia_id, "lead_id": lead_id,
+            "status_anterior": anterior, "status_atual": novo,
+            # Sempre falso: status não é criado por API (decisão do lote 1D).
+            # O campo fica porque integrador pode estar lendo.
+            "status_created": False}

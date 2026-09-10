@@ -25,6 +25,11 @@ async def _limpar(conn, hashes=()):
         "SELECT id FROM leads WHERE email = $1", EMAIL)]
     dnias = [r["dnia_id"] for r in await conn.fetch(
         "SELECT dnia_id FROM ecosystem_identities WHERE lower(email) = $1", EMAIL)]
+    # `journey_events` não tem FK: `trg_contact_event_journey` copia todo
+    # `contact_events` pra lá, e apagar o lead não leva a cópia junto — sem
+    # isto os testes vazam linha na fila de jornada de PRODUÇÃO.
+    await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])",
+                       lead_ids)
     for tabela in ("contact_events", "lead_notes", "lead_tags"):
         await conn.execute(f"DELETE FROM {tabela} WHERE lead_id = ANY($1::uuid[])",
                            lead_ids)
@@ -206,3 +211,56 @@ async def test_chave_de_leitura_nao_escreve(cliente, contato_api):
                             headers=_auth(contato_api["chave_leitura"]),
                             json={"cargo": "x"})
     assert r.status_code == 403
+
+
+async def test_status_por_dnia_id_grava_contact_updated_e_lead_qualified(
+        cliente, contato_api):
+    r = await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                            json={"dnia_id": contato_api["dnia_id"],
+                                  "status": "LEAD QUALIFICADO"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"success": True, "dnia_id": contato_api["dnia_id"],
+                        "lead_id": contato_api["lead_id"], "status_anterior": "Lead",
+                        "status_atual": "Lead Qualificado", "status_created": False}
+    tipos = [e["event_type"] for e in await _eventos(contato_api["lead_id"])]
+    assert tipos.count("contact_updated") == 1
+    assert tipos.count("lead_qualified") == 1
+
+
+async def test_status_aceita_post_como_alias(cliente, contato_api):
+    r = await cliente.post("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                           json={"dnia_id": contato_api["dnia_id"], "status": "Iniciado"})
+    assert r.status_code == 200, r.text
+    assert r.json()["status_atual"] == "Iniciado"
+
+
+async def test_status_nao_avanca_o_estagio_da_identidade(cliente, contato_api):
+    """Decisão 2 do plano. Se o Erick decidir que avança, este teste muda junto
+    com a rota do admin — nunca uma sem a outra."""
+    await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                        json={"dnia_id": contato_api["dnia_id"],
+                              "status": "Lead Qualificado"})
+    async with db.sessao(role="service_role") as conn:
+        estagio = await conn.fetchval(
+            "SELECT stage FROM ecosystem_identities WHERE dnia_id = $1::uuid",
+            contato_api["dnia_id"])
+    assert estagio != "opportunity"
+
+
+async def test_status_desconhecido_e_400(cliente, contato_api):
+    r = await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                            json={"dnia_id": contato_api["dnia_id"], "status": "Novo Status"})
+    assert r.status_code == 400
+
+
+async def test_status_dnia_id_inexistente_e_404(cliente, contato_api):
+    r = await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                            json={"dnia_id": "00000000-0000-0000-0000-000000000000",
+                                  "status": "Lead"})
+    assert r.status_code == 404
+
+
+async def test_status_dnia_id_malformado_e_422(cliente, contato_api):
+    r = await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                            json={"dnia_id": "nao-e-uuid", "status": "Lead"})
+    assert r.status_code == 422
