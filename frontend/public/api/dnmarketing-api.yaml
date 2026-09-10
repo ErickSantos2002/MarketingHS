@@ -994,8 +994,28 @@ paths:
                   etiqueta:
                     type: string
                     nullable: true
+        '400':
+          description: >-
+            Identificador ausente (informe phone, email ou dnia_id como query
+            param) ou status desconhecido, com a lista dos que valem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Chave sem permissão de escrita.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Contato não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Corpo inválido (validação do Pydantic — ex. dnia_id malformado).
           content:
             application/json:
               schema:
@@ -1008,8 +1028,10 @@ paths:
       description: |
         Atualiza o status do lead identificado por `dnia_id`. Registra evento
         `contact_updated` na timeline e, quando o status for `Lead Qualificado`,
-        registra também o evento `lead_qualified`. O estágio no ecossistema não
-        é avançado e o handoff ao CRM não é disparado. Requer permissão write.
+        `MQL - Reunião agendada` ou `Venda realizada`, registra também o evento
+        específico que a listagem conta (`lead_qualified`, `meeting_scheduled`,
+        `deal_won`). O estágio no ecossistema não é avançado e o handoff ao CRM
+        não é disparado. Requer permissão write.
       tags:
         - Contatos
       requestBody:
@@ -1054,20 +1076,37 @@ paths:
                     nullable: true
                   status_atual:
                     type: string
+                  status_created:
+                    type: boolean
+                    description: Sempre `false` — status nunca é criado pela API.
         '400':
-          description: Payload inválido (dnia_id/status ausente ou status fora da lista permitida)
+          description: Status desconhecido, com a lista dos que valem.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: Token inválido ou sem permissão de escrita
+          description: Chave de API ausente, inválida ou revogada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Chave sem permissão de escrita.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           description: dnia_id não encontrado ou sem lead vinculado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: >-
+            dnia_id ou status ausente (campos obrigatórios), ou dnia_id que
+            não é um UUID válido — validação do Pydantic.
           content:
             application/json:
               schema:
@@ -1088,8 +1127,12 @@ paths:
           $ref: '#/paths/~1publico~1contato~1status/patch/responses/400'
         '401':
           $ref: '#/paths/~1publico~1contato~1status/patch/responses/401'
+        '403':
+          $ref: '#/paths/~1publico~1contato~1status/patch/responses/403'
         '404':
           $ref: '#/paths/~1publico~1contato~1status/patch/responses/404'
+        '422':
+          $ref: '#/paths/~1publico~1contato~1status/patch/responses/422'
 
   /publico/contato/tags:
     put:
@@ -1175,7 +1218,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
-          description: Token inválido ou sem permissão de escrita
+          description: Chave de API ausente, inválida ou revogada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Chave sem permissão de escrita.
           content:
             application/json:
               schema:
@@ -1203,6 +1252,8 @@ paths:
           $ref: '#/paths/~1publico~1contato~1tags/put/responses/400'
         '401':
           $ref: '#/paths/~1publico~1contato~1tags/put/responses/401'
+        '403':
+          $ref: '#/paths/~1publico~1contato~1tags/put/responses/403'
         '404':
           $ref: '#/paths/~1publico~1contato~1tags/put/responses/404'
 

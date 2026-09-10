@@ -8,9 +8,12 @@
 > `contact-status-update`) e `PUT`/`POST /publico/contato/tags` (era
 > `contact-tags-sync`) — as três em `backend/app/routers/api_contato.py`,
 > reaproveitando `_registrar_mudanca` e `_resolver_status` de
-> `escrita_contatos.py`. Suíte de backend em **218 testes** — ⚠️ não os 217
-> que o plano e a emenda previam; ver a nota abaixo, é achado de contagem
-> antiga, não defeito do 8B.
+> `escrita_contatos.py`. **218 medidos no portão + 1 teste da correção,
+> rodados isoladamente** — ⚠️ não os 217 que o plano e a emenda previam; ver
+> a nota abaixo, é achado de contagem antiga, não defeito do 8B. A onda de
+> correção da revisão final (F1-F8) não pôde rodar contra o banco — o host
+> do Postgres estava fora do ar em 10/09/2026; os testes novos e alterados
+> ficaram escritos e coletados (`--collect-only`), não executados.
 >
 > **Placar da pasta de especificação: 42 functions portadas, 7 descartadas,
 > restam 5** (`ab-events`, `get-nexus-stages`, `go`, `handoff-to-nexus`,
@@ -29,6 +32,13 @@
 >    escrita (admin e API) ao mesmo tempo.
 > 3. `source_app = 'marketinghs'` nos três (a origem gravava `dnmarketing`
 >    e, em `contact-tags-sync`, `nexus`).
+>
+>    ⚠️ Consequência: a rota de tags grava `source_app='marketinghs'` onde a
+>    origem gravava `'nexus'`; o filtro "Plataforma: Nexus" da tela de
+>    Contatos usa `tem_eventos_nexus = bool_or(source_app='nexus')`
+>    (`leitura_contatos.py`) OU `nexus_contact_id` (`useContactsEnriched.tsx`).
+>    Contato novo que só recebe sync de tags pelo CRM, sem `nexus_contact_id`,
+>    deixa de aparecer no filtro. Linhas antigas não mudam.
 > 4. Tag normalizada nas duas rotas que mexem em tag — sem `/` na frente,
 >    sem espaço nas pontas, minúscula; busca por `lower(name)`.
 > 5. Mudança de status pela rota geral (`PATCH /publico/contato` com
@@ -50,7 +60,7 @@
 > `test_config_resend.py`
 > (`test_ligar_rastreamento_com_chave_rejeitada_nao_desloga_o_admin`) sem
 > ninguém recontar — o 8B, medido na ponta da branch em que começou, na
-> verdade partiu de **198**. As 20 tarefas próprias do 8B
+> verdade partiu de **198**. Os 20 testes próprios do 8B
 > (`test_api_contato.py`) somam **218**: nenhum teste falhou, nenhum teste
 > do 8B está fora do lugar — era a baseline que carregava um número velho.
 >
@@ -65,6 +75,14 @@
 > inexistente), mas apagar é decisão do Erick — ver a lista abaixo. Duas
 > formas de parar de crescer a cada rodada: limpeza numa fixture comum, ou
 > banco de teste separado.
+>
+> **Limitações conhecidas da API de contato, herdadas da origem ou de
+> propósito:**
+>
+> - Tags que diferem só na caixa (`"VIP"`/`"vip"`) colapsam na sincronização.
+> - `removed`/`kept` saem sem ordem definida — como na origem.
+> - CORS só aceita `FRONTEND_URL` (a origem mandava `*`), de propósito: a
+>   chave de escrita mora em servidor, não no navegador. Pauta do 8E.
 
 > ## ✅ Sub-lote 8A (Resend) fechado (10/09/2026)
 >
@@ -841,10 +859,11 @@ o defeito dos 2.080 volta, calado.
 31. **Lead Qualificado avança o contato para `opportunity` no ecossistema?**
     A origem avançava (`resolve_or_create_identity` com `p_stage:
     'opportunity'`) e a documentação publicada prometia; a rota do admin já
-    não avança (`escrita_contatos.py:166-169`) e o 8B manteve as duas
-    portas de escrita concordando: nenhuma avança hoje. Se a resposta for
-    sim, é uma linha nas duas rotas ao mesmo tempo — nunca numa só, para não
-    reabrir a discordância entre portas que já mordeu este projeto.
+    não avança (o comentário em `mudar_status`, `escrita_contatos.py`) e o
+    8B manteve as duas portas de escrita concordando: nenhuma avança hoje. Se
+    a resposta for sim, é uma linha nas duas rotas ao mesmo tempo — nunca
+    numa só, para não reabrir a discordância entre portas que já mordeu este
+    projeto.
 32. **Apagar as 1.522 linhas órfãs de `journey_events`** (medido depois da
     suíte completa deste portão) — ou deixar como estão. Cada rodada da
     suíte inteira acrescenta ~27 (`form_submitted`, `email_sent`,
@@ -852,6 +871,11 @@ o defeito dos 2.080 volta, calado.
     `email_complained`) — vazamento antigo das fixtures de captura/
     conversão/envio/webhook, não do 8B. Duas formas de parar de crescer:
     limpeza numa fixture comum, ou banco de teste separado.
+33. **Sync de tags vindo do CRM deve continuar pondo o contato no filtro
+    "Plataforma: Nexus"?** Se sim, a rota de tags (`sincronizar_tags`,
+    `api_contato.py`) volta a gravar `source_app='nexus'` (uma palavra, como
+    a origem); se não, o filtro passa a depender só de `nexus_contact_id`.
+    Ver a consequência da decisão 3 do 8B, no topo deste documento.
 
 ## Como subir o que existe
 

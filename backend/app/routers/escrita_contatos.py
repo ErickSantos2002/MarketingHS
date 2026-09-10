@@ -111,7 +111,8 @@ _EVENTO_POR_STATUS = {
 async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str,
                              origem: str = "manual",
                              descricao: str = "Mudança de status pelo painel",
-                             gravar_generico: bool = True) -> None:
+                             gravar_generico: bool = True,
+                             metadata_extra: dict | None = None) -> None:
     """Grava os eventos de mudança de status na timeline.
 
     ⚠️ Não é log opcional. A listagem calcula `status_changed_at` a partir
@@ -135,17 +136,26 @@ async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str,
     em `api_contato.py`, que junta tudo (status, campos, tags, note) num
     evento só. Sem isso, um PATCH com `status` duplicaria o `contact_updated`
     (e, por tabela, a linha de `journey_events` que o gatilho copia).
+
+    `metadata_extra` mescla chaves adicionais SÓ no metadata do
+    `contact_updated` genérico (`{**metadata, **metadata_extra}`) — nunca no
+    evento específico. Existe para `atualizar_status` (`api_contato.py`)
+    marcar `source: "api"`: sem ela, uma mudança de status feita pela API
+    ficava idêntica à do painel na timeline, e a decisão 3 do plano do 8B
+    conta justamente com `metadata.source` para dizer de onde veio. Padrão
+    `None` — comportamento do painel (`mudar_status`) fica byte-idêntico.
     """
     if gravar_generico:
+        metadata = {"de": de, "para": para, "status_anterior": de, "status_atual": para}
+        if metadata_extra:
+            metadata = {**metadata, **metadata_extra}
         await conn.execute(
             """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
                                            title, metadata)
                SELECT $1::uuid, l.dnia_id, 'marketinghs', 'contact_updated',
-                      'Status alterado',
-                      jsonb_build_object('de', $2::text, 'para', $3::text,
-                                         'status_anterior', $2::text, 'status_atual', $3::text)
+                      'Status alterado', $2::jsonb
                  FROM leads l WHERE l.id = $1::uuid""",
-            lead_id, de, para)
+            lead_id, metadata)
 
     especifico = _EVENTO_POR_STATUS.get(para)
     if especifico:

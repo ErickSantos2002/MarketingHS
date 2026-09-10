@@ -115,6 +115,22 @@ async def test_atualiza_campos_tags_e_nota_por_email(cliente, contato_api):
     assert atualizados[-1]["metadata"]["source"] == "api"
 
 
+async def test_atualizacao_aceita_numero_em_campo_de_texto(cliente, contato_api):
+    """A origem aceitava `{"funcionarios": 50}` e `{"faturamento": 100000.5}`
+    nas colunas `text` de `leads`; um porte não nasce menor que o substituído."""
+    r = await cliente.patch(
+        "/publico/contato", params={"dnia_id": contato_api["dnia_id"]},
+        headers=_auth(contato_api["chave"]),
+        json={"funcionarios": 50, "faturamento": 100000.5})
+    assert r.status_code == 200, r.text
+    async with db.sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT funcionarios, faturamento FROM leads WHERE id = $1::uuid",
+            contato_api["lead_id"])
+    assert linha["funcionarios"] == "50"
+    assert linha["faturamento"] == "100000.5"
+
+
 async def test_remove_tag_sem_diferenciar_maiuscula(cliente, contato_api):
     await cliente.patch("/publico/contato", params={"dnia_id": contato_api["dnia_id"]},
                         headers=_auth(contato_api["chave"]),
@@ -222,9 +238,14 @@ async def test_status_por_dnia_id_grava_contact_updated_e_lead_qualified(
     assert r.json() == {"success": True, "dnia_id": contato_api["dnia_id"],
                         "lead_id": contato_api["lead_id"], "status_anterior": "Lead",
                         "status_atual": "Lead Qualificado", "status_created": False}
-    tipos = [e["event_type"] for e in await _eventos(contato_api["lead_id"])]
+    eventos = await _eventos(contato_api["lead_id"])
+    tipos = [e["event_type"] for e in eventos]
     assert tipos.count("contact_updated") == 1
     assert tipos.count("lead_qualified") == 1
+    atualizado = next(e for e in eventos if e["event_type"] == "contact_updated")
+    assert atualizado["metadata"]["source"] == "api", \
+        "sem isto, a mudança pela API fica igual à do painel na timeline"
+    assert atualizado["metadata"]["status_atual"] == "Lead Qualificado"
 
 
 async def test_status_aceita_post_como_alias(cliente, contato_api):
@@ -283,6 +304,14 @@ async def test_tags_espelha_o_conjunto(cliente, contato_api):
     assert corpo["added"] == [f"{PREFIXO_TAG}-c"]
     assert corpo["removed"] == [f"{PREFIXO_TAG}-a"]
     assert corpo["kept"] == [f"{PREFIXO_TAG}-b"]
+
+    # A resposta é calculada em memória — confere o banco também, senão um
+    # DELETE quebrado (a tag "removida" continuando em lead_tags) passaria.
+    async with db.sessao(role="service_role") as conn:
+        tags_no_banco = {r["name"] for r in await conn.fetch(
+            """SELECT t.name FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id
+                WHERE lt.lead_id = $1::uuid""", contato_api["lead_id"])}
+    assert tags_no_banco == set(corpo["tags_final"])
 
     tipos = [e["event_type"] for e in await _eventos(contato_api["lead_id"])]
     assert tipos.count("tags_synced") == 2

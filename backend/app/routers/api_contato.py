@@ -12,17 +12,15 @@ nós.
 em `escrita_contatos.py`. A origem criava; o lote 1D decidiu que não.
 """
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.chave_api import ChaveApi, chave_api
 from app.database import sessao
 from app.routers.escrita_contatos import _registrar_mudanca, _resolver_status
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/publico", tags=["api-contato"])
 
 # Colunas que a atualização pode tocar. Lista fechada: o UPDATE nunca é montado
@@ -102,6 +100,20 @@ class AtualizacaoIn(BaseModel):
     tags_add: list[str] | None = None
     tags_remove: list[str] | None = None
     note: str | None = Field(default=None, max_length=10000)
+
+    @field_validator("nome", "cargo", "whatsapp", "empresa", "faturamento",
+                     "funcionarios", "desafios", mode="before")
+    @classmethod
+    def _numero_vira_texto(cls, valor):
+        """A origem aceitava `{"funcionarios": 50}` e `{"faturamento":
+        100000.5}` — as colunas são `text`, e o integrador manda número. `bool`
+        fica de fora de propósito: é subclasse de `int` em Python, mas
+        `True`/`False` não é o formato que estas colunas guardam."""
+        if isinstance(valor, bool):
+            return valor
+        if isinstance(valor, (int, float)):
+            return str(valor)
+        return valor
 
 
 @router.patch("/contato")
@@ -224,8 +236,9 @@ async def atualizar_status(dados: StatusApiIn,
 
     ⚠️ O estágio da identidade NÃO avança para `opportunity`, e o handoff para
     o CRM não é disparado. A origem fazia os dois; a rota do admin deixou de
-    fazer (`escrita_contatos.py:166-169`) porque a régua é decisão de produto,
-    e as duas portas de escrita têm de concordar. O handoff é o lote 8D.
+    fazer (o comentário em `mudar_status`, `escrita_contatos.py`) porque a
+    régua é decisão de produto, e as duas portas de escrita têm de concordar.
+    O handoff é o lote 8D.
     """
     if not dados.status.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
@@ -253,8 +266,12 @@ async def atualizar_status(dados: StatusApiIn,
         anterior = linha["status"]
 
         await conn.execute("UPDATE leads SET status = $2 WHERE id = $1::uuid", lead_id, novo)
+        # `metadata_extra`: o `contact_updated` genérico desta rota fica igual
+        # ao do painel na timeline sem isto — `source` é quem diz que veio da
+        # API, não de alguém clicando na tela.
         await _registrar_mudanca(conn, lead_id, anterior, novo,
-                                 origem="api", descricao=DESCRICAO_API)
+                                 origem="api", descricao=DESCRICAO_API,
+                                 metadata_extra={"source": "api"})
 
     return {"success": True, "dnia_id": dnia_id, "lead_id": lead_id,
             "status_anterior": anterior, "status_atual": novo,
