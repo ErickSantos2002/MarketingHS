@@ -20,6 +20,12 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
+      // A landing pública é servida pelo backend (`GET /p/{slug}` e o bundle
+      // em `/landing/`), não por este SPA. Sem estas duas entradas, "Abrir
+      // página" e o link de anúncio caem no 404 do admin em desenvolvimento.
+      // Em produção o nginx precisa rotear os mesmos dois prefixos.
+      "/p/": { target: "http://localhost:8100", changeOrigin: true },
+      "/landing/": { target: "http://localhost:8100", changeOrigin: true },
     },
   },
   plugins: [react()],

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, RefreshCw, Layout, ExternalLink, Edit, Trash2, Link2, Users, Copy, MoreHorizontal, Flame } from 'lucide-react';
+import { caminhoDaLanding } from '@/lib/landing';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -217,7 +218,7 @@ export function PagesManagement() {
                     <DropdownMenuItem onClick={() => handleDuplicate(page)}>
                       <Copy className="h-4 w-4 mr-2" /> Duplicar
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => window.open(`/${page.slug.replace(/^\/+/, '')}`, '_blank')}>
+                    <DropdownMenuItem onClick={() => window.open(caminhoDaLanding(page.slug), '_blank')}>
                       <ExternalLink className="h-4 w-4 mr-2" /> Abrir página
                     </DropdownMenuItem>
                     {(page.total_leads || 0) === 0 && (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { usePages } from '@/hooks/usePages';
+import { caminhoDaLanding } from '@/lib/landing';
 import { toast } from 'sonner';
 
 const FORM_FIELDS = [
@@ -44,14 +45,12 @@ export default function PageConfigEditor() {
 
   const page = pages.find((p) => p.slug === slug);
 
-  // Known routes in the React Router
-  const KNOWN_SLUGS = useMemo(() => new Set([
-    '', 'convidado', 'obrigadoconvidado', 'obrigado', 'obrigado-recuperacao',
-    'gratuito', 'obrigadogratuito', 'obrigadointeresse', 'oportunidade',
-    'linkaula', 'pesquisa', 'p1g', '24-25fev', 'v2_2425fev', 'v3_2425fev',
-    'programadeiaficacao', 'eventoia', 'eventoia130526', 'eventoia140426',
-  ]), []);
-  const hasRoute = slug ? KNOWN_SLUGS.has(slug) : false;
+  // ⚠️ O remix decidia a prévia por uma lista fixa de slugs — as rotas das
+  // landings da dn.ia dentro deste SPA, apagadas no lote 0. Aqui toda página
+  // tem landing em `/p/{slug}` (o motor de template do subprojeto A), e a
+  // casca só serve página ATIVA: rascunho e inativa dão 404. Por isso a regra
+  // da prévia é a mesma da casca, não uma lista.
+  const hasRoute = page?.status === 'active';
   
   const [config, setConfig] = useState<Record<string, any>>({});
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -345,7 +344,7 @@ export default function PageConfigEditor() {
             {hasRoute ? (
               <iframe
                 ref={iframeRef}
-                src={`/${page.slug}?preview=true`}
+                src={caminhoDaLanding(page.slug)}
                 className="w-full border-0"
                 style={{ height: '520px' }}
                 title="Preview"
@@ -355,19 +354,14 @@ export default function PageConfigEditor() {
                 <Layout className="h-12 w-12 text-muted-foreground/40 mb-3" />
                 <p className="text-sm font-medium">Preview indisponível</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Esta página é baseada em <code className="bg-muted px-1 rounded">/{page.template_base || '...'}</code>.
-                  O preview será exibido quando houver uma rota registrada para <code className="bg-muted px-1 rounded">/{page.slug}</code>.
+                  A landing <code className="bg-muted px-1 rounded">{caminhoDaLanding(page.slug)}</code> só
+                  é servida com a página ativa. Publique para ver o preview.
                 </p>
-                {page.template_base && (
-                  <Button variant="outline" size="sm" className="mt-4" onClick={() => window.open(`/${page.template_base}?preview=true`, '_blank')}>
-                    <ExternalLink className="h-4 w-4 mr-1" /> Ver página base
-                  </Button>
-                )}
               </div>
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.open(`/${page.slug}`, '_blank')}>
+            <Button variant="outline" size="sm" onClick={() => window.open(caminhoDaLanding(page.slug), '_blank')}>
               <ExternalLink className="h-4 w-4 mr-1" /> Abrir em nova aba
             </Button>
             <Button

@@ -1,4 +1,5 @@
 import { ExternalLink, Edit, Trash2, Power } from 'lucide-react';
+import { caminhoDaLanding } from '@/lib/landing';
 import {
   Table,
   TableBody,
@@ -104,7 +105,7 @@ export function PagesTable({
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => window.open(page.slug, '_blank')}
+                    onClick={() => window.open(caminhoDaLanding(page.slug), '_blank')}
                     title="Visualizar"
                   >
                     <ExternalLink className="h-4 w-4" />

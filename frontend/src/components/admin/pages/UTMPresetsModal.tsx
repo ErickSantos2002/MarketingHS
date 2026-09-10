@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Copy, Trash2, Plus } from 'lucide-react';
+import { urlDaLanding } from '@/lib/landing';
 import { toast } from 'sonner';
 import type { PageStat } from '@/hooks/usePages';
 
@@ -40,7 +41,10 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
   // única base verdadeira que esta tela tem à mão — mesma decisão que a rota
   // PATCH /publico/paginas/{slug} já tomou no backend, trocando o link
   // absoluto por caminho relativo.
-  const baseUrl = `${window.location.origin}/${page.slug}`;
+  //
+  // ⚠️ Este é o link que se cola em anúncio. Ele montava `/${slug}` na raiz,
+  // que aqui é o 404 do admin — a landing mora em `/p/{slug}`.
+  const baseUrl = urlDaLanding(page.slug);
 
   const buildUrl = (s: string, m: string, c: string, ct?: string) => {
     const params = new URLSearchParams();
