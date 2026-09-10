@@ -45,8 +45,7 @@ async def test_leitura_aceita_chave_de_api_de_leitura(cliente, chave_de,
     assert r.status_code == 200, r.text
 
 
-async def test_escrita_recusa_chave_de_api_mesmo_de_escrita(cliente, chave_de,
-                                                            segredos_resend):
+async def test_escrita_recusa_chave_de_api_mesmo_de_escrita(cliente, chave_de):
     """Comentário I2 da origem: chave da tabela `api_keys` que vazasse poderia
     trocar a RESEND_API_KEY por uma de outra conta e exfiltrar a base."""
     r = await cliente.put(ROTA, headers=_auth(await chave_de("write")), json={
@@ -329,3 +328,21 @@ async def test_ligar_rastreamento_recusa_chave_de_api(cliente, chave_de, segredo
     r = await cliente.post(f"{ROTA}/dominios/d1/rastreamento",
                            headers=_auth(await chave_de("write")), json={})
     assert r.status_code == 401
+
+
+async def test_ligar_rastreamento_com_chave_rejeitada_nao_desloga_o_admin(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    """Achado da revisão final: 401 aqui derrubaria a sessão do admin, porque
+    `pedir()` (frontend/src/lib/api.ts) trata TODO 401 como sessão vencida.
+    A chave gravada sendo rejeitada pelo Resend é 400, nunca 401."""
+    await integracoes.gravar_segredo("RESEND_API_KEY", "re_ok")
+
+    async def alterar_dominio(chave, dominio_id, corpo):
+        return httpx.Response(401, json={"name": "invalid_api_key"})
+
+    monkeypatch.setattr(cliente_resend, "alterar_dominio", alterar_dominio)
+    r = await cliente.post(f"{ROTA}/dominios/d1/rastreamento",
+                           headers=_auth(token_admin), json={})
+    assert r.status_code != 401
+    assert r.status_code == 400
+    assert "rejeitada pelo Resend" in r.json()["detail"]

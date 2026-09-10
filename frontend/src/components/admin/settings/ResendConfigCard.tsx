@@ -275,8 +275,19 @@ export default function ResendConfigCard() {
           )}
           {teste && teste.valida === false && (
             <p className="text-xs text-destructive">
-              {teste.motivo === 'network' ? 'Não foi possível falar com o Resend.' : 'Chave inválida.'}
+              {teste.motivo === 'network' && 'Não foi possível falar com o Resend.'}
+              {teste.motivo === 'invalid_api_key' && 'Chave inválida.'}
+              {teste.motivo === 'unknown' && 'O Resend respondeu com um erro inesperado. Tente de novo.'}
             </p>
+          )}
+          {config?.resend_api_key.configurado && config.resend_api_key.escopo === null && !teste && (
+            <Alert className="py-2 border-amber-500/40 bg-amber-500/10">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              <AlertDescription className="text-xs text-amber-600 dark:text-amber-400">
+                Não foi possível confirmar agora a chave salva junto ao Resend — ela pode ter
+                sido revogada. Teste uma chave nova ou confira em resend.com/api-keys.
+              </AlertDescription>
+            </Alert>
           )}
         </div>
 

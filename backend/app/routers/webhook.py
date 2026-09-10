@@ -83,8 +83,9 @@ def _confere_assinatura(svix_id: str, ts: str, corpo: bytes, segredo: str,
         return False
     try:
         instante = float(ts)
-        # ⚠️ `nan` e `inf` passariam: toda comparação com NaN é falsa,
-        # inclusive `> JANELA_SEGUNDOS`. A origem recusava não finito.
+        # ⚠️ Só `nan` passaria: toda comparação com NaN é falsa, inclusive
+        # `> JANELA_SEGUNDOS` (`inf` já cai nessa comparação). A origem
+        # recusava não finito.
         if not math.isfinite(instante) or abs(time.time() - instante) > JANELA_SEGUNDOS:
             return False
         chave = base64.b64decode(segredo.removeprefix("whsec_"))

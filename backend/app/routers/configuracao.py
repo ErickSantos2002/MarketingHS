@@ -430,9 +430,11 @@ async def diagnostico_resend(_: str = Depends(admin_ou_maquina("read"))):
 
     teste = await cliente_resend.testar_chave(chave)
     if not teste["valida"]:
+        erro_api = ("Falha ao conectar ao Resend." if teste["motivo"] == "network"
+                    else f"O Resend recusou a chave ({teste['motivo']}).")
         return {"ok": False, "faltando": [],
                 "segredo_descadastro_faltando": sem_descadastro,
-                "erro_api": f"O Resend recusou a chave ({teste['motivo']})."}
+                "erro_api": erro_api}
     return {"ok": True, "faltando": [],
             "segredo_descadastro_faltando": sem_descadastro,
             "remetente": remetente,
@@ -586,8 +588,14 @@ async def ligar_rastreamento_resend(dominio_id: str, dados: RastreamentoIn,
                 'A chave configurada é do tipo "somente envio", e o Resend não '
                 "permite alterar domínios com ela. Gere uma chave de acesso "
                 "completo em resend.com/api-keys, salve-a aqui e tente de novo.")
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED,
-                            "Chave rejeitada pelo Resend ao ativar o rastreamento.")
+        # ⚠️ NUNCA 401 aqui: é o Resend recusando a CHAVE GRAVADA, não a sessão
+        # de quem clicou. O wrapper do admin (`pedir()` em lib/api.ts) trata
+        # TODO 401 como sessão vencida e desloga — um 401 nesta rota derrubaria
+        # o admin no meio do clique em "Ativar rastreamento".
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "A chave salva foi rejeitada pelo Resend ao ativar o rastreamento "
+            "— confira se ela ainda vale.")
     if not resposta.is_success:
         try:
             mensagem = resposta.json().get("message")
