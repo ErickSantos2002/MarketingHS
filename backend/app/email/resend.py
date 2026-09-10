@@ -5,6 +5,7 @@ fora, e é o que um teste precisa substituir para rodar sem enviar nada.
 """
 
 import httpx
+import json
 
 API = "https://api.resend.com/emails"
 TIMEOUT = 30
@@ -38,3 +39,110 @@ async def enviar(chave: str, de: str, para: str, assunto: str,
             API, headers={"Authorization": f"Bearer {chave}"}, json=corpo)
     resposta.raise_for_status()
     return resposta.json().get("id", "")
+
+
+# ── Domínios ─────────────────────────────────────────────────────────────────
+# Restaurado no lote 8A: a origem (`resend-config`) testava a chave, listava e
+# exigia domínio verificado, e ligava open/click tracking. O 3C tirou tudo; o
+# Erick decidiu devolver.
+
+DOMINIOS = "https://api.resend.com/domains"
+
+
+class FalhaDeRede(Exception):
+    """A API do Resend não respondeu. Quem chama decide se é 502 ou degradação."""
+
+
+def restrita(resposta: httpx.Response) -> bool:
+    """O 401 é de chave *sending-only* — VÁLIDA, só não pode ler domínio.
+
+    ⚠️ Qualquer outro 401 (corpo diferente, ou não-JSON) NÃO é restrita: não
+    classificamos chave como válida por omissão.
+    """
+    try:
+        corpo = resposta.json()
+    except ValueError:
+        return False
+    if isinstance(corpo, dict) and corpo.get("name") == "restricted_api_key":
+        return True
+    return "restricted_api_key" in json.dumps(corpo)
+
+
+async def testar_chave(chave: str) -> dict:
+    """Classifica a chave sem gravá-la. NUNCA levanta."""
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
+            resposta = await cliente.get(
+                DOMINIOS, headers={"Authorization": f"Bearer {chave}"})
+    except httpx.HTTPError:
+        return {"valida": False, "motivo": "network"}
+
+    if resposta.status_code == 200:
+        try:
+            corpo = resposta.json()
+        except ValueError:
+            return {"valida": False, "motivo": "network"}
+        dados = corpo.get("data") if isinstance(corpo, dict) else None
+        return {"valida": True, "escopo": "full", "dominios": [
+            {"id": d.get("id"), "name": d.get("name"), "status": d.get("status"),
+             "capabilities": d.get("capabilities")}
+            for d in (dados or []) if isinstance(d, dict)]}
+
+    if resposta.status_code == 401:
+        if restrita(resposta):
+            return {"valida": True, "escopo": "sending_only", "dominios": []}
+        return {"valida": False, "motivo": "invalid_api_key"}
+    if resposta.status_code == 403:
+        return {"valida": False, "motivo": "invalid_api_key"}
+    return {"valida": False, "motivo": "unknown"}
+
+
+async def ler_dominio(chave: str, dominio_id: str) -> dict:
+    """O estado REAL do rastreamento, pelo GET de domínio único. NUNCA levanta.
+
+    ⚠️ A listagem (`GET /domains`) não garante trazer open/click tracking por
+    item; o GET de domínio único sempre traz. É o que permite avisar o caso
+    traiçoeiro: tracking ligado na conta e o CNAME nunca adicionado no DNS.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
+            resposta = await cliente.get(
+                f"{DOMINIOS}/{dominio_id}",
+                headers={"Authorization": f"Bearer {chave}"})
+    except httpx.HTTPError:
+        return {"ok": False, "motivo": "network"}
+
+    if resposta.status_code == 401:
+        return {"ok": False, "motivo": "restricted_api_key" if restrita(resposta)
+                else "unknown"}
+    if resposta.status_code == 404:
+        return {"ok": False, "motivo": "not_found"}
+    if not resposta.is_success:
+        return {"ok": False, "motivo": "unknown"}
+    try:
+        corpo = resposta.json()
+    except ValueError:
+        return {"ok": False, "motivo": "unknown"}
+
+    registros = corpo.get("records") if isinstance(corpo.get("records"), list) else []
+    return {
+        "ok": True,
+        "open_tracking": bool(corpo.get("open_tracking")),
+        "click_tracking": bool(corpo.get("click_tracking")),
+        "tracking_subdomain": corpo.get("tracking_subdomain"),
+        "status": corpo.get("status"),
+        "records": [r for r in registros
+                    if isinstance(r, dict) and r.get("record") == "Tracking"],
+    }
+
+
+async def alterar_dominio(chave: str, dominio_id: str, corpo: dict) -> httpx.Response:
+    """PATCH no domínio. Devolve a resposta crua — quem chama interpreta.
+    Levanta `FalhaDeRede` se não houver resposta."""
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
+            return await cliente.patch(
+                f"{DOMINIOS}/{dominio_id}",
+                headers={"Authorization": f"Bearer {chave}"}, json=corpo)
+    except httpx.HTTPError as e:
+        raise FalhaDeRede(str(e)) from e
