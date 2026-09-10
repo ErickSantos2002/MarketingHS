@@ -273,7 +273,7 @@ export default function ResendConfigCard() {
               rastreamento. Digite o domínio à mão e confira a verificação em resend.com/domains.
             </p>
           )}
-          {teste && !teste.valida && (
+          {teste && teste.valida === false && (
             <p className="text-xs text-destructive">
               {teste.motivo === 'network' ? 'Não foi possível falar com o Resend.' : 'Chave inválida.'}
             </p>
