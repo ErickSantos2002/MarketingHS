@@ -1,5 +1,75 @@
 # Continuar aqui
 
+> ## ✅ Sub-lote 8A (Resend) fechado (10/09/2026)
+>
+> **Branch `lote-8`, NÃO mergeada.** Restaura por inteiro a configuração do
+> Resend que o lote 3C tinha cortado sem ninguém decidir: teste de chave,
+> domínios, rastreamento (open/click) e diagnóstico. Suíte de backend em
+> **197 testes**, `tsc -p tsconfig.app.json` com os mesmos 8 erros
+> pré-existentes de sempre (nenhum novo, nenhum em `ResendConfigCard.tsx` nem
+> em `lib/config.ts`), `tsc -p tsconfig.node.json` limpo, `vite build` limpo.
+>
+> **O defeito real, e que está consertado:** o 3C (`ecca32d`) tirou teste de
+> chave, listagem de domínios e rastreamento — e junto, sem ninguém perceber,
+> foi embora o único caminho para gravar o `UNSUBSCRIBE_SECRET` pela tela. Sem
+> esse segredo o worker monta o e-mail sem `List-Unsubscribe` e sem o link no
+> rodapé, violando a exigência de one-click do Gmail/Yahoo para quem envia em
+> volume. O Erick decidiu em 10/09/2026 restaurar a tela inteira, não só o
+> segredo.
+>
+> **Placar da pasta de especificação: 39 functions portadas, 7 descartadas,
+> restam 8** (`ab-events`, `contact-status-update`, `contact-tags-sync`,
+> `contact-update`, `get-nexus-stages`, `go`, `handoff-to-nexus`,
+> `nexus-config`). `resend-config`, `resend-config-check` e `resend-webhook`
+> saíram da pasta neste portão — a Tarefa 8 conferiu capacidade por
+> capacidade contra os três arquivos antes de apagar; nenhuma ficou sem lugar.
+>
+> **As cinco decisões deste plano**
+> (`docs/superpowers/plans/2026-09-10-marketinghs-lote-8a-resend.md`):
+>
+> 1. O remetente continua num segredo só, `EMAIL_FROM` — não em
+>    `dashboard_settings.resend_from` como na origem. É o que o worker lê; as
+>    três partes (nome, prefixo, domínio) são extraídas do próprio valor na
+>    leitura, em vez de viverem em dois lugares.
+> 2. As `action`s do corpo da origem viram rotas próprias (`/testar`,
+>    `/diagnostico`, `/dominios/{id}`, `/dominios/{id}/rastreamento`) —
+>    FastAPI autoriza por rota, e um `action` escondido no corpo escondia
+>    justamente a autorização que difere entre elas.
+> 3. Autorização como a origem: leitura aceita JWT de admin, `WEBHOOK_SECRET`
+>    ou chave de API de leitura; escrita aceita **só** JWT de admin ou
+>    `WEBHOOK_SECRET` — nunca uma chave de `api_keys`, mesmo com permissão de
+>    escrita (vazada, ela poderia trocar a `RESEND_API_KEY` por uma de outra
+>    conta e exfiltrar a base inteira de contatos).
+> 4. O diagnóstico com chave *sending-only* responde `ok: true` com lista de
+>    domínios vazia — a origem tratava isso como `api_error`, uma chave válida
+>    acusada como falha.
+> 5. Falha secundária de banco no webhook devolve **500**, não os 200 da
+>    origem — o Svix reentrega e o `svix_id` deduplica; perder o evento em
+>    silêncio é pior que reprocessar. Registrado, não corrigido para bater com
+>    a origem.
+>
+> **O caminho com chave de verdade continua sem conferência ao vivo** até o
+> Erick fornecer uma chave do Resend. O portão (passo 3, feito pelo
+> controlador) confirmou os caminhos de erro e o diagnóstico contra o banco
+> real — `RESEND_WEBHOOK_SECRET` e `UNSUBSCRIBE_SECRET` estão gravados hoje;
+> nem `RESEND_API_KEY` nem `EMAIL_FROM` existem —; o caminho feliz (chave
+> válida, domínio verificado, tracking ligado) segue provado só pelos testes
+> das Tarefas 4 e 5, nunca clicado contra o Resend de verdade.
+>
+> ⚠️ **A verificação de tipos do frontend estava vazia desde sempre, em todo
+> lote anterior.** `frontend/tsconfig.json` tem `"files": []` e só
+> `references` para `tsconfig.app.json`/`tsconfig.node.json` — `npx tsc
+> --noEmit` sem `-p` checa ZERO arquivos e sai 0, sempre. Todo "tsc limpo"
+> anunciado antes deste sub-lote (inclusive neste documento e no `CLAUDE.md`
+> do repo) não provava nada. **O comando que checa `src` de verdade:**
+> `npx tsc --noEmit -p tsconfig.app.json` — daqui em diante é esse que todo
+> portão e todo plano usa. Atrás do vazio estava um defeito real:
+> `LeadScoringSettings.tsx:55` lê `result.updated` de uma resposta que vem
+> `{ atualizados }` (é o que o `POST` de recálculo de score devolve,
+> `backend/app/routers/contatos.py:184`) — o aviso na tela sai "Score
+> recalculado para undefined leads!". Corte silencioso de porte anterior, sem
+> relação com o 8A; ver o item na lista do Erick, abaixo.
+
 > ## ✅ Subprojeto A da captação pública fechado (10/09/2026)
 >
 > **Branch `captacao-a`, NÃO mergeada.** O merge em `main` é decisão do Erick.
@@ -662,6 +732,26 @@ o defeito dos 2.080 volta, calado.
     formulário dentro dele cria contato e conversão reais. A origem passava
     `?preview=true`, que a casca não trata. Baixo risco, mas vale saber antes
     de alguém "testar" a página pelo preview.
+29. ⚠️ **A verificação de tipos do frontend era vazia em todo lote até
+    aqui** — `npx tsc --noEmit` sem `-p` checa zero arquivos e sai 0 sempre
+    (`frontend/tsconfig.json` só tem `references`). Achado da Tarefa 8 do
+    8A, em 10/09/2026. O comando certo é `npx tsc --noEmit -p
+    tsconfig.app.json`; ele expôs um defeito real que o vazio escondia:
+    `LeadScoringSettings.tsx:55` lê `result.updated` de uma resposta que vem
+    `{ atualizados }` (`backend/app/routers/contatos.py:184`), e o aviso na
+    tela sai "Score recalculado para undefined leads!". Uma palavra para
+    consertar — não fiz porque é fora do escopo do 8A, mas é achado, não
+    dúvida.
+30. **Para o 8E (limpeza da marca dn.ia/Lovable):** três achados ao vivo do
+    portão da Tarefa 8, em 10/09/2026. O rastreador do Lovable
+    (`lovableproject.com/.../tracker.js`, em `frontend/index.html`) dispara
+    de fato em toda carga do admin — hoje o navegador bloqueia a resposta
+    por ORB, mas a chamada de saída da casa para um terceiro acontece
+    mesmo assim. O card "Webhook de eventos", em Configurações, ainda diz
+    "Configure WEBHOOK_SECRET no Supabase Secrets" — texto morto, o
+    Supabase saiu e o segredo agora vive em `integration_secrets`. E há um
+    card "mentor.ia" da dn.ia na mesma tela. Nenhuma tarefa do 8A tinha
+    escopo sobre esses três.
 
 ## Como subir o que existe
 
