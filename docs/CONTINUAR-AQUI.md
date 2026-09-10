@@ -1,6 +1,41 @@
 # Continuar aqui
 
-> ## ✅ Sub-lote 8B (API de contato) fechado (10/09/2026)
+> ## ⚠️ Onde paramos — 10/09/2026, fim do dia
+>
+> **A VPS do EasyPanel (`62.72.11.28`) caiu no começo da tarde e voltou às
+> 15:00 restaurada de backup.** Os 10 bancos da casa reiniciaram juntos; o do
+> MarketingHS voltou ao estado de **04/09/2026, ~10:05** (último
+> `contact_events` às 13:05 UTC). O Erick restaurou e confirmou que está tudo
+> ok. **Nada do repositório se perdeu** — os commits são locais; o que voltou
+> no tempo foi DADO de produção, não estrutura (a migration mais nova, 016, é
+> de 03/09, anterior ao backup).
+>
+> Consequências para quem continuar:
+>
+> - a conta admin do Claude (`claude.dev@example.com`) **não existe mais** no
+>   banco — o arquivo de credencial continua no disco; recriar pede ok do
+>   Erick;
+> - `journey_events` tem **740** linhas órfãs, não as 1.522 medidas no portão
+>   do 8B (a restauração levou tudo o que era posterior a 04/09);
+> - `RESEND_WEBHOOK_SECRET` e `UNSUBSCRIBE_SECRET` estão com a versão de
+>   04/09; continua não havendo `RESEND_API_KEY` nem `EMAIL_FROM`.
+>
+> **O que falta para fechar o 8B** (branch `lote-8`, ponta `a409c4e`, NÃO
+> mergeada):
+>
+> 1. Rodar os testes de banco da onda de correção da revisão final — o host
+>    fora do ar não deixou; estão escritos e coletados, não executados:
+>    `cd backend && ./.venv/bin/pytest -q tests/ -k "status or escrita or contato or painel"`
+>    (46 de 219 coletados). Primeiro plano, nunca interromper.
+> 2. A re-revisão escopada da correção (`bb80b37..a409c4e`).
+> 3. Decidir o destino da branch `lote-8` (8A + 8B) — merge só com o Erick.
+>
+> Depois disso: escrever e executar os planos do 8C (telas de A/B), 8D
+> (handoff para o GrowthHS) e 8E (limpeza final). O estado fino do trabalho —
+> ledgers com cada decisão, relatórios das tarefas — está em
+> `.superpowers/sdd/`, ignorado pelo git, só nesta máquina.
+
+> ## 🟡 Sub-lote 8B (API de contato) — portão fechado, correção final à espera dos testes de banco (10/09/2026)
 >
 > **Branch `lote-8`, NÃO mergeada.** Reconstrói as três functions da API de
 > contato para integrador externo: `PATCH /publico/contato` (era
@@ -75,6 +110,9 @@
 > inexistente), mas apagar é decisão do Erick — ver a lista abaixo. Duas
 > formas de parar de crescer a cada rodada: limpeza numa fixture comum, ou
 > banco de teste separado.
+>
+> ⚠️ Depois da restauração da VPS (10/09, 15:00) o banco voltou a 04/09 e as
+> órfãs são **740** — a taxa de ~27 por rodada continua valendo.
 >
 > **Limitações conhecidas da API de contato, herdadas da origem ou de
 > propósito:**
@@ -823,6 +861,8 @@ o defeito dos 2.080 volta, calado.
     Erick, para o Claude conferir telas no navegador; a credencial fica fora
     do repositório, em `~/.config/marketinghs/claude-admin.env`. Aproveitar e
     redefinir a senha de `erick@healthsafety.com.br`, que se perdeu.
+    ⚠️ A restauração da VPS em 10/09 (banco de volta a 04/09) já levou a
+    conta; o arquivo de credencial ficou no disco. Recriar só com ok do Erick.
 26. **A marca da dn.ia ainda aparece no admin** — trabalho de transformação,
     não de visual: a aba do navegador se chama **"dn.mkt"** (`index.html`,
     `<title>` e `og:title`); há um botão flutuante **"Abrir DNIA AI"**; a ficha
@@ -864,8 +904,9 @@ o defeito dos 2.080 volta, calado.
     a resposta for sim, é uma linha nas duas rotas ao mesmo tempo — nunca
     numa só, para não reabrir a discordância entre portas que já mordeu este
     projeto.
-32. **Apagar as 1.522 linhas órfãs de `journey_events`** (medido depois da
-    suíte completa deste portão) — ou deixar como estão. Cada rodada da
+32. **Apagar as linhas órfãs de `journey_events`** — 1.522 no portão do 8B,
+    **740** depois da restauração da VPS de 10/09 (banco de volta a 04/09) —
+    ou deixar como estão. Cada rodada da
     suíte inteira acrescenta ~27 (`form_submitted`, `email_sent`,
     `email_opened`, `email_bounced`, `contact_reactivated`,
     `email_complained`) — vazamento antigo das fixtures de captura/
