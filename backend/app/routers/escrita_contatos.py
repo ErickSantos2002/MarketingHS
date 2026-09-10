@@ -108,7 +108,9 @@ _EVENTO_POR_STATUS = {
 }
 
 
-async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str) -> None:
+async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str,
+                             origem: str = "manual",
+                             descricao: str = "Mudança de status pelo painel") -> None:
     """Grava os eventos de mudança de status na timeline.
 
     ⚠️ Não é log opcional. A listagem calcula `status_changed_at` a partir
@@ -135,11 +137,10 @@ async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str) -> N
         await conn.execute(
             """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
                                            title, description, metadata)
-               SELECT $1::uuid, l.dnia_id, 'marketinghs', $2, $3,
-                      'Mudança de status pelo painel',
-                      jsonb_build_object('status_anterior', $4::text, 'origem', 'manual')
+               SELECT $1::uuid, l.dnia_id, 'marketinghs', $2, $3, $5,
+                      jsonb_build_object('status_anterior', $4::text, 'origem', $6::text)
                  FROM leads l WHERE l.id = $1::uuid""",
-            lead_id, tipo, titulo, de)
+            lead_id, tipo, titulo, de, descricao, origem)
 
 
 @router.patch("/{lead_id}/status")
