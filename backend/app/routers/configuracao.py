@@ -4,12 +4,14 @@ e a tags — dois dos 68 pontos que a spec mandou fechar."""
 import re
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from app.chave_api import admin_ou_maquina
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual, usuario_atual
+from app.email import resend as cliente_resend
+from app.integracoes import gravar_segredo, ler_segredo
 
 router = APIRouter(tags=["configuracao"])
 
@@ -293,6 +295,37 @@ async def remover_supressao(supressao_id: str, _: Usuario = Depends(admin_atual)
 # ── Configuração do Resend ───────────────────────────────────────────────────
 # Os segredos moram em `integration_secrets` (ver app/integracoes.py), não no
 # repositório e não no .env de produção.
+#
+# ⚠️ Restaurado por inteiro no lote 8A. O 3C (`ecca32d`) tinha tirado teste de
+# chave, domínios, rastreamento e diagnóstico, e — sem ninguém decidir isso — a
+# tela perdeu o caminho para gravar o UNSUBSCRIBE_SECRET, sem o qual o worker
+# não consome a fila. O Erick decidiu em 10/09/2026 restaurar tudo.
+
+SEGREDOS_RESEND = {
+    "api_key": "RESEND_API_KEY",
+    "email_from": "EMAIL_FROM",
+    "unsubscribe_secret": "UNSUBSCRIBE_SECRET",
+    "webhook_secret": "RESEND_WEBHOOK_SECRET",
+}
+
+_REMETENTE = re.compile(r"^\s*(.+?)\s*<([^@\s<>]+)@([^\s<>]+)>\s*$")
+
+
+def partes_do_remetente(email_from: str | None) -> dict | None:
+    """`"Nome <prefixo@dominio>"` → as três partes que a tela edita.
+
+    ⚠️ O remetente mora no segredo EMAIL_FROM, que é o que o worker lê — não em
+    `dashboard_settings.resend_from` como na origem. Dois lugares para o
+    remetente é o defeito que o `integracoes.py` existe para acabar; as partes
+    saem do próprio valor.
+    """
+    if not email_from:
+        return None
+    achado = _REMETENTE.match(email_from)
+    if not achado:
+        return None
+    return {"nome": achado[1], "prefixo": achado[2], "dominio": achado[3]}
+
 
 class ResendIn(BaseModel):
     # Todos opcionais: a tela grava só o que o admin preencheu. Campo ausente
@@ -303,38 +336,90 @@ class ResendIn(BaseModel):
     webhook_secret: str | None = None
 
 
-SEGREDOS_RESEND = {
-    "api_key": "RESEND_API_KEY",
-    "email_from": "EMAIL_FROM",
-    "unsubscribe_secret": "UNSUBSCRIBE_SECRET",
-    "webhook_secret": "RESEND_WEBHOOK_SECRET",
-}
-
-
 @router.get("/config/resend")
-async def ler_config_resend(_: str = Depends(admin_ou_maquina("read"))):
-    """O que está configurado — NUNCA o valor.
+async def ler_config_resend(request: Request,
+                            _: str = Depends(admin_ou_maquina("read"))):
+    """O que está configurado — NUNCA o valor de um segredo.
 
     ⚠️ Devolver o valor colocaria a RESEND_API_KEY no HTML de qualquer admin
-    logado, e num log de proxy no caminho. A tela só precisa saber se o segredo
-    existe; os últimos quatro caracteres da chave bastam para a pessoa
-    reconhecer qual é.
+    logado, e num log de proxy no caminho. `EMAIL_FROM` é a exceção: não é
+    segredo, é o endereço que aparece na caixa de entrada de quem recebe.
 
-    ⚠️ `EMAIL_FROM` é a exceção e volta inteiro: não é segredo, é o endereço que
-    aparece na caixa de entrada de quem recebe.
+    Com chave gravada, testa a chave de novo — é o que dá o escopo e a lista de
+    domínios. A origem fazia o mesmo a cada leitura.
     """
-    from app.integracoes import ler_segredo
-
     valores = {campo: await ler_segredo(nome)
                for campo, nome in SEGREDOS_RESEND.items()}
     chave = valores["api_key"] or ""
+
+    escopo, dominios = None, []
+    if chave:
+        teste = await cliente_resend.testar_chave(chave)
+        if teste["valida"]:
+            escopo, dominios = teste["escopo"], teste["dominios"]
+
     return {
         "resend_api_key": {"configurado": bool(chave),
-                           "ultimos4": chave[-4:] if len(chave) >= 4 else None},
+                           "ultimos4": chave[-4:] if len(chave) >= 4 else None,
+                           "escopo": escopo},
         "email_from": valores["email_from"],
+        "remetente": partes_do_remetente(valores["email_from"]),
         "unsubscribe_secret": {"configurado": bool(valores["unsubscribe_secret"])},
         "webhook_secret": {"configurado": bool(valores["webhook_secret"])},
+        "dominios": dominios,
+        # Montado pelo próprio request: o host de produção ainda não foi
+        # decidido (item 11), e cravar um aqui repetiria o link de anúncio que
+        # o subprojeto A pegou apontando para o lugar errado.
+        "webhook_url": str(request.url_for("resend_webhook")),
     }
+
+
+class TesteDeChaveIn(BaseModel):
+    api_key: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/config/resend/testar")
+async def testar_chave_resend(dados: TesteDeChaveIn,
+                              _: str = Depends(admin_ou_maquina("read"))):
+    """Classifica a chave SEM gravar. É leitura: não muda nada."""
+    return await cliente_resend.testar_chave(dados.api_key.strip())
+
+
+@router.get("/config/resend/diagnostico")
+async def diagnostico_resend(_: str = Depends(admin_ou_maquina("read"))):
+    """O que era `resend-config-check`: está tudo no lugar, e o Resend responde?
+
+    ⚠️ O segredo de descadastro vem num campo PRÓPRIO, fora de `faltando`: a
+    ausência dele não afeta a conexão com o Resend, mas faz o worker não
+    consumir a fila. A tela mostra os dois avisos separados.
+
+    Diferente da origem: chave *sending-only* responde `ok: true` com lista de
+    domínios vazia. A origem tratava como `api_error` — chave válida acusada
+    como falha.
+    """
+    chave = await ler_segredo("RESEND_API_KEY")
+    remetente = await ler_segredo("EMAIL_FROM")
+    segredo_webhook = await ler_segredo("RESEND_WEBHOOK_SECRET")
+    sem_descadastro = not await ler_segredo("UNSUBSCRIBE_SECRET")
+
+    faltando = [nome for nome, valor in (("RESEND_API_KEY", chave),
+                                         ("EMAIL_FROM", remetente),
+                                         ("RESEND_WEBHOOK_SECRET", segredo_webhook))
+                if not valor]
+    if faltando:
+        return {"ok": False, "faltando": faltando,
+                "segredo_descadastro_faltando": sem_descadastro}
+
+    teste = await cliente_resend.testar_chave(chave)
+    if not teste["valida"]:
+        return {"ok": False, "faltando": [],
+                "segredo_descadastro_faltando": sem_descadastro,
+                "erro_api": f"O Resend recusou a chave ({teste['motivo']})."}
+    return {"ok": True, "faltando": [],
+            "segredo_descadastro_faltando": sem_descadastro,
+            "remetente": remetente,
+            "dominios": [{"name": d["name"], "status": d["status"]}
+                         for d in teste["dominios"]]}
 
 
 @router.put("/config/resend")
@@ -345,8 +430,6 @@ async def gravar_config_resend(dados: ResendIn, _: str = Depends(admin_ou_maquin
     não digitou nada naquele input. String vazia é "não mexi", não "apague" —
     apagar a RESEND_API_KEY por engano pararia todo envio em silêncio.
     """
-    from app.integracoes import gravar_segredo
-
     if dados.webhook_secret and not dados.webhook_secret.startswith("whsec_"):
         # A chave do HMAC é o base64 do segredo SEM o prefixo. Um valor sem
         # `whsec_` faz toda assinatura falhar e os eventos do Resend serem

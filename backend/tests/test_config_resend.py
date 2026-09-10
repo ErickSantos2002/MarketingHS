@@ -9,8 +9,10 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import pytest
 
+from app import integracoes
 from app.config import settings
 from app.email import resend as cliente_resend
+from app.routers.configuracao import partes_do_remetente
 
 ROTA = "/config/resend"
 
@@ -82,3 +84,63 @@ async def test_escrita_com_jwt_de_admin_vencido_da_sessao_expirada(cliente, toke
         "from_name": "HS", "from_prefix": "contato", "from_domain": "hs.com.br"})
     assert r.status_code == 401
     assert "expirada" in r.json()["detail"]
+
+
+def test_partes_do_remetente():
+    assert partes_do_remetente("Health & Safety <contato@hs.com.br>") == {
+        "nome": "Health & Safety", "prefixo": "contato", "dominio": "hs.com.br"}
+    assert partes_do_remetente("contato@hs.com.br") is None
+    assert partes_do_remetente(None) is None
+
+
+async def test_leitura_devolve_escopo_dominios_e_webhook_url_e_nunca_o_segredo(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    await integracoes.gravar_segredo("RESEND_API_KEY", "re_segredo_de_teste_1234")
+    await integracoes.gravar_segredo("EMAIL_FROM", "HS <contato@hs.com.br>")
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "full", "dominios": [
+        {"id": "d1", "name": "hs.com.br", "status": "verified", "capabilities": None}]})
+
+    r = await cliente.get(ROTA, headers=_auth(token_admin))
+
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert corpo["resend_api_key"] == {"configurado": True, "ultimos4": "1234",
+                                       "escopo": "full"}
+    assert corpo["remetente"] == {"nome": "HS", "prefixo": "contato",
+                                  "dominio": "hs.com.br"}
+    assert corpo["dominios"][0]["id"] == "d1"
+    assert corpo["webhook_url"].endswith("/publico/webhook/resend")
+    assert "re_segredo_de_teste" not in r.text
+
+
+async def test_testar_classifica_sem_gravar(cliente, token_admin, segredos_resend,
+                                            monkeypatch):
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "sending_only",
+                                      "dominios": []})
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin),
+                           json={"api_key": "re_nova"})
+    assert r.json() == {"valida": True, "escopo": "sending_only", "dominios": []}
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+
+
+async def test_diagnostico_aponta_o_que_falta(cliente, token_admin, segredos_resend):
+    r = await cliente.get(f"{ROTA}/diagnostico", headers=_auth(token_admin))
+    corpo = r.json()
+    assert corpo["ok"] is False
+    assert corpo["faltando"] == ["RESEND_API_KEY", "EMAIL_FROM", "RESEND_WEBHOOK_SECRET"]
+    assert corpo["segredo_descadastro_faltando"] is True
+
+
+async def test_diagnostico_completo(cliente, token_admin, segredos_resend, monkeypatch):
+    for nome, valor in (("RESEND_API_KEY", "re_x"), ("EMAIL_FROM", "HS <c@hs.com.br>"),
+                        ("RESEND_WEBHOOK_SECRET", "whsec_eA=="),
+                        ("UNSUBSCRIBE_SECRET", "u" * 32)):
+        await integracoes.gravar_segredo(nome, valor)
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "full", "dominios": [
+        {"id": "d1", "name": "hs.com.br", "status": "verified", "capabilities": None}]})
+
+    corpo = (await cliente.get(f"{ROTA}/diagnostico", headers=_auth(token_admin))).json()
+
+    assert corpo == {"ok": True, "faltando": [], "segredo_descadastro_faltando": False,
+                     "remetente": "HS <c@hs.com.br>",
+                     "dominios": [{"name": "hs.com.br", "status": "verified"}]}
