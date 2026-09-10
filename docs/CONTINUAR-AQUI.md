@@ -1,5 +1,71 @@
 # Continuar aqui
 
+> ## ✅ Sub-lote 8B (API de contato) fechado (10/09/2026)
+>
+> **Branch `lote-8`, NÃO mergeada.** Reconstrói as três functions da API de
+> contato para integrador externo: `PATCH /publico/contato` (era
+> `contact-update`), `PATCH`/`POST /publico/contato/status` (era
+> `contact-status-update`) e `PUT`/`POST /publico/contato/tags` (era
+> `contact-tags-sync`) — as três em `backend/app/routers/api_contato.py`,
+> reaproveitando `_registrar_mudanca` e `_resolver_status` de
+> `escrita_contatos.py`. Suíte de backend em **218 testes** — ⚠️ não os 217
+> que o plano e a emenda previam; ver a nota abaixo, é achado de contagem
+> antiga, não defeito do 8B.
+>
+> **Placar da pasta de especificação: 42 functions portadas, 7 descartadas,
+> restam 5** (`ab-events`, `get-nexus-stages`, `go`, `handoff-to-nexus`,
+> `nexus-config`). O portão (Tarefa 5) conferiu capacidade por capacidade
+> contra os três `index.ts` antes de apagar; nenhuma ficou sem lugar — ver o
+> relatório da tarefa.
+>
+> **As sete decisões deste plano**
+> (`docs/superpowers/plans/2026-09-10-marketinghs-lote-8b-api-de-contato.md`):
+>
+> 1. Status desconhecido responde **400** com a lista do que vale, não
+>    criação automática como a origem fazia — decisão já tomada no lote 1D.
+> 2. **O estágio da identidade NÃO avança para `opportunity` em "Lead
+>    Qualificado".** A origem avançava, e a documentação prometia; ⚠️
+>    pergunta ao Erick, na lista abaixo — vale para as duas portas de
+>    escrita (admin e API) ao mesmo tempo.
+> 3. `source_app = 'marketinghs'` nos três (a origem gravava `dnmarketing`
+>    e, em `contact-tags-sync`, `nexus`).
+> 4. Tag normalizada nas duas rotas que mexem em tag — sem `/` na frente,
+>    sem espaço nas pontas, minúscula; busca por `lower(name)`.
+> 5. Mudança de status pela rota geral (`PATCH /publico/contato` com
+>    `status`) grava os mesmos eventos da rota de status — a origem gravava
+>    o status cru, sem evento, o que hoje cairia na FK com 500.
+> 6. `dnia_id` malformado dá **422** (validação do FastAPI), não 500.
+> 7. `contact-status-update` com identidade cujo lead não existe mais dá
+>    **404** — a origem respondia sucesso sem ter gravado nada.
+>
+> **O indicador de MQL estava cortado, e o 8B consertou:** o card
+> `/painel/agendamentos/mql-hoje` lê `contact_updated` com
+> `metadata->>'status_atual'`, e a mudança de status pela API não gravava
+> esse campo. Hoje grava, em `_registrar_mudanca` e `status_em_lote`.
+>
+> ⚠️ **A suíte fechou em 218, não nos 217 previstos — e o motivo é anterior
+> ao 8B.** O total de 197 registrado no fechamento do 8A (`91fdc39`,
+> 11:17:13) já estava desatualizado 23 minutos depois: a `93504c3`
+> ("revisão final" do 8A, 11:40:01) acrescentou um teste a
+> `test_config_resend.py`
+> (`test_ligar_rastreamento_com_chave_rejeitada_nao_desloga_o_admin`) sem
+> ninguém recontar — o 8B, medido na ponta da branch em que começou, na
+> verdade partiu de **198**. As 20 tarefas próprias do 8B
+> (`test_api_contato.py`) somam **218**: nenhum teste falhou, nenhum teste
+> do 8B está fora do lugar — era a baseline que carregava um número velho.
+>
+> **`journey_events` tem 1.522 linhas órfãs**, medido depois da suíte
+> completa deste portão rodar: o trigger `trg_contact_event_journey` copia
+> cada `contact_events` para lá, a tabela não tem FK para `leads`, e
+> limpezas antigas não apagavam a cópia. Só esta rodada acrescentou **27**
+> (`form_submitted` 13, `email_sent` 7, `email_opened` 3, `email_bounced` 2,
+> `contact_reactivated` 1, `email_complained` 1) — nenhuma com a assinatura
+> do 8B: é o vazamento antigo das fixtures de captura/conversão/envio/
+> webhook, ~27 por rodada completa da suíte. Inofensivas para o motor (lead
+> inexistente), mas apagar é decisão do Erick — ver a lista abaixo. Duas
+> formas de parar de crescer a cada rodada: limpeza numa fixture comum, ou
+> banco de teste separado.
+
 > ## ✅ Sub-lote 8A (Resend) fechado (10/09/2026)
 >
 > **Branch `lote-8`, NÃO mergeada.** Restaura por inteiro a configuração do
@@ -772,6 +838,20 @@ o defeito dos 2.080 volta, calado.
     Supabase saiu e o segredo agora vive em `integration_secrets`. E há um
     card "mentor.ia" da dn.ia na mesma tela. Nenhuma tarefa do 8A tinha
     escopo sobre esses três.
+31. **Lead Qualificado avança o contato para `opportunity` no ecossistema?**
+    A origem avançava (`resolve_or_create_identity` com `p_stage:
+    'opportunity'`) e a documentação publicada prometia; a rota do admin já
+    não avança (`escrita_contatos.py:166-169`) e o 8B manteve as duas
+    portas de escrita concordando: nenhuma avança hoje. Se a resposta for
+    sim, é uma linha nas duas rotas ao mesmo tempo — nunca numa só, para não
+    reabrir a discordância entre portas que já mordeu este projeto.
+32. **Apagar as 1.522 linhas órfãs de `journey_events`** (medido depois da
+    suíte completa deste portão) — ou deixar como estão. Cada rodada da
+    suíte inteira acrescenta ~27 (`form_submitted`, `email_sent`,
+    `email_opened`, `email_bounced`, `contact_reactivated`,
+    `email_complained`) — vazamento antigo das fixtures de captura/
+    conversão/envio/webhook, não do 8B. Duas formas de parar de crescer:
+    limpeza numa fixture comum, ou banco de teste separado.
 
 ## Como subir o que existe
 
