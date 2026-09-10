@@ -261,3 +261,95 @@ async def atualizar_status(dados: StatusApiIn,
             # Sempre falso: status não é criado por API (decisão do lote 1D).
             # O campo fica porque integrador pode estar lendo.
             "status_created": False}
+
+
+class TagsApiIn(BaseModel):
+    dnia_id: UUID | None = None
+    nexus_contact_id: UUID | None = None
+    email: str | None = None
+    # Sem tipo de item: a origem aceitava lista com não-string e descartava.
+    # A validação de "é lista?" é da rota, para a mensagem ser a da origem.
+    tags: object = None
+
+
+@router.api_route("/contato/tags", methods=["PUT", "POST"])
+async def sincronizar_tags(dados: TagsApiIn,
+                           _: ChaveApi = Depends(chave_api("write"))):
+    """O que era `contact-tags-sync`: substituição TOTAL. O que não veio sai.
+
+    PUT é a rota; POST é alias, para cliente que não sabe mandar PUT.
+    """
+    if not (dados.dnia_id or dados.nexus_contact_id or dados.email):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Informe ao menos um identificador: dnia_id, nexus_contact_id ou email.")
+    if not isinstance(dados.tags, list):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            'O campo "tags" precisa ser um array de strings (use [] para remover todas).')
+
+    alvo: list[str] = []
+    for bruta in dados.tags:
+        if isinstance(bruta, str):
+            nome = normalizar_tag(bruta)
+            if nome and nome not in alvo:
+                alvo.append(nome)
+
+    async with sessao(role="service_role") as conn:
+        if dados.dnia_id or dados.nexus_contact_id:
+            coluna = "dnia_id" if dados.dnia_id else "nexus_contact_id"
+            valor = str(dados.dnia_id or dados.nexus_contact_id)
+            identidade = await conn.fetchrow(
+                f"SELECT dnia_id::text AS dnia_id, dndash_lead_id::text AS lead_id "
+                f"FROM ecosystem_identities WHERE {coluna} = $1::uuid", valor)
+            if identidade is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                    "Contato não encontrado para o identificador informado.")
+            dnia_id, lead_id = identidade["dnia_id"], identidade["lead_id"]
+        else:
+            lead = await conn.fetchrow(
+                """SELECT id::text AS id, dnia_id::text AS dnia_id FROM leads
+                    WHERE lower(email) = lower($1) AND deleted_at IS NULL
+                    ORDER BY created_at DESC LIMIT 1""", dados.email.strip())
+            if lead is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                    "Contato não encontrado pelo email informado.")
+            dnia_id, lead_id = lead["dnia_id"], lead["id"]
+        if not lead_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                "Contato encontrado, mas sem lead vinculado.")
+
+        atuais = {r["name"].lower(): r["id"] for r in await conn.fetch(
+            """SELECT t.id::text AS id, t.name FROM lead_tags lt
+                 JOIN tags t ON t.id = lt.tag_id WHERE lt.lead_id = $1::uuid""", lead_id)}
+
+        adicionadas = [n for n in alvo if n not in atuais]
+        mantidas = [n for n in alvo if n in atuais]
+        removidas = [n for n in atuais if n not in alvo]
+
+        criadas: list[str] = []
+        for nome in adicionadas:
+            tag_id, criada = await _id_da_tag(conn, nome)
+            if criada:
+                criadas.append(nome)
+            await conn.execute(
+                "INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2::uuid) "
+                "ON CONFLICT DO NOTHING", lead_id, tag_id)
+        if removidas:
+            await conn.execute(
+                "DELETE FROM lead_tags WHERE lead_id = $1::uuid AND tag_id = ANY($2::uuid[])",
+                lead_id, [atuais[n] for n in removidas])
+
+        await conn.execute(
+            """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
+                                           title, metadata)
+               VALUES ($1::uuid, $2::uuid, 'marketinghs', 'tags_synced',
+                       'Tags sincronizadas via API',
+                       jsonb_build_object('added', $3::text[], 'removed', $4::text[],
+                                          'kept', $5::text[], 'total', $6::int,
+                                          'source', 'api'))""",
+            lead_id, dnia_id, adicionadas, removidas, mantidas, len(alvo))
+
+    return {"success": True, "dnia_id": dnia_id, "lead_id": lead_id,
+            "tags_final": alvo, "added": adicionadas, "removed": removidas,
+            "kept": mantidas, "created_tags": criadas}

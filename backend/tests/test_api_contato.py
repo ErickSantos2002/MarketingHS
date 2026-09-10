@@ -266,3 +266,49 @@ async def test_status_dnia_id_malformado_e_422(cliente, contato_api):
     r = await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
                             json={"dnia_id": "nao-e-uuid", "status": "Lead"})
     assert r.status_code == 422
+
+
+async def test_tags_espelha_o_conjunto(cliente, contato_api):
+    chave = _auth(contato_api["chave"])
+    base = {"dnia_id": contato_api["dnia_id"]}
+    r1 = await cliente.put("/publico/contato/tags", headers=chave, json={
+        **base, "tags": [f"{PREFIXO_TAG}-a", f"{PREFIXO_TAG}-b"]})
+    assert r1.status_code == 200, r1.text
+    assert sorted(r1.json()["created_tags"]) == [f"{PREFIXO_TAG}-a", f"{PREFIXO_TAG}-b"]
+
+    r2 = await cliente.put("/publico/contato/tags", headers=chave, json={
+        **base, "tags": [f"{PREFIXO_TAG}-B", f"/{PREFIXO_TAG}-c", f"{PREFIXO_TAG}-c", 7]})
+    corpo = r2.json()
+    assert corpo["tags_final"] == [f"{PREFIXO_TAG}-b", f"{PREFIXO_TAG}-c"]
+    assert corpo["added"] == [f"{PREFIXO_TAG}-c"]
+    assert corpo["removed"] == [f"{PREFIXO_TAG}-a"]
+    assert corpo["kept"] == [f"{PREFIXO_TAG}-b"]
+
+    tipos = [e["event_type"] for e in await _eventos(contato_api["lead_id"])]
+    assert tipos.count("tags_synced") == 2
+
+
+async def test_tags_lista_vazia_limpa_tudo_e_post_e_alias(cliente, contato_api):
+    chave = _auth(contato_api["chave"])
+    await cliente.put("/publico/contato/tags", headers=chave, json={
+        "email": EMAIL, "tags": [f"{PREFIXO_TAG}-x"]})
+    r = await cliente.post("/publico/contato/tags", headers=chave,
+                           json={"email": EMAIL, "tags": []})
+    assert r.status_code == 200, r.text
+    assert r.json()["removed"] == [f"{PREFIXO_TAG}-x"]
+    async with db.sessao(role="service_role") as conn:
+        assert await conn.fetchval("SELECT count(*) FROM lead_tags WHERE lead_id = $1::uuid",
+                                   contato_api["lead_id"]) == 0
+
+
+async def test_tags_sem_identificador_e_400(cliente, contato_api):
+    r = await cliente.put("/publico/contato/tags", headers=_auth(contato_api["chave"]),
+                          json={"tags": []})
+    assert r.status_code == 400
+
+
+async def test_tags_que_nao_e_lista_e_400(cliente, contato_api):
+    r = await cliente.put("/publico/contato/tags", headers=_auth(contato_api["chave"]),
+                          json={"email": EMAIL, "tags": "a,b"})
+    assert r.status_code == 400
+    assert "array" in r.json()["detail"]
