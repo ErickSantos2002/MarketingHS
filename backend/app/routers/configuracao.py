@@ -525,6 +525,88 @@ async def gravar_config_resend(dados: ResendIn,
     return {"gravados": gravados, "email_from": remetente, "aviso": aviso}
 
 
+class RastreamentoIn(BaseModel):
+    subdominio: str = Field(default="links", min_length=1, max_length=63,
+                            pattern=r"^[a-z0-9-]+$")
+    abertura: bool = True
+    clique: bool = True
+
+
+async def _chave_gravada() -> str:
+    chave = await ler_segredo("RESEND_API_KEY")
+    if not chave:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "RESEND_API_KEY não configurada — salve a chave antes.")
+    return chave
+
+
+def _info_do_dominio(info: dict) -> dict:
+    return {k: info[k] for k in ("open_tracking", "click_tracking",
+                                 "tracking_subdomain", "status", "records")}
+
+
+@router.get("/config/resend/dominios/{dominio_id}")
+async def ler_dominio_resend(dominio_id: str,
+                             _: str = Depends(admin_ou_maquina("read"))):
+    """O estado real do rastreamento de um domínio (`domain_info` da origem).
+
+    ⚠️ Chave *sending-only* ou domínio inexistente NÃO é erro: é um estado que
+    a tela mostra ("não dá para consultar por aqui"). Responde 200 com
+    `disponivel: false`, como a origem.
+    """
+    info = await cliente_resend.ler_dominio(await _chave_gravada(), dominio_id)
+    if not info["ok"]:
+        return {"disponivel": False, "motivo": info["motivo"]}
+    return {"disponivel": True, **_info_do_dominio(info)}
+
+
+@router.post("/config/resend/dominios/{dominio_id}/rastreamento")
+async def ligar_rastreamento_resend(dominio_id: str, dados: RastreamentoIn,
+                                    _: str = Depends(admin_ou_maquina("write"))):
+    """Liga open/click tracking no domínio (`enable_tracking` da origem).
+
+    O Resend vem com os dois DESLIGADOS — é por isso que o webhook recebe
+    `email.delivered` mas nunca `email.opened`. Ligar exige um CNAME novo no
+    DNS, que só quem administra o domínio aplica: a resposta devolve os
+    registros para a tela mostrar.
+    """
+    chave = await _chave_gravada()
+    try:
+        resposta = await cliente_resend.alterar_dominio(chave, dominio_id, {
+            "open_tracking": dados.abertura, "click_tracking": dados.clique,
+            "tracking_subdomain": dados.subdominio})
+    except cliente_resend.FalhaDeRede:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            "Não foi possível conectar à API do Resend.")
+
+    if resposta.status_code == 401:
+        if cliente_resend.restrita(resposta):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                'A chave configurada é do tipo "somente envio", e o Resend não '
+                "permite alterar domínios com ela. Gere uma chave de acesso "
+                "completo em resend.com/api-keys, salve-a aqui e tente de novo.")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                            "Chave rejeitada pelo Resend ao ativar o rastreamento.")
+    if not resposta.is_success:
+        try:
+            mensagem = resposta.json().get("message")
+        except ValueError:
+            mensagem = None
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            mensagem or f"O Resend recusou a alteração (status {resposta.status_code}).")
+
+    info = await cliente_resend.ler_dominio(chave, dominio_id)
+    if not info["ok"]:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "O rastreamento foi ativado, mas não deu para confirmar o estado. "
+            "Recarregue a página.")
+    return {"sucesso": True, **_info_do_dominio(info),
+            "tracking_subdomain": info["tracking_subdomain"] or dados.subdominio}
+
+
 # ── Configuração do Meta ─────────────────────────────────────────────────────
 # Mesmo desenho do Resend: os segredos moram em `integration_secrets`, e a
 # leitura NUNCA devolve o valor.

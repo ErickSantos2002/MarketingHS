@@ -6,6 +6,7 @@ monkeypatch — o cliente em si é testado em `test_resend_cliente.py`.
 
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import jwt
 import pytest
 
@@ -267,3 +268,64 @@ async def test_webhook_sem_whsec_e_recusado(cliente, token_admin, segredos_resen
         "webhook_secret": "sem-prefixo"})
     assert r.status_code == 400
     assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+
+
+INFO = {"ok": True, "open_tracking": True, "click_tracking": True,
+        "tracking_subdomain": "links", "status": "verified",
+        "records": [{"record": "Tracking", "name": "links", "type": "CNAME",
+                     "value": "links1.resend-dns.com", "status": "pending"}]}
+
+
+async def test_ler_dominio_sem_chave_da_400(cliente, token_admin, segredos_resend):
+    r = await cliente.get(f"{ROTA}/dominios/d1", headers=_auth(token_admin))
+    assert r.status_code == 400
+
+
+async def test_ler_dominio_restrito_e_200_indisponivel(cliente, token_admin,
+                                                       segredos_resend, monkeypatch):
+    await integracoes.gravar_segredo("RESEND_API_KEY", "re_envio")
+    _resend_falso(monkeypatch, dominio={"ok": False, "motivo": "restricted_api_key"})
+    r = await cliente.get(f"{ROTA}/dominios/d1", headers=_auth(token_admin))
+    assert r.status_code == 200
+    assert r.json() == {"disponivel": False, "motivo": "restricted_api_key"}
+
+
+async def test_ligar_rastreamento_devolve_os_registros_dns(cliente, token_admin,
+                                                          segredos_resend, monkeypatch):
+    await integracoes.gravar_segredo("RESEND_API_KEY", "re_ok")
+    enviado = {}
+
+    async def alterar_dominio(chave, dominio_id, corpo):
+        enviado.update(corpo)
+        return httpx.Response(200, json={"object": "domain"})
+
+    _resend_falso(monkeypatch, dominio=INFO)
+    monkeypatch.setattr(cliente_resend, "alterar_dominio", alterar_dominio)
+
+    r = await cliente.post(f"{ROTA}/dominios/d1/rastreamento",
+                           headers=_auth(token_admin), json={})
+
+    assert r.status_code == 200, r.text
+    assert enviado == {"open_tracking": True, "click_tracking": True,
+                       "tracking_subdomain": "links"}
+    assert r.json()["records"][0]["type"] == "CNAME"
+
+
+async def test_ligar_rastreamento_com_chave_de_envio_da_403(cliente, token_admin,
+                                                           segredos_resend, monkeypatch):
+    await integracoes.gravar_segredo("RESEND_API_KEY", "re_envio")
+
+    async def alterar_dominio(chave, dominio_id, corpo):
+        return httpx.Response(401, json={"name": "restricted_api_key"})
+
+    monkeypatch.setattr(cliente_resend, "alterar_dominio", alterar_dominio)
+    r = await cliente.post(f"{ROTA}/dominios/d1/rastreamento",
+                           headers=_auth(token_admin), json={})
+    assert r.status_code == 403
+    assert "somente envio" in r.json()["detail"]
+
+
+async def test_ligar_rastreamento_recusa_chave_de_api(cliente, chave_de, segredos_resend):
+    r = await cliente.post(f"{ROTA}/dominios/d1/rastreamento",
+                           headers=_auth(await chave_de("write")), json={})
+    assert r.status_code == 401
