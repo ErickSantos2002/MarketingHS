@@ -144,3 +144,115 @@ async def test_diagnostico_completo(cliente, token_admin, segredos_resend, monke
     assert corpo == {"ok": True, "faltando": [], "segredo_descadastro_faltando": False,
                      "remetente": "HS <c@hs.com.br>",
                      "dominios": [{"name": "hs.com.br", "status": "verified"}]}
+
+
+REMETENTE = {"from_name": "Health & Safety", "from_prefix": "contato",
+             "from_domain": "hs.com.br"}
+VERIFICADO = {"valida": True, "escopo": "full", "dominios": [
+    {"id": "d1", "name": "hs.com.br", "status": "verified",
+     "capabilities": {"sending": "enabled"}}]}
+
+
+async def test_gravar_recusa_chave_invalida_e_nao_grava_nada(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    _resend_falso(monkeypatch, teste={"valida": False, "motivo": "invalid_api_key"})
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ruim", "unsubscribe_secret": "u" * 32})
+    assert r.status_code == 400
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+    assert await integracoes.ler_segredo("UNSUBSCRIBE_SECRET") is None
+
+
+async def test_gravar_exige_o_dominio_na_conta(cliente, token_admin, segredos_resend,
+                                               monkeypatch):
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "full", "dominios": []})
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32})
+    assert r.status_code == 400
+    assert "não encontrado" in r.json()["detail"]
+
+
+async def test_gravar_exige_dominio_verificado(cliente, token_admin, segredos_resend,
+                                               monkeypatch):
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "full", "dominios": [
+        {"id": "d1", "name": "hs.com.br", "status": "pending", "capabilities": None}]})
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32})
+    assert r.status_code == 400
+    assert "não está verificado" in r.json()["detail"]
+
+
+async def test_parcialmente_verificado_com_envio_ligado_passa(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "full", "dominios": [
+        {"id": "d1", "name": "hs.com.br", "status": "partially_verified",
+         "capabilities": {"sending": "enabled"}}]})
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32})
+    assert r.status_code == 200, r.text
+
+
+async def test_gravar_monta_o_remetente_e_grava(cliente, token_admin, segredos_resend,
+                                               monkeypatch):
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32,
+        "webhook_secret": "whsec_eA=="})
+    assert r.status_code == 200, r.text
+    assert r.json()["email_from"] == "Health & Safety <contato@hs.com.br>"
+    assert r.json()["aviso"] is None
+    assert await integracoes.ler_segredo("EMAIL_FROM") == \
+        "Health & Safety <contato@hs.com.br>"
+    assert await integracoes.ler_segredo("RESEND_API_KEY") == "re_ok"
+
+
+async def test_chave_de_envio_grava_com_aviso(cliente, token_admin, segredos_resend,
+                                              monkeypatch):
+    _resend_falso(monkeypatch, teste={"valida": True, "escopo": "sending_only",
+                                      "dominios": []})
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_envio", "unsubscribe_secret": "u" * 32})
+    assert r.status_code == 200, r.text
+    assert "confira manualmente" in r.json()["aviso"]
+
+
+async def test_segredo_de_descadastro_e_obrigatorio_na_primeira_vez(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    """Sem ele o worker não consome a fila (`worker.py:180`) — e o 3C deixou a
+    tela sem caminho para gravá-lo."""
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={**REMETENTE, "api_key": "re_ok"})
+    assert r.status_code == 400
+    assert "descadastro" in r.json()["detail"]
+
+
+async def test_segredo_de_descadastro_curto_e_recusado(cliente, token_admin,
+                                                       segredos_resend, monkeypatch):
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "curto"})
+    assert r.status_code == 400
+    assert "32" in r.json()["detail"]
+
+
+async def test_com_segredo_ja_gravado_so_o_remetente_basta(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    await integracoes.gravar_segredo("UNSUBSCRIBE_SECRET", "u" * 40)
+    await integracoes.gravar_segredo("RESEND_API_KEY", "re_ja_gravada")
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={**REMETENTE, "api_key": "", "unsubscribe_secret": ""})
+    assert r.status_code == 200, r.text
+    assert r.json()["gravados"] == ["email_from"]
+    assert await integracoes.ler_segredo("UNSUBSCRIBE_SECRET") == "u" * 40
+
+
+async def test_webhook_sem_whsec_e_recusado(cliente, token_admin, segredos_resend,
+                                            monkeypatch):
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32,
+        "webhook_secret": "sem-prefixo"})
+    assert r.status_code == 400
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None

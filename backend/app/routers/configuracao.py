@@ -327,13 +327,31 @@ def partes_do_remetente(email_from: str | None) -> dict | None:
     return {"nome": achado[1], "prefixo": achado[2], "dominio": achado[3]}
 
 
+_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+TAMANHO_MINIMO_DESCADASTRO = 32
+
+
 class ResendIn(BaseModel):
-    # Todos opcionais: a tela grava só o que o admin preencheu. Campo ausente
-    # NÃO apaga o segredo guardado.
+    # O remetente vem em três partes, como na origem: é o que permite conferir
+    # o domínio contra a conta do Resend.
+    from_name: str = Field(min_length=1, max_length=100)
+    from_prefix: str = Field(min_length=1, max_length=64)
+    from_domain: str = Field(min_length=1, max_length=253)
+    # Opcionais: a tela manda vazio quando o admin não digitou. Vazio é "não
+    # mexi", não "apague".
     api_key: str | None = None
-    email_from: str | None = None
     unsubscribe_secret: str | None = None
     webhook_secret: str | None = None
+
+
+def _preenchido(valor: str | None) -> str | None:
+    return valor.strip() if valor and valor.strip() else None
+
+
+def _verificado(dominio: dict) -> bool:
+    envio_ligado = (dominio.get("capabilities") or {}).get("sending") == "enabled"
+    situacao = dominio.get("status") or ""
+    return situacao == "verified" or (situacao.startswith("partially_") and envio_ligado)
 
 
 @router.get("/config/resend")
@@ -423,29 +441,88 @@ async def diagnostico_resend(_: str = Depends(admin_ou_maquina("read"))):
 
 
 @router.put("/config/resend")
-async def gravar_config_resend(dados: ResendIn, _: str = Depends(admin_ou_maquina("write"))):
-    """Grava só o que veio preenchido.
+async def gravar_config_resend(dados: ResendIn,
+                               _: str = Depends(admin_ou_maquina("write"))):
+    """Grava a configuração, na ordem da origem: TUDO é validado antes de
+    qualquer coisa ser gravada.
 
-    ⚠️ `exclude_unset` não basta aqui: a tela manda campo vazio quando o admin
-    não digitou nada naquele input. String vazia é "não mexi", não "apague" —
-    apagar a RESEND_API_KEY por engano pararia todo envio em silêncio.
+    ⚠️ O segredo de descadastro é obrigatório — vindo agora OU já gravado. Sem
+    ele o worker não consome a fila, e e-mail de campanha sem link de
+    descadastro viola a exigência de one-click do Gmail e do Yahoo.
     """
-    if dados.webhook_secret and not dados.webhook_secret.startswith("whsec_"):
-        # A chave do HMAC é o base64 do segredo SEM o prefixo. Um valor sem
-        # `whsec_` faz toda assinatura falhar e os eventos do Resend serem
-        # rejeitados em silêncio — melhor recusar aqui.
+    nome = dados.from_name.strip()
+    prefixo = dados.from_prefix.strip()
+    dominio = dados.from_domain.strip().lower()
+    chave_nova = _preenchido(dados.api_key)
+    descadastro = _preenchido(dados.unsubscribe_secret)
+    segredo_webhook = _preenchido(dados.webhook_secret)
+
+    # 1. Chave nova é testada antes de qualquer coisa. Sem chave nova, a
+    #    gravada serve só para conferir o domínio.
+    if chave_nova:
+        teste = await cliente_resend.testar_chave(chave_nova)
+        if not teste["valida"]:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Chave do Resend inválida ou inacessível ({teste['motivo']}).")
+    else:
+        gravada = await ler_segredo("RESEND_API_KEY")
+        teste = await cliente_resend.testar_chave(gravada) if gravada else None
+
+    # 2. Domínio verificado — só dá para exigir com chave de escopo completo.
+    aviso = None
+    if teste and teste["valida"] and teste["escopo"] == "full":
+        achado = next((d for d in teste["dominios"]
+                       if (d.get("name") or "").lower() == dominio), None)
+        if achado is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                f'Domínio "{dominio}" não encontrado na conta Resend.')
+        if not _verificado(achado):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f'Domínio "{dominio}" não está verificado (status: {achado.get("status")}).')
+    else:
+        aviso = ("Não foi possível confirmar a verificação do domínio (chave "
+                 "somente-envio ou ainda não testada) — confira manualmente em "
+                 "resend.com/domains.")
+
+    # 3. O remetente final.
+    endereco = f"{prefixo}@{dominio}"
+    if not _EMAIL.match(endereco):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Prefixo e domínio formam um endereço de remetente inválido.")
+    remetente = f"{nome} <{endereco}>"
+
+    # 4. Os segredos, antes de gravar qualquer um.
+    if descadastro is not None and len(descadastro) < TAMANHO_MINIMO_DESCADASTRO:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"O segredo de descadastro precisa de pelo menos "
+            f"{TAMANHO_MINIMO_DESCADASTRO} caracteres.")
+    if descadastro is None and not await ler_segredo("UNSUBSCRIBE_SECRET"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "O segredo de descadastro é obrigatório. Sem ele os e-mails saem sem "
+            "link de descadastro e o worker não envia nada.")
+    if segredo_webhook and not segredo_webhook.startswith("whsec_"):
+        # A chave do HMAC é o base64 do segredo SEM o prefixo. Sem `whsec_`
+        # toda assinatura falharia e os eventos seriam rejeitados em silêncio.
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             'O segredo do webhook começa com "whsec_" — é o signing secret que '
             "o Resend mostra ao criar o webhook.")
 
+    # 5. Grava — só depois de tudo validado.
     gravados = []
-    for campo, nome in SEGREDOS_RESEND.items():
-        valor = getattr(dados, campo)
-        if valor and valor.strip():
-            await gravar_segredo(nome, valor.strip())
+    for campo, valor in (("api_key", chave_nova), ("unsubscribe_secret", descadastro),
+                         ("webhook_secret", segredo_webhook)):
+        if valor:
+            await gravar_segredo(SEGREDOS_RESEND[campo], valor)
             gravados.append(campo)
-    return {"gravados": gravados}
+    await gravar_segredo("EMAIL_FROM", remetente)
+    gravados.append("email_from")
+
+    return {"gravados": gravados, "email_from": remetente, "aviso": aviso}
 
 
 # ── Configuração do Meta ─────────────────────────────────────────────────────
