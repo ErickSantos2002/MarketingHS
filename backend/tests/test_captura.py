@@ -260,12 +260,43 @@ async def test_captura_reativa_contato_excluido(cliente, pagina_sonda):
 
     async with db.sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
-            "SELECT id, deleted_at FROM leads WHERE email = $1", EMAIL_SONDA)
+            "SELECT id, deleted_at, dnia_id FROM leads WHERE email = $1", EMAIL_SONDA)
         assert linha["deleted_at"] is None, "reconverter deveria reativar o contato"
-        evento = await conn.fetchval(
-            "SELECT count(*) FROM contact_events "
+        eventos = await conn.fetch(
+            "SELECT dnia_id FROM contact_events "
             "WHERE lead_id = $1 AND event_type = 'contact_reactivated'", linha["id"])
-        assert evento == 1, "a reativação precisa deixar rastro"
+        assert len(eventos) == 1, "a reativação precisa deixar rastro"
+        # ⚠️ A origem gravava `dnia_id` no evento, e a primeira versão desta
+        # rota deixou de gravar — corte silencioso achado no portão. Sem ele o
+        # evento some do cruzamento por `idx_contact_events_universal_id` e do
+        # merge de identidade (`UPDATE contact_events SET dnia_id = p_keep`).
+        assert linha["dnia_id"] is not None, "a primeira captura não resolveu identidade"
+        assert eventos[0]["dnia_id"] == linha["dnia_id"], \
+            "o evento de reativação precisa carregar o dnia_id do contato"
+
+
+async def test_captura_email_longo_demais_da_400(cliente, pagina_sonda):
+    """A origem tinha UM caminho de erro para e-mail: 400. O `max_length` do
+    Pydantic respondia 422 com `detail` em lista — outro contrato."""
+    longo = "a" * 320 + "@exemplo.invalid"
+    resposta = await cliente.post("/publico/captura", json={
+        "email": longo, "page_slug": pagina_sonda, "fields": {}})
+    assert resposta.status_code == 400
+
+
+async def test_captura_descarta_session_id_longo_demais(cliente, pagina_sonda):
+    """A origem fazia `sessionId.length <= 100 ? sessionId : null`: o campo
+    ruim some e a captura segue. Recusar a requisição inteira perderia o lead
+    por causa de um campo de rastreio."""
+    resposta = await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda,
+        "session_id": "s" * 101, "fields": {"nome": "Carla"}})
+    assert resposta.status_code == 200
+
+    async with db.sessao(role="service_role") as conn:
+        sessao_gravada = await conn.fetchval(
+            "SELECT session_id FROM leads WHERE email = $1", EMAIL_SONDA)
+        assert sessao_gravada is None
 
 
 async def test_captura_sobrevive_a_falha_real_na_identidade(cliente, pagina_sonda,

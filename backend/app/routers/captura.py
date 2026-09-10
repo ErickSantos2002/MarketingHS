@@ -22,7 +22,7 @@ API. Fechar o laço aqui é o único caminho que não expõe credencial.
 import logging
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.captura.campos import higienizar
 from app.captura.email import validar_dominio
@@ -31,6 +31,9 @@ from app.routers.publico import _aplicar_tag_do_slug
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/publico", tags=["captura"])
+
+EMAIL_TAMANHO_MAXIMO = 320
+SESSION_ID_TAMANHO_MAXIMO = 100
 
 # ⚠️ Constante, não literal inline, só para o teste da rodada 1 de correção
 # conseguir forçar uma falha DE BANCO real dentro da transação (trocando o
@@ -43,10 +46,24 @@ _SQL_RESOLVE_IDENTIDADE = (
 
 
 class CapturaIn(BaseModel):
-    email: str = Field(min_length=3, max_length=320)
+    # ⚠️ Sem `max_length` no e-mail de propósito: o teto de 320 é checado em
+    # `capturar()`, para responder 400 como qualquer outro e-mail inválido —
+    # o `max_length` do Pydantic respondia 422 com `detail` em lista, um
+    # segundo contrato de erro que a origem não tinha.
+    email: str = Field(min_length=3)
     page_slug: str = Field(min_length=1, max_length=200)
-    session_id: str | None = Field(default=None, min_length=1, max_length=100)
+    session_id: str | None = None
     fields: dict = Field(default_factory=dict)
+
+    @field_validator("session_id", mode="before")
+    @classmethod
+    def _descartar_session_id_invalido(cls, valor):
+        """Como a origem (`sessionId.length <= 100 ? sessionId : null`): o
+        campo de rastreio ruim some e a captura segue. Recusar a requisição
+        inteira perderia o lead por causa dele."""
+        if not isinstance(valor, str) or not valor or len(valor) > SESSION_ID_TAMANHO_MAXIMO:
+            return None
+        return valor
 
 
 class EmailIn(BaseModel):
@@ -73,6 +90,8 @@ async def validar_email(dados: EmailIn):
 @router.post("/captura")
 async def capturar(dados: CapturaIn):
     email = dados.email.strip().lower()
+    if len(email) > EMAIL_TAMANHO_MAXIMO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "E-mail inválido.")
 
     valido, motivo = await validar_dominio(email)
     if not valido:
@@ -211,16 +230,22 @@ async def _atualizar(conn, existente, session_id: str | None, campos: dict) -> N
         # `TypeError` e a captura toda falha por causa de um campo de
         # auditoria. `str(None)` nunca acontece aqui porque só entra neste
         # bloco quando `deleted_at` não é nulo.
+        #
+        # ⚠️ `dnia_id` vai no evento, como na origem: é por ele que o evento
+        # entra no cruzamento de `idx_contact_events_universal_id` e no merge
+        # de identidade. A primeira versão desta rota o esqueceu — corte
+        # silencioso achado no portão.
         deleted_by = existente["deleted_by"]
         await conn.execute(
             """INSERT INTO contact_events
-                   (lead_id, source_app, event_type, title, metadata)
-               VALUES ($1::uuid, 'marketinghs', 'contact_reactivated',
+                   (lead_id, dnia_id, source_app, event_type, title, metadata)
+               VALUES ($1::uuid, $3::uuid, 'marketinghs', 'contact_reactivated',
                        'Contato reativado por nova conversão', $2)""",
             existente["id"],
             {"previous_deleted_at": str(existente["deleted_at"]),
              "previous_deleted_by": str(deleted_by) if deleted_by else None,
-             "reason": "captura_reconversao"})
+             "reason": "captura_reconversao"},
+            existente["dnia_id"])
 
 
 async def _resolver_identidade(conn, lead_id: str, email: str, campos: dict) -> None:

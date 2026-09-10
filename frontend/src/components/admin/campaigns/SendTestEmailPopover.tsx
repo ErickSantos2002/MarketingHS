@@ -13,10 +13,10 @@ import { ErroApi } from '@/lib/api';
 // /templates/:id/preview para ser reusado no modal de visualizacao aberto pelo
 // builder de fluxos. Funciona aninhado dentro de um Dialog do Radix.
 
-// Checagem de formato apenas. NAO reusar validateEmailFormat de
-// lib/emailValidation.ts aqui: aquela funcao tambem rejeita dominios
-// descartaveis (higiene de captura de LEAD), e o destinatario de um email de
-// teste e escolha do admin -- inclusive um endereco temporario, de proposito.
+// Checagem de formato apenas. NAO trocar pela validacao da captura de lead
+// (POST /publico/validar-email): aquela tambem rejeita dominios descartaveis,
+// e o destinatario de um email de teste e escolha do admin -- inclusive um
+// endereco temporario, de proposito.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface Props {
