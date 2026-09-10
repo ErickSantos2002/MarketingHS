@@ -110,7 +110,8 @@ _EVENTO_POR_STATUS = {
 
 async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str,
                              origem: str = "manual",
-                             descricao: str = "Mudança de status pelo painel") -> None:
+                             descricao: str = "Mudança de status pelo painel",
+                             gravar_generico: bool = True) -> None:
     """Grava os eventos de mudança de status na timeline.
 
     ⚠️ Não é log opcional. A listagem calcula `status_changed_at` a partir
@@ -121,15 +122,30 @@ async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str,
     deixavam rastro nenhum, e o histórico de status ficava com buraco. Aqui
     toda mudança grava `contact_updated`, e as três transições que a listagem
     conta gravam também o tipo específico dela.
+
+    ⚠️ `status_atual`/`status_anterior` duplicam `para`/`de` na mesma
+    metadata: são as chaves da ORIGEM, e `GET /painel/agendamentos/mql-hoje`
+    (painel.py) lê `metadata->>'status_atual'` para contar quem entrou em
+    "MQL - Reunião agendada" hoje — sem elas, o indicador nunca via a
+    mudança, mesmo com o evento gravado.
+
+    `gravar_generico=False` pula SÓ o INSERT genérico de `contact_updated`
+    (mantém o evento específico de `_EVENTO_POR_STATUS`): existe para quem
+    chama já grava seu PRÓPRIO `contact_updated` — hoje, `atualizar_contato`
+    em `api_contato.py`, que junta tudo (status, campos, tags, note) num
+    evento só. Sem isso, um PATCH com `status` duplicaria o `contact_updated`
+    (e, por tabela, a linha de `journey_events` que o gatilho copia).
     """
-    await conn.execute(
-        """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
-                                       title, metadata)
-           SELECT $1::uuid, l.dnia_id, 'marketinghs', 'contact_updated',
-                  'Status alterado',
-                  jsonb_build_object('de', $2::text, 'para', $3::text)
-             FROM leads l WHERE l.id = $1::uuid""",
-        lead_id, de, para)
+    if gravar_generico:
+        await conn.execute(
+            """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
+                                           title, metadata)
+               SELECT $1::uuid, l.dnia_id, 'marketinghs', 'contact_updated',
+                      'Status alterado',
+                      jsonb_build_object('de', $2::text, 'para', $3::text,
+                                         'status_anterior', $2::text, 'status_atual', $3::text)
+                 FROM leads l WHERE l.id = $1::uuid""",
+            lead_id, de, para)
 
     especifico = _EVENTO_POR_STATUS.get(para)
     if especifico:
@@ -188,7 +204,8 @@ async def status_em_lote(dados: StatusEmLoteIn, _: Usuario = Depends(usuario_atu
                                            title, metadata)
                SELECT l.id, l.dnia_id, 'marketinghs', 'contact_updated',
                       'Status alterado',
-                      jsonb_build_object('de', l.status, 'para', $2::text)
+                      jsonb_build_object('de', l.status, 'para', $2::text,
+                                         'status_anterior', l.status, 'status_atual', $2::text)
                  FROM leads l
                 WHERE l.id = ANY($1::uuid[]) AND l.status IS DISTINCT FROM $2""",
             dados.lead_ids, novo)

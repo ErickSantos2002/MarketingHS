@@ -134,6 +134,50 @@ async def test_status_pela_atualizacao_grava_os_eventos_de_status(cliente, conta
     assert "lead_qualified" in tipos
 
 
+async def test_status_pela_atualizacao_grava_um_so_contact_updated(cliente, contato_api):
+    """Fix round 1: a duplicação era o achado do reviewer — `_registrar_mudanca`
+    gravava o genérico e a rota gravava o seu, virando DOIS `contact_updated`
+    (e duas linhas em `journey_events`, via `trg_contact_event_journey`)."""
+    r = await cliente.patch("/publico/contato", params={"dnia_id": contato_api["dnia_id"]},
+                            headers=_auth(contato_api["chave"]),
+                            json={"status": "lead qualificado"})
+    assert r.status_code == 200, r.text
+    eventos = await _eventos(contato_api["lead_id"])
+    tipos = [e["event_type"] for e in eventos]
+    assert tipos.count("contact_updated") == 1
+    assert tipos.count("lead_qualified") == 1
+    atualizado = next(e for e in eventos if e["event_type"] == "contact_updated")
+    assert atualizado["metadata"]["status_atual"] == "Lead Qualificado"
+    assert atualizado["metadata"]["status_anterior"] == "Lead"
+
+
+async def test_status_pela_atualizacao_alimenta_o_indicador_de_mql(
+        cliente, contato_api, token_admin):
+    """Fim a fim: mudar o status pelo admin ATÉ o indicador de agendamentos
+    contar — o achado do controlador era o admin gravar `de`/`para` sem as
+    chaves de origem que a métrica lê."""
+    r = await cliente.patch(
+        f"/contatos/{contato_api['lead_id']}/status",
+        headers=_auth(token_admin), json={"status": "MQL - Reunião agendada"})
+    assert r.status_code == 200, r.text
+
+    r = await cliente.get("/painel/agendamentos/mql-hoje", headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    assert contato_api["lead_id"] in r.json()
+
+
+async def test_status_em_lote_tambem_alimenta_o_indicador_de_mql(
+        cliente, contato_api, token_admin):
+    r = await cliente.post(
+        "/contatos/status-em-lote", headers=_auth(token_admin),
+        json={"lead_ids": [contato_api["lead_id"]], "status": "MQL - Reunião agendada"})
+    assert r.status_code == 200, r.text
+
+    eventos = await _eventos(contato_api["lead_id"])
+    atualizado = next(e for e in eventos if e["event_type"] == "contact_updated")
+    assert atualizado["metadata"]["status_atual"] == "MQL - Reunião agendada"
+
+
 async def test_status_desconhecido_e_400_e_nada_muda(cliente, contato_api):
     r = await cliente.patch("/publico/contato", params={"dnia_id": contato_api["dnia_id"]},
                             headers=_auth(contato_api["chave"]),

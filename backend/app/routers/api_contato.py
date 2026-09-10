@@ -138,8 +138,13 @@ async def atualizar_contato(
         if novo_status is not None:
             await conn.execute("UPDATE leads SET status = $2 WHERE id = $1::uuid",
                                lead_id, novo_status)
+            # `gravar_generico=False`: esta rota grava o PRÓPRIO `contact_updated`
+            # mais abaixo, juntando status com os outros campos num evento só —
+            # sem isso, duplicaria o genérico (e a linha de `journey_events` que
+            # o gatilho copia de cada `contact_events`).
             await _registrar_mudanca(conn, lead_id, lead["status"], novo_status,
-                                     origem="api", descricao=DESCRICAO_API)
+                                     origem="api", descricao=DESCRICAO_API,
+                                     gravar_generico=False)
             atualizados.append("status")
 
         campos = {c: enviados[c] for c in _CAMPOS if c in enviados}
@@ -177,14 +182,24 @@ async def atualizar_contato(
                 lead_id, enviados["note"])
             atualizados.append("note")
 
+        # UM `contact_updated` por chamada — nunca dois. Quando a chamada mudou
+        # status, este evento também carrega `de`/`para`/`status_anterior`/
+        # `status_atual`: são as chaves que `GET /painel/agendamentos/mql-hoje`
+        # (painel.py) e o histórico de status leem, e que `_registrar_mudanca`
+        # não gravou aqui (`gravar_generico=False` acima).
+        metadata_evento = {"fields_updated": atualizados, "source": "api"}
+        if novo_status is not None:
+            metadata_evento.update({
+                "de": lead["status"], "para": novo_status,
+                "status_anterior": lead["status"], "status_atual": novo_status,
+            })
         await conn.execute(
             """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
                                            title, metadata)
                SELECT $1::uuid, l.dnia_id, 'marketinghs', 'contact_updated',
-                      'Contato atualizado via API',
-                      jsonb_build_object('fields_updated', $2::text[], 'source', 'api')
+                      'Contato atualizado via API', $2::jsonb
                  FROM leads l WHERE l.id = $1::uuid""",
-            lead_id, atualizados)
+            lead_id, metadata_evento)
 
         final = await conn.fetchrow(
             "SELECT dnia_id::text AS dnia_id, lead_score, etiqueta FROM leads "
