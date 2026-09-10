@@ -237,9 +237,10 @@ async def test_status_aceita_post_como_alias(cliente, contato_api):
 async def test_status_nao_avanca_o_estagio_da_identidade(cliente, contato_api):
     """Decisão 2 do plano. Se o Erick decidir que avança, este teste muda junto
     com a rota do admin — nunca uma sem a outra."""
-    await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
-                        json={"dnia_id": contato_api["dnia_id"],
-                              "status": "Lead Qualificado"})
+    r = await cliente.patch("/publico/contato/status", headers=_auth(contato_api["chave"]),
+                            json={"dnia_id": contato_api["dnia_id"],
+                                  "status": "Lead Qualificado"})
+    assert r.status_code == 200, r.text
     async with db.sessao(role="service_role") as conn:
         estagio = await conn.fetchval(
             "SELECT stage FROM ecosystem_identities WHERE dnia_id = $1::uuid",
@@ -258,6 +259,7 @@ async def test_status_dnia_id_inexistente_e_404(cliente, contato_api):
                             json={"dnia_id": "00000000-0000-0000-0000-000000000000",
                                   "status": "Lead"})
     assert r.status_code == 404
+    assert r.json()["detail"] == "dnia_id não encontrado."
 
 
 async def test_status_dnia_id_malformado_e_422(cliente, contato_api):
