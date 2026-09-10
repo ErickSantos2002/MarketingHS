@@ -941,7 +941,12 @@ o `id` (`b43ccc0`).
 
 - [ ] **Passo 4: tipagem**
 
-Run: `cd frontend && npx tsc --noEmit`
+Run: `cd frontend && npx tsc --noEmit -p tsconfig.app.json`
+
+⚠️ **Não use `npx tsc --noEmit` sem `-p`** — o `tsconfig.json` da raiz tem
+`"files": []` e o comando checa zero arquivos (achado do 8A). Com `-p
+tsconfig.app.json` há 8 erros anteriores ao lote 8 (useJourneys ×3,
+NexusCard ×3, lib/ab.ts ×1, LeadScoringSettings ×1).
 Expected: sem erro.
 
 - [ ] **Passo 5: commit**
