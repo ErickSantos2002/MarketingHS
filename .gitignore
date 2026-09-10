@@ -29,6 +29,9 @@ dist-landing
 .env.*
 !.env.example
 
+# permissões locais do Claude Code — pessoais, não vão para o repositório
+.claude/settings.local.json
+
 # python
 __pycache__/
 *.pyc
