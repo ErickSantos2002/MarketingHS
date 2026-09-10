@@ -133,3 +133,98 @@ async def envio():
         await conn.execute("UPDATE campaigns SET status='failed' WHERE id=$1", campanha)
         await conn.execute("DELETE FROM campaigns WHERE id = $1", campanha)
         await conn.execute("DELETE FROM leads WHERE id = $1", lead)
+
+
+@pytest_asyncio.fixture
+async def token_admin():
+    """Um JWT de administrador de verdade, para as rotas com `admin_atual`.
+
+    ⚠️ Cria usuário em `auth.users` do banco real. Limpa antes (pytest morto no
+    meio deixa a linha e o e-mail único derruba a rodada seguinte) e depois.
+    """
+    from app.auth.security import emitir_token, gerar_hash
+
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+    email = "admin-teste-8a@exemplo.invalid"
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "DELETE FROM public.user_roles WHERE user_id IN "
+            "(SELECT id FROM auth.users WHERE email = $1)", email)
+        await conn.execute("DELETE FROM auth.users WHERE email = $1", email)
+        uid = await conn.fetchval(
+            "INSERT INTO auth.users (email, password_hash) VALUES ($1, $2) "
+            "RETURNING id::text", email, gerar_hash("senha-de-teste-8a"))
+        await conn.execute(
+            "INSERT INTO public.user_roles (user_id, role) VALUES ($1::uuid, 'admin')",
+            uid)
+    token, _ = emitir_token(uid, "admin", email)
+    yield token
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM public.user_roles WHERE user_id = $1::uuid", uid)
+        await conn.execute("DELETE FROM auth.users WHERE id = $1::uuid", uid)
+
+
+SEGREDOS_DO_RESEND = ("RESEND_API_KEY", "EMAIL_FROM", "UNSUBSCRIBE_SECRET",
+                      "RESEND_WEBHOOK_SECRET")
+
+
+@pytest_asyncio.fixture
+async def segredos_resend(monkeypatch):
+    """Começa o teste SEM nenhum segredo do Resend, e devolve os que havia.
+
+    ⚠️ O banco é o de produção. Se houver segredo de verdade gravado, ele sai
+    durante o teste e VOLTA no teardown — por isso nunca mate o pytest no meio.
+    O ambiente também é esvaziado: `ler_segredo` cai para `os.environ`.
+    """
+    from app import integracoes
+
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+    async with db.sessao(role="service_role") as conn:
+        antes = {r["name"]: r["value"] for r in await conn.fetch(
+            "SELECT name, value FROM integration_secrets WHERE name = ANY($1::text[])",
+            list(SEGREDOS_DO_RESEND))}
+        await conn.execute(
+            "DELETE FROM integration_secrets WHERE name = ANY($1::text[])",
+            list(SEGREDOS_DO_RESEND))
+    for nome in SEGREDOS_DO_RESEND:
+        monkeypatch.delenv(nome, raising=False)
+        integracoes.esquecer(nome)
+    yield
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "DELETE FROM integration_secrets WHERE name = ANY($1::text[])",
+            list(SEGREDOS_DO_RESEND))
+        for nome, valor in antes.items():
+            await conn.execute(
+                "INSERT INTO integration_secrets (name, value, updated_at) "
+                "VALUES ($1, $2, now())", nome, valor)
+    for nome in SEGREDOS_DO_RESEND:
+        integracoes.esquecer(nome)
+
+
+@pytest_asyncio.fixture
+async def chave_de():
+    """Fábrica de chave de API: `crua = await chave_de("read")`."""
+    from app.chave_api import gerar_chave
+
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+    hashes = []
+
+    async def _criar(permissao: str) -> str:
+        crua, hash_, prefixo = gerar_chave()
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute(
+                "INSERT INTO api_keys (name, key_hash, key_prefix, permissions) "
+                "VALUES ('teste 8A', $1, $2, $3)", hash_, prefixo, permissao)
+        hashes.append(hash_)
+        return crua
+
+    yield _criar
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM api_keys WHERE key_hash = ANY($1::text[])", hashes)

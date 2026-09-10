@@ -113,3 +113,62 @@ def chave_api(permissao: str):
         return ChaveApi(id=linha["id"], nome=linha["name"], permissoes=permissoes)
 
     return dependencia
+
+
+def admin_ou_maquina(permissao: str):
+    """Fábrica de dependência para a configuração de integração.
+
+    A origem (`resend-config`, `resend-config-check`) aceitava o navegador do
+    admin E o chamador máquina — mas não do mesmo jeito:
+
+      - leitura: JWT de admin, `WEBHOOK_SECRET` ou chave de API de leitura
+      - escrita: JWT de admin ou `WEBHOOK_SECRET` — NUNCA chave da tabela
+        `api_keys`, mesmo com permissão de escrita
+
+    ⚠️ A assimetria é o ponto. Uma chave de `api_keys` que vazasse poderia
+    trocar a RESEND_API_KEY por uma de outra conta: toda campanha passaria a
+    sair — e ser lida — pela conta de terceiro. Não "simplifique" para
+    `chave_api("write")`.
+
+    Devolve quem autorizou: "admin", "webhook" ou "chave".
+    """
+    if permissao not in ("read", "write"):
+        raise ValueError(f"permissão inválida: {permissao!r}")
+
+    async def dependencia(
+        cred: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    ) -> str:
+        if cred is None:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "Credencial necessária.",
+                headers={"WWW-Authenticate": "Bearer"})
+        token = cred.credentials
+
+        if settings.WEBHOOK_SECRET and hmac.compare_digest(token, settings.WEBHOOK_SECRET):
+            return "webhook"
+
+        # Parece JWT? Então é o navegador — e tem de ser admin.
+        from app.auth.security import ler_token
+        from app.dependencies import usuario_atual
+        import jwt
+
+        try:
+            ler_token(token)
+            eh_jwt = True
+        except jwt.PyJWTError:
+            eh_jwt = False
+        if eh_jwt:
+            usuario = await usuario_atual(cred)
+            if usuario.papel != "admin":
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    "Esta ação exige perfil de administrador.")
+            return "admin"
+
+        if permissao == "write":
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                "Esta operação aceita só o login de administrador ou o WEBHOOK_SECRET.")
+        await chave_api("read")(cred)
+        return "chave"
+
+    return dependencia

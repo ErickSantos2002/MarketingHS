@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.chave_api import admin_ou_maquina
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual, usuario_atual
 
@@ -311,7 +312,7 @@ SEGREDOS_RESEND = {
 
 
 @router.get("/config/resend")
-async def ler_config_resend(_: Usuario = Depends(admin_atual)):
+async def ler_config_resend(_: str = Depends(admin_ou_maquina("read"))):
     """O que está configurado — NUNCA o valor.
 
     ⚠️ Devolver o valor colocaria a RESEND_API_KEY no HTML de qualquer admin
@@ -337,7 +338,7 @@ async def ler_config_resend(_: Usuario = Depends(admin_atual)):
 
 
 @router.put("/config/resend")
-async def gravar_config_resend(dados: ResendIn, _: Usuario = Depends(admin_atual)):
+async def gravar_config_resend(dados: ResendIn, _: str = Depends(admin_ou_maquina("write"))):
     """Grava só o que veio preenchido.
 
     ⚠️ `exclude_unset` não basta aqui: a tela manda campo vazio quando o admin
