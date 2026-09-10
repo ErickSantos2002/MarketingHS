@@ -170,6 +170,8 @@ async def test_gravar_exige_o_dominio_na_conta(cliente, token_admin, segredos_re
         **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32})
     assert r.status_code == 400
     assert "não encontrado" in r.json()["detail"]
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+    assert await integracoes.ler_segredo("EMAIL_FROM") is None
 
 
 async def test_gravar_exige_dominio_verificado(cliente, token_admin, segredos_resend,
@@ -180,6 +182,8 @@ async def test_gravar_exige_dominio_verificado(cliente, token_admin, segredos_re
         **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "u" * 32})
     assert r.status_code == 400
     assert "não está verificado" in r.json()["detail"]
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+    assert await integracoes.ler_segredo("EMAIL_FROM") is None
 
 
 async def test_parcialmente_verificado_com_envio_ligado_passa(
@@ -225,6 +229,9 @@ async def test_segredo_de_descadastro_e_obrigatorio_na_primeira_vez(
                           json={**REMETENTE, "api_key": "re_ok"})
     assert r.status_code == 400
     assert "descadastro" in r.json()["detail"]
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+    assert await integracoes.ler_segredo("EMAIL_FROM") is None
+    assert await integracoes.ler_segredo("UNSUBSCRIBE_SECRET") is None
 
 
 async def test_segredo_de_descadastro_curto_e_recusado(cliente, token_admin,
@@ -234,6 +241,9 @@ async def test_segredo_de_descadastro_curto_e_recusado(cliente, token_admin,
         **REMETENTE, "api_key": "re_ok", "unsubscribe_secret": "curto"})
     assert r.status_code == 400
     assert "32" in r.json()["detail"]
+    assert await integracoes.ler_segredo("RESEND_API_KEY") is None
+    assert await integracoes.ler_segredo("EMAIL_FROM") is None
+    assert await integracoes.ler_segredo("UNSUBSCRIBE_SECRET") is None
 
 
 async def test_com_segredo_ja_gravado_so_o_remetente_basta(
@@ -246,6 +256,7 @@ async def test_com_segredo_ja_gravado_so_o_remetente_basta(
     assert r.status_code == 200, r.text
     assert r.json()["gravados"] == ["email_from"]
     assert await integracoes.ler_segredo("UNSUBSCRIBE_SECRET") == "u" * 40
+    assert await integracoes.ler_segredo("RESEND_API_KEY") == "re_ja_gravada"
 
 
 async def test_webhook_sem_whsec_e_recusado(cliente, token_admin, segredos_resend,
