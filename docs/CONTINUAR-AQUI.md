@@ -1,53 +1,58 @@
 # Continuar aqui
 
-> ## ⏸ EM ANDAMENTO — subprojeto A da captação pública (08/09/2026)
+> ## ✅ Subprojeto A da captação pública fechado (10/09/2026)
 >
-> **Você está na branch `captacao-a`, e ela NÃO está mergeada.** O trabalho parou
-> por decisão do Erick no fim do dia, com sete das nove tarefas fechadas.
+> **Branch `captacao-a`, NÃO mergeada.** O merge em `main` é decisão do Erick.
+> Suíte em **160 testes**, `tsc` limpo, os dois builds limpos, bundle público
+> em 144 KB.
 >
-> **Pronto e revisado:** validação de e-mail (*fail-open*), lista branca de
-> campos, `POST /publico/captura`, `POST /publico/validar-email`, a casca
-> `GET /p/{slug}`, o segundo bundle do Vite, o renderizador da landing, e a
-> documentação. **158 testes**, `tsc` limpo, bundle público em 144 KB.
+> **Placar: 36 functions portadas, 7 descartadas, restam 11.** O toco do
+> Supabase continua vivo: os 9 pontos do alias `const db = supabase as any`
+> nas telas de Experiments não mudaram, e este subprojeto não os toca.
 >
-> **Falta:**
+> **O portão foi conferido no navegador pelo próprio Claude.** O Playwright
+> alcança `127.0.0.1` nesta máquina (a nota antiga de que não alcançava estava
+> errada), e o admin foi aberto com uma conta temporária — item 25.
+> Conferido contra o banco real: landing com título, CTA e `og:*` no HTML cru;
+> envio redirecionando; `@mailinator.com` recusado com mensagem legível; o
+> mesmo e-mail com maiúsculas trocadas não duplicando o contato; o contato na
+> tela de Contatos com score 35, etiqueta, `dnia_id` e tag; contato e página
+> apagados pela própria tela. Banco limpo no fim.
 >
-> 1. **O passo 3 do portão — abrir a landing e enviar o formulário.** É a única
->    coisa que impede fechar. ⚠️ O Chrome que o Claude controla **não roda nesta
->    máquina** (conferido: `pgrep` não acha processo de navegador algum), então
->    ele não alcança `127.0.0.1`. O combinado é o Erick abrir e relatar. O
->    roteiro e o script que cria a página de teste estão no ledger da sessão,
->    em `.superpowers/sdd/2026-09-08-marketinghs-captacao-a-landing/`.
-> 2. **Dois achados da verificação do portão, que chegaram depois do
->    encerramento e ainda NÃO foram tratados:**
->    - ⚠️ **corte silencioso:** o evento `contact_reactivated` deixou de gravar
->      `dnia_id` em `contact_events` (`backend/app/routers/captura.py:215-223`)
->      — a coluna existe, é indexada e o valor está à mão. Corrigir antes de
->      fechar;
->    - ⚠️ **sobrou código morto do remix:** `frontend/src/lib/leadCapture.ts:39`
->      e `frontend/src/lib/emailValidation.ts:41` ainda chamam
->      `supabase.functions.invoke`. Nada os importa, mas são os clientes de
->      navegador das duas functions que este subprojeto substitui — os análogos
->      exatos do `leadConversion.ts` do lote 7. Devem sair no portão.
+> **O que o portão pegou depois do encerramento de 08/09, todos corrigidos:**
 >
->    (Mais dois menores, no ledger: e-mail >320 caracteres agora dá 422 em vez
->    de 400, e `session_id` >100 caracteres rejeita a requisição inteira em vez
->    de descartar o campo.)
-> 3. **Passo 5 do portão:** `git rm -r` em `backend/supabase/functions/lead-capture`
->    e `.../validate-email-domain` — só DEPOIS do clique.
-> 4. **Tarefa 9:** atualizar este documento de verdade (placar 36/7/11, os itens
->    22 a 24 da lista do Erick) e apagar esta caixa.
+> - `contact_reactivated` voltou a gravar `dnia_id` (`750f1dc`) — **provado
+>   ao vivo**: contato apagado pela tela, reconvertido pela landing, e o evento
+>   nasceu com o `dnia_id` do contato;
+> - e-mail >320 caracteres dá 400, e `session_id` >100 é descartado sem
+>   derrubar a captura — os dois contratos da origem (`750f1dc`);
+> - saíram `leadCapture.ts`, `resolveIdentity.ts` e `emailValidation.ts`;
+> - ⚠️ **cinco pontos do admin montavam o endereço da landing na raiz**
+>   (`/${slug}`), herança de quando as landings da dn.ia moravam no SPA —
+>   inclusive o **"Gerar link", o link colado em anúncio**, que mandaria o
+>   tráfego para o 404 do admin. Tudo passa agora por `lib/landing.ts`, e o
+>   Vite repassa `/p/` e `/landing/` ao backend (`c512118`). **É a segunda vez
+>   que esse link sai errado** (a primeira, `dnia.ai` cravado, no lote 7) — e
+>   de novo nenhum `grep` do portão o pegaria: só o clique.
 >
-> ⚠️ **O design system da HS não foi consultado** — a ferramenta não estava
-> disponível na sessão que escreveu o `landing.css`. O CSS é sóbrio e
-> **provisório**, não uma decisão visual tomada.
+> **A landing nasce sem oferta decidida** (item 22). É motor dirigido por
+> `pages.config`, e **um template de página única não estica para diagnóstico
+> multi-etapa** — se a oferta for essa, é outra construção.
 >
-> **O banco está limpo:** 0 páginas, 0 conversões, 0 contatos de teste, 0 chaves
-> de escrita. Nenhum servidor no ar.
+> **Duas capacidades saíram de propósito:** `mode: "update_only"` e a projeção
+> do lead na resposta da captura (a rota é anônima; até `isNew` seria oráculo
+> de enumeração).
+>
+> **Faltam B e C da captação:** a imagem OG (e `pages.config` ainda não tem
+> campo para ela) e o teste A/B, que segue esperando conta Cloudflare.
+>
+> ⚠️ **O design system da HS não foi consultado** para o `landing.css`. O CSS é
+> sóbrio e **provisório**, não uma decisão visual tomada.
 
 
-**Atualizado:** 8 de setembro de 2026
-**Branch:** `main` — a `lote-7` foi mergeada e apagada. **Nada pushado.**
+**Atualizado:** 10 de setembro de 2026
+**Branch:** `captacao-a`, a partir de `main` — **não mergeada, nada pushado.**
+A `lote-7` foi mergeada em `main` e apagada em 08/09.
 
 ⚠️ **A `lote-7` não existe mais.** Fechou com merge local em `main`
 (fast-forward, sem commit de merge), suíte conferida no resultado mergeado
@@ -285,32 +290,30 @@ surpreender com o número.
 
 ---
 
-## 👉 O próximo passo — captação pública
+## 👉 O próximo passo — terminar a transformação
 
 **Abrir a sessão dentro do repo:** `cl MarketingHS` (ou Meta+C), nunca de fora.
 
-A **captação pública** é a parte da spec (linha 238) que o lote 7 deixou de
-fora por decisão do Erick: landing modelo da HS (com `/humanoseagentes` como
-molde), `lead-capture`, `validate-email-domain`, OG estático, e o teste A/B
-(`go`, `ab-events`, as três telas de Experiments e os 9 pontos do alias
-`const db = supabase as any`).
+⚠️ **A prioridade, dita pelo Erick em 10/09/2026: primeiro transformar o remix
+em sistema nosso; feature e decisão de produto vêm depois, com o sistema
+inteiro portado.** Na hora de escolher o próximo passo, vence o que diminui o
+que resta do remix.
 
-⚠️ **Precisa de brainstorm de produto antes do plano** — a spec, na linha
-439, diz explicitamente que não decide o desenho da landing. E o A/B depende
-de conta Cloudflare da HS, que é pendência do Erick — ver a lista abaixo.
+O que resta, medido em 10/09/2026:
 
-O que já se sabe antes de começar:
+- **11 functions na pasta de especificação:** `contact-status-update`,
+  `contact-tags-sync`, `contact-update` · `resend-config`,
+  `resend-config-check`, `resend-webhook` · `get-nexus-stages`,
+  `nexus-config`, `handoff-to-nexus` (as três do **5A**, bloqueado — ver
+  abaixo) · `go`, `ab-events` (o **C** da captação, que espera conta
+  Cloudflare).
+- **O toco do Supabase**, vivo pelos 9 pontos do alias nas três telas de
+  Experiments — também o C.
+- **A marca da dn.ia no admin** (item 26) — independe de terceiro e pode ir
+  já.
 
-- `pages` e `lead_conversions` seguem **vazias** — o lote 7 portou o
-  mecanismo, não populou dado real.
-- **A tela de Páginas não consegue criar a primeira página** sem uma para
-  clonar (`NewPageDialog.tsx:52`). A landing modelo, quando existir, resolve
-  isso sozinha — ver item 18 da lista abaixo.
-- `ApiDocumentation.tsx` e `dnmarketing-api.yaml` já ensinaram URL morta
-  **oito vezes**. Conferir os dois antes de apagar qualquer function.
-
-Depois dele fica o **5A** (handoff → GrowthHS), que segue bloqueado esperando
-resposta do `hsgrowth-sistema` — ver abaixo.
+⚠️ Antes de apagar qualquer function, conferir `ApiDocumentation.tsx` e
+`dnmarketing-api.yaml`: já ensinaram URL morta **oito vezes**.
 
 ---
 
@@ -325,7 +328,8 @@ resposta do `hsgrowth-sistema` — ver abaixo.
 | **5C** | Identidade unificada, Meta CAPI | ✅ concluído (03/09/2026) |
 | **5D** | Limpeza das sobras | ✅ concluído (02/09/2026) |
 | **6** | IA (chat, análises) e painel | ✅ concluído (04/09/2026) |
-| **7** | Páginas e conversões | ✅ concluído (08/09/2026) — branch `lote-7`, ainda não mergeada |
+| **7** | Páginas e conversões | ✅ concluído (08/09/2026) — mergeado em `main` |
+| **A** | Captação pública: landing e captura | ✅ concluído (10/09/2026) — branch `captacao-a`, não mergeada |
 
 ## 🎨 O trabalho de visual já pode começar
 
@@ -628,6 +632,36 @@ o defeito dos 2.080 volta, calado.
     chamada. Mesma família do defeito que o lote 7 consertou em
     `POST /publico/conversao`: neste banco, data de última conversão errada
     não dá erro, dá número de painel plausível.
+22. **A oferta da landing** — o que o lead ganha ao preencher. Decisão do
+    Nicholson; até ela existir, a landing mostra os textos padrão.
+23. **Os sete campos da dn.ia na lista branca da captura**
+    (`tipo_participante`, `presenca`, `indicacao`, `interesse_formacao`,
+    `interesse_ecossistema`, `interesse_mtia`, `data_interesse`) — funil de
+    evento e mentoria que a HS não tem. Ficam porque as colunas existem e
+    integrador externo pode estar mandando. Tirá-los é decisão de negócio.
+24. **A URL pública da landing** — hoje `/p/{slug}` no backend. A URL limpa do
+    anúncio depende do host de produção, que é o item 11. ⚠️ **E o nginx de
+    produção precisa rotear `/p/` e `/landing/` para o backend** — em
+    desenvolvimento quem faz isso é o proxy do Vite (`vite.config.ts`); sem a
+    regra no nginx, todo link de anúncio cai no 404 do admin.
+25. **Apagar a conta admin do Claude** (`claude.dev@example.com`) quando o
+    sistema estiver funcionando. Criada em 10/09/2026, com autorização do
+    Erick, para o Claude conferir telas no navegador; a credencial fica fora
+    do repositório, em `~/.config/marketinghs/claude-admin.env`. Aproveitar e
+    redefinir a senha de `erick@healthsafety.com.br`, que se perdeu.
+26. **A marca da dn.ia ainda aparece no admin** — trabalho de transformação,
+    não de visual: a aba do navegador se chama **"dn.mkt"** (`index.html`,
+    `<title>` e `og:title`); há um botão flutuante **"Abrir DNIA AI"**; a ficha
+    do contato mostra **"DN.IA ID"** e filtros de histórico **dnMarketing /
+    Nexus / mentor.ia**; e `public/ab.js` aponta para `dnmkt.dnia.ai`.
+27. **A timeline da ficha esconde reconversão feita em até 60 segundos** do
+    cadastro — trata como duplicata do "Primeiro cadastro"
+    (`LeadDetailSheet.tsx:130`). Herdado, intocado no porte; os dados estão
+    certos no banco. Só aparece em teste ou em duplo envio.
+28. **O preview do editor de Páginas é a landing de verdade** — enviar o
+    formulário dentro dele cria contato e conversão reais. A origem passava
+    `?preview=true`, que a casca não trata. Baixo risco, mas vale saber antes
+    de alguém "testar" a página pelo preview.
 
 ## Como subir o que existe
 
