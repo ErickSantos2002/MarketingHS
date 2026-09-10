@@ -155,6 +155,12 @@ def admin_ou_maquina(permissao: str):
         try:
             ler_token(token)
             eh_jwt = True
+        except jwt.ExpiredSignatureError:
+            # Sessão vencida é do navegador, não de máquina: cai em
+            # usuario_atual mesmo assim, para dar "Sessão expirada" — e não a
+            # mensagem genérica de credencial de máquina, nem uma tentativa
+            # (fadada) de tratar o JWT como chave de api_keys.
+            eh_jwt = True
         except jwt.PyJWTError:
             eh_jwt = False
         if eh_jwt:
