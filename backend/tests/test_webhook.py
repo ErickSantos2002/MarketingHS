@@ -134,6 +134,14 @@ async def test_reclamacao_suprime(cliente, segredo, envio):
             "SELECT reason FROM email_suppressions WHERE email = 'a@b.c'") == "complaint"
 
 
+async def test_timestamp_nao_numerico_devolve_401(cliente, segredo):
+    """A origem recusava timestamp não finito. `float("nan")` passa pela
+    comparação da janela — toda comparação com NaN é falsa, inclusive `> 300`
+    — e só a assinatura segurava. A janela anti-replay não pode depender disso."""
+    r = await _postar(cliente, segredo, "msg_nan", _corpo("email.opened"), ts="nan")
+    assert r.status_code == 401
+
+
 async def test_evento_de_campanha_excluida_nao_entra_em_laco(cliente, segredo, envio):
     """A escada de degradação. Evento que chega DEPOIS da exclusão tenta inserir
     um id que não existe mais — 23503, não 23505. Sem a escada o endpoint

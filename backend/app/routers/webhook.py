@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import time
 from datetime import datetime, timezone
 
@@ -81,7 +82,10 @@ def _confere_assinatura(svix_id: str, ts: str, corpo: bytes, segredo: str,
     if not (segredo and svix_id and ts and cabecalho):
         return False
     try:
-        if abs(time.time() - float(ts)) > JANELA_SEGUNDOS:
+        instante = float(ts)
+        # ⚠️ `nan` e `inf` passariam: toda comparação com NaN é falsa,
+        # inclusive `> JANELA_SEGUNDOS`. A origem recusava não finito.
+        if not math.isfinite(instante) or abs(time.time() - instante) > JANELA_SEGUNDOS:
             return False
         chave = base64.b64decode(segredo.removeprefix("whsec_"))
     except Exception:  # noqa: BLE001
