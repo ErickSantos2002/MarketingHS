@@ -12,9 +12,10 @@
 > **O defeito real, e que está consertado:** o 3C (`ecca32d`) tirou teste de
 > chave, listagem de domínios e rastreamento — e junto, sem ninguém perceber,
 > foi embora o único caminho para gravar o `UNSUBSCRIBE_SECRET` pela tela. Sem
-> esse segredo o worker monta o e-mail sem `List-Unsubscribe` e sem o link no
-> rodapé, violando a exigência de one-click do Gmail/Yahoo para quem envia em
-> volume. O Erick decidiu em 10/09/2026 restaurar a tela inteira, não só o
+> esse segredo o worker **não consome a fila** (`backend/app/worker.py:180-185`)
+> — nenhum e-mail de campanha sai, nem sem `List-Unsubscribe`. Essa frase era o
+> comportamento da ORIGEM (que enviava mesmo assim); hoje é diferente e mais
+> seguro. O Erick decidiu em 10/09/2026 restaurar a tela inteira, não só o
 > segredo.
 >
 > **Placar da pasta de especificação: 39 functions portadas, 7 descartadas,
@@ -55,6 +56,25 @@
 > nem `RESEND_API_KEY` nem `EMAIL_FROM` existem —; o caminho feliz (chave
 > válida, domínio verificado, tracking ligado) segue provado só pelos testes
 > das Tarefas 4 e 5, nunca clicado contra o Resend de verdade.
+>
+> ⚠️ **Antes de cadastrar o webhook no Resend em produção, resolver o
+> `webhook_url`.** O card monta essa URL com `request.url_for` — atrás do proxy
+> do EasyPanel ela provavelmente sai `http://` (não `https://`) e sem o
+> prefixo `/api`, a não ser que o uvicorn suba com `--proxy-headers
+> --forwarded-allow-ips` e um `root_path` correto, ou que exista um
+> `PUBLIC_API_URL` declarado em `Settings`. Cadastrar a URL errada no Resend
+> significa nenhum evento chegando, sem aviso nenhum.
+>
+> ⚠️ **Quando existir uma `RESEND_API_KEY` de verdade em produção, a suíte do
+> backend NÃO PODE rodar contra o banco de produção.** As fixtures deste
+> sub-lote (`segredos_resend` e as que gravam credenciais do Resend) escrevem
+> segredos falsos-porém-completos direto em `integration_secrets` durante o
+> teste — com uma chave real presente, um worker de produção rodando ao mesmo
+> tempo poderia tentar enviar com a chave falsa da fixture. E um `pytest` morto
+> no meio (a mesma regra de sempre: nunca interromper) apagaria de vez o
+> `RESEND_API_KEY`/`UNSUBSCRIBE_SECRET` reais — todo link de descadastro já
+> enviado passaria a falhar. Antes disso acontecer, apontar os testes para um
+> banco de teste.
 >
 > ⚠️ **A verificação de tipos do frontend estava vazia desde sempre, em todo
 > lote anterior.** `frontend/tsconfig.json` tem `"files": []` e só
