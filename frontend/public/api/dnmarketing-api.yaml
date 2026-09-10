@@ -429,7 +429,7 @@ paths:
                   description: |
                     Campos de qualificação para enriquecer o lead. Modo enriquecimento:
                     só grava se o campo estiver vazio no banco (não sobrescreve).
-                    Para sobrescrever, use PATCH /contact-update.
+                    Para sobrescrever, use PATCH /publico/contato.
                   properties:
                     cargo: { type: string }
                     empresa: { type: string }
@@ -909,13 +909,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /contact-update:
+  /publico/contato:
     patch:
       operationId: contactUpdate
       summary: Atualizar contato
       description: |
         Atualiza campos do lead, gerencia tags e adiciona notas. Registra evento
-        contact_updated na timeline. Requer permissão write.
+        contact_updated na timeline. Requer permissão write. Status desconhecido
+        responde 400.
       tags:
         - Contatos
       parameters:
@@ -1000,15 +1001,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /contact-status-update:
+  /publico/contato/status:
     patch:
       operationId: contactStatusUpdate
       summary: Atualizar status do contato
       description: |
         Atualiza o status do lead identificado por `dnia_id`. Registra evento
         `contact_updated` na timeline e, quando o status for `Lead Qualificado`,
-        dispara o handoff para o Nexus CRM (avança stage para `opportunity` e
-        registra evento `lead_qualified`). Requer permissão write.
+        registra também o evento `lead_qualified`. O estágio no ecossistema não
+        é avançado e o handoff ao CRM não é disparado. Requer permissão write.
       tags:
         - Contatos
       requestBody:
@@ -1025,14 +1026,13 @@ paths:
                   description: Identificador único do contato no ecossistema
                 status:
                   type: string
-                  enum:
-                    - Lead
-                    - Lead Qualificado
-                    - MQL - Reunião agendada
-                    - SQL - Em negociação
-                    - Venda realizada
-                    - Em contrato
-                    - Iniciado
+                  maxLength: 60
+                  description: |
+                    Um dos status cadastrados em lead_statuses, sem diferenciar
+                    maiúscula. Status desconhecido responde 400 com a lista dos
+                    que valem. Padrões: Lead, Iniciado, Lead Qualificado,
+                    MQL - Reunião agendada, SQL - Em negociação, Em contrato,
+                    Venda realizada.
       responses:
         '200':
           description: Status atualizado
@@ -1072,16 +1072,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    post:
+      operationId: contactStatusUpdatePost
+      summary: Atualizar status do contato (alias POST)
+      description: |
+        Alias `POST` para `PATCH /publico/contato/status`. Mesma semântica.
+      tags:
+        - Contatos
+      requestBody:
+        $ref: '#/paths/~1publico~1contato~1status/patch/requestBody'
+      responses:
+        '200':
+          $ref: '#/paths/~1publico~1contato~1status/patch/responses/200'
+        '400':
+          $ref: '#/paths/~1publico~1contato~1status/patch/responses/400'
+        '401':
+          $ref: '#/paths/~1publico~1contato~1status/patch/responses/401'
+        '404':
+          $ref: '#/paths/~1publico~1contato~1status/patch/responses/404'
 
-  /contact-tags-sync:
+  /publico/contato/tags:
     put:
       operationId: contactTagsSync
       summary: Sincronizar tags do contato (substituição total)
       description: |
-        Espelha o conjunto completo de tags de um contato. A origem (ex: Nexus)
-        envia **todas** as tags do contato; o endpoint adiciona as novas, mantém
-        as existentes e remove as que não vieram. Use `tags: []` para limpar
-        todas as tags. Tags inexistentes são criadas automaticamente.
+        Espelha o conjunto completo de tags de um contato. O sistema de origem
+        (ex: o CRM) envia **todas** as tags do contato; o endpoint adiciona as
+        novas, mantém as existentes e remove as que não vieram. Use `tags: []`
+        para limpar todas as tags. Tags inexistentes são criadas automaticamente.
         Aceita também `POST` com a mesma semântica (substituição total).
         Registra evento `tags_synced` na timeline. Requer permissão write.
       tags:
@@ -1172,21 +1190,21 @@ paths:
       operationId: contactTagsSyncPost
       summary: Sincronizar tags do contato (alias POST)
       description: |
-        Alias `POST` para `PUT /contact-tags-sync`. Mesma semântica de
+        Alias `POST` para `PUT /publico/contato/tags`. Mesma semântica de
         substituição total. Útil para clientes/CRMs que não suportam PUT.
       tags:
         - Contatos
       requestBody:
-        $ref: '#/paths/~1contact-tags-sync/put/requestBody'
+        $ref: '#/paths/~1publico~1contato~1tags/put/requestBody'
       responses:
         '200':
-          $ref: '#/paths/~1contact-tags-sync/put/responses/200'
+          $ref: '#/paths/~1publico~1contato~1tags/put/responses/200'
         '400':
-          $ref: '#/paths/~1contact-tags-sync/put/responses/400'
+          $ref: '#/paths/~1publico~1contato~1tags/put/responses/400'
         '401':
-          $ref: '#/paths/~1contact-tags-sync/put/responses/401'
+          $ref: '#/paths/~1publico~1contato~1tags/put/responses/401'
         '404':
-          $ref: '#/paths/~1contact-tags-sync/put/responses/404'
+          $ref: '#/paths/~1publico~1contato~1tags/put/responses/404'
 
   /publico/segmentos:
     get:

@@ -408,14 +408,14 @@ const ENDPOINTS = [
   {
     id: 'contact-update',
     method: 'PATCH',
-    path: '/contact-update',
+    path: '/publico/contato',
     title: 'Atualizar contato',
-    description: 'Atualiza campos do lead, gerencia tags e adiciona notas. Registra evento contact_updated na timeline.',
+    description: 'Atualiza campos do contato, gerencia tags e adiciona notas. Registra evento contact_updated na timeline. Status precisa ser um dos cadastrados — status desconhecido responde 400 com a lista dos que valem.',
     params: [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone do contato' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email do contato' },
       { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID' },
-      { name: 'status', type: 'string (body)', required: 'Não', description: 'Novo status' },
+      { name: 'status', type: 'string (body)', required: 'Não', description: 'Um dos status cadastrados (ex: Lead Qualificado). Desconhecido: 400.' },
       { name: 'nome', type: 'string (body)', required: 'Não', description: 'Nome' },
       { name: 'cargo', type: 'string (body)', required: 'Não', description: 'Cargo' },
       { name: 'whatsapp', type: 'string (body)', required: 'Não', description: 'WhatsApp/telefone' },
@@ -428,11 +428,11 @@ const ENDPOINTS = [
       { name: 'note', type: 'string (body)', required: 'Não', description: 'Nota a adicionar' },
     ],
     curl: `curl -X PATCH \\
-  '${BASE_URL}/contact-update?email=joao@empresa.com' \\
+  '${BASE_URL}/publico/contato?email=joao@empresa.com' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
-    "status": "Qualificado",
+    "status": "Lead Qualificado",
     "tags_add": ["VIP", "Evento Abril"],
     "note": "Demonstrou interesse no programa"
   }'`,
@@ -584,16 +584,16 @@ curl -X POST \\
   },
   {
     id: 'contact-status-update',
-    method: 'PATCH',
-    path: '/contact-status-update',
+    method: 'PATCH / POST',
+    path: '/publico/contato/status',
     title: 'Atualizar status do contato',
-    description: 'Atualiza o status do lead via dnia_id. Registra evento contact_updated e, quando status = "Lead Qualificado", dispara handoff para o Nexus CRM.',
+    description: 'Atualiza o status do contato via dnia_id. Registra contact_updated e, para Lead Qualificado, MQL e Venda realizada, o evento específico que a listagem conta. PATCH é a rota; POST é alias com a mesma semântica.',
     params: [
       { name: 'dnia_id', type: 'uuid (body)', required: 'Sim', description: 'Identificador único do contato' },
-      { name: 'status', type: 'string (body)', required: 'Sim', description: 'Qualquer status válido (máx. 60 caracteres). Status não cadastrados são criados automaticamente sem duplicar (match case-insensitive). Padrões pré-cadastrados: Lead | Iniciado | Lead Qualificado | MQL - Reunião agendada | SQL - Em negociação | Em contrato | Venda realizada' },
+      { name: 'status', type: 'string (body)', required: 'Sim', description: 'Um dos status cadastrados (máx. 60 caracteres, sem diferenciar maiúscula). Status desconhecido responde 400 com a lista dos que valem — não é criado. Padrões: Lead | Iniciado | Lead Qualificado | MQL - Reunião agendada | SQL - Em negociação | Em contrato | Venda realizada' },
     ],
     curl: `curl -X PATCH \\
-  '${BASE_URL}/contact-status-update' \\
+  '${BASE_URL}/publico/contato/status' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -608,14 +608,14 @@ curl -X POST \\
       status_atual: "Lead Qualificado",
       status_created: false
     }, null, 2),
-    notes: 'Status novos são auto-cadastrados (cor padrão #888780, sem duplicar — comparação case-insensitive). Quando o valor canônico for "Lead Qualificado", o contato é automaticamente avançado para stage "opportunity" no ecossistema e enviado ao Nexus. O campo status_created indica se um status novo foi criado nesta chamada.',
+    notes: 'Status não é mais criado automaticamente: o funil da HS é cadastrado em Configurações. status_created vem sempre false e fica na resposta por compatibilidade. O estágio do contato no ecossistema NÃO é avançado e o handoff ao CRM não é disparado por esta rota.',
   },
   {
     id: 'contact-tags-sync',
     method: 'PUT / POST',
-    path: '/contact-tags-sync',
+    path: '/publico/contato/tags',
     title: 'Sincronizar tags do contato (substituição total)',
-    description: 'Espelha o conjunto completo de tags de um contato. Envie sempre TODAS as tags — o endpoint adiciona as novas, mantém as existentes e remove as que não vieram. Use tags: [] para limpar tudo. Tags inexistentes são criadas automaticamente. Aceita PUT (semântica padrão) ou POST (alias para clientes que não suportam PUT). Ideal para sincronização contínua a partir do Nexus.',
+    description: 'Espelha o conjunto completo de tags de um contato. Envie sempre TODAS as tags — o endpoint adiciona as novas, mantém as existentes e remove as que não vieram. Use tags: [] para limpar tudo. Tags inexistentes são criadas automaticamente. Aceita PUT (semântica padrão) ou POST (alias para clientes que não suportam PUT). Ideal para sincronização contínua a partir do CRM.',
     params: [
       { name: 'dnia_id', type: 'uuid (body)', required: 'Um dos 3', description: 'Identificador único do contato (preferencial)' },
       { name: 'nexus_contact_id', type: 'uuid (body)', required: 'Um dos 3', description: 'ID do contato no Nexus CRM' },
@@ -624,7 +624,7 @@ curl -X POST \\
     ],
     curl: `# PUT (recomendado)
 curl -X PUT \\
-  '${BASE_URL}/contact-tags-sync' \\
+  '${BASE_URL}/publico/contato/tags' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -634,7 +634,7 @@ curl -X PUT \\
 
 # POST (alias — mesma semântica)
 curl -X POST \\
-  '${BASE_URL}/contact-tags-sync' \\
+  '${BASE_URL}/publico/contato/tags' \\
   -H 'Authorization: Bearer [WEBHOOK_SECRET]' \\
   -H 'Content-Type: application/json' \\
   -d '{ "dnia_id": "uuid-do-contato", "tags": [] }'`,
@@ -648,7 +648,7 @@ curl -X POST \\
       kept: ["cliente-vip", "interessado-formacao"],
       created_tags: ["evento-maio"]
     }, null, 2),
-    notes: 'Substituição total (PUT semântico, POST aceito como alias). Registra evento "tags_synced" na timeline com source_app=nexus. Para mutações parciais (adicionar OU remover tags individualmente), use /contact-update com tags_add / tags_remove.',
+    notes: 'Substituição total (PUT semântico, POST aceito como alias). Tags são comparadas sem diferenciar maiúscula. Registra evento "tags_synced" na timeline. Para mutações parciais (adicionar OU remover tags individualmente), use PATCH /publico/contato com tags_add / tags_remove.',
   },
   {
     id: 'segmentos',
