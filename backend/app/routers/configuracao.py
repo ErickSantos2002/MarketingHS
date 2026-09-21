@@ -5,7 +5,7 @@ import re
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.chave_api import admin_ou_maquina
 from app.database import sessao
@@ -785,3 +785,108 @@ async def gravar_config_ia(dados: IAIn, _: Usuario = Depends(admin_atual)):
             "colou a chave de outro serviço.")
     await gravar_segredo(ia_cliente.SEGREDO_CHAVE, valor)
     return {"gravado": True, "limpado": False}
+
+
+# ============================================================================
+# GrowthHS — para onde vai o lead qualificado (lote 8D)
+# ============================================================================
+
+class GrowthHSIn(BaseModel):
+    base_url: str | None = None
+    board_id: int | None = Field(default=None, gt=0, le=2147483647)
+    app_url: str | None = None
+    api_key: str | None = None
+    limpar: list[str] = Field(default_factory=list)
+
+    @field_validator("base_url", "app_url")
+    @classmethod
+    def _endereco(cls, valor):
+        if valor is None or not valor.strip():
+            return None
+        valor = valor.strip().rstrip("/")
+        if not re.match(r"^https?://[^/\s]+", valor, re.I):
+            raise ValueError("use o endereço completo, com https://")
+        return valor
+
+
+async def _estado_growthhs() -> dict:
+    from app.crm import growthhs
+
+    cfg = await growthhs.ler_config()
+    chave = cfg.api_key or ""
+    async with sessao(role="service_role") as conn:
+        pendentes = await conn.fetchval(
+            "SELECT count(*) FROM crm_handoffs WHERE status = 'pendente'")
+        falhas = await conn.fetchval(
+            "SELECT count(*) FROM crm_handoffs WHERE status = 'falhou'")
+        ultimas = await conn.fetch(
+            """SELECT lead_id::text, erro, atualizado_em::text FROM crm_handoffs
+                WHERE status = 'falhou' ORDER BY atualizado_em DESC LIMIT 5""")
+    return {
+        "base_url": cfg.base_url, "board_id": cfg.board_id, "app_url": cfg.app_url,
+        "api_key": {"configurado": bool(chave),
+                    "ultimos4": chave[-4:] if len(chave) >= 4 else None},
+        "configurado": cfg.configurado,
+        "fila": {"pendentes": pendentes, "falhas": falhas,
+                 "ultimas_falhas": [dict(l) for l in ultimas]},
+    }
+
+
+@router.get("/config/growthhs")
+async def ler_config_growthhs(_: Usuario = Depends(admin_atual)):
+    """O que está configurado, e como anda a fila de entrega.
+
+    ⚠️ A chave NUNCA volta inteira — ela cria card no funil de vendas. As
+    falhas aparecem aqui porque falha de entrega é o tipo de coisa que ninguém
+    vê: o lead "foi para o comercial" e não foi."""
+    return await _estado_growthhs()
+
+
+@router.put("/config/growthhs")
+async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(admin_atual)):
+    """Grava só o que veio; `limpar: ["api_key"]` apaga a chave."""
+    from app.crm import growthhs
+    from app.integracoes import apagar_segredo, gravar_segredo
+
+    desconhecidos = [c for c in dados.limpar if c != "api_key"]
+    if desconhecidos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Campos desconhecidos: {', '.join(desconhecidos)}")
+    if "api_key" in dados.limpar:
+        await apagar_segredo(growthhs.SEGREDO_CHAVE)
+    elif dados.api_key and dados.api_key.strip():
+        await gravar_segredo(growthhs.SEGREDO_CHAVE, dados.api_key.strip())
+
+    campos = {c: v for c, v in dados.model_dump(exclude_unset=True).items()
+              if c in ("base_url", "board_id", "app_url")}
+    if campos:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                """INSERT INTO growthhs_config (base_url, board_id, app_url, updated_by)
+                   VALUES ($1, $2, $3, $7::uuid)
+                   ON CONFLICT ((true)) DO UPDATE SET
+                     base_url   = CASE WHEN $4 THEN EXCLUDED.base_url ELSE growthhs_config.base_url END,
+                     board_id   = CASE WHEN $5 THEN EXCLUDED.board_id ELSE growthhs_config.board_id END,
+                     app_url    = CASE WHEN $6 THEN EXCLUDED.app_url ELSE growthhs_config.app_url END,
+                     updated_by = EXCLUDED.updated_by,
+                     updated_at = now()""",
+                campos.get("base_url"), campos.get("board_id"), campos.get("app_url"),
+                "base_url" in campos, "board_id" in campos, "app_url" in campos, admin.id)
+    return await _estado_growthhs()
+
+
+@router.post("/config/growthhs/testar")
+async def testar_config_growthhs(_: Usuario = Depends(admin_atual)):
+    """Confere que a API do GrowthHS responde. ⚠️ NÃO confere a chave
+    (decisão 10 do plano do 8D) — a tela diz isso."""
+    from app.crm import growthhs
+
+    cfg = await growthhs.ler_config()
+    if not cfg.base_url:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Preencha o endereço da API do GrowthHS antes de testar.")
+    try:
+        codigo = await growthhs.testar(cfg)
+    except growthhs.ErroTransitorio as erro:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(erro))
+    return {"alcancavel": codigo < 500, "status": codigo}

@@ -7,7 +7,7 @@ import { Plug, Bell, UserCircle, Copy, Check, Eye, EyeOff, Send, Loader2, BookOp
 import { toast } from 'sonner';
 import ApiDocumentation from '@/components/admin/settings/ApiDocumentation';
 import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings';
-import NexusCard from '@/components/admin/settings/NexusCard';
+import GrowthHSCard from '@/components/admin/settings/GrowthHSCard';
 import ResendConfigCard from '@/components/admin/settings/ResendConfigCard';
 import MetaCard from '@/components/admin/settings/MetaCard';
 import IACard from '@/components/admin/settings/IACard';
@@ -143,8 +143,8 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            {/* Nexus Card */}
-            <NexusCard />
+            {/* GrowthHS Card */}
+            <GrowthHSCard />
 
             {/* Resend Card */}
             <ResendConfigCard />
