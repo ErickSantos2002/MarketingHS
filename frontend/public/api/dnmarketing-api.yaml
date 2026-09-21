@@ -166,9 +166,32 @@ components:
 
     Error:
       type: object
+      description: >-
+        O erro vem em `detail`. Nos 4xx comuns (400, 401, 403, 404, 429) é um
+        texto; no 422 (corpo ou parâmetro inválido) é uma lista, um item por
+        campo recusado.
+      required: [detail]
       properties:
-        error:
-          type: string
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                properties:
+                  loc:
+                    type: array
+                    description: Caminho do campo recusado, ex. ["body", "faturamento"].
+                    items:
+                      oneOf:
+                        - type: string
+                        - type: integer
+                  msg:
+                    type: string
+                  type:
+                    type: string
+      example:
+        detail: Contato não encontrado.
 
     Campanha:
       type: object

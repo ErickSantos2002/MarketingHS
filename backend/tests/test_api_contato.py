@@ -131,6 +131,32 @@ async def test_atualizacao_aceita_numero_em_campo_de_texto(cliente, contato_api)
     assert linha["faturamento"] == "100000.5"
 
 
+@pytest.mark.parametrize("enviado, gravado", [
+    (50.0, "50"),                        # JSON `50.0` — JS grava "50"
+    (1500000.00, "1500000"),
+    (1e16, "10000000000000000"),         # str() daria "1e+16"
+    (100000.5, "100000.5"),
+    (-3.0, "-3"),
+])
+def test_numero_vira_o_mesmo_texto_que_na_origem(enviado, gravado):
+    """`str()` do Python formata float diferente do `String()` do JS: o
+    integrador que manda `50.0` passaria a gravar "50.0" onde a origem
+    gravava "50"."""
+    from app.routers.api_contato import AtualizacaoIn
+    assert AtualizacaoIn(funcionarios=enviado).funcionarios == gravado
+
+
+@pytest.mark.parametrize("enviado", [float("nan"), float("inf"), float("-inf")])
+def test_numero_nao_finito_e_recusado(enviado):
+    """O parser JSON do Python aceita `NaN` e `Infinity`; gravar "nan" numa
+    coluna de faturamento é lixo silencioso — melhor 422."""
+    from pydantic import ValidationError
+
+    from app.routers.api_contato import AtualizacaoIn
+    with pytest.raises(ValidationError):
+        AtualizacaoIn(faturamento=enviado)
+
+
 async def test_remove_tag_sem_diferenciar_maiuscula(cliente, contato_api):
     await cliente.patch("/publico/contato", params={"dnia_id": contato_api["dnia_id"]},
                         headers=_auth(contato_api["chave"]),

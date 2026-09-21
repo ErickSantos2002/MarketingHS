@@ -12,6 +12,7 @@ nós.
 em `escrita_contatos.py`. A origem criava; o lote 1D decidiu que não.
 """
 
+import math
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -108,9 +109,18 @@ class AtualizacaoIn(BaseModel):
         """A origem aceitava `{"funcionarios": 50}` e `{"faturamento":
         100000.5}` — as colunas são `text`, e o integrador manda número. `bool`
         fica de fora de propósito: é subclasse de `int` em Python, mas
-        `True`/`False` não é o formato que estas colunas guardam."""
+        `True`/`False` não é o formato que estas colunas guardam.
+
+        Float inteiro passa por `int()` para gravar o que o `String()` do JS
+        gravava — `50.0` vira "50", não "50.0", e `1e16` não vira "1e+16".
+        `NaN`/infinito, que o parser JSON do Python aceita, é recusado."""
         if isinstance(valor, bool):
             return valor
+        if isinstance(valor, float):
+            if not math.isfinite(valor):
+                raise ValueError("número precisa ser finito")
+            if valor.is_integer() and abs(valor) < 1e21:
+                return str(int(valor))
         if isinstance(valor, (int, float)):
             return str(valor)
         return valor
