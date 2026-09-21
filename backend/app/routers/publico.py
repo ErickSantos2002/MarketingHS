@@ -15,6 +15,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.ab.costura import Ab, costurar_visitante, extrair_ab, registrar_conversao_ab
 from app.chave_api import ChaveApi, chave_api
 from app.database import sessao
 from app.routers.automacoes import (
@@ -31,6 +32,10 @@ router = APIRouter(prefix="/publico", tags=["publico"])
 # recusar cedo, com mensagem melhor que uma exceção de trigger.
 SOURCE_APPS = ("marketinghs", "dnmarketing", "nexus", "mentoria", "website")
 
+# Os eventos que contam como a conversão `agendamento` do teste A/B — a lista
+# de `receive-contact-event`.
+EVENTOS_DE_AGENDAMENTO = ("meeting_scheduled", "scheduling_widget_booked")
+
 
 class IdentidadeIn(BaseModel):
     phone: str | None = None
@@ -41,6 +46,12 @@ class IdentidadeIn(BaseModel):
     stage: str | None = None
     utm_source: str | None = None
     contact_fields: dict | None = None
+    # Teste A/B, no topo ou em `metadata` — como a origem
+    # (`_shared/ab.ts:extractAbParams`). Ver `app/ab/costura.py`.
+    ab_vid: str | None = None
+    ab_test: str | None = None
+    ab_var: str | None = None
+    metadata: dict | None = None
 
 
 class EventoIn(BaseModel):
@@ -54,6 +65,9 @@ class EventoIn(BaseModel):
     nome: str | None = None
     metadata: dict | None = None
     occurred_at: str | None = None
+    ab_vid: str | None = None
+    ab_test: str | None = None
+    ab_var: str | None = None
 
 
 async def _achar_identidade(conn, phone, email, dnia_id):
@@ -156,6 +170,18 @@ async def gravar_identidade(dados: IdentidadeIn, _: ChaveApi = Depends(chave_api
             await conn.execute(
                 f"UPDATE leads SET {atribuicoes} WHERE id = $1", lead_id, *a_gravar.values())
 
+        # Costura A/B o mais cedo possível: atribui até quem abandona nas
+        # etapas seguintes do agendamento. Só com sinal de A/B no corpo, como
+        # na origem.
+        ab = extrair_ab(dados.model_dump(), dados.metadata)
+        if ab.ab_vid or ab.ab_test:
+            await costurar_visitante(
+                conn, ab, email=dados.email, phone=dados.phone,
+                phone_normalized=resultado.get("phone_normalized"),
+                lead_id=str(lead_id), dnia_id=str(dnia_id),
+                source_app=dados.source_app or "marketinghs",
+                metadata={"origin": "identity-upsert"})
+
     return {"dnia_id": str(dnia_id), "lead_id": str(lead_id), "criou_contato": criou}
 
 
@@ -189,8 +215,10 @@ async def receber_evento(dados: EventoIn, _: ChaveApi = Depends(chave_api("write
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                 "Não foi possível identificar o contato.")
 
-        lead_id = await conn.fetchval(
-            "SELECT dndash_lead_id FROM ecosystem_identities WHERE dnia_id = $1::uuid", dnia_id)
+        identidade = await conn.fetchrow(
+            "SELECT dndash_lead_id, email, phone FROM ecosystem_identities "
+            "WHERE dnia_id = $1::uuid", dnia_id)
+        lead_id = identidade["dndash_lead_id"] if identidade else None
 
         evento_id = await conn.fetchval(
             """INSERT INTO contact_events (dnia_id, lead_id, source_app, event_type,
@@ -200,6 +228,22 @@ async def receber_evento(dados: EventoIn, _: ChaveApi = Depends(chave_api("write
                RETURNING id""",
             dnia_id, lead_id, dados.source_app, dados.event_type, dados.title,
             dados.description, dados.metadata or {}, dados.occurred_at)
+
+        # Costura A/B + conversão de agendamento. Sem `ab_vid`, a costura
+        # procura pelo e-mail/telefone — da chamada ou, na falta, da
+        # identidade (como a origem).
+        ab = await costurar_visitante(
+            conn, extrair_ab(dados.model_dump(), dados.metadata),
+            email=dados.email or (identidade["email"] if identidade else None),
+            phone=dados.phone or (identidade["phone"] if identidade else None),
+            phone_normalized=identidade["phone"] if identidade else None,
+            lead_id=str(lead_id) if lead_id else None, dnia_id=str(dnia_id),
+            source_app=dados.source_app,
+            metadata={"origin": "receive-contact-event", "event_type": dados.event_type})
+        if dados.event_type in EVENTOS_DE_AGENDAMENTO:
+            await registrar_conversao_ab(
+                conn, ab, "agendamento", lead_id=str(lead_id) if lead_id else None,
+                dnia_id=str(dnia_id), metadata={"event_type": dados.event_type})
 
     return {"evento_id": str(evento_id), "dnia_id": str(dnia_id),
             "lead_id": str(lead_id) if lead_id else None}
@@ -1156,6 +1200,12 @@ async def registrar_conversao(dados: ConversaoIn,
             dados.utm_source or None, dados.utm_medium or None,
             dados.utm_campaign or None, dados.utm_term or None,
             dados.utm_content or None)
+
+        # `lead_criado` no teste A/B — era o `leadConversion.ts` do cliente,
+        # apagado no lote 7 sem que esta rota assumisse.
+        await registrar_conversao_ab(
+            conn, Ab(dados.ab_vid, dados.ab_test, dados.ab_var), "lead_criado",
+            lead_id=lead_id, page_slug=dados.page_slug)
 
         tag = None
         if dados.apply_tag:

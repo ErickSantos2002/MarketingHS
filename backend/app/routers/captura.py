@@ -24,6 +24,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
+from app.ab.costura import Ab, registrar_conversao_ab
 from app.captura.campos import higienizar
 from app.captura.email import validar_dominio
 from app.database import sessao
@@ -155,6 +156,11 @@ async def capturar(dados: CapturaIn):
             campos.get("utm_campaign"), campos.get("utm_term"),
             campos.get("utm_content"), campos.get("source"),
             campos.get("ab_test"), campos.get("ab_var"), campos.get("ab_vid"))
+
+        # `lead_criado` no teste A/B: a landing lê `ab_*` da URL e manda aqui.
+        await registrar_conversao_ab(
+            conn, Ab(campos.get("ab_vid"), campos.get("ab_test"), campos.get("ab_var")),
+            "lead_criado", lead_id=lead_id, page_slug=dados.page_slug)
 
         await _aplicar_tag_do_slug(conn, lead_id, dados.page_slug)
 

@@ -445,3 +445,21 @@ async def test_casca_404_para_rascunho(cliente, pagina_sonda):
         await conn.execute("UPDATE pages SET status = 'draft' WHERE slug = $1",
                            pagina_sonda)
     assert (await cliente.get(f"/p/{pagina_sonda}")).status_code == 404
+
+
+async def test_captura_com_teste_ab_registra_lead_criado(cliente, pagina_sonda, limpar_ab):
+    """A landing do lote 7 lê `ab_*` da URL e manda aqui. Sem isto, o teste A/B
+    de uma landing nunca teria conversão — decisão 7 do plano do 8C."""
+    r = await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda,
+        "fields": {"nome": "Carla Sonda", "cargo": "Gerente de SESMT",
+                   "empresa": "Transportes Exemplo", "whatsapp": "85999991234",
+                   "ab_test": "teste-8c-captura", "ab_var": "B",
+                   "ab_vid": "v_teste8c-cap"}})
+    assert r.status_code == 200, r.text
+    async with db.sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT event_name, ab_var, page_slug, lead_id FROM ab_events "
+            "WHERE ab_test = 'teste-8c-captura'")
+    assert linha["event_name"] == "lead_criado" and linha["ab_var"] == "B"
+    assert linha["page_slug"] == pagina_sonda and linha["lead_id"] is not None

@@ -230,3 +230,25 @@ async def test_recalculo_zera_quando_nao_sobra_conversao(conexao):
     await _recalcular_datas(conexao, [lead])
     assert await conexao.fetchval(
         "SELECT last_conversion_date FROM leads WHERE id = $1::uuid", lead) is None
+
+
+async def test_conversao_com_teste_ab_registra_lead_criado_uma_vez(
+        cliente, chamador, limpar_ab):
+    """O `leadConversion.ts` gravava `lead_criado` no coletor; o lote 7 o
+    apagou e esta rota não assumiu. Decisão 7 do plano do 8C.
+
+    `apply_tag: False` porque a fixture `chamador` não apaga a tag criada."""
+    lead_id, chave = chamador
+    corpo = {"lead_id": lead_id, "tipo": "lead", "page_slug": "lp-8c",
+             "ab_test": "teste-8c-conv", "ab_var": "A", "ab_vid": "v_teste8c-conv",
+             "apply_tag": False}
+    for _ in range(2):
+        r = await cliente.post("/publico/conversao", json=corpo,
+                               headers={"Authorization": f"Bearer {chave}"})
+        assert r.status_code == 201, r.text
+    async with db.sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT event_name, lead_id::text, page_slug FROM ab_events "
+            "WHERE ab_test = 'teste-8c-conv'")
+    assert [dict(l) for l in linhas] == [
+        {"event_name": "lead_criado", "lead_id": lead_id, "page_slug": "lp-8c"}]
