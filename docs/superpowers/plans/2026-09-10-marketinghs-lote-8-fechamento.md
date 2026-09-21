@@ -44,7 +44,7 @@ os restos do Lovable fora das duas coisas.
 |---|---|---|---|
 | **8A** | Resend: `resend-config` restaurado inteiro, `resend-config-check`, `resend-webhook` (só fechar o portão) e o segredo de descadastro pela tela | ~930 linhas | `2026-09-10-marketinghs-lote-8a-resend.md` |
 | **8B** | API de contato por chave: `contact-update`, `contact-status-update`, `contact-tags-sync` | ~480 linhas | `2026-09-10-marketinghs-lote-8b-api-de-contato.md` |
-| **8C** | Teste A/B: `go`, `ab-events`, as três telas de Experiments, `lib/ab.ts`, `public/ab.js` | ~540 linhas + 3 telas | a escrever quando o 8B fechar |
+| **8C** | Teste A/B: `go`, `ab-events`, as três telas de Experiments, `lib/ab.ts`, `public/ab.js` | ~540 linhas + 3 telas | `2026-09-21-marketinghs-lote-8c-teste-ab.md` — portão fechado em 21/09 |
 | **8D** | Handoff → GrowthHS: `handoff-to-nexus`, `nexus-config`, `get-nexus-stages`, o `NexusCard` | ~990 linhas | a escrever quando o 8C fechar |
 | **8E** | Limpeza final: Lovable e dn.ia no `index.html`, `lovable-tagger` e `@supabase/supabase-js` no `package.json`, a marca da dn.ia no admin (item 26 do CONTINUAR), `integrations/supabase/`, `backend/supabase/` | — | por último |
 

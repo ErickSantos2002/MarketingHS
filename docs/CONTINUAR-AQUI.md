@@ -1,16 +1,59 @@
 # Continuar aqui
 
-> ## ✅ 21/09/2026 — passos 1 e 2 do fechamento do 8B feitos
+> ## ✅ Sub-lote 8C (Teste A/B) — portão fechado, 21/09/2026
 >
-> - Os 46 testes de banco da onda de correção **passaram** (46 de 219, 4m53s).
-> - A re-revisão escopada (`bb80b37..a409c4e`) achou dois pontos baixos,
->   corrigidos em `1f79bda`: float inteiro vindo do integrador grava "50", não
->   "50.0" (e NaN/infinito dá 422); e o schema `Error` da documentação da API
->   dizia `{error}` quando o FastAPI devolve `{detail}` — errado para todas as
->   rotas `/publico`, não só as do 8B. `test_api_contato.py` inteiro: 29
->   passaram.
+> **Branch `lote-8c`, NÃO mergeada.** O 8B entrou na `main` em 21/09
+> (fast-forward até `dc64ef0`). Plano:
+> `docs/superpowers/plans/2026-09-21-marketinghs-lote-8c-teste-ab.md`.
 >
-> **Resta só o passo 3:** decidir com o Erick o destino da branch `lote-8`.
+> **O que entrou:** `/ab/*` no admin (config, testes, ativação pela RPC
+> `ab_activate_test`, eventos até 20.000 com aviso `truncado`);
+> `/publico/ab/go/{slug}` (redirecionador) e `/publico/ab/eventos` (coletor),
+> com gravação depois da resposta; migration 017 (`ab_config` sem o
+> `DEFAULT 'dnia.ai'`, com `redirector_base`, linha única); as três telas de
+> Experiments falando com `/ab`; `ab.js` sem nenhum padrão da dn.ia;
+> `lib/ab.ts` apagado (sem importador desde o lote 7).
+>
+> **⚠️ O achado que importa: o funil do A/B não registrava conversão
+> nenhuma.** O lote 1D portou `/publico/identidade` e
+> `/publico/evento-de-contato` sem a costura do `_shared/ab.ts` (conversão
+> `agendamento`), e o lote 7 apagou o `leadConversion.ts`, que gravava
+> `lead_criado`, sem que `/publico/conversao` assumisse. Nenhuma TELA mudou,
+> então o portão não tinha como pegar. `app/ab/costura.py` devolve as duas
+> conversões, dentro de SAVEPOINT (falha no A/B nunca derruba o contato).
+>
+> **Portão:** buscas limpas (o toco agora só é importado por `LimiteDeErro` e
+> `NexusCard`); ~35 capacidades conferidas contra a origem, nenhuma sem lugar;
+> as três telas conferidas no navegador (5/5, zero erro de console); suíte
+> inteira: **273 passaram**, 0 falhas, 4 avisos de biblioteca (18 min). A revisão final da branch pediu correções nas rotas
+> públicas, feitas: o coletor e o redirecionador têm balde próprio de limite
+> (120/min e 300/min, `LIMITE_COLETOR_POR_MINUTO` e
+> `LIMITE_REDIRECIONADOR_POR_MINUTO` em `Settings`) — **a decisão 6 do plano
+> mudou**: o redirecionador não é mais isento —, e o redirecionador guarda o
+> domínio em memória para não dar 404 a clique pago com o banco fora.
+>
+> **Placar: 44 functions portadas, 7 descartadas, restam 3**
+> (`get-nexus-stages`, `handoff-to-nexus`, `nexus-config` — o 8D). Telas
+> migradas: as três de Experiments.
+>
+> **Antes de o A/B entrar no ar (não bloqueia o merge):**
+> - verificar como o `X-Forwarded-For` que o Worker manda chega através do
+>   Traefik do EasyPanel — se ele trocar o cabeçalho, todo visitante divide o
+>   balde dos IPs do Cloudflare e os eventos somem em silêncio;
+> - a fixture `config_ab` reescreve a `ab_config` de PRODUÇÃO durante a
+>   suíte (e a devolve no fim) — com o A/B no ar, rodar a suíte contra o banco
+>   de produção manda cliques de anúncio para `exemplo.invalid`. Mesma classe
+>   do aviso do Resend.
+>
+> **Perguntas ao Erick:** peso 0 numa variante hoje vale 1, como na origem —
+> deve significar "sem tráfego"?
+>
+> **Para o 8E:** `docs/ab-testing/` é a documentação da origem (dn.ia,
+> `go.dnia.ai`, Supabase) e contradiz o código; a casca do app chama um
+> endpoint supabase (`get-tests`) e `lovableproject.com` durante a navegação.
+>
+> A conta admin do Claude foi **recriada** em 21/09 com ok do Erick — apagar
+> no fim da travessia.
 
 > ## ⚠️ Onde paramos — 10/09/2026, fim do dia
 >
