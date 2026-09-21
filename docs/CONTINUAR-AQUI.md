@@ -1,5 +1,17 @@
 # Continuar aqui
 
+> ## ✅ 21/09/2026 — passos 1 e 2 do fechamento do 8B feitos
+>
+> - Os 46 testes de banco da onda de correção **passaram** (46 de 219, 4m53s).
+> - A re-revisão escopada (`bb80b37..a409c4e`) achou dois pontos baixos,
+>   corrigidos em `1f79bda`: float inteiro vindo do integrador grava "50", não
+>   "50.0" (e NaN/infinito dá 422); e o schema `Error` da documentação da API
+>   dizia `{error}` quando o FastAPI devolve `{detail}` — errado para todas as
+>   rotas `/publico`, não só as do 8B. `test_api_contato.py` inteiro: 29
+>   passaram.
+>
+> **Resta só o passo 3:** decidir com o Erick o destino da branch `lote-8`.
+
 > ## ⚠️ Onde paramos — 10/09/2026, fim do dia
 >
 > **A VPS do EasyPanel (`62.72.11.28`) caiu no começo da tarde e voltou às
