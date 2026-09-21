@@ -172,6 +172,18 @@ async def recalcular_scores(_: Usuario = Depends(admin_atual)):
     O original percorria os leads em Deno e recalculava em TypeScript. Aqui não
     há laço: o score é um trigger BEFORE UPDATE, então basta um UPDATE que toque
     uma coluna vigiada. Uma fonte de verdade a menos para divergir.
+
+    ⚠️ Desde a migration 019, `trg_automation_on_etiqueta_change` não tem mais
+    lista de colunas (`AFTER INSERT OR UPDATE`, sem `OF ...`) — ele reavalia em
+    TODO UPDATE de `leads`, inclusive este. Se uma etiqueta/status/score mudar
+    como efeito colateral do recálculo (`UPDATE leads SET cargo = cargo`
+    dispara `trg_score_lead_on_change`, que pode reescrever `etiqueta` e
+    `lead_score`), e houver regra de automação ATIVA casando com o resultado,
+    esta rota pode enfileirar MUITOS leads para o comercial de uma vez — um
+    recálculo em massa virando um envio em massa ao GrowthHS. Não é bug: é
+    consequência de remover a lista de colunas do gatilho (correção de um
+    achado maior — ver migration 019). Decisão de produto pendente com o
+    Erick; nada foi alterado aqui para evitar isso.
     """
     async with sessao(role="service_role") as conn:
         # ⚠️ Tem de tocar uma das colunas da lista do trigger:

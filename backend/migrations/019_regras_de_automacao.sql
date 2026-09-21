@@ -10,11 +10,14 @@
 -- Seis mudanças em relação à origem, e só estas:
 --
 --   1. Assinatura igual à origem: RETURNS trigger LANGUAGE plpgsql
---      SECURITY DEFINER SET search_path TO 'public'.
+--      SECURITY DEFINER SET search_path TO 'public' (o `search_path` ganhou
+--      `'pg_temp'` depois, na revisão de código — ver "Endurecimento" no
+--      fim deste cabeçalho; não é uma das seis mudanças de porte).
 --   2. Saída cedo ampliada (achado 7): a origem só olhava a etiqueta mudar; a
 --      tela de automações também oferece condição por status e por pontuação,
 --      e elas nunca disparavam o gatilho. Agora a saída cedo confere as três
---      colunas com IS NOT DISTINCT FROM.
+--      colunas com IS NOT DISTINCT FROM — e só se aplica a UPDATE: todo
+--      INSERT em `leads` continua avaliando as regras, igual à origem.
 --   3. Achado 8: regra mal preenchida (um cast que estoura, ex.: valor não
 --      numérico numa condição de score) não pode derrubar o INSERT/UPDATE do
 --      lead. Cada iteração do laço vira um bloco BEGIN...EXCEPTION WHEN
@@ -43,11 +46,26 @@
 -- UPDATE que o CHAMADOR fez — o Postgres não sabe, e não pode saber antes de
 -- rodar o BEFORE trigger, que uma trigger anterior vai tocar `etiqueta` de
 -- lambuja. Resultado: um `UPDATE leads SET cargo = 'CEO'` que faz o score
--- virar 'hotlead' NUNCA disparava a regra de automação — o pedido ficava
--- pendente para sempre, sem erro, o modo de falhar que este lote existe para
--- evitar. A saída cedo da função (mudança 2) já compara OLD/NEW de
+-- virar 'hotlead' NUNCA disparava a regra de automação — o pedido de handoff
+-- NUNCA ERA CRIADO (não é "ficava pendente": nem chega a existir uma linha
+-- em `crm_handoffs`), sem erro nenhum — o modo de falhar que este lote existe
+-- para evitar. A saída cedo da função (mudança 2) já compara OLD/NEW de
 -- etiqueta, status e lead_score por conta própria; tirar a lista de colunas
 -- do gatilho não perde precisão nenhuma — só perde a falha silenciosa.
+--
+-- ⚠️ Efeito colateral do conserto (fix round 1, revisão de código): sem lista
+-- de colunas, o gatilho reavalia em TODO UPDATE de `leads` — inclusive
+-- atualizações em massa que nunca tiveram etiqueta/status/score como alvo.
+-- `POST /contatos/recalcular-scores` (`app/routers/contatos.py`) faz
+-- `UPDATE leads SET cargo = cargo` para acordar `trg_score_lead_on_change`
+-- na base inteira, e a sincronização do DataCore
+-- (`app/dominio/sincronizacao_datacore.py`) faz `UPDATE ... SET source =
+-- 'datacore'` em lote — `source` também é vigiada pelo scoring. Se uma regra
+-- de automação ATIVA casar com o resultado, um recálculo ou uma sincronização
+-- pode enfileirar MUITOS leads para o GrowthHS de uma vez só. Não é bug desta
+-- migration — é a consequência direta de fechar o defeito acima — mas é
+-- comportamento novo que não existia com a lista de colunas. Decisão de
+-- produto em aberto com o Erick; nada foi mudado para evitar isso.
 --
 -- Continua valendo, sem mudança: primeira regra que casa, por prioridade
 -- (DESC NULLS LAST), decide — como na origem. Regras depois dela nem são
@@ -55,10 +73,18 @@
 --
 -- Reaplicável: CREATE OR REPLACE FUNCTION + DROP TRIGGER IF EXISTS antes do
 -- CREATE TRIGGER. Rode duas vezes para provar.
+--
+-- Endurecimento (fix round 1, revisão de código — não é uma das seis
+-- mudanças de porte acima, é reforço adicional pedido na revisão):
+-- `SET search_path TO 'public', 'pg_temp'` (com `pg_temp` por ÚLTIMO — é a
+-- prática recomendada para funções SECURITY DEFINER: impede que uma tabela
+-- temporária de mesmo nome numa sessão maliciosa se disfarce de tabela real
+-- antes de `public` ser consultado) e `public.automation_rules`
+-- schema-qualificado no FROM do laço de regras, pela mesma razão.
 
 CREATE OR REPLACE FUNCTION public.evaluate_automation_on_etiqueta() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 DECLARE
   v_rule RECORD;
@@ -80,7 +106,7 @@ BEGIN
   FOR v_rule IN
     SELECT id, action_type, condition_type, condition_operator, condition_value,
            conditions, COALESCE(condition_logic, 'and') AS condition_logic
-    FROM automation_rules
+    FROM public.automation_rules
     WHERE is_active = true
     ORDER BY priority DESC NULLS LAST
   LOOP

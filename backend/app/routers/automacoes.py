@@ -5,9 +5,10 @@
 (`validate_automation_rule_fields`) não aceita outra coisa. Aqui existe o
 cadastro das regras e a prévia de quem elas pegariam; quem AVALIA e ENFILEIRA
 é o gatilho `trg_automation_on_etiqueta_change` (migration 019,
-`evaluate_automation_on_etiqueta`), disparado em toda mudança de etiqueta,
-status ou pontuação do lead — não esta rota. O worker (`app/crm/entrega.py`)
-é quem entrega de fato.
+`evaluate_automation_on_etiqueta`), disparado em TODO INSERT de lead e em
+toda mudança de etiqueta, status ou pontuação num UPDATE — não esta rota (a
+migration 019 tirou a lista de colunas do UPDATE; a saída cedo da função é
+quem filtra). O worker (`app/crm/entrega.py`) é quem entrega de fato.
 
 ⚠️ `evaluate_automation_on_etiqueta` e o trigger `trg_automation_on_etiqueta_change`
 tinham sido removidos no lote 0, porque um trigger que avalia e não tem ação

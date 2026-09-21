@@ -84,6 +84,19 @@ async def test_regra_mal_formada_nao_derruba_a_gravacao_do_lead(conexao):
     assert await conexao.fetchval("SELECT count(*) FROM leads WHERE id = $1::uuid", lead) == 1
 
 
+async def test_regra_quebrada_nao_bloqueia_regra_valida_de_prioridade_menor(conexao):
+    """Achado 8, visto do outro lado: a regra quebrada é IGNORADA (loga e
+    segue o laço), não um bloqueio — uma regra válida de prioridade MENOR
+    ainda tem a chance de casar e enfileirar."""
+    await _regra(conexao, [{"type": "score", "operator": "greater_than", "value": "abc"}],
+                 prioridade=10)
+    await _regra(conexao, [{"type": "etiqueta", "operator": "is", "value": "hotlead"}],
+                 prioridade=1)
+    lead = await _lead(conexao)
+    await conexao.execute("UPDATE leads SET etiqueta = 'hotlead' WHERE id = $1::uuid", lead)
+    assert len(await _pedidos(conexao, lead)) == 1
+
+
 async def test_mover_etapa_enfileira_como_mover(conexao):
     # ⚠️ Mesmo motivo do teste de bloqueio: `trg_score_lead_on_change`
     # sobrescreveria a etiqueta pedida no INSERT — por isso o UPDATE.
@@ -181,4 +194,14 @@ async def test_botao_manual_exige_admin_e_enfileira_uma_vez(cliente, token_admin
     assert r.json() == {"handoff_id": None, "ja_na_fila": True}
     r = await cliente.post("/crm/enviar/00000000-0000-0000-0000-000000000000",
                            headers=_auth(token_admin))
+    assert r.status_code == 404
+
+
+async def test_botao_manual_404_para_lead_apagado(cliente, token_admin, lead_real):
+    """Exclusão é lógica (`deleted_at`) — a rota não pode oferecer ao GrowthHS
+    um contato que a tela já trata como apagado."""
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE leads SET deleted_at = now() WHERE id = $1::uuid", lead_real)
+    r = await cliente.post(f"/crm/enviar/{lead_real}", headers=_auth(token_admin))
     assert r.status_code == 404

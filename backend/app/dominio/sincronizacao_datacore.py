@@ -189,6 +189,15 @@ async def _um_bloco(conn, bloco: list[ClienteErp], r: Resumo) -> None:
     # 3) E os que já existiam recebem o que o ERP tem de novo.
     #    ⚠️ O e-mail é PREENCHIDO, nunca sobrescrito: se alguém corrigiu o
     #    endereço do lado do marketing, o ERP não desfaz a correção.
+    #    ⚠️ `source` é uma das colunas vigiadas por `trg_score_lead_on_change`
+    #    (score/etiqueta) — e, desde a migration 019,
+    #    `trg_automation_on_etiqueta_change` reavalia em TODO UPDATE de leads,
+    #    sem lista de colunas própria. Se este UPDATE mudar a etiqueta/score de
+    #    muitos leads de uma vez e houver regra de automação ATIVA casando com
+    #    o resultado, esta sincronização pode enfileirar um lote inteiro para o
+    #    GrowthHS numa rodada só. Não é bug desta sincronização — é o mesmo
+    #    efeito do achado da migration 019, e decisão de produto pendente com
+    #    o Erick. Nada foi alterado aqui para evitar isso.
     await conn.execute(
         """UPDATE leads l
               SET nome     = COALESCE(d.nome, l.nome),
