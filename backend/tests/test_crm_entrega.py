@@ -25,6 +25,15 @@ def _transporte(status, corpo=None, contagem=None):
     return httpx.MockTransport(responder)
 
 
+def _transporte_corpo_invalido(status, contagem=None):
+    """Um 2xx cujo corpo NÃO é JSON — round 1, achado I1(b)."""
+    def responder(request):
+        if contagem is not None:
+            contagem.append(request)
+        return httpx.Response(status, content=b"isto nao e json")
+    return httpx.MockTransport(responder)
+
+
 @pytest_asyncio.fixture
 async def lead_8d():
     """Um lead com identidade, apagado com tudo o que a entrega grava."""
@@ -143,3 +152,51 @@ async def test_mover_etapa_falha_a_vista(lead_8d):
     pedido = await _pedido(lead_8d["lead_id"])
     assert pedido["status"] == "falhou" and "mover" in pedido["erro"]
     assert chamadas == []
+
+
+async def test_2xx_com_corpo_invalido_ainda_entrega_e_nao_repete(lead_8d):
+    """Round 1, achado I1(b): um 2xx já criou o card do lado do GrowthHS —
+    corpo ilegível não pode virar re-envio (segundo card)."""
+    async with db.sessao(role="service_role") as conn:
+        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
+    chamadas = []
+    resultado = await entrega.rodar_entregas(
+        somente_lead=lead_8d["lead_id"], cfg=CFG,
+        transporte=_transporte_corpo_invalido(201, chamadas))
+    assert resultado["entregues"] == 1
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "entregue" and pedido["card_id"] is None
+
+    # Segunda passada: nada pendente, nenhuma chamada nova ao GrowthHS.
+    outro_resultado = await entrega.rodar_entregas(
+        somente_lead=lead_8d["lead_id"], cfg=CFG,
+        transporte=_transporte_corpo_invalido(201, chamadas))
+    assert outro_resultado == {"entregues": 0, "ja_entregues": 0, "adiadas": 0, "falhas": 0}
+    assert len(chamadas) == 1
+
+
+async def test_falha_apos_o_2xx_nao_reenvia(lead_8d, monkeypatch):
+    """Round 1, achado I1(a): um defeito NOSSO depois do sucesso (aqui,
+    `_registrar_evento` explodindo) não pode desfazer o `entregue` nem
+    provocar um segundo POST."""
+    async def _explode(*args, **kwargs):
+        raise RuntimeError("defeito simulado depois do sucesso")
+    monkeypatch.setattr(entrega, "_registrar_evento", _explode)
+
+    async with db.sessao(role="service_role") as conn:
+        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
+    chamadas = []
+    resultado = await entrega.rodar_entregas(
+        somente_lead=lead_8d["lead_id"], cfg=CFG,
+        transporte=_transporte(201, {"id": 4821, "person_id": 1180, "created": True}, chamadas))
+    assert resultado["entregues"] == 1
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
+
+    # Segunda passada: nada pendente, nenhuma chamada nova ao GrowthHS, mesmo
+    # com o passo de registro tendo "quebrado" na primeira.
+    outro_resultado = await entrega.rodar_entregas(
+        somente_lead=lead_8d["lead_id"], cfg=CFG,
+        transporte=_transporte(201, {"id": 9999, "person_id": 1}, chamadas))
+    assert outro_resultado == {"entregues": 0, "ja_entregues": 0, "adiadas": 0, "falhas": 0}
+    assert len(chamadas) == 1

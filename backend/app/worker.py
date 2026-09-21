@@ -352,10 +352,42 @@ async def _rodar_jornadas() -> dict:
     return resumo
 
 
+async def _laco_entregas() -> None:
+    """A entrega ao GrowthHS, num laço PRÓPRIO — achado I2 do round 1 de
+    revisão do 8D/Tarefa 4: dentro do laço principal, um GrowthHS lento ou
+    fora do ar (até `limite` × `TIMEOUT` segundos por passada) atrasava o
+    envio de e-mail e as jornadas atrás dela na fila. Correndo à parte, o
+    pior caso do GrowthHS nunca afeta o resto do worker.
+
+    Mesmo ritmo das jornadas (`JORNADAS_INTERVALO`: nenhum dos três caminhos
+    que enfileiram — regra, jornada, botão manual — precisa de mais que
+    isso) e o mesmo evento de parada do laço principal.
+    """
+    global _growthhs_avisado
+    while not _parar.is_set():
+        try:
+            resultado = await entrega.rodar_entregas()
+            if resultado.get("desligado"):
+                # Uma vez por processo — não a cada passada, para sempre.
+                if not _growthhs_avisado:
+                    logger.warning(
+                        "[crm] GrowthHS não configurado — a fila de entrega espera")
+                    _growthhs_avisado = True
+            elif any(resultado.values()):
+                logger.info("[crm] entrega ao GrowthHS: %s", resultado)
+        except Exception:  # noqa: BLE001 — este laço não pode morrer
+            logger.exception("falha na passada da entrega ao GrowthHS")
+        try:
+            await asyncio.wait_for(_parar.wait(), timeout=JORNADAS_INTERVALO)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def principal() -> None:
     await init_db()
     logger.info("worker no ar — lote de %s, intervalo de %ss",
                 settings.FILA_LOTE, settings.WORKER_INTERVALO_SEGUNDOS)
+    tarefa_entregas = asyncio.create_task(_laco_entregas())
     proximo_agendador = 0.0
     proximo_jornadas = 0.0
     try:
@@ -375,22 +407,6 @@ async def principal() -> None:
                         logger.info("jornadas: %s", r)
                 except Exception:  # noqa: BLE001
                     logger.exception("falha na passada das jornadas")
-                # A entrega ao GrowthHS no mesmo ritmo das jornadas — o pedido
-                # nasce de regra, jornada ou botão manual, e nenhum dos três
-                # precisa de um ritmo mais apertado do que este.
-                try:
-                    global _growthhs_avisado
-                    resultado_crm = await entrega.rodar_entregas()
-                    if resultado_crm.get("desligado"):
-                        if not _growthhs_avisado:
-                            logger.warning(
-                                "[crm] GrowthHS não configurado — a fila de "
-                                "entrega espera")
-                            _growthhs_avisado = True
-                    elif any(resultado_crm.values()):
-                        logger.info("[crm] entrega ao GrowthHS: %s", resultado_crm)
-                except Exception:  # noqa: BLE001
-                    logger.exception("falha na passada da entrega ao GrowthHS")
             try:
                 tratadas = await _tick()
             except Exception:  # noqa: BLE001 — o laço não morre por uma passada
@@ -403,6 +419,14 @@ async def principal() -> None:
             except asyncio.TimeoutError:
                 pass
     finally:
+        # O laço de entregas escuta o MESMO `_parar` — setá-lo de novo aqui é
+        # inofensivo (idempotente) e cobre o caso raro do laço principal
+        # sair por outro motivo que não o sinal de parada.
+        _parar.set()
+        try:
+            await asyncio.wait_for(tarefa_entregas, timeout=30)
+        except asyncio.TimeoutError:
+            tarefa_entregas.cancel()
         await close_db()
         logger.info("worker encerrado")
 
