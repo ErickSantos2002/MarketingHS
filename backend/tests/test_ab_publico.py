@@ -155,3 +155,71 @@ async def test_redirecionador_nao_leva_429(cliente, config_ab, limpar_ab):
     for _ in range(35):
         r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe")
         assert r.status_code == 404
+
+
+async def _eventos(slug: str):
+    async with db.sessao(role="service_role") as conn:
+        return await conn.fetch(
+            "SELECT event_type, event_name, dedupe_key, browser, lead_id, occurred_at "
+            "FROM ab_events WHERE ab_test = $1 ORDER BY event_type", slug)
+
+
+async def test_coletor_aceita_texto_puro_e_absorve_exposicao_repetida(cliente, limpar_ab):
+    """O `ab.js` manda `text/plain` (decisão 5) — o corpo é JSON do mesmo jeito."""
+    slug = f"{limpar_ab}-coletor"
+    exposicao = {"ab_test": slug, "ab_var": "A", "ab_vid": "v_teste8c-col",
+                 "event_type": "exposure"}
+    corpo = {"events": [exposicao, exposicao,
+                        {"ab_test": slug, "ab_vid": "v_teste8c-col", "event_type": "behavior",
+                         "event_name": "scroll", "metadata": {"depth": 50}},
+                        {"ab_test": slug, "ab_vid": "v_teste8c-col", "event_type": "inventado"}]}
+    r = await cliente.post("/publico/ab/eventos", content=json.dumps(corpo),
+                           headers={"content-type": "text/plain;charset=UTF-8",
+                                    "user-agent": CHROME_WIN})
+    assert r.status_code == 202 and r.json() == {"accepted": 3}
+
+    linhas = await _eventos(slug)
+    assert [l["event_type"] for l in linhas] == ["behavior", "exposure"]
+    exposicao_gravada = linhas[1]
+    assert exposicao_gravada["dedupe_key"] == f"v_teste8c-col:{slug}:exposure"
+    assert exposicao_gravada["browser"] == "Chrome"
+
+
+async def test_coletor_aceita_evento_solto_e_lista(cliente, limpar_ab):
+    slug = f"{limpar_ab}-formatos"
+    um = {"ab_test": slug, "ab_vid": "v_teste8c-f", "event_type": "behavior"}
+    assert (await cliente.post("/publico/ab/eventos", json=um)).json() == {"accepted": 1}
+    assert (await cliente.post("/publico/ab/eventos", json=[um, um])).json() == {"accepted": 2}
+    assert len(await _eventos(slug)) == 3
+
+
+async def test_coletor_corta_em_cinquenta(cliente, limpar_ab):
+    slug = f"{limpar_ab}-teto"
+    um = {"ab_test": slug, "ab_vid": "v_teste8c-t", "event_type": "behavior"}
+    r = await cliente.post("/publico/ab/eventos", json={"events": [um] * 60})
+    assert r.json() == {"accepted": 50}
+
+
+async def test_coletor_descarta_robo_e_recusa_json_quebrado(cliente, limpar_ab):
+    slug = f"{limpar_ab}-robo"
+    um = {"ab_test": slug, "ab_vid": "v_teste8c-r", "event_type": "exposure"}
+    r = await cliente.post("/publico/ab/eventos", json=um,
+                           headers={"user-agent": "Googlebot/2.1"})
+    assert r.status_code == 200 and r.json() == {"accepted": 0, "skipped": "bot"}
+    assert await _eventos(slug) == []
+
+    r = await cliente.post("/publico/ab/eventos", content="{quebrado",
+                           headers={"content-type": "text/plain"})
+    assert r.status_code == 400
+
+
+async def test_coletor_responde_preflight_de_qualquer_origem(cliente):
+    """Sem o middleware próprio, o `CORSMiddleware` global devolveria 400: ele
+    só aceita o `FRONTEND_URL`, e a landing mora em outro domínio."""
+    r = await cliente.options("/publico/ab/eventos", headers={
+        "origin": "https://lp.exemplo.invalid",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type"})
+    assert r.status_code == 204
+    assert r.headers["access-control-allow-origin"] == "*"
+    assert "POST" in r.headers["access-control-allow-methods"]

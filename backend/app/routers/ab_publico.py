@@ -17,14 +17,17 @@ backend, o cookie é recusado e não há permanência na variante — só serve 
 conferência.
 """
 
+import json
 import logging
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from app.ab.dominio import host_no_dominio, ler_user_agent, normalizar_dominio, sortear
-from app.ab.eventos import ORIGEM, inserir
+from app.ab.eventos import (MAX_EVENTOS, ORIGEM, ROBO, SEM_DUPLICATA, inserir,
+                            normalizar_evento)
 from app.database import sessao
 
 logger = logging.getLogger(__name__)
@@ -208,3 +211,53 @@ async def _registrar_clique(comum: dict, destino: str, ua: str | None, fixa: boo
                            "event_name": "sticky" if fixa else "new", "url": destino})
     except Exception:
         logger.exception("[ab/go] falha ao registrar o clique — o redirecionamento já saiu")
+
+
+@router.post("/eventos", status_code=status.HTTP_202_ACCEPTED)
+async def coletar(request: Request, tarefas: BackgroundTasks):
+    """O que era a function `ab-events`. Aceita um evento, uma lista ou
+    `{"events": [...]}`, com qualquer `content-type` — o `ab.js` manda
+    `text/plain` para não disparar preflight (decisão 5)."""
+    ua = request.headers.get("user-agent") or ""
+    if ROBO.search(ua):
+        # 200, e não erro, para o robô não re-tentar.
+        return JSONResponse({"accepted": 0, "skipped": "bot"})
+    try:
+        corpo = json.loads(await request.body())
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "JSON inválido.")
+
+    if isinstance(corpo, list):
+        brutos = corpo
+    elif isinstance(corpo, dict) and isinstance(corpo.get("events"), list):
+        brutos = corpo["events"]
+    elif isinstance(corpo, dict):
+        brutos = [corpo]
+    else:
+        brutos = []
+
+    lido = ler_user_agent(ua)
+    referer = request.headers.get("referer")
+    idioma = (request.headers.get("accept-language") or "").split(",")[0] or None
+    linhas = [linha for evento in brutos[:MAX_EVENTOS]
+              if (linha := normalizar_evento(evento, lido, referer, idioma))]
+    if linhas:
+        tarefas.add_task(_gravar_eventos, linhas)
+    return {"accepted": len(linhas)}
+
+
+async def _gravar_eventos(linhas: list[dict]) -> None:
+    """Linha a linha, cada uma no seu SAVEPOINT: um evento ruim não leva os
+    outros. Duplicata é absorvida pelo índice (`SEM_DUPLICATA`)."""
+    try:
+        async with sessao(role="service_role") as conn:
+            for linha in linhas:
+                try:
+                    async with conn.transaction():
+                        await inserir(conn, "ab_events", linha, SEM_DUPLICATA)
+                except Exception:
+                    logger.exception("[ab/eventos] evento descartado (%s)",
+                                     linha["event_type"])
+    except Exception:
+        logger.exception("[ab/eventos] banco indisponível — lote de %d perdido",
+                         len(linhas))

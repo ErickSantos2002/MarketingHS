@@ -6,6 +6,7 @@ Nenhum dos dois aparece na tela: o anúncio só deixa de rodar.
 """
 
 from app.ab.dominio import host_no_dominio, ler_user_agent, normalizar_dominio, sortear
+from app.ab.eventos import chave_de_dedupe, normalizar_evento
 
 
 def test_normaliza_o_que_o_admin_digita():
@@ -56,3 +57,38 @@ def test_peso_zero_ou_ausente_vale_um_como_na_origem():
     variantes = [{"key": "A", "weight": 0}, {"key": "B"}]
     assert sortear(variantes, lambda: 0.49)["key"] == "A"
     assert sortear(variantes, lambda: 0.51)["key"] == "B"
+
+
+LIDO = {"device_type": "desktop", "os": "Windows", "browser": "Chrome", "browser_version": "1"}
+
+
+def test_chave_de_dedupe_como_na_origem():
+    base = {"ab_vid": "v1", "ab_test": "t1"}
+    assert chave_de_dedupe({**base, "event_type": "exposure"}) == "v1:t1:exposure"
+    assert chave_de_dedupe({**base, "event_type": "conversion"}) == "v1:t1:conversion:default"
+    assert (chave_de_dedupe({**base, "event_type": "schedule_step", "metadata": {"step": 2}})
+            == "v1:t1:schedule_step:2")
+    assert chave_de_dedupe({**base, "event_type": "behavior"}) is None
+
+
+def test_normalizacao_descarta_o_invalido_e_nao_perde_evento_por_campo_ruim():
+    assert normalizar_evento("texto", LIDO, None, None) is None
+    assert normalizar_evento({"ab_test": "t", "ab_vid": "v", "event_type": "x"},
+                             LIDO, None, None) is None
+    assert normalizar_evento({"ab_test": "", "ab_vid": "v", "event_type": "exposure"},
+                             LIDO, None, None) is None
+
+    linha = normalizar_evento(
+        {"ab_test": "t" * 300, "ab_vid": "v", "event_type": "exposure",
+         "lead_id": "não-é-uuid", "occurred_at": "ontem", "metadata": [1]},
+        LIDO, "https://ref.invalid", "pt-BR")
+    assert len(linha["ab_test"]) == 200
+    # Decisão 11: a origem perdia o evento inteiro por um destes campos.
+    assert linha["lead_id"] is None and linha["occurred_at"] is not None
+    assert linha["metadata"] is None
+    assert linha["referrer"] == "https://ref.invalid" and linha["language"] == "pt-BR"
+    assert linha["browser"] == "Chrome" and linha["browser_version"] is None
+
+    quando = normalizar_evento({"ab_test": "t", "ab_vid": "v", "event_type": "exposure",
+                                "occurred_at": "2026-09-01T12:00:00Z"}, LIDO, None, None)
+    assert quando["occurred_at"].isoformat() == "2026-09-01T12:00:00+00:00"

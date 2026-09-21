@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.auth.router import router as auth_router
 from app.database import close_datacore, close_db, init_datacore, init_db
+from app.middleware.cors_coletor import CorsDoColetorMiddleware
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
 from app.routers.ab import router as ab_router
 from app.routers.ab_publico import router as ab_publico_router
@@ -82,6 +83,10 @@ app.add_middleware(
     # camada do Cloudflare (regra de Rate Limiting do Worker).
     isentos=("/publico/webhook/", "/publico/validar-email", "/publico/ab/go"),
 )
+
+# ⚠️ Por último de propósito: é o mais de fora, e responde o preflight do
+# coletor antes do CORSMiddleware global recusá-lo (ver o módulo).
+app.add_middleware(CorsDoColetorMiddleware, caminho="/publico/ab/eventos")
 
 
 @app.exception_handler(RuntimeError)
