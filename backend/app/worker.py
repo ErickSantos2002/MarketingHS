@@ -1,5 +1,5 @@
-"""O worker: drena a fila de e-mail, promove campanhas agendadas e roda as
-jornadas.
+"""O worker: drena a fila de e-mail, promove campanhas agendadas, roda as
+jornadas e entrega os leads ao GrowthHS.
 
 Substitui o `pg_cron` por um laço `asyncio`, no padrão do `guardiao_crons.py` do
 HS.OS. Roda como processo separado (`python -m app.worker`) porque reiniciar a
@@ -17,6 +17,7 @@ import signal
 
 from app import fila, integracoes
 from app.config import settings
+from app.crm import entrega
 from app.database import close_db, init_db, sessao
 from app.email import resend
 from app.email.montagem import (
@@ -45,6 +46,9 @@ JORNADAS_LEASE = 300
 EVENTOS_LOTE = 50
 
 _parar = asyncio.Event()
+# Avisa "não configurado" uma vez só — não a cada passada do laço, senão o
+# log vira ruído a cada JORNADAS_INTERVALO segundos para sempre.
+_growthhs_avisado = False
 
 
 async def _remetente() -> str:
@@ -371,6 +375,22 @@ async def principal() -> None:
                         logger.info("jornadas: %s", r)
                 except Exception:  # noqa: BLE001
                     logger.exception("falha na passada das jornadas")
+                # A entrega ao GrowthHS no mesmo ritmo das jornadas — o pedido
+                # nasce de regra, jornada ou botão manual, e nenhum dos três
+                # precisa de um ritmo mais apertado do que este.
+                try:
+                    global _growthhs_avisado
+                    resultado_crm = await entrega.rodar_entregas()
+                    if resultado_crm.get("desligado"):
+                        if not _growthhs_avisado:
+                            logger.warning(
+                                "[crm] GrowthHS não configurado — a fila de "
+                                "entrega espera")
+                            _growthhs_avisado = True
+                    elif any(resultado_crm.values()):
+                        logger.info("[crm] entrega ao GrowthHS: %s", resultado_crm)
+                except Exception:  # noqa: BLE001
+                    logger.exception("falha na passada da entrega ao GrowthHS")
             try:
                 tratadas = await _tick()
             except Exception:  # noqa: BLE001 — o laço não morre por uma passada
