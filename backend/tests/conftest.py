@@ -228,3 +228,90 @@ async def chave_de():
     yield _criar
     async with db.sessao(role="service_role") as conn:
         await conn.execute("DELETE FROM api_keys WHERE key_hash = ANY($1::text[])", hashes)
+
+
+@pytest_asyncio.fixture
+async def token_usuario():
+    """JWT de um usuário SEM papel de admin — para provar os 403.
+
+    ⚠️ Sem esta prova, uma rota que esquecesse o `admin_atual` passaria: o
+    usuário comum levaria zero linhas do RLS, não erro, e ninguém notaria.
+    """
+    from app.auth.security import emitir_token, gerar_hash
+
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+    email = "usuario-teste-8c@exemplo.invalid"
+
+    async def limpar():
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute(
+                "DELETE FROM public.user_roles WHERE user_id IN "
+                "(SELECT id FROM auth.users WHERE email = $1)", email)
+            await conn.execute("DELETE FROM auth.users WHERE email = $1", email)
+
+    await limpar()
+    async with db.sessao(role="service_role") as conn:
+        uid = await conn.fetchval(
+            "INSERT INTO auth.users (email, password_hash) VALUES ($1, $2) "
+            "RETURNING id::text", email, gerar_hash("senha-de-teste-8c"))
+        await conn.execute(
+            "INSERT INTO public.user_roles (user_id, role) VALUES ($1::uuid, 'user')", uid)
+    token, _ = emitir_token(uid, "user", email)
+    yield token
+    await limpar()
+
+
+@pytest_asyncio.fixture
+async def config_ab():
+    """Põe `ab_config` num estado conhecido: `await config_ab("exemplo.invalid")`.
+
+    ⚠️ `ab_config` é UMA linha, global — é a configuração de PRODUÇÃO do A/B.
+    A fixture guarda o que havia e devolve no teardown, mesmo que o teste
+    falhe. `config_ab(None)` deixa a tabela vazia (nada configurado).
+    """
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+    async with db.sessao(role="service_role") as conn:
+        antes = await conn.fetchrow(
+            "SELECT production_domain, redirector_base FROM ab_config LIMIT 1")
+
+    async def gravar(dominio, base=None):
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM ab_config")
+            if dominio is not None or base is not None:
+                await conn.execute(
+                    "INSERT INTO ab_config (production_domain, redirector_base) "
+                    "VALUES ($1, $2)", dominio, base)
+
+    yield gravar
+    await gravar(antes["production_domain"] if antes else None,
+                 antes["redirector_base"] if antes else None)
+
+
+# Tudo o que os testes do 8C gravam em `ab_*` começa com isto — é o que a
+# limpeza apaga. `ab_vid` de teste começa com "v_teste8c".
+PREFIXO_AB = "teste-8c"
+
+
+@pytest_asyncio.fixture
+async def limpar_ab():
+    """Apaga, antes e depois, o que os testes do A/B gravaram."""
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+
+    async def limpar():
+        async with db.sessao(role="service_role") as conn:
+            for tabela in ("ab_events", "ab_assignments"):
+                await conn.execute(f"DELETE FROM {tabela} WHERE ab_test LIKE $1",
+                                   PREFIXO_AB + "%")
+            await conn.execute("DELETE FROM ab_identities WHERE ab_vid LIKE 'v_teste8c%'")
+            await conn.execute("DELETE FROM ab_tests WHERE public_slug LIKE $1",
+                               PREFIXO_AB + "%")
+
+    await limpar()
+    yield PREFIXO_AB
+    await limpar()
