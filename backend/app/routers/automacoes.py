@@ -1,14 +1,19 @@
 """Regras de automação. Substitui a `automations-api`.
 
-⚠️ **A ação de toda regra é o Nexus** — `create_in_nexus`, `move_stage_nexus`,
-`block_nexus`, e o trigger de validação do banco não aceita outra coisa. A
-integração com o GrowthHS é o LOTE 5. Então aqui existe o cadastro das regras e
-a contagem de quem elas pegariam, e **nada dispara**. A tela diz isso em letra
-grande; não é acidente nem pendência esquecida.
+⚠️ **A ação de toda regra é o GrowthHS** — `create_in_growthhs`,
+`move_stage_growthhs`, `block_growthhs`, e o trigger de validação do banco
+(`validate_automation_rule_fields`) não aceita outra coisa. Aqui existe o
+cadastro das regras e a prévia de quem elas pegariam; quem AVALIA e ENFILEIRA
+é o gatilho `trg_automation_on_etiqueta_change` (migration 019,
+`evaluate_automation_on_etiqueta`), disparado em toda mudança de etiqueta,
+status ou pontuação do lead — não esta rota. O worker (`app/crm/entrega.py`)
+é quem entrega de fato.
 
 ⚠️ `evaluate_automation_on_etiqueta` e o trigger `trg_automation_on_etiqueta_change`
-foram removidos no lote 0 e NÃO voltam aqui: um trigger que avalia e não tem
-ação para chamar é trigger sem consumidor. Ele volta no lote 5, junto do Nexus.
+tinham sido removidos no lote 0, porque um trigger que avalia e não tem ação
+para chamar é trigger sem consumidor — e voltaram no lote 8D (decisão 1),
+agora enfileirando em `crm_handoffs` em vez de chamar a Edge Function do
+Supabase.
 """
 
 import logging
@@ -178,7 +183,7 @@ class PreviaIn(BaseModel):
 
 @router.post("/previa")
 async def previa(dados: PreviaIn, _: Usuario = Depends(admin_atual)):
-    """Quantos contatos a regra pegaria, sem contar quem já está no Nexus.
+    """Quantos contatos a regra pegaria, sem contar quem já está no GrowthHS.
 
     ⚠️ Só o TOTAL e uma amostra voltam. A origem trazia a lista inteira de leads
     para o navegador só para chamar `.length` — com a base crescida isso é a
@@ -198,23 +203,24 @@ async def previa(dados: PreviaIn, _: Usuario = Depends(admin_atual)):
     juncao = " OR " if (dados.condition_logic or "and").lower() == "or" else " AND "
     onde = "(" + juncao.join(f"({s})" for s in partes) + ")"
 
-    # ⚠️ Quem já tem contato no Nexus fica de fora — a regra não o mandaria de
+    # ⚠️ Quem já está no GrowthHS fica de fora — a regra não o mandaria de
     # novo. `dnia_id` nulo NÃO é exclusão: contato sem identidade no ecossistema
-    # nunca esteve no Nexus.
-    fora_do_nexus = """
+    # nunca esteve no GrowthHS. `nexus_contact_id` (agendamento "dn.nexus") não
+    # entra aqui — é outro produto (restrição global do 8D).
+    fora_do_growthhs = """
         AND NOT EXISTS (
             SELECT 1 FROM ecosystem_identities ei
              WHERE l.dnia_id IS NOT NULL
                AND ei.dnia_id = l.dnia_id
-               AND ei.nexus_contact_id IS NOT NULL
+               AND ei.growthhs_card_id IS NOT NULL
         )"""
 
     async with sessao(role="service_role") as conn:
         total = await conn.fetchval(
-            f"SELECT count(*) FROM leads l WHERE {onde} {fora_do_nexus}", *params)
+            f"SELECT count(*) FROM leads l WHERE {onde} {fora_do_growthhs}", *params)
         amostra = await conn.fetch(
             f"""SELECT l.id::text, l.nome, l.email, l.etiqueta
-                  FROM leads l WHERE {onde} {fora_do_nexus}
+                  FROM leads l WHERE {onde} {fora_do_growthhs}
                  ORDER BY l.created_at DESC LIMIT 5""", *params)
     return {"total": int(total or 0), "amostra": [dict(a) for a in amostra]}
 

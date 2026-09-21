@@ -200,13 +200,17 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
                               {"tag_name": cfg.get("tag_name")})
         return {"tipo": "avancar", "proximo": no.get("next")}
 
-    if tipo == "handoff_nexus":
-        # ⚠️ A entrega ao comercial é o LOTE 5. Falhar explicitamente é o certo:
-        # um fluxo que diz ter entregado o lead sem entregar nada é pior que um
-        # que falhou visivelmente — ninguém vai procurar o lead que "já foi".
-        await registrar_passo(conn, run, no, "failed",
-                              {"motivo": "a entrega ao GrowthHS é do lote 5"})
-        return {"tipo": "parar", "falhou": True}
+    if tipo == "handoff_growthhs":
+        # Enfileira e segue: quem entrega é o worker (app/crm/entrega.py), com
+        # re-tentativa e falha à vista na linha do tempo do contato. O fluxo
+        # não espera o GrowthHS — um CRM fora do ar não pode parar as jornadas.
+        from app.crm.entrega import enfileirar
+
+        pedido = await enfileirar(conn, str(run["lead_id"]), "jornada",
+                                  journey_run_id=str(run["run_id"]))
+        await registrar_passo(conn, run, no, "enqueued",
+                              {"handoff_id": pedido, "ja_na_fila": pedido is None})
+        return {"tipo": "avancar", "proximo": no.get("next")}
 
     raise ValueError(f"tipo de nó desconhecido: {tipo}")
 

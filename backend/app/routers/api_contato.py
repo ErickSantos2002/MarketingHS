@@ -244,11 +244,12 @@ async def atualizar_status(dados: StatusApiIn,
     """O que era `contact-status-update`. PATCH é a rota; POST é alias, como na
     origem — mesmo caminho, porque aqui POST não colide com nada.
 
-    ⚠️ O estágio da identidade NÃO avança para `opportunity`, e o handoff para
-    o CRM não é disparado. A origem fazia os dois; a rota do admin deixou de
-    fazer (o comentário em `mudar_status`, `escrita_contatos.py`) porque a
-    régua é decisão de produto, e as duas portas de escrita têm de concordar.
-    O handoff é o lote 8D.
+    ⚠️ O estágio da identidade NÃO avança para `opportunity` — isso continua
+    decisão de produto, fora desta rota. O handoff ao GrowthHS, esse, dispara
+    sozinho: o gatilho de regras (migration 019) avalia em QUALQUER mudança de
+    `leads.status`, inclusive a que este UPDATE faz — não precisa desta rota
+    chamar nada. A origem fazia os dois passos explicitamente; aqui só o
+    handoff é implícito.
     """
     if not dados.status.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST,

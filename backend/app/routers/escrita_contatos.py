@@ -397,10 +397,11 @@ async def excluir_contato(lead_id: str, admin: Usuario = Depends(admin_atual)):
     `deleted_by` existia e ninguém o preenchia pela tela. Um registro de quem
     apagou vale mais que a coluna vazia.
 
-    ⚠️ Ponto de extensão do lote 5: a origem chamava a API do Nexus para apagar
-    o contato lá também, antes de marcar aqui. Na HS o destino é o GrowthHS.
-    Não implementado agora — mas quando o handoff existir, a exclusão precisa
-    propagar.
+    ⚠️ Excluir não apaga o card no GrowthHS (decisão 12 do 8D). A origem
+    chamava a API do Nexus para apagar o contato lá também, antes de marcar
+    aqui; o contrato do GrowthHS não tem rota de exclusão, e apagar card de
+    vendedor é decisão do CRM, não do MarketingHS. Registrado como pergunta
+    em aberto no contrato (docs/contratos/2026-09-02-endpoint-card-comercial-growthhs.md).
     """
     async with sessao(role="service_role") as conn:
         r = await conn.execute(

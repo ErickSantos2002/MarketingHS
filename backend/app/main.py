@@ -22,6 +22,7 @@ from app.routers.envio import router as envio_router
 from app.routers.chaves import router as chaves_router
 from app.routers.configuracao import router as configuracao_router
 from app.routers.contatos import router as contatos_router
+from app.routers.crm import router as crm_router
 from app.routers.datacore import router as datacore_router
 from app.routers.escrita_contatos import router as escrita_contatos_router
 from app.routers.ia import router as ia_router
@@ -144,6 +145,7 @@ app.include_router(campanhas_router)
 app.include_router(envio_router)
 app.include_router(jornadas_router)
 app.include_router(automacoes_router)
+app.include_router(crm_router)
 app.include_router(datacore_router)
 app.include_router(ia_router)
 app.include_router(imagens_router)
