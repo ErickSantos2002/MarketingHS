@@ -18,6 +18,24 @@ class Settings(BaseSettings):
     # Limite de taxa da borda pública (lead-capture e afins não têm auth).
     LIMITE_PUBLICO_POR_MINUTO: int = 30
 
+    # Baldes PRÓPRIOS do A/B público (revisão final do 8C, I1 e I4) — nenhum
+    # dos dois pode dividir cota com `/publico/captura`, que é onde mora o
+    # lead de verdade.
+    #
+    # O coletor (`/publico/ab/eventos`): o `ab.js` manda vários eventos por
+    # visita (troca de aba, pagehide, scroll, clique em CTA) — 30/min do
+    # balde comum estoura fácil com poucas visitas simultâneas, ou várias
+    # atrás do mesmo NAT corporativo.
+    LIMITE_COLETOR_POR_MINUTO: int = 120
+
+    # O redirecionador (`/publico/ab/go`): antes ficava TOTALMENTE isento
+    # (decisão 6 do plano); um balde alto substitui a isenção total, porque
+    # isenção total deixa qualquer GET em loop na URL pública (a tela de
+    # configuração a imprime) enfileirar duas escritas por acesso no pool de
+    # 10 sem limite nenhum. Ninguém clica 300 anúncios por minuto, nem atrás
+    # de NAT de operadora.
+    LIMITE_REDIRECIONADOR_POR_MINUTO: int = 300
+
     # Credencial alternativa à chave de API, para chamador máquina que não
     # tem chave própria. ⚠️ É global: vale tudo, não tem escopo nem expiração.
     # Herdado da origem; ver a pendência no ROADMAP.

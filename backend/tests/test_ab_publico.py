@@ -9,14 +9,34 @@ de erro. O do coletor é perder evento, ou contar a mesma exposição duas vezes
 """
 
 import json
+from collections import defaultdict, deque
 from urllib.parse import parse_qsl, urlsplit
 from uuid import uuid4
 
 import app.database as db
 from app.ab import dominio
+from app.config import settings
+from app.main import app as _app
+from app.middleware.limite_taxa import LimiteTaxaMiddleware
+from app.routers import ab_publico
 
 CHROME_WIN = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+
+
+def _limite_de(prefixo: str) -> LimiteTaxaMiddleware:
+    """Acha, na pilha JÁ MONTADA do app, a instância de `LimiteTaxaMiddleware`
+    responsável por `prefixo`. O Starlette só constrói a pilha (e portanto as
+    instâncias de verdade, com o `_historico` que os testes precisam sujar ou
+    limpar) na primeira requisição — por isso o chamador garante uma antes."""
+    camada = _app.middleware_stack
+    while camada is not None:
+        if isinstance(camada, LimiteTaxaMiddleware) and prefixo in camada.prefixos:
+            return camada
+        camada = getattr(camada, "app", None)
+    raise AssertionError(f"nenhum LimiteTaxaMiddleware cobre {prefixo!r}")
+
+
 VARIANTES = [{"key": "A", "url": "https://lp.exemplo.invalid/a", "weight": 50},
              {"key": "B", "url": "https://lp.exemplo.invalid/b?x=1", "weight": 50}]
 
@@ -137,6 +157,9 @@ async def test_sem_configuracao_e_sem_teste_e_404_curto(cliente, config_ab, limp
     await config_ab(None)
     r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe")
     assert r.status_code == 404
+    # M3: 404 de rota inexistente também é 404 — sem o texto, o teste não
+    # prova que é ESTA rota respondendo, e não o roteador.
+    assert r.text == "Link de teste indisponível."
 
 
 async def test_destino_fora_do_dominio_cai_na_reserva_sem_gravar(
@@ -150,11 +173,94 @@ async def test_destino_fora_do_dominio_cai_na_reserva_sem_gravar(
 
 
 async def test_redirecionador_nao_leva_429(cliente, config_ab, limpar_ab):
-    """Clique de anúncio nunca pode levar 429 — decisão 6 do plano."""
+    """Clique de anúncio nunca pode levar 429 em volume normal — decisão 6 do
+    plano. ⚠️ A decisão MUDOU no I4: o redirecionador deixou de ser TOTALMENTE
+    isento; ganhou um balde próprio e generoso (`LIMITE_REDIRECIONADOR_POR_MINUTO`,
+    300 por padrão) — 35 acessos fica bem abaixo disso. Que o balde existe de
+    verdade (e pode sim dar 429 acima dele) é o que
+    `test_redirecionador_tem_balde_proprio_e_pode_levar_429` prova."""
     await config_ab(None)
     for _ in range(35):
         r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe")
         assert r.status_code == 404
+
+
+async def test_redirecionador_tem_balde_proprio_e_pode_levar_429(
+        cliente, config_ab, limpar_ab, monkeypatch):
+    """I4: antes, `/publico/ab/go` ficava em `isentos` — nenhum `por_minuto`
+    jamais importaria, porque `isentos` barra a requisição ANTES do balde ser
+    olhado (ver `LimiteTaxaMiddleware.dispatch`). Provar que o balde é de
+    verdade: baixamos o `por_minuto` da instância já montada (300/min de
+    verdade seria caro de esgotar aqui) e vemos o 429 aparecer."""
+    await cliente.get("/health")  # garante a pilha de middleware montada
+    balde = _limite_de("/publico/ab/go")
+    monkeypatch.setattr(balde, "por_minuto", 3)
+    monkeypatch.setattr(balde, "_historico", defaultdict(deque))
+
+    await config_ab(None)
+    cabecalhos = {"x-forwarded-for": "203.0.113.51"}
+    for _ in range(3):
+        r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe", headers=cabecalhos)
+        assert r.status_code == 404
+    r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe", headers=cabecalhos)
+    assert r.status_code == 429
+
+
+async def test_banco_indisponivel_cai_no_dominio_em_cache_no_lugar_de_404(
+        cliente, config_ab, limpar_ab, monkeypatch):
+    """I3: `dominio` vem do banco; se `sessao()` falhar (pool saturado, sem
+    timeout de acquire), a origem tinha uma reserva independente do banco — a
+    nossa não pode devolver 404 pra clique pago só porque o banco tropeçou.
+    Preenche o cache com uma leitura boa e então quebra `sessao()`."""
+    await config_ab("exemplo.invalid")
+    r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe")
+    assert r.status_code == 302 and r.headers["location"] == "https://exemplo.invalid"
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _sessao_quebrada(*args, **kwargs):
+        raise RuntimeError("banco indisponível (simulado)")
+        yield  # nunca alcançado — só pra isto continuar sendo um gerador
+
+    monkeypatch.setattr(ab_publico, "sessao", _sessao_quebrada)
+
+    r = await cliente.get(f"/publico/ab/go/{limpar_ab}-nao-existe")
+    assert r.status_code == 302
+    assert r.headers["location"] == "https://exemplo.invalid"
+
+
+async def test_coletor_tem_balde_proprio_e_nao_gasta_o_do_publico(
+        cliente, limpar_ab):
+    """I1: o `ab.js` manda `time_on_page` a cada troca de aba e no `pagehide`,
+    um evento por clique em CTA e um por marca de rolagem — duas ou três
+    visitas por minuto (ou várias atrás do mesmo NAT corporativo) gastavam os
+    30/min de `/publico`, e o FORMULÁRIO de captura da mesma visita levava
+    429 logo depois. Usa um IP sintético pra não sujar a cota que os testes de
+    `/publico/captura` também usam."""
+    cabecalhos = {"x-forwarded-for": "203.0.113.52"}
+    evento = {"ab_test": f"{limpar_ab}-limite", "ab_vid": "v_teste8c-limite",
+             "event_type": "behavior"}
+    for _ in range(35):
+        r = await cliente.post("/publico/ab/eventos", json=evento, headers=cabecalhos)
+        assert r.status_code == 202, r.text
+
+    r = await cliente.post("/publico/captura", json={}, headers=cabecalhos)
+    assert r.status_code != 429, r.text
+
+
+async def test_coletor_nao_manda_credentials_com_origem_curinga(cliente, limpar_ab):
+    """M5: `Access-Control-Allow-Origin: *` com `Access-Control-Allow-Credentials:
+    true` é combinação inválida — o navegador descarta a resposta inteira. O
+    `CORSMiddleware` global põe o `Allow-Credentials` quando a Origin bate com
+    o `FRONTEND_URL`; o coletor tem de tirá-lo antes de responder."""
+    evento = {"ab_test": f"{limpar_ab}-cors", "ab_vid": "v_teste8c-cors",
+             "event_type": "behavior"}
+    r = await cliente.post("/publico/ab/eventos", json=evento,
+                           headers={"origin": settings.FRONTEND_URL})
+    assert r.status_code == 202
+    assert r.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in r.headers
 
 
 async def _eventos(slug: str):

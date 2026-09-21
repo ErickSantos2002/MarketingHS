@@ -33,5 +33,12 @@ class CorsDoColetorMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return Response(status_code=204, headers=_CABECALHOS)
         resposta = await call_next(request)
+        # M5: quando a Origin bate com o FRONTEND_URL, o CORSMiddleware
+        # global (mais interno) já pôs `Allow-Credentials: true` na resposta.
+        # ACAO `*` + `Allow-Credentials: true` é combinação inválida — o
+        # navegador descarta a resposta inteira. A rota não lê cookie nem
+        # credencial nenhuma, então o header sai.
+        if "access-control-allow-credentials" in resposta.headers:
+            del resposta.headers["access-control-allow-credentials"]
         resposta.headers.update(_CABECALHOS)
         return resposta

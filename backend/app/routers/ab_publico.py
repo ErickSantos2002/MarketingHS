@@ -7,6 +7,13 @@ erro enquanto houver para onde mandar (cai no domínio de produção); o coletor
 responde na hora. Gravação vai em `BackgroundTasks`, que roda DEPOIS da
 resposta sair — o `waitUntil` da origem.
 
+⚠️ I3: "houver para onde mandar" inclui o banco estar fora ou lento. O
+`production_domain` lido com sucesso fica em cache de módulo
+(`_dominio_producao_cache`), e a leitura do banco tem 2s de timeout — pool
+saturado (máx. 10, sem timeout de acquire) ou `sessao()` falhando não pode
+virar um 404 depois de um travamento longo para um clique pago; cai no
+último domínio bom conhecido.
+
 ⚠️ `role="service_role"`: não há usuário. Quem autoriza é a natureza da rota,
 pública por desenho, como `/publico/captura`.
 
@@ -17,6 +24,7 @@ backend, o cookie é recusado e não há permanência na variante — só serve 
 conferência.
 """
 
+import asyncio
 import json
 import logging
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
@@ -40,6 +48,14 @@ PARAMETROS_INTERNOS = {"t"}
 _SEM_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate",
               "X-Robots-Tag": "noindex, nofollow",
               "Referrer-Policy": "no-referrer-when-downgrade"}
+# I3: último `production_domain` lido com sucesso — sobrevive a uma falha ou
+# lentidão do banco. Por processo, como o `_historico` do limite de taxa: com
+# uma réplica basta.
+_dominio_producao_cache: str = ""
+# Timeout da consulta ao `ab_config`/`ab_tests` no redirecionador. O pool tem
+# no máximo 10 conexões e nenhum timeout de acquire — sem isto, um pool
+# saturado prende o clique pago até o Postgres (ou o driver) desistir sozinho.
+TIMEOUT_CONSULTA_SEGUNDOS = 2
 
 
 def _redirecionar(destino: str, cookies: list[str] | None = None) -> Response:
@@ -53,7 +69,8 @@ def _redirecionar(destino: str, cookies: list[str] | None = None) -> Response:
 def _reserva(dominio: str) -> Response:
     """Para onde vai o clique sem teste. A origem usava `AB_FALLBACK_URL`
     (padrão https://dnia.ai); aqui é o domínio de produção (decisão 2). Sem
-    domínio configurado não há para onde mandar: 404 curto, sem página."""
+    domínio configurado — de verdade, não por falha do banco (I3 cuida disso
+    antes de chegar aqui) — não há para onde mandar: 404 curto, sem página."""
     if dominio:
         return _redirecionar(f"https://{dominio}")
     return Response("Link de teste indisponível.", status_code=404,
@@ -95,29 +112,45 @@ def _escolher_teste(linhas):
             or (linhas[0] if linhas else None))
 
 
-@router.get("/go")
-@router.get("/go/{public_slug}")
-async def redirecionar(request: Request, tarefas: BackgroundTasks,
-                       public_slug: str | None = None):
-    """O que era a function `go`. O slug vem do caminho ou de `?t=` (que vence)."""
-    dominio = ""
-    try:
-        async with sessao(role="service_role") as conn:
-            dominio = normalizar_dominio(await conn.fetchval(
-                "SELECT production_domain FROM ab_config LIMIT 1"))
-            slug_publico = (request.query_params.get("t") or "").strip() or public_slug
-            if not slug_publico:
-                return _reserva(dominio)
+async def _consultar(request: Request, public_slug: str | None):
+    """A parte que toca o banco — isolada para poder ir dentro do
+    `asyncio.wait_for` do chamador (I3). Atualiza o cache de domínio assim
+    que uma leitura boa chega, mesmo que o resto da função falhe depois."""
+    global _dominio_producao_cache
+    async with sessao(role="service_role") as conn:
+        dominio = normalizar_dominio(await conn.fetchval(
+            "SELECT production_domain FROM ab_config LIMIT 1"))
+        if dominio:
+            _dominio_producao_cache = dominio
+        slug_publico = (request.query_params.get("t") or "").strip() or public_slug
+        linhas = []
+        if slug_publico:
             # A mesma slug pública pode ter vários testes ao longo do tempo;
             # por isso lista, em vez de pegar um.
             linhas = await conn.fetch(
                 """SELECT slug, status, variants, control_variant, winner_variant
                      FROM ab_tests WHERE public_slug = $1
                     ORDER BY updated_at DESC LIMIT 20""", slug_publico)
+    return dominio, slug_publico, linhas
+
+
+@router.get("/go")
+@router.get("/go/{public_slug}")
+async def redirecionar(request: Request, tarefas: BackgroundTasks,
+                       public_slug: str | None = None):
+    """O que era a function `go`. O slug vem do caminho ou de `?t=` (que
+    vence). I3: banco fora ou lento (mais de `TIMEOUT_CONSULTA_SEGUNDOS`) cai
+    no último domínio de produção lido com sucesso, não em 404."""
+    try:
+        dominio, slug_publico, linhas = await asyncio.wait_for(
+            _consultar(request, public_slug), timeout=TIMEOUT_CONSULTA_SEGUNDOS)
+        if not slug_publico:
+            return _reserva(dominio)
         return _decidir(request, tarefas, dominio, _escolher_teste(linhas))
     except Exception:
-        logger.exception("[ab/go] falha — o visitante vai para a reserva")
-        return _reserva(dominio)
+        logger.exception("[ab/go] falha ou lentidão no banco — indo para o "
+                         "domínio em cache")
+        return _reserva(_dominio_producao_cache)
 
 
 def _decidir(request: Request, tarefas: BackgroundTasks, dominio: str, teste) -> Response:

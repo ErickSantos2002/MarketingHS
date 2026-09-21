@@ -78,10 +78,37 @@ app.add_middleware(
     # ENVIO de verdade, e a pessoa levaria 429 na hora de mandar o formulário
     # que preencheu direitinho. Mesma classe de defeito que recusar lead real.
     #
-    # ⚠️ `/publico/ab/go` também é isento: é o clique do anúncio, e um 429 ali
-    # joga fora uma visita paga. A origem mandava pôr o limite dessa rota na
-    # camada do Cloudflare (regra de Rate Limiting do Worker).
-    isentos=("/publico/webhook/", "/publico/validar-email", "/publico/ab/go"),
+    # ⚠️ `/publico/ab/go` e `/publico/ab/eventos` são isentos DESTE balde
+    # comum, mas não do limite de taxa em geral — cada um tem o seu próprio,
+    # registrado abaixo (revisão final do 8C, I1 e I4). O do coletor evita que
+    # os vários eventos por visita do `ab.js` estourem a cota de
+    # `/publico/captura` da MESMA visita; o do redirecionador substitui o que
+    # antes era isenção total (ver o comentário no `add_middleware` dele).
+    isentos=("/publico/webhook/", "/publico/validar-email",
+             "/publico/ab/go", "/publico/ab/eventos"),
+)
+
+# I1: balde próprio do coletor de eventos do A/B — bem mais generoso que o
+# comum, porque um único visitante gera vários eventos (troca de aba,
+# pagehide, scroll, clique em CTA). Sem ele, o coletor dividia cota com
+# `/publico/captura` e o FORMULÁRIO da mesma visita levava 429.
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=settings.LIMITE_COLETOR_POR_MINUTO,
+    prefixos=("/publico/ab/eventos",),
+)
+
+# I4: balde próprio do redirecionador — generoso, mas não mais TOTALMENTE
+# isento (isso mudava a decisão 6 do plano; deliberado). Isenção total deixava
+# qualquer GET em loop na URL pública (a tela de configuração a imprime)
+# enfileirar duas escritas por acesso no pool de 10 sem limite nenhum —
+# poluindo o volume de cliques e podendo travar as outras rotas, admin
+# inclusive. Ninguém clica 300 anúncios por minuto, nem atrás de NAT de
+# operadora.
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=settings.LIMITE_REDIRECIONADOR_POR_MINUTO,
+    prefixos=("/publico/ab/go",),
 )
 
 # ⚠️ Por último de propósito: é o mais de fora, e responde o preflight do
