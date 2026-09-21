@@ -8,14 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertCircle, Zap, GitBranch, Play, Plus, Trash2 } from 'lucide-react';
 import { listarTags } from '@/lib/contatos';
+import { AUTOMACAO_NAO_LIGADA } from '@/lib/automacoes';
 import type { AutomationRule, AutomationCondition } from '@/lib/automacoes';
-
-interface NexusStage {
-  id: string;
-  name: string;
-  is_won?: boolean;
-  is_lost?: boolean;
-}
 
 interface Props {
   rule: AutomationRule | null;
@@ -66,9 +60,9 @@ const OPERATORS_MAP: Record<string, { value: string; label: string }[]> = {
 };
 
 const ACTION_TYPES = [
-  { value: 'create_in_nexus', label: 'Criar contato + oportunidade no Nexus' },
-  { value: 'move_stage_nexus', label: 'Mover oportunidade de estágio no Nexus' },
-  { value: 'block_nexus', label: 'Não enviar para o Nexus' },
+  { value: 'create_in_growthhs', label: 'Criar card no GrowthHS' },
+  { value: 'move_stage_growthhs', label: 'Mover etapa no GrowthHS' },
+  { value: 'block_growthhs', label: 'Não enviar ao GrowthHS (bloquear)' },
 ];
 
 function buildInitialConditions(rule: AutomationRule | null): AutomationCondition[] {
@@ -190,15 +184,16 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
   const [priority, setPriority] = useState(rule?.priority || 1);
   const [conditions, setConditions] = useState<AutomationCondition[]>(() => buildInitialConditions(rule));
   const [conditionLogic, setConditionLogic] = useState<'and' | 'or'>((rule as any)?.condition_logic || 'and');
-  const [actionType, setActionType] = useState(rule?.action_type || 'create_in_nexus');
+  const [actionType, setActionType] = useState(rule?.action_type || 'create_in_growthhs');
   const [actionValue, setActionValue] = useState(rule?.action_value || '');
   const [actionMetadata, setActionMetadata] = useState<Record<string, any>>(rule?.action_metadata || {});
   const [isActive, setIsActive] = useState(rule?.is_active ?? true);
   const [saving, setSaving] = useState(false);
 
-  // Estágios do Nexus — ver AUTOMACAO_NAO_LIGADA em lib/automacoes. Não há
-  // lista para carregar: `get-nexus-stages` é do lote 5. O campo vira texto
-  // livre, que é o mesmo caminho que a origem já usava quando a lista falhava.
+  // Etapas do GrowthHS — o contrato não tem rota de leitura para listá-las
+  // (decisão 10 do plano), então o campo é texto livre, só para
+  // `move_stage_growthhs` (a única ação que ainda pede uma etapa: criar e
+  // bloquear não usam `action_value` — ver Step 1 do plano).
 
   // Tags
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
@@ -249,14 +244,17 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
       conditions,
       condition_logic: conditionLogic,
       action_type: actionType,
-      action_value: actionType === 'block_nexus' ? null : actionValue || null,
-      action_metadata: actionMetadata,
+      // Só `move_stage_growthhs` usa `action_value`: o card de criar entra
+      // sempre na etapa de entrada do funil configurado, e bloquear não tem
+      // etapa nenhuma.
+      action_value: actionType === 'move_stage_growthhs' ? (actionValue || null) : null,
+      action_metadata: actionType === 'move_stage_growthhs' ? actionMetadata : {},
       is_active: isActive,
     });
     setSaving(false);
   };
 
-  const needsStageSelect = actionType === 'create_in_nexus' || actionType === 'move_stage_nexus';
+  const needsStageSelect = actionType === 'move_stage_growthhs';
 
   return (
     <div className="space-y-6">
@@ -361,15 +359,22 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
             </Select>
           </div>
 
-          {actionType === 'block_nexus' && (
+          {actionType === 'block_growthhs' && (
             <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              Bloqueia o envio para o Nexus mesmo que outras regras se apliquem.
+              Bloqueia o envio ao GrowthHS mesmo que outras regras se apliquem.
             </p>
           )}
 
-          {actionType === 'move_stage_nexus' && (
+          {actionType === 'create_in_growthhs' && (
             <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              Só funciona se o contato já existir no Nexus.
+              O card entra na etapa de entrada do funil configurado em
+              Configurações → GrowthHS.
+            </p>
+          )}
+
+          {actionType === 'move_stage_growthhs' && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+              {AUTOMACAO_NAO_LIGADA}
             </p>
           )}
 
@@ -377,13 +382,13 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Estágio do pipeline</Label>
               <Input
-                placeholder="ID do estágio no Nexus"
+                placeholder="ID da etapa no GrowthHS"
                 value={actionValue}
                 onChange={(e) => { setActionValue(e.target.value); setActionMetadata({ stage_id: e.target.value, stage_name: e.target.value }); }}
               />
               <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-                A lista de estágios chega junto com a integração; por enquanto o
-                identificador é digitado.
+                O contrato ainda não tem rota para mover card de etapa — ver o
+                aviso acima.
               </p>
             </div>
           )}
@@ -397,7 +402,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
         <Switch checked={isActive} onCheckedChange={setIsActive} />
         <div>
           <Label className="text-sm">Ativa esta regra imediatamente</Label>
-          <p className="text-[10px] text-muted-foreground/60">Fica guardada e pronta — mas nada dispara ainda, como diz o aviso acima.</p>
+          <p className="text-[10px] text-muted-foreground/60">Regra ativa dispara na primeira mudança de etiqueta, status ou pontuação que casar com ela.</p>
         </div>
       </div>
 

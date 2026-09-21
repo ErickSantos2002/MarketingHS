@@ -9,6 +9,7 @@ import {
   Clock, FileText, Mail, MailOpen, ExternalLink, MessageCircle,
   Calendar, TrendingUp, FileCheck, Rocket, Heart, StickyNote, Circle,
   ChevronDown, ChevronUp, Send, ArrowRight, Plus, Trophy, Search, Filter, X,
+  AlertTriangle,
 } from 'lucide-react';
 import { eventosDoContato } from '@/lib/leitura';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -41,6 +42,8 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
   onboarding_started: Rocket,
   health_updated: Heart,
   note_added: StickyNote,
+  crm_handoff: Send,
+  crm_handoff_falhou: AlertTriangle,
 };
 
 const APP_COLORS: Record<string, { label: string; color: string; name: string }> = {
@@ -279,6 +282,12 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
                 const Icon = EVENT_ICONS[evt.event_type] || Circle;
                 const app = APP_COLORS[evt.source_app] || APP_COLORS.dnmarketing;
                 const isLast = idx === dateEvents.length - 1;
+                // `crm_handoff_falhou` não grava `description` — o motivo
+                // mora em `metadata.erro` (ver backend/app/crm/entrega.py).
+                const description = evt.description
+                  ?? (evt.event_type === 'crm_handoff_falhou' && typeof evt.metadata?.erro === 'string'
+                    ? evt.metadata.erro
+                    : null);
 
                 return (
                   <div key={evt.id} className="flex gap-3 pb-3 last:pb-0">
@@ -301,8 +310,8 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
                         <Icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: app.color }} />
                         <span className="text-sm font-medium text-foreground">{evt.title}</span>
                       </div>
-                      {evt.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{evt.description}</p>
+                      {description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
                       )}
                       <span className="text-[10px] text-muted-foreground">
                         {formatDistanceToNow(new Date(evt.occurred_at), { addSuffix: true, locale: ptBR })}

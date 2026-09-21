@@ -11,7 +11,7 @@ const NODE_ICONS: Record<JourneyNodeType, typeof Mail> = {
   branch_segment: Users,
   branch_email_event: MailCheck,
   apply_tag: Tag,
-  handoff_nexus: Building2,
+  handoff_growthhs: Building2,
 };
 
 interface Props {

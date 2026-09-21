@@ -10,7 +10,7 @@ import { Zap, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { useAutomationRules } from '@/hooks/useAutomationRules';
 import { AutomationRuleForm } from '@/components/admin/automations/AutomationRuleForm';
 import { toast } from 'sonner';
-import { AUTOMACAO_NAO_LIGADA, previaDaRegra, type AutomationRule } from '@/lib/automacoes';
+import { AUTOMACAO_COMO_FUNCIONA, previaDaRegra, type AutomationRule } from '@/lib/automacoes';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { JourneysTab } from '@/components/admin/automations/JourneysTab';
 
@@ -35,9 +35,9 @@ const OPERATOR_LABELS: Record<string, string> = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  create_in_nexus: 'Criar no Nexus',
-  move_stage_nexus: 'Mover estágio no Nexus',
-  block_nexus: 'Não enviar para o Nexus',
+  create_in_growthhs: 'Criar no GrowthHS',
+  move_stage_growthhs: 'Mover estágio no GrowthHS',
+  block_growthhs: 'Não enviar para o GrowthHS',
 };
 
 export default function Automations() {
@@ -71,9 +71,9 @@ export default function Automations() {
     if (!ok) return;
     setShowForm(false);
 
-    // `block_nexus` não manda ninguém para lugar nenhum: contar quantos ela
-    // pegaria não diz nada a quem acabou de criá-la.
-    if (rule.action_type === 'block_nexus') return;
+    // `block_growthhs` não manda ninguém para lugar nenhum: contar quantos
+    // ela pegaria não diz nada a quem acabou de criá-la.
+    if (rule.action_type === 'block_growthhs') return;
 
     setPreviaRegra(rule);
     setPreviaCarregando(true);
@@ -106,7 +106,7 @@ export default function Automations() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold">Automações</h1>
-        <p className="text-sm text-muted-foreground">Regras de handoff para o Nexus e fluxos de email</p>
+        <p className="text-sm text-muted-foreground">Regras de handoff para o GrowthHS e fluxos de email</p>
       </div>
 
       <Tabs defaultValue="fluxos">
@@ -122,15 +122,14 @@ export default function Automations() {
             </Button>
           </div>
 
-          {/* ⚠️ O aviso da origem mandava conferir as credenciais do Nexus em
-              Configurações, como se faltasse configuração. Não falta: a
-              integração inteira é do lote 5. Mandar procurar credencial que
-              não existe faz perder tempo procurando defeito onde não há. */}
+          {/* Desde o lote 8D as regras disparam de verdade, via gatilho no
+              banco. Este aviso deixou de ser "nada dispara" e passou a
+              explicar o que acontece agora. */}
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardContent className="py-3 flex items-start gap-3">
           <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            {AUTOMACAO_NAO_LIGADA}
+            {AUTOMACAO_COMO_FUNCIONA}
           </p>
         </CardContent>
       </Card>
@@ -230,11 +229,11 @@ export default function Automations() {
               {previaCarregando ? (
                 'Calculando quantos contatos atendem à condição...'
               ) : previaTotal === 0 ? (
-                'Nenhum contato existente atende a esta condição (ou todos já estão no Nexus).'
+                'Nenhum contato existente atende a esta condição.'
               ) : (
                 <>
                   <strong>{previaTotal}</strong> contato{previaTotal !== 1 ? 's' : ''} existente{previaTotal !== 1 ? 's' : ''}
-                  {' '}atende{previaTotal === 1 ? '' : 'm'} à condição e ainda não está{previaTotal === 1 ? '' : 'ão'} no Nexus.
+                  {' '}atende{previaTotal === 1 ? '' : 'm'} à condição.
                 </>
               )}
             </DialogDescription>
@@ -244,7 +243,7 @@ export default function Automations() {
             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
               <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
               <p className="text-xs text-amber-900 dark:text-amber-200">
-                Eles não serão enviados agora. {AUTOMACAO_NAO_LIGADA}
+                Eles não são enviados retroativamente. {AUTOMACAO_COMO_FUNCIONA}
               </p>
             </div>
           )}

@@ -1,10 +1,13 @@
 // Cliente de regras de automação. Substitui a `automations-api` e o acesso
 // direto de useAutomationRules, AutomationRuleForm e Automations.
 //
-// ⚠️ **Nenhuma regra dispara hoje.** As três ações possíveis são o Nexus
-// (`create_in_nexus`, `move_stage_nexus`, `block_nexus`) e a integração com o
-// GrowthHS é o lote 5. O cadastro existe e é real — a regra fica guardada,
-// pronta —, mas nada a executa. A tela diz isso; ver AUTOMACAO_NAO_LIGADA.
+// A partir do lote 8D as regras disparam de verdade: um gatilho no banco
+// avalia toda escrita relevante em `leads` e enfileira a ação casada em
+// `crm_handoffs`. As três ações possíveis são `create_in_growthhs`,
+// `move_stage_growthhs` e `block_growthhs` — ver AUTOMACAO_COMO_FUNCIONA.
+// `move_stage_growthhs` é a exceção: o contrato do GrowthHS ainda não tem
+// rota para mover card de etapa, então uma regra dessas é registrada e falha
+// na entrega, à vista — ver AUTOMACAO_NAO_LIGADA.
 import { api } from '@/lib/api';
 
 export interface AutomationCondition {
@@ -30,13 +33,20 @@ export interface AutomationRule {
   updated_at: string;
 }
 
-// A frase única sobre o que não roda. Mesmo papel de NODE_NAO_LIGADO em
-// lib/journeys.ts: quando o lote 5 ligar o Nexus, muda-se aqui e a tela toda
-// para de mentir de uma vez.
+// O que acontece hoje, para os banners "regra dispara" da tela de
+// Automações. Mesmo papel de NODE_NAO_LIGADO em lib/journeys.ts.
+export const AUTOMACAO_COMO_FUNCIONA =
+  'Quando um contato muda de etiqueta, status ou pontuação, a primeira regra ' +
+  'ativa que casar (por prioridade) envia o contato ao GrowthHS. A entrega ' +
+  'aparece na linha do tempo do contato; falhas, em Configurações → GrowthHS.';
+
+// A única ação que ainda não roda: o GrowthHS não tem rota para mover card de
+// etapa. Usado só no aviso de `move_stage_growthhs` em AutomationRuleForm —
+// as outras duas ações (criar, bloquear) já funcionam.
 export const AUTOMACAO_NAO_LIGADA =
-  'A integração com o GrowthHS ainda não está ligada neste sistema. As regras ' +
-  'ficam salvas e prontas, mas nenhuma dispara: nada é criado, movido ou ' +
-  'bloqueado no Nexus até o próximo lote.';
+  'O GrowthHS ainda não tem como mover card de etapa. Uma regra destas é ' +
+  'registrada e falha na entrega, à vista — ela passa a funcionar quando o ' +
+  'GrowthHS ganhar a rota.';
 
 export const listarRegras = () => api.get<AutomationRule[]>('/automacoes');
 

@@ -45,7 +45,7 @@ const ADD_MENU: { label: string; type: JourneyNodeType }[] = [
   { label: NODE_LABELS.wait_for_event, type: 'wait_for_event' },
   { label: 'Condição', type: 'branch_attribute' },
   { label: NODE_LABELS.apply_tag, type: 'apply_tag' },
-  { label: NODE_LABELS.handoff_nexus, type: 'handoff_nexus' },
+  { label: NODE_LABELS.handoff_growthhs, type: 'handoff_growthhs' },
 ];
 
 function minutesToLabel(m: number): string {
@@ -166,8 +166,8 @@ export default function JourneyBuilder() {
       }
       case 'apply_tag':
         return `Tag "${node.config.tag_name}"`;
-      case 'handoff_nexus':
-        return node.config.stage_name || 'estágio do Nexus';
+      case 'handoff_growthhs':
+        return 'Etapa de entrada do funil configurado';
       default:
         return '';
     }

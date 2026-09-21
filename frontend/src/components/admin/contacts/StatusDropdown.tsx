@@ -52,9 +52,10 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
     // existe. Quem decidir isso, decide no servidor.
 
     // ⚠️ A chamada às automações saiu no lote 4B. Ela avaliava as regras no
-    // navegador e chamava `handoff-to-nexus`, que é do lote 5 — o toast dizia
-    // "Automação executada" enquanto nada saía. A avaliação volta no lote 5,
-    // no servidor, junto da ação que ela dispara. Ver AUTOMACAO_NAO_LIGADA.
+    // navegador e chamava `handoff-to-nexus`, function que não existe mais —
+    // o toast dizia "Automação executada" enquanto nada saía. A avaliação
+    // voltou no lote 8D, no servidor (gatilho da migration 019), junto da
+    // ação que ela dispara. Ver AUTOMACAO_COMO_FUNCIONA em lib/automacoes.
 
     onStatusChange?.(newStatus);
   };

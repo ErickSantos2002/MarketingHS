@@ -762,7 +762,7 @@ curl -X POST \\
     method: 'GET',
     path: '/publico/automacoes',
     title: 'Listar automações',
-    description: 'Lista regras de automação, por prioridade decrescente. POST para criar, PATCH para ativar/desativar. ⚠️ As regras são cadastro: a ação de todas é o handoff para o Nexus, que ainda não está ligado — nada dispara.',
+    description: 'Lista regras de automação, por prioridade decrescente. POST para criar, PATCH para ativar/desativar. A ação de cada regra envia o contato ao GrowthHS (criar card, mover etapa ou bloquear); um gatilho no banco avalia toda mudança de etiqueta, status ou pontuação.',
     params: [],
     curl: `curl -X GET \\
   '${BASE_URL}/publico/automacoes' \\
@@ -774,11 +774,11 @@ curl -X POST \\
         is_active: true,
         priority: 10,
         condition: "etiqueta is hotlead",
-        action: "create_in_nexus em Diagnóstico",
+        action: "create_in_growthhs",
         condition_type: "etiqueta",
         condition_value: "hotlead",
-        action_type: "create_in_nexus",
-        action_metadata: { stage_name: "Diagnóstico" }
+        action_type: "create_in_growthhs",
+        action_metadata: {}
       }]
     }, null, 2),
     notes: 'PATCH /publico/automacoes/{id} para ativar/desativar regras.',

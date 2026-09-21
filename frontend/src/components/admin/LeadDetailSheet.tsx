@@ -12,6 +12,8 @@ import {
   StickyNote, History, Send, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import type { Lead } from '@/hooks/useLeads';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import {
@@ -62,11 +64,12 @@ interface TimelineEventData {
 }
 
 export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onDataChanged }: LeadDetailSheetProps) {
+  const { isAdmin } = useAuth();
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loadingConversions, setLoadingConversions] = useState(false);
   const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown | null>(null);
-  const [sendingToNexus, setSendingToNexus] = useState(false);
+  const [enviandoAoComercial, setEnviandoAoComercial] = useState(false);
 
   // Cast to enriched if available
   const enrichedLead = lead ? {
@@ -211,34 +214,34 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                   size={12}
                 />
                 <NexusLink nexusContactId={enrichedLead.ecosystem?.nexus_contact_id ?? null} />
-                {/* Manual send to Nexus — only for hotleads not yet in Nexus */}
-                {enrichedLead.etiqueta === 'hotlead' && !enrichedLead.ecosystem?.nexus_contact_id && (
+                {/* Botão manual, admin-only (POST /crm/enviar/{lead_id} — a
+                    rota é `Depends(admin_atual)`). Entra na mesma fila que a
+                    regra e a jornada usam (crm_handoffs); o backend responde
+                    `ja_na_fila` quando o lead já está lá, e a entrega
+                    acontece em segundo plano pelo worker. */}
+                {isAdmin && enrichedLead.etiqueta === 'hotlead' && !enrichedLead.ecosystem?.nexus_contact_id && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-6 px-2 text-[10px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                    // ⚠️ Desativado até o lote 5. O destino era o Nexus, CRM da
-                    // dn.ia; na HS este botão vai empurrar o contato para o
-                    // GrowthHS. Deixá-lo clicável apontando para o lugar errado
-                    // seria pior que desativá-lo.
-                    disabled
-                    title="Disponível quando a integração com o GrowthHS estiver pronta"
+                    disabled={enviandoAoComercial}
                     onClick={async () => {
-                      setSendingToNexus(true);
+                      setEnviandoAoComercial(true);
                       try {
-                        const data: { error?: string } = {};
-                        if (data?.error) throw new Error(data.error);
-                        toast.success('Contato enviado!');
+                        const { ja_na_fila } = await api.post<{ handoff_id: number | null; ja_na_fila: boolean }>(
+                          `/crm/enviar/${lead.id}`,
+                        );
+                        toast.success(ja_na_fila ? 'Já estava na fila' : 'Enviado para a fila do comercial');
                         onDataChanged?.();
                       } catch (err: any) {
-                        toast.error(err?.message || 'Erro ao enviar para o Nexus');
+                        toast.error(err?.message || 'Erro ao enviar ao comercial');
                       } finally {
-                        setSendingToNexus(false);
+                        setEnviandoAoComercial(false);
                       }
                     }}
                   >
-                    {sendingToNexus ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                    Enviar para Nexus
+                    {enviandoAoComercial ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                    Enviar ao comercial
                   </Button>
                 )}
               </div>
@@ -317,7 +320,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
           </div>
         </DialogHeader>
 
-        <QualifiedBanner status={enrichedLead.status} />
+        <QualifiedBanner status={enrichedLead.status} leadId={lead.id} onSent={onDataChanged} />
 
         <ScrollArea className="max-h-[calc(90vh-120px)]">
           <div className="p-6 space-y-6">

@@ -450,6 +450,8 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   conversion_unregistered: 'Conversão removida',
   direct_nexus_send: 'Enviado ao Nexus',
   manual_nexus_send: 'Envio manual ao Nexus',
+  crm_handoff: 'Enviado ao comercial (GrowthHS)',
+  crm_handoff_falhou: 'Falha ao enviar ao comercial',
   opportunity_created: 'Oportunidade criada',
   sync_manual: 'Sync manual',
   note_added: 'Nota adicionada',

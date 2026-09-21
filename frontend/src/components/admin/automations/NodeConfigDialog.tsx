@@ -9,7 +9,7 @@ import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSegments } from '@/hooks/useSegments';
-import { NODE_LABELS, NODE_NAO_LIGADO, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
+import { NODE_LABELS, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
 
 // Mesmo vocabulário field/operator/value que build_segment_condition
 // (migration 20260713250000) mapeia -- evaluate_rules_for_lead (Task 6.4)
@@ -124,10 +124,6 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   // as mesmas do filtro ETIQUETA de /contacts e do campo Etiqueta dos segmentos.
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
 
-  // handoff_nexus — ver NODE_NAO_LIGADO em lib/journeys. Não há lista de
-  // estágios para carregar: o GrowthHS entra no lote 5.
-  const [stageId, setStageId] = useState('');
-
   useEffect(() => {
     if (!open || !type) return;
     const cfg = initialConfig || {};
@@ -147,7 +143,6 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
     setEmailCheck(cfg.check || '');
     if (type && isBranch(type)) setCondType(type);
     setTagName(cfg.tag_name || '');
-    setStageId(cfg.stage_id || '');
   }, [open, type, initialConfig]);
 
   useEffect(() => {
@@ -183,8 +178,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       case 'branch_segment': return !!segmentId;
       case 'branch_email_event': return !!sourceNodeId && ['delivered', 'opened', 'clicked'].includes(emailCheck);
       case 'apply_tag': return !!normalizedTag;
-      // Passo sem consumidor não se salva — ver NODE_NAO_LIGADO.
-      case 'handoff_nexus': return false;
+      // Sem configuração: o card entra na etapa de entrada do funil
+      // configurado em Configurações → GrowthHS (decisão 7 do plano).
+      case 'handoff_growthhs': return true;
       default: return false;
     }
   };
@@ -218,11 +214,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       case 'apply_tag':
         config = { tag_name: normalizedTag };
         break;
-      case 'handoff_nexus':
-        // Inalcançável: isValid() recusa este tipo enquanto o GrowthHS não
-        // entrar. O `stage_id` de um fluxo antigo é preservado como está, sem
-        // o `stage_name` que só a integração saberia resolver.
-        config = { stage_id: stageId };
+      case 'handoff_growthhs':
+        config = {};
         break;
     }
     // Passa o subtipo real quando é uma Condição; o chamador persiste esse type.
@@ -480,11 +473,13 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
             </div>
           )}
 
-          {type === 'handoff_nexus' && (
-            <div className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-              <p className="text-xs text-amber-900 dark:text-amber-200">
-                {NODE_NAO_LIGADO.handoff_nexus}
+          {type === 'handoff_growthhs' && (
+            <div className="flex gap-2 rounded-md border border-border/40 bg-muted/20 p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">
+                O contato entra na etapa de entrada do funil configurado em
+                Configurações → GrowthHS. A entrega acontece em segundo
+                plano; o fluxo segue sem esperar.
               </p>
             </div>
           )}
