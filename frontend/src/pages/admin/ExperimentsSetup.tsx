@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Copy, Save, Settings2, Cloud, Globe, ShieldAlert, ShieldCheck, Code2, Zap, CalendarClock } from "lucide-react";
@@ -27,12 +27,16 @@ const API = '${API_URL}';
 export default {
   async fetch(request) {
     const url = new URL(request.url);
-    const path = url.pathname;
+    // M4: com barra final (go.<dom>/slug/) o Starlette responde 307 para o
+    // host da API e o cookie de domínio se perde — tira a barra final antes
+    // de montar o target, exceto quando o path é só '/'.
+    let path = url.pathname;
+    if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
     let target;
 
-    if (path === '/e' || path === '/e/') {
+    if (path === '/e') {
       target = \`\${API}/publico/ab/eventos\${url.search}\`;
-    } else if (path === '/' || path === '') {
+    } else if (path === '' || path === '/') {
       target = \`\${API}/publico/ab/go\${url.search}\`;
     } else {
       target = \`\${API}/publico/ab/go\${path}\${url.search}\`;
@@ -89,10 +93,18 @@ export default function ExperimentsSetup() {
   const abConfig = useAbConfig();
   const [base, setBase] = useState("");
   const [prodDomain, setProdDomain] = useState("");
+  // M6: preenche os campos a partir do banco só na PRIMEIRA carga. Sem o
+  // `inicializado`, este efeito reagia a QUALQUER mudança em productionDomain
+  // OU redirectorBase — e salvar um dos dois reescrevia o outro por cima do
+  // que a pessoa tinha digitado e ainda não salvo (o campo "esvaziava").
+  // Depois da carga inicial, cada campo só se atualiza pelo PRÓPRIO save
+  // (`salvarDominio` / `save`, abaixo).
+  const inicializado = useRef(false);
   useEffect(() => {
-    if (!abConfig.loading) {
+    if (!abConfig.loading && !inicializado.current) {
       setProdDomain(abConfig.productionDomain);
       setBase(abConfig.redirectorBase ?? "");
+      inicializado.current = true;
     }
   }, [abConfig.loading, abConfig.productionDomain, abConfig.redirectorBase]);
   const cleanBase = base.trim().replace(/\/+$/, "");
@@ -159,7 +171,14 @@ Content-Type: application/json
         return;
       }
     }
-    await abConfig.saveRedirector(cleanBase);
+    // M6: só o campo salvo é atualizado — `prodDomain` não é tocado aqui.
+    if (await abConfig.saveRedirector(cleanBase)) setBase(cleanBase);
+  };
+
+  const salvarDominio = async () => {
+    const salvo = await abConfig.save(prodDomain);
+    // M6: só o campo salvo é atualizado — `base` não é tocado aqui.
+    if (salvo) setProdDomain(salvo);
   };
 
   return (
@@ -201,7 +220,7 @@ Content-Type: application/json
               disabled={abConfig.loading}
             />
           </div>
-          <Button onClick={() => abConfig.save(prodDomain)} disabled={abConfig.saving || abConfig.loading}>
+          <Button onClick={salvarDominio} disabled={abConfig.saving || abConfig.loading}>
             <Save className="h-4 w-4 mr-2" /> Salvar
           </Button>
         </div>

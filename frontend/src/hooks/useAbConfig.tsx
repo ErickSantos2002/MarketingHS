@@ -22,17 +22,21 @@ export function useAbConfig() {
     onSuccess: (dados) => qc.setQueryData(["ab_config"], dados),
   });
 
-  const save = async (domain: string) => {
+  // Devolve o domínio normalizado quando salva (para a tela sincronizar só
+  // este campo, sem mexer no do redirecionador — ver M6 no 8C).
+  const save = async (domain: string): Promise<string | null> => {
     const clean = normalizeProductionDomain(domain);
     if (!clean) {
       toast.error("Informe um domínio válido (ex.: exemplo.com.br).");
-      return;
+      return null;
     }
     try {
       await gravar.mutateAsync({ production_domain: clean });
       toast.success("Domínio de produção salvo.");
+      return clean;
     } catch (e) {
       toast.error("Erro ao salvar o domínio de produção: " + (e as Error).message);
+      return null;
     }
   };
 
