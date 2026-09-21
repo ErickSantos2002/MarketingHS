@@ -12,6 +12,7 @@ from app.auth.router import router as auth_router
 from app.database import close_datacore, close_db, init_datacore, init_db
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
 from app.routers.ab import router as ab_router
+from app.routers.ab_publico import router as ab_publico_router
 from app.routers.api_contato import router as api_contato_router
 from app.routers.automacoes import router as automacoes_router
 from app.routers.campanhas import router as campanhas_router
@@ -75,7 +76,11 @@ app.add_middleware(
     # 30/min com `/publico/captura` faria a conferência gastar o orçamento do
     # ENVIO de verdade, e a pessoa levaria 429 na hora de mandar o formulário
     # que preencheu direitinho. Mesma classe de defeito que recusar lead real.
-    isentos=("/publico/webhook/", "/publico/validar-email"),
+    #
+    # ⚠️ `/publico/ab/go` também é isento: é o clique do anúncio, e um 429 ali
+    # joga fora uma visita paga. A origem mandava pôr o limite dessa rota na
+    # camada do Cloudflare (regra de Rate Limiting do Worker).
+    isentos=("/publico/webhook/", "/publico/validar-email", "/publico/ab/go"),
 )
 
 
@@ -115,6 +120,7 @@ app.include_router(paginas_router)
 app.include_router(captura_router)
 app.include_router(api_contato_router)
 app.include_router(ab_router)
+app.include_router(ab_publico_router)
 app.include_router(publico_router)
 app.include_router(webhook_router)
 app.include_router(landing_router)
