@@ -1,27 +1,29 @@
 /*!
- * ab.js — script leve do Teste A/B da dn.ia (v1).
+ * ab.js — script leve do Teste A/B do MarketingHS.
  *
  * Instalação (1 linha, no <head> ou fim do <body> de qualquer landing page):
- *   <script src="https://dnmkt.dnia.ai/ab.js" async></script>
+ *   <script src="https://<app>/ab.js" async data-endpoint="https://<redirecionador>/e" data-cookie-domain=".<domínio>"></script>
  *
  * O que faz (standalone, sem dependências):
  *  - Lê ab_test/ab_var/ab_vid da query (postos pelo redirecionador) e grava no
- *    cookie .dnia.ai (SameSite=Lax, Secure, 90d). Em retornos SEM query, o
+ *    cookie configurado (SameSite=Lax, Secure, 90d). Em retornos SEM query, o
  *    cookie é a fonte da verdade.
  *  - Dispara `exposure` ao coletor (separa humano de bot: bots seguem o redirect
  *    mas não executam JS).
  *  - Rastreia comportamento: profundidade de scroll, tempo na página, cliques em
  *    CTAs (marque com [data-ab-cta]) e submit de formulário.
  *  - Injeta ab_vid/ab_var/ab_test em campos ocultos de TODO formulário.
- *  - Reescreve o src de TODO iframe nexus.dnia.ai/schedule (inclui iframes
- *    inseridos depois, via MutationObserver) levando o tracking p/ o agendamento.
+ *  - Reescreve o src de TODO iframe cujo endereço contenha `data-iframe-match`
+ *    (inclui iframes inseridos depois, via MutationObserver) levando o
+ *    tracking p/ o agendamento.
  *  - LGPD: com data-require-consent="true", só ativa após consentimento
  *    (cookie ab_consent=1 ou window.abConsentGranted()).
  *
- * Config opcional via atributos no <script>:
- *   data-endpoint   (default https://dnmkt.dnia.ai/api/ab/events)
- *   data-cookie-domain (default .dnia.ai)
- *   data-require-consent ("true" para exigir consentimento)
+ * Config via atributos no <script>:
+ *   data-endpoint        OBRIGATÓRIO — o coletor (https://<redirecionador>/e). Sem ele, nada é enviado.
+ *   data-cookie-domain   ex.: .exemplo.com.br — sem ele, o cookie fica só no host da página
+ *   data-iframe-match    trecho do src do iframe de agendamento que recebe o tracking
+ *   data-require-consent "true" para exigir consentimento
  */
 (function () {
   'use strict';
@@ -33,10 +35,12 @@
     return s[s.length - 1];
   })();
   var cfg = (script && script.dataset) || {};
-  var ENDPOINT = cfg.endpoint || 'https://go.dnia.ai/e';
-  var COOKIE_DOMAIN = cfg.cookieDomain || '.dnia.ai';
+  var ENDPOINT = cfg.endpoint || null;
+  var COOKIE_DOMAIN = cfg.cookieDomain || null;
+  var IFRAME_MATCH = cfg.iframeMatch || null;
   var REQUIRE_CONSENT = String(cfg.requireConsent || '') === 'true';
   var COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 dias
+  if (!ENDPOINT && window.console) console.warn('[ab.js] sem data-endpoint: nenhum evento será enviado.');
 
   // ---- utilidades ----------------------------------------------------------
   function qp(name) {
@@ -47,9 +51,12 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
   function canScopeDomain() {
-    // Só usa Domain=.dnia.ai quando o host de fato é *.dnia.ai (em localhost/preview
-    // grava sem domain para não falhar silenciosamente).
-    return /(^|\.)dnia\.ai$/i.test(location.hostname);
+    // Só usa Domain= quando a página está de fato sob esse domínio (em
+    // localhost/preview grava sem domain para não falhar em silêncio).
+    if (!COOKIE_DOMAIN) return false;
+    var d = COOKIE_DOMAIN.replace(/^\./, '').toLowerCase();
+    var h = location.hostname.toLowerCase();
+    return h === d || h.slice(-(d.length + 1)) === '.' + d;
   }
   function writeCookie(name, value) {
     var parts = [name + '=' + encodeURIComponent(value), 'Path=/', 'Max-Age=' + COOKIE_MAX_AGE, 'SameSite=Lax'];
@@ -101,13 +108,14 @@
 
   // ---- envio ao coletor (fire-and-forget) ----------------------------------
   function send(events) {
-    if (!CONSENT) return;
+    if (!CONSENT || !ENDPOINT) return;
     try {
       var payload = JSON.stringify({ events: events });
+      // text/plain: sem preflight de CORS, e o sendBeacon aceita (decisão 5 do 8C).
       if (navigator.sendBeacon) {
-        navigator.sendBeacon(ENDPOINT, new Blob([payload], { type: 'application/json' }));
+        navigator.sendBeacon(ENDPOINT, new Blob([payload], { type: 'text/plain;charset=UTF-8' }));
       } else {
-        fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, keepalive: true }).catch(function () {});
+        fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'text/plain;charset=UTF-8' }, body: payload, keepalive: true }).catch(function () {});
       }
     } catch (e) { /* nunca lança */ }
   }
@@ -156,11 +164,11 @@
     for (var i = 0; i < forms.length; i++) injectForm(forms[i]);
   }
 
-  // ---- 3) reescrita do iframe do Nexus ------------------------------------
-  function rewriteNexusIframe(iframe) {
-    if (!HAS_ASSIGNMENT || !iframe || iframe.__abRewritten) return;
+  // ---- 3) reescrita do iframe do agendamento ------------------------------
+  function rewriteIframe(iframe) {
+    if (!HAS_ASSIGNMENT || !IFRAME_MATCH || !iframe || iframe.__abRewritten) return;
     var src = iframe.getAttribute('src') || '';
-    if (src.indexOf('nexus.dnia.ai/schedule') === -1) return;
+    if (src.indexOf(IFRAME_MATCH) === -1) return;
     try {
       var u = new URL(src, location.href);
       u.searchParams.set('ab_vid', ab_vid);
@@ -172,7 +180,7 @@
   }
   function rewriteAllIframes() {
     var frames = document.getElementsByTagName('iframe');
-    for (var i = 0; i < frames.length; i++) rewriteNexusIframe(frames[i]);
+    for (var i = 0; i < frames.length; i++) rewriteIframe(frames[i]);
   }
 
   // ---- 4) comportamento: scroll, tempo, cliques ---------------------------

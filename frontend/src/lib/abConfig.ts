@@ -1,53 +1,25 @@
-// Configuração do módulo A/B ajustável pelo admin (persistida no navegador).
-// O "domínio do redirecionador" é o Custom Domain do Cloudflare Worker
-// (default https://go.dnia.ai). Ele monta o Link de Distribuição e o endpoint
-// do coletor. Trocar aqui reflete nos links e no snippet mostrados na UI — se
-// mudar o subdomínio de fato, atualize também o Custom Domain no Cloudflare e o
-// `data-endpoint` do snippet nas landing pages.
+// Configuração do módulo A/B. O domínio de produção e o do redirecionador
+// moram em `ab_config` (compartilhados pelo time) — ver useAbConfig. Até o
+// lote 8C o redirecionador ficava no localStorage de cada navegador, com
+// padrão https://go.dnia.ai: cada admin podia ver um link diferente.
+//
+// O "domínio do redirecionador" é o Custom Domain do Cloudflare Worker. Ele
+// monta o Link de Distribuição e o endpoint do coletor.
 
-const KEY = "ab-redirector-base";
-export const AB_BASE_DEFAULT = "https://go.dnia.ai";
-
-export function getAbBaseUrl(): string {
-  if (typeof localStorage === "undefined") return AB_BASE_DEFAULT;
-  try {
-    const v = localStorage.getItem(KEY);
-    return v && /^https?:\/\//i.test(v) ? v.replace(/\/+$/, "") : AB_BASE_DEFAULT;
-  } catch {
-    return AB_BASE_DEFAULT;
-  }
+// Link de Distribuição de um teste: {base}/{slug}. Vazio sem redirecionador.
+export function abDistributionLink(base: string | null, slug: string): string {
+  return base ? `${base}/${slug}` : "";
 }
 
-export function setAbBaseUrl(url: string): void {
-  try {
-    localStorage.setItem(KEY, url.trim().replace(/\/+$/, ""));
-  } catch {
-    /* ignore */
-  }
+// Endpoint do coletor: {base}/e (o Worker leva para /publico/ab/eventos).
+export function abCollectorUrl(base: string | null): string {
+  return base ? `${base}/e` : "";
 }
 
-// Link de Distribuição de um teste: https://go.dnia.ai/{slug}
-export function abDistributionLink(slug: string): string {
-  return `${getAbBaseUrl()}/${slug}`;
+// Rótulo sem protocolo, para exibição compacta.
+export function abBaseHost(base: string | null): string {
+  return base ? base.replace(/^https?:\/\//i, "") : "(redirecionador não configurado)";
 }
-
-// Endpoint do coletor de eventos: https://go.dnia.ai/e
-export function abCollectorUrl(): string {
-  return `${getAbBaseUrl()}/e`;
-}
-
-// Rótulo sem protocolo (ex.: go.dnia.ai) para exibição compacta.
-export function abBaseHost(): string {
-  return getAbBaseUrl().replace(/^https?:\/\//i, "");
-}
-
-// --- Domínio de produção (validação das URLs de variante) --------------------
-// Domínio oficial das landing pages. Toda variante de um teste deve apontar para
-// ele (ou para um subdomínio dele). Impede cross-domain redirect no anúncio — a
-// principal causa de reprovação por "Destination mismatch" no Google/Meta.
-// Persistido na tabela Supabase `ab_config` (compartilhado pelo time) — ver
-// useAbConfig. O default abaixo é só o fallback de UI antes do carregamento.
-export const AB_PROD_DOMAIN_DEFAULT = "dnia.ai";
 
 // Reduz um domínio digitado a um host "raiz" comparável: sem protocolo, sem
 // www., sem path/porta/query, minúsculo.
@@ -71,8 +43,8 @@ export function domainOf(url: string): string | null {
 }
 
 // `host` pertence a `domain` — é o próprio domínio ou um subdomínio dele?
-// Ex.: isHostInDomain("promo.dnia.ai", "dnia.ai") === true;
-//      isHostInDomain("dnia.ai.evil.com", "dnia.ai") === false.
+// Ex.: isHostInDomain("promo.exemplo.com.br", "exemplo.com.br") === true;
+//      isHostInDomain("exemplo.com.br.evil.com", "exemplo.com.br") === false.
 export function isHostInDomain(host: string, domain: string): boolean {
   const h = (host || "").toLowerCase();
   const d = normalizeProductionDomain(domain);

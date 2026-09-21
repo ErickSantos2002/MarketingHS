@@ -19,6 +19,7 @@ import {
 import { useAbTest, useAbEvents, AbEventRow } from "@/hooks/useAbTests";
 import { analyzeVariants, VariantVerdict } from "@/lib/abStats";
 import { abDistributionLink, abBaseHost } from "@/lib/abConfig";
+import { useAbConfig } from "@/hooks/useAbConfig";
 
 const pct = (n: number) => (n * 100).toFixed(2) + "%";
 
@@ -56,10 +57,11 @@ export default function ExperimentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: test, isLoading } = useAbTest(id);
-  const { data: events, isLoading: loadingEvents } = useAbEvents(test?.slug);
+  const { data: eventosDoTeste, isLoading: loadingEvents } = useAbEvents(test?.id);
+  const { redirectorBase } = useAbConfig();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
 
-  const rows = useMemo(() => events || [], [events]);
+  const rows = useMemo(() => eventosDoTeste?.events || [], [eventosDoTeste]);
 
   // ---- Agregação por variante (relatório) ----------------------------------
   const report = useMemo(() => {
@@ -146,7 +148,11 @@ export default function ExperimentDetail() {
 
   const copyLink = () => {
     if (!test) return;
-    navigator.clipboard.writeText(abDistributionLink(test.public_slug));
+    if (!redirectorBase) {
+      toast.error("Configure o redirecionador em Configuração do A/B.");
+      return;
+    }
+    navigator.clipboard.writeText(abDistributionLink(redirectorBase, test.public_slug));
     toast.success("Link de distribuição copiado.");
   };
 
@@ -181,9 +187,15 @@ export default function ExperimentDetail() {
             <FlaskConical className="h-5 w-5 text-primary" /> {test.name}
           </h1>
           <p className="text-xs text-muted-foreground font-mono">
-            {abBaseHost()}/{test.public_slug} · {test.status}
+            {abBaseHost(redirectorBase)}/{test.public_slug} · {test.status}
             {test.status === "completed" && test.winner_variant && ` · vencedora ${test.winner_variant}`}
           </p>
+          {eventosDoTeste?.truncado && (
+            <p className="text-xs text-amber-600 mt-1">
+              Mostrando os {eventosDoTeste.teto.toLocaleString("pt-BR")} eventos mais recentes — o
+              relatório está parcial.
+            </p>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={copyLink}><Copy className="h-4 w-4 mr-2" /> Link</Button>
       </div>

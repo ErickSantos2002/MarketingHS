@@ -80,7 +80,7 @@ const EMPTY_FORM: FormState = {
 export default function Experiments() {
   const navigate = useNavigate();
   const { data: tests, isLoading } = useAbTests();
-  const { productionDomain } = useAbConfig();
+  const { productionDomain, redirectorBase } = useAbConfig();
   const createTest = useCreateAbTest();
   const updateTest = useUpdateAbTest();
   const activateTest = useActivateAbTest();
@@ -140,6 +140,9 @@ export default function Experiments() {
     // anúncio — principal causa de reprovação por "Destination mismatch" no
     // Google/Meta. O domínio é configurável em /experiments/setup.
     const prod = normalizeProductionDomain(productionDomain);
+    if (!prod) {
+      return toast.error("Configure o domínio de produção em Configuração do A/B antes de criar um teste.");
+    }
     for (const v of form.variants) {
       const host = domainOf(v.url);
       if (!host) {
@@ -247,7 +250,11 @@ export default function Experiments() {
   };
 
   const copyLink = (slug: string) => {
-    navigator.clipboard.writeText(abDistributionLink(slug));
+    if (!redirectorBase) {
+      toast.error("Configure o redirecionador em Configuração do A/B.");
+      return;
+    }
+    navigator.clipboard.writeText(abDistributionLink(redirectorBase, slug));
     toast.success("Link de distribuição copiado.");
   };
 
@@ -299,7 +306,7 @@ export default function Experiments() {
                 <TableRow key={t.id} className="cursor-pointer" onClick={() => navigate(`/experiments/${t.id}`)}>
                   <TableCell>
                     <div className="font-medium">{t.name}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{abBaseHost()}/{t.public_slug}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{abBaseHost(redirectorBase)}/{t.public_slug}</div>
                     {busyBy && (
                       <div className="text-xs text-muted-foreground mt-0.5">slug em uso por "{busyBy.name}"</div>
                     )}
@@ -370,7 +377,7 @@ export default function Experiments() {
               <Input value={publicSlug}
                 onChange={(e) => { setSlugTouched(true); setForm({ ...form, public_slug: e.target.value }); }}
                 placeholder="home-oferta" />
-              <p className="text-xs text-muted-foreground mt-1 font-mono">{abBaseHost()}/{publicSlug || "…"}</p>
+              <p className="text-xs text-muted-foreground mt-1 font-mono">{abBaseHost(redirectorBase)}/{publicSlug || "…"}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Este é o link que vai no anúncio. Pode ser reutilizado em testes futuros — só um teste fica ativo por slug de cada vez.
               </p>
@@ -393,7 +400,7 @@ export default function Experiments() {
               {form.variants.map((v, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Badge variant="outline" className="w-8 justify-center">{v.key}</Badge>
-                  <Input className="flex-1" placeholder="https://dnia.ai/pagina" value={v.url}
+                  <Input className="flex-1" placeholder={`https://${productionDomain || "exemplo.com.br"}/pagina`} value={v.url}
                     onChange={(e) => setVariant(i, { url: e.target.value })} />
                   <Input className="w-20" type="number" min={0} value={v.weight}
                     onChange={(e) => setVariant(i, { weight: Number(e.target.value) })} title="Peso" />
@@ -492,7 +499,7 @@ export default function Experiments() {
           <AlertDialogHeader>
             <AlertDialogTitle>Já existe um teste ativo nesta slug</AlertDialogTitle>
             <AlertDialogDescription>
-              {abBaseHost()}/{conflict?.target.public_slug} está rodando "{conflict?.runningName}".
+              {abBaseHost(redirectorBase)}/{conflict?.target.public_slug} está rodando "{conflict?.runningName}".
               Só pode haver um teste ativo por slug de cada vez.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -514,7 +521,7 @@ export default function Experiments() {
           <DialogHeader>
             <DialogTitle>Concluir "{finishing?.name}"</DialogTitle>
             <DialogDescription>
-              O tráfego de {abBaseHost()}/{finishing?.public_slug} passa a ir 100% para a vencedora
+              O tráfego de {abBaseHost(redirectorBase)}/{finishing?.public_slug} passa a ir 100% para a vencedora
               (ou para o controle) até outro teste ser ativado nesta slug.
             </DialogDescription>
           </DialogHeader>

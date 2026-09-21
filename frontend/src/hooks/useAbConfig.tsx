@@ -1,60 +1,59 @@
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AB_PROD_DOMAIN_DEFAULT, normalizeProductionDomain } from "@/lib/abConfig";
+import { api } from "@/lib/api";
+import { normalizeProductionDomain } from "@/lib/abConfig";
 
-// `ab_config` (como as demais tabelas ab_*) não está no types.ts auto-gerado —
-// acesso via cliente destipado, mesma convenção de useAbTests.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any;
+export interface AbConfig {
+  production_domain: string | null;
+  redirector_base: string | null;
+}
 
-// Configuração compartilhada do módulo A/B (single-row). Hoje guarda apenas o
-// "domínio de produção" usado para validar as URLs de variante no cadastro.
+// Configuração compartilhada do módulo A/B (linha única em `ab_config`): o
+// domínio de produção, que valida as URLs de variante, e o redirecionador,
+// que monta os links. Vazio = não configurado — a tela manda configurar.
 export function useAbConfig() {
-  const [id, setId] = useState<string | null>(null);
-  const [productionDomain, setProductionDomain] = useState<string>(AB_PROD_DOMAIN_DEFAULT);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await db.from("ab_config").select("*").limit(1).single();
-    if (!error && data) {
-      setId(data.id);
-      setProductionDomain(data.production_domain || AB_PROD_DOMAIN_DEFAULT);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const qc = useQueryClient();
+  const consulta = useQuery({
+    queryKey: ["ab_config"],
+    queryFn: () => api.get<AbConfig>("/ab/config"),
+  });
+  const gravar = useMutation({
+    mutationFn: (patch: Partial<AbConfig>) => api.put<AbConfig>("/ab/config", patch),
+    onSuccess: (dados) => qc.setQueryData(["ab_config"], dados),
+  });
 
   const save = async (domain: string) => {
     const clean = normalizeProductionDomain(domain);
     if (!clean) {
-      toast.error("Informe um domínio válido (ex.: dnia.ai).");
+      toast.error("Informe um domínio válido (ex.: exemplo.com.br).");
       return;
     }
-    setSaving(true);
-    let error: unknown = null;
-    if (id) {
-      ({ error } = await db
-        .from("ab_config")
-        .update({ production_domain: clean, updated_at: new Date().toISOString() })
-        .eq("id", id));
-    } else {
-      // Sem linha ainda (seed ausente) — cria a linha única.
-      const res = await db.from("ab_config").insert({ production_domain: clean }).select().single();
-      error = res.error;
-      if (!error && res.data) setId(res.data.id);
-    }
-    if (error) {
-      toast.error("Erro ao salvar o domínio de produção.");
-    } else {
+    try {
+      await gravar.mutateAsync({ production_domain: clean });
       toast.success("Domínio de produção salvo.");
-      setProductionDomain(clean);
+    } catch (e) {
+      toast.error("Erro ao salvar o domínio de produção: " + (e as Error).message);
     }
-    setSaving(false);
   };
 
-  return { productionDomain, loading, saving, save, refetch: load };
+  const saveRedirector = async (base: string): Promise<boolean> => {
+    try {
+      await gravar.mutateAsync({ redirector_base: base || null });
+      toast.success("Redirecionador salvo.");
+      return true;
+    } catch (e) {
+      toast.error("Erro ao salvar o redirecionador: " + (e as Error).message);
+      return false;
+    }
+  };
+
+  return {
+    productionDomain: consulta.data?.production_domain ?? "",
+    redirectorBase: consulta.data?.redirector_base ?? null,
+    loading: consulta.isLoading,
+    saving: gravar.isPending,
+    save,
+    saveRedirector,
+    refetch: consulta.refetch,
+  };
 }

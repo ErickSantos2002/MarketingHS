@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { getAbBaseUrl, setAbBaseUrl, AB_BASE_DEFAULT, domainOf, isHostInDomain, normalizeProductionDomain } from "@/lib/abConfig";
+import { abCollectorUrl, domainOf, isHostInDomain, normalizeProductionDomain } from "@/lib/abConfig";
 import { useAbConfig } from "@/hooks/useAbConfig";
 
 // ⚠️ Era a URL das Edge Functions do Supabase da dn.ia. Agora é a nossa API.
@@ -16,14 +16,13 @@ import { useAbConfig } from "@/hooks/useAbConfig";
 // rebuildar não muda o que está escrito aqui na tela.
 const API_URL = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api`;
 
-// Código exato do Cloudflare Worker (Opção A). As 3 linhas de `target` usam
-// template literals — por isso os crases e ${...} estão escapados aqui dentro.
-const WORKER_CODE = `// Cloudflare Worker do Teste A/B (Opção A) — ligado ao Custom Domain go.dnia.ai
-//   https://go.dnia.ai/{slug}  -> redirecionador (Edge Function \`go\`)
-//   https://go.dnia.ai/e       -> coletor de eventos (Edge Function \`ab-events\`)
+// Código exato do Cloudflare Worker. As linhas de `target` usam template
+// literals — por isso os crases e ${...} estão escapados aqui dentro.
+const WORKER_CODE = `// Cloudflare Worker do Teste A/B — ligado ao Custom Domain do redirecionador
+//   https://<redirecionador>/{slug}  -> ${API_URL}/publico/ab/go/{slug}
+//   https://<redirecionador>/e       -> ${API_URL}/publico/ab/eventos
 
-const SUPABASE_FUNCTIONS = '${API_URL}';
-const SUPABASE_ANON_KEY = ''; // vazio: as functions respondem sem apikey
+const API = '${API_URL}';
 
 export default {
   async fetch(request) {
@@ -32,15 +31,18 @@ export default {
     let target;
 
     if (path === '/e' || path === '/e/') {
-      target = \`\${SUPABASE_FUNCTIONS}/ab-events\${url.search}\`;
+      target = \`\${API}/publico/ab/eventos\${url.search}\`;
     } else if (path === '/' || path === '') {
-      target = \`\${SUPABASE_FUNCTIONS}/go\${url.search}\`;
+      target = \`\${API}/publico/ab/go\${url.search}\`;
     } else {
-      target = \`\${SUPABASE_FUNCTIONS}/go\${path}\${url.search}\`;
+      target = \`\${API}/publico/ab/go\${path}\${url.search}\`;
     }
 
     const proxied = new Request(target, request);
-    if (SUPABASE_ANON_KEY) proxied.headers.set('apikey', SUPABASE_ANON_KEY);
+    // O backend limita requisições por IP. Sem isto, todo visitante chegaria
+    // com o IP do Cloudflare e dividiria o mesmo limite.
+    const ip = request.headers.get('CF-Connecting-IP');
+    if (ip) proxied.headers.set('X-Forwarded-For', ip);
 
     // redirect:'manual' => o 302 do redirecionador vai INTACTO para o navegador.
     const resp = await fetch(proxied, { redirect: 'manual' });
@@ -84,17 +86,24 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
 
 export default function ExperimentsSetup() {
   const navigate = useNavigate();
-  const [base, setBase] = useState(getAbBaseUrl());
   const abConfig = useAbConfig();
+  const [base, setBase] = useState("");
   const [prodDomain, setProdDomain] = useState("");
   useEffect(() => {
-    if (!abConfig.loading) setProdDomain(abConfig.productionDomain);
-  }, [abConfig.loading, abConfig.productionDomain]);
-  const cleanBase = base.trim().replace(/\/+$/, "") || AB_BASE_DEFAULT;
-  const collector = `${cleanBase}/e`;
-  const snippet = `<script src="https://dnmkt.dnia.ai/ab.js" async data-endpoint="${collector}"></script>`;
+    if (!abConfig.loading) {
+      setProdDomain(abConfig.productionDomain);
+      setBase(abConfig.redirectorBase ?? "");
+    }
+  }, [abConfig.loading, abConfig.productionDomain, abConfig.redirectorBase]);
+  const cleanBase = base.trim().replace(/\/+$/, "");
+  const collector = abCollectorUrl(cleanBase || null) || "<configure o redirecionador>";
+  const prodNormalized = normalizeProductionDomain(abConfig.productionDomain);
+  // Exemplos nos textos: o domínio de verdade quando configurado.
+  const exemploDominio = prodNormalized || "exemplo.com.br";
+  const exemploRedirecionador = domainOf(cleanBase) || `go.${exemploDominio}`;
+  const snippet = `<script src="${window.location.origin}/ab.js" async data-endpoint="${collector}" data-cookie-domain=".${exemploDominio}"></script>`;
 
-  // Payloads que o Nexus deve enviar ao dnmkt (etapa 1, etapas 2-3, confirmação).
+  // Payloads que o Nexus deve enviar ao MarketingHS (etapa 1, etapas 2-3, confirmação).
   const nexusUpsert = `POST ${API_URL}/publico/identidade
 Authorization: Bearer <API key ou WEBHOOK_SECRET>
 Content-Type: application/json
@@ -130,14 +139,13 @@ Content-Type: application/json
 }`;
 
   // O redirecionador tem de ser o próprio domínio de produção ou um subdomínio
-  // dele — senão o cookie .dnia.ai não gruda e o anúncio vira cross-domain
-  // redirect (reprovação "Destination mismatch").
+  // dele — senão o cookie não gruda e o anúncio vira cross-domain redirect
+  // (reprovação "Destination mismatch").
   const redirectorHost = domainOf(cleanBase);
-  const prodNormalized = normalizeProductionDomain(abConfig.productionDomain);
   const redirectorOk = !!redirectorHost && isHostInDomain(redirectorHost, abConfig.productionDomain);
   const showRedirectorWarning = !abConfig.loading && !!prodNormalized && !redirectorOk;
 
-  const save = () => {
+  const save = async () => {
     if (!abConfig.loading && prodNormalized) {
       if (!redirectorHost) {
         toast.error("URL base inválida — use o endereço completo (https://…).");
@@ -151,9 +159,7 @@ Content-Type: application/json
         return;
       }
     }
-    setAbBaseUrl(cleanBase);
-    setBase(cleanBase);
-    toast.success("Configuração salva.");
+    await abConfig.saveRedirector(cleanBase);
   };
 
   return (
@@ -191,7 +197,7 @@ Content-Type: application/json
             <Input
               value={prodDomain}
               onChange={(e) => setProdDomain(e.target.value)}
-              placeholder="dnia.ai"
+              placeholder="exemplo.com.br"
               disabled={abConfig.loading}
             />
           </div>
@@ -200,8 +206,9 @@ Content-Type: application/json
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Ex.: <code>dnia.ai</code> aceita <code>dnia.ai/lp</code> e <code>promo.dnia.ai</code>, mas
-          rejeita <code>outro.com</code>. Não inclua <code>https://</code> nem caminho.
+          Ex.: <code>{exemploDominio}</code> aceita <code>{exemploDominio}/lp</code> e{" "}
+          <code>promo.{exemploDominio}</code>, mas rejeita <code>outro.com</code>. Não inclua{" "}
+          <code>https://</code> nem caminho.
         </p>
       </Card>
 
@@ -213,18 +220,19 @@ Content-Type: application/json
         </div>
         <p className="text-sm text-muted-foreground">
           É o Custom Domain do Cloudflare Worker. Monta o Link de Distribuição de cada teste e o
-          endpoint do coletor. Salvo neste navegador. Precisa ser o <strong>domínio de produção ou um
-          subdomínio dele</strong> (ex.: <code>go.dnia.ai</code> para uma produção em <code>dnia.ai</code>)
-          — senão o cookie <code>.dnia.ai</code> não gruda e o anúncio vira cross-domain redirect. Se
-          trocar o subdomínio de fato, atualize também o Custom Domain no Cloudflare e o
+          endpoint do coletor. Salvo no banco, compartilhado pelo time. Precisa ser o <strong>domínio
+          de produção ou um subdomínio dele</strong> (ex.: <code>{exemploRedirecionador}</code> para uma
+          produção em <code>{exemploDominio}</code>) — senão o cookie <code>.{exemploDominio}</code> não
+          gruda e o anúncio vira cross-domain redirect. Se trocar o subdomínio de fato, atualize também
+          o Custom Domain no Cloudflare e o
           <code> data-endpoint</code> do snippet.
         </p>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="flex-1 min-w-[260px]">
             <Label className="text-xs">URL base</Label>
-            <Input value={base} onChange={(e) => setBase(e.target.value)} placeholder={AB_BASE_DEFAULT} />
+            <Input value={base} onChange={(e) => setBase(e.target.value)} placeholder={`https://${exemploRedirecionador}`} />
           </div>
-          <Button onClick={save}>
+          <Button onClick={save} disabled={abConfig.saving || abConfig.loading}>
             <Save className="h-4 w-4 mr-2" /> Salvar
           </Button>
         </div>
@@ -251,20 +259,17 @@ Content-Type: application/json
         </div>
       </Card>
 
-      {/* Por que go.dnia.ai */}
+      {/* Por que um subdomínio dedicado */}
       <Card className="p-5 space-y-3">
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-600" />
-          <h2 className="font-semibold">Por que um subdomínio dedicado (go.dnia.ai)</h2>
+          <h2 className="font-semibold">Por que um subdomínio dedicado ({exemploRedirecionador})</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          O app (<code>dnmkt.dnia.ai</code>) é servido pelo Lovable via <strong>Cloudflare for
-          SaaS</strong> (orange-to-orange). Nesse arranjo, o Cloudflare entrega a requisição à
-          configuração do Lovable e <strong>ignora as Workers Routes</strong> da sua zona nesse
-          hostname — por isso não dá para interceptar <code>dnmkt.dnia.ai/go/*</code>. A solução é um
-          subdomínio próprio dedicado ao worker (<code>go.dnia.ai</code>), que continua sendo
-          <code> *.dnia.ai</code>, então o cookie <code>.dnia.ai</code> same-site do redirecionador
-          funciona normalmente.
+          O redirecionador precisa estar sob o domínio de produção (ex.: <code>{exemploRedirecionador}</code>{" "}
+          para uma produção em <code>{exemploDominio}</code>) para o cookie <code>.{exemploDominio}</code>{" "}
+          ser same-site — cookie de outro domínio não é lido pela landing page, e o anúncio vira
+          cross-domain redirect.
         </p>
       </Card>
 
@@ -298,12 +303,13 @@ Content-Type: application/json
             No worker <code>ab-router</code> → aba <strong>Domains</strong> → <strong>Add Domain</strong>.
           </Step>
           <Step n={2}>
-            Selecione a zona <code>dnia.ai</code>, subdomínio <code>go</code> → <strong>Add domain</strong>.
-            O Cloudflare cria o registro DNS proxiado e o certificado automaticamente.
+            Selecione a zona do domínio de produção (ex.: <code>{exemploDominio}</code>), subdomínio
+            dedicado ao redirecionador (ex.: <code>go</code>) → <strong>Add domain</strong>. O Cloudflare
+            cria o registro DNS proxiado e o certificado automaticamente.
           </Step>
           <Step n={3}>
-            Resultado: <code>go.dnia.ai</code> → Production. Todo o tráfego de <code>go.dnia.ai</code>
-            vai ao worker. Não use Workers Route em <code>dnmkt.dnia.ai</code> (não funciona — ver acima).
+            Resultado: <code>{exemploRedirecionador}</code> → Production. Todo o tráfego desse domínio
+            vai ao worker.
           </Step>
         </ol>
       </Card>
@@ -315,11 +321,11 @@ Content-Type: application/json
           <h2 className="font-semibold">Cloudflare — Rate Limiting</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Zona <code>dnia.ai</code> → <strong>Security → Security rules → Create rule → Rate limiting
-          rules</strong>. Configuração usada:
+          Zona do domínio de produção (<code>{exemploDominio}</code>) → <strong>Security → Security
+          rules → Create rule → Rate limiting rules</strong>. Configuração usada:
         </p>
         <ul className="text-sm space-y-1 list-disc pl-5 text-muted-foreground">
-          <li>Expressão: <code>(http.host eq "go.dnia.ai" and http.request.uri.path eq "/e")</code></li>
+          <li>Expressão: <code>{`(http.host eq "${exemploRedirecionador}" and http.request.uri.path eq "/e")`}</code></li>
           <li>Características: <strong>IP</strong> · Taxa: <strong>50 req / 10 s</strong></li>
           <li>Ação: <strong>Block</strong> por <strong>10 s</strong> · Status: <strong>Active</strong></li>
         </ul>
@@ -329,17 +335,19 @@ Content-Type: application/json
       <Card className="p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Code2 className="h-4 w-4 text-primary" />
-          <h2 className="font-semibold">Snippet nas landing pages (dnia.ai)</h2>
+          <h2 className="font-semibold">Snippet nas landing pages ({exemploDominio})</h2>
         </div>
         <p className="text-sm text-muted-foreground">
           Cole 1 linha no <code>&lt;head&gt;</code> de cada landing do teste. O script lê a atribuição
-          da URL, grava o cookie <code>.dnia.ai</code>, dispara exposição/comportamento, injeta os
-          campos ocultos nos formulários e reescreve o iframe do Nexus.
+          da URL, grava o cookie <code>.{exemploDominio}</code>, dispara exposição/comportamento, injeta
+          os campos ocultos nos formulários e reescreve o iframe do agendamento (quando configurado).
         </p>
         <CodeBlock code={snippet} label="Snippet" />
         <p className="text-xs text-muted-foreground">
           Marque CTAs com <code>data-ab-cta="nome"</code> para cliques nomeados. Para exigir
-          consentimento LGPD, adicione <code>data-require-consent="true"</code>.
+          consentimento LGPD, adicione <code>data-require-consent="true"</code>. Para levar o teste até
+          um agendamento em iframe, acrescente <code>data-iframe-match="&lt;trecho da URL do iframe&gt;"</code>{" "}
+          ao script.
         </p>
       </Card>
 

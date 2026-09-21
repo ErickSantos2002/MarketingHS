@@ -1,11 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-
-// Tabelas ab_* são novas e ainda não constam em types.ts (auto-gerado pelo
-// Lovable — não editar à mão). Acessamos via um cliente destipado local; as
-// interfaces abaixo garantem a tipagem no nosso lado.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any;
+import { api, ErroApi } from "@/lib/api";
 
 export interface AbVariant {
   key: string;
@@ -19,7 +13,7 @@ export interface AbTest {
   /** Chave interna do teste: circula em cookies, params ab_test, eventos e
    *  relatórios. Única e imutável — nunca se repete entre testes. */
   slug: string;
-  /** Slug da URL pública (go.dnia.ai/{public_slug}). Reutilizável entre testes;
+  /** Slug da URL pública ({redirecionador}/{public_slug}). Reutilizável entre testes;
    *  só um teste `running` por vez em cada um. */
   public_slug: string;
   name: string;
@@ -104,14 +98,7 @@ export function runningTestForSlug(
 export function useAbTests() {
   return useQuery({
     queryKey: ["ab_tests"],
-    queryFn: async (): Promise<AbTest[]> => {
-      const { data, error } = await db
-        .from("ab_tests")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data || []) as AbTest[];
-    },
+    queryFn: () => api.get<AbTest[]>("/ab/testes"),
   });
 }
 
@@ -120,9 +107,13 @@ export function useAbTest(id: string | undefined) {
     queryKey: ["ab_test", id],
     enabled: !!id,
     queryFn: async (): Promise<AbTest | null> => {
-      const { data, error } = await db.from("ab_tests").select("*").eq("id", id).maybeSingle();
-      if (error) throw error;
-      return (data as AbTest) || null;
+      try {
+        return await api.get<AbTest>(`/ab/testes/${id}`);
+      } catch (e) {
+        // A tela trata "não existe" como null, como o maybeSingle() de antes.
+        if (e instanceof ErroApi && e.status === 404) return null;
+        throw e;
+      }
     },
   });
 }
@@ -130,11 +121,7 @@ export function useAbTest(id: string | undefined) {
 export function useCreateAbTest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: Partial<AbTest>) => {
-      const { data, error } = await db.from("ab_tests").insert(payload).select().single();
-      if (error) throw error;
-      return data as AbTest;
-    },
+    mutationFn: (payload: Partial<AbTest>) => api.post<AbTest>("/ab/testes", payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ab_tests"] }),
   });
 }
@@ -142,11 +129,8 @@ export function useCreateAbTest() {
 export function useUpdateAbTest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<AbTest> }) => {
-      const { data, error } = await db.from("ab_tests").update(patch).eq("id", id).select().single();
-      if (error) throw error;
-      return data as AbTest;
-    },
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<AbTest> }) =>
+      api.patch<AbTest>(`/ab/testes/${id}`, patch),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["ab_tests"] });
       qc.invalidateQueries({ queryKey: ["ab_test", vars.id] });
@@ -164,28 +148,13 @@ export interface ActivateResult {
 
 // Ativação de um teste. A RPC é atômica: sem `force`, recusa e devolve o teste
 // que já está rodando na mesma slug; com `force`, conclui esse teste e ativa o
-// novo na mesma transação (nunca deixa a slug sem ativo por falha no meio).
+// novo na mesma transação. Se outro admin ganhar a corrida, a rota devolve 409
+// com a mensagem pronta para o toast.
 export function useActivateAbTest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, force }: { id: string; force?: boolean }): Promise<ActivateResult> => {
-      const { data, error } = await db.rpc("ab_activate_test", {
-        p_test_id: id,
-        p_force: !!force,
-      });
-      if (error) {
-        // 23505: perdeu a corrida contra o índice único parcial (outro admin).
-        if (error.code === "23505") {
-          throw new Error("Outro teste foi ativado nesta slug agora mesmo. Recarregue a página.");
-        }
-        // PGRST202: a migration ab_public_slug_reuse ainda não foi aplicada.
-        if (error.code === "PGRST202") {
-          throw new Error("Ativação indisponível: a migration ab_public_slug_reuse ainda não foi aplicada.");
-        }
-        throw error;
-      }
-      return (data || { activated: false }) as ActivateResult;
-    },
+    mutationFn: ({ id, force }: { id: string; force?: boolean }) =>
+      api.post<ActivateResult>(`/ab/testes/${id}/ativar`, { force: !!force }),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["ab_tests"] });
       qc.invalidateQueries({ queryKey: ["ab_test", vars.id] });
@@ -193,28 +162,19 @@ export function useActivateAbTest() {
   });
 }
 
-// Busca eventos do teste (pagina de 1000 em 1000, cap ~20000 — convenção do projeto).
-export function useAbEvents(slug: string | undefined) {
+export interface AbEventsPage {
+  events: AbEventRow[];
+  // true quando o teste tem mais eventos que o teto — o relatório é parcial.
+  truncado: boolean;
+  teto: number;
+}
+
+// Eventos do teste, mais novos primeiro, até 20.000 (o teto da origem).
+export function useAbEvents(testId: string | undefined) {
   return useQuery({
-    queryKey: ["ab_events", slug],
-    enabled: !!slug,
+    queryKey: ["ab_events", testId],
+    enabled: !!testId,
     refetchInterval: 60000,
-    queryFn: async (): Promise<AbEventRow[]> => {
-      const all: AbEventRow[] = [];
-      const PAGE = 1000;
-      for (let from = 0; from < 20000; from += PAGE) {
-        const { data, error } = await db
-          .from("ab_events")
-          .select("*")
-          .eq("ab_test", slug)
-          .order("occurred_at", { ascending: false })
-          .range(from, from + PAGE - 1);
-        if (error) throw error;
-        const rows = (data || []) as AbEventRow[];
-        all.push(...rows);
-        if (rows.length < PAGE) break;
-      }
-      return all;
-    },
+    queryFn: () => api.get<AbEventsPage>(`/ab/testes/${testId}/eventos`),
   });
 }
