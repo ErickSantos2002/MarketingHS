@@ -40,6 +40,11 @@ _COLUNAS_EVENTO = """id::text, ab_test, ab_var, ab_vid, event_type, event_name,
 # O `PUBLIC_SLUG_RE` de `useAbTests.tsx` — o endereço que vai no anúncio.
 SLUG_PUBLICO = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 
+# Teto de `integer` no Postgres (M2) — acima disso o asyncpg levanta
+# `DataError` ao codificar o parâmetro, e isso não deveria precisar de um
+# round-trip pro banco pra virar 422.
+INT32_MAX = 2147483647
+
 
 class VarianteIn(BaseModel):
     key: str = Field(min_length=1, max_length=40)
@@ -49,7 +54,12 @@ class VarianteIn(BaseModel):
 
 
 class TesteIn(BaseModel):
-    slug: str = Field(min_length=1, max_length=200)
+    # M1: `slug` vira nome de cookie (`ab_{slug}`) em `Set-Cookie` no
+    # redirecionador — `;`, espaço ou CR/LF ali é injeção de atributo de
+    # cookie, ou 500 fora do try de `redirecionar`. Mesmo padrão do
+    # `public_slug` — compatível com o `internalSlug` do frontend
+    # (`{publicSlugify}-{4 chars base36}`).
+    slug: str = Field(min_length=1, max_length=200, pattern=SLUG_PUBLICO)
     public_slug: str = Field(pattern=SLUG_PUBLICO, max_length=80)
     name: str = Field(min_length=1, max_length=200)
     hypothesis: str | None = None
@@ -59,7 +69,7 @@ class TesteIn(BaseModel):
     control_variant: str | None = None
     primary_metric: str = Field(default="lead_criado", min_length=1, max_length=80)
     guardrail_metric: str | None = Field(default="agendamento", max_length=80)
-    target_sample_per_variant: int | None = Field(default=None, ge=0)
+    target_sample_per_variant: int | None = Field(default=None, ge=0, le=INT32_MAX)
     # Texto: a tela manda `YYYY-MM-DD` do <input type="date">, e quem converte
     # é o Postgres (`::text::timestamptz`) — asyncpg recusa str em timestamptz.
     starts_at: str | None = None
@@ -75,7 +85,7 @@ class TestePatch(BaseModel):
     winner_variant: str | None = None
     primary_metric: str | None = Field(default=None, min_length=1, max_length=80)
     guardrail_metric: str | None = Field(default=None, max_length=80)
-    target_sample_per_variant: int | None = Field(default=None, ge=0)
+    target_sample_per_variant: int | None = Field(default=None, ge=0, le=INT32_MAX)
     starts_at: str | None = None
     ends_at: str | None = None
 

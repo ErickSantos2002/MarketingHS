@@ -113,6 +113,31 @@ async def test_criar_recusa_status_que_nao_e_rascunho_e_slug_publico_invalido(
     assert r.status_code == 422
 
 
+async def test_criar_recusa_slug_interno_com_caractere_perigoso(
+        cliente, token_admin, limpar_ab):
+    """M1: o slug interno vira nome de cookie (`ab_{slug}`) em `Set-Cookie` no
+    redirecionador — `;`, espaço ou CRLF ali é injeção de atributo de cookie,
+    ou 500 fora do try do redirecionador."""
+    r = await cliente.post("/ab/testes", headers=_auth(token_admin),
+                           json={**_novo(limpar_ab), "slug": "ruim; Secure\r\nX-Evil: 1"})
+    assert r.status_code == 422, r.text
+
+
+async def test_criar_e_editar_recusam_amostra_alvo_acima_do_int32(
+        cliente, token_admin, limpar_ab):
+    """M2: `target_sample_per_variant` é `integer` no Postgres — acima de
+    int32 o asyncpg recusa ao codificar o parâmetro, e isso não pode chegar
+    ao banco: a validação é da API, não um round-trip para descobrir."""
+    r = await cliente.post("/ab/testes", headers=_auth(token_admin),
+                           json={**_novo(limpar_ab), "target_sample_per_variant": 2147483648})
+    assert r.status_code == 422, r.text
+
+    teste = await _criar(cliente, token_admin, _novo(limpar_ab, sufixo="patch"))
+    r = await cliente.patch(f"/ab/testes/{teste['id']}", headers=_auth(token_admin),
+                            json={"target_sample_per_variant": 2147483648})
+    assert r.status_code == 422, r.text
+
+
 async def test_editar_pausar_concluir_e_recusas(cliente, token_admin, limpar_ab):
     teste = await _criar(cliente, token_admin, _novo(limpar_ab))
     caminho = f"/ab/testes/{teste['id']}"
