@@ -371,9 +371,9 @@ export function ContactsTable({
                               <DropdownMenuItem onClick={() => handleCopyEmail(lead.email)}>
                                 Copiar email
                               </DropdownMenuItem>
-                              {lead.ecosystem?.nexus_contact_id && (
-                                <DropdownMenuItem onClick={() => window.open(`https://nexus.dnia.ai/crm/contacts/${lead.ecosystem?.nexus_contact_id}`, '_blank')}>
-                                  Ver no Nexus
+                              {lead.ecosystem?.growthhs_card_url && (
+                                <DropdownMenuItem onClick={() => window.open(lead.ecosystem!.growthhs_card_url!, '_blank')}>
+                                  Ver no GrowthHS
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
@@ -698,6 +698,7 @@ function EcosystemBadges({ lead }: { lead: EnrichedLead }) {
     { label: 'D', active: true, activeBg: '#EEEDFE', activeColor: '#3C3489', tooltip: 'Presente no dnMarketing' },
     { label: 'N', active: !!lead.ecosystem?.nexus_contact_id || !!lead.ecosystem?.hasNexusEvents, activeBg: '#E6F1FB', activeColor: '#0C447C', tooltip: lead.ecosystem?.nexus_contact_id ? 'Presente no Nexus' : 'Não está no Nexus' },
     { label: 'M', active: !!lead.ecosystem?.mentoria_client_id || !!lead.ecosystem?.hasMentoriaEvents, activeBg: '#E1F5EE', activeColor: '#085041', tooltip: lead.ecosystem?.mentoria_client_id ? 'Presente no mentor.ia' : 'Não está no mentor.ia' },
+    { label: 'G', active: !!lead.ecosystem?.growthhs_card_id, activeBg: '#DCFCE7', activeColor: '#15803D', tooltip: lead.ecosystem?.growthhs_card_id ? 'Presente no GrowthHS' : 'Não está no GrowthHS' },
   ];
 
   return (

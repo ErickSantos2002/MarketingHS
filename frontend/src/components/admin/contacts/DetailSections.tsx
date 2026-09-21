@@ -103,23 +103,26 @@ export function DniaIdChip({ dniaId }: { dniaId: string | null }) {
   );
 }
 
-// ─── Nexus Link ───
-export function NexusLink({ nexusContactId }: { nexusContactId: string | null }) {
-  if (!nexusContactId) return null;
+// ─── GrowthHS Link ───
+// Era "Ver no Nexus" (CRM antigo da dn.ia, endereço cravado no componente). O
+// CRM agora é o GrowthHS — o link já vem pronto do backend
+// (`growthhs_card_url`), que é quem lê `growthhs_config` (tela de admin).
+export function GrowthHSLink({ growthhsCardUrl }: { growthhsCardUrl: string | null }) {
+  if (!growthhsCardUrl) return null;
 
   return (
     <Button
       variant="outline"
       size="sm"
       className="h-6 text-[10px] gap-1 px-2"
-      style={{ color: '#185FA5', borderColor: '#185FA530' }}
+      style={{ color: '#15803D', borderColor: '#15803D30' }}
       onClick={(e) => {
         e.stopPropagation();
-        window.open(`https://nexus.dnia.ai/crm/contacts/${nexusContactId}`, '_blank');
+        window.open(growthhsCardUrl, '_blank');
       }}
     >
       <ExternalLink className="h-3 w-3" />
-      Ver no Nexus
+      Ver no GrowthHS
     </Button>
   );
 }

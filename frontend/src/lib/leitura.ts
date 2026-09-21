@@ -13,6 +13,8 @@ export const listarContatos = <T>(pagina: number, tamanho: number, visao: VisaoC
 export interface SinaisEcossistema {
   nexus_contact_id: string | null;
   mentoria_client_id: string | null;
+  growthhs_card_id: number | null;
+  growthhs_card_url: string | null;
   tem_eventos_nexus: boolean;
   tem_eventos_mentoria: boolean;
   tem_agendamento_aberto: boolean;

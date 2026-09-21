@@ -5,17 +5,25 @@ interface EcosystemPillsProps {
   hasMentoria: boolean;
   hasNexusEvents?: boolean;
   hasMentoriaEvents?: boolean;
+  hasGrowthHS?: boolean;
   size?: number;
 }
 
+// "Nexus" aqui é o agendamento (dn.nexus) — pílula intocada. O CRM (GrowthHS)
+// é uma pílula à parte, ao lado das demais.
 const PILLS = [
   { label: 'D', app: 'dnMarketing', color: '#534AB7', alwaysActive: true },
   { label: 'N', app: 'Nexus', color: '#185FA5', key: 'hasNexus' as const, evKey: 'hasNexusEvents' as const },
   { label: 'M', app: 'mentor.ia', color: '#0F6E56', key: 'hasMentoria' as const, evKey: 'hasMentoriaEvents' as const },
+  { label: 'G', app: 'GrowthHS', color: '#15803D', key: 'hasGrowthHS' as const },
 ];
 
-export function EcosystemPills({ hasNexus, hasMentoria, hasNexusEvents, hasMentoriaEvents, size = 14 }: EcosystemPillsProps) {
-  const activeMap = { hasNexus: hasNexus || !!hasNexusEvents, hasMentoria: hasMentoria || !!hasMentoriaEvents };
+export function EcosystemPills({ hasNexus, hasMentoria, hasNexusEvents, hasMentoriaEvents, hasGrowthHS, size = 14 }: EcosystemPillsProps) {
+  const activeMap = {
+    hasNexus: hasNexus || !!hasNexusEvents,
+    hasMentoria: hasMentoria || !!hasMentoriaEvents,
+    hasGrowthHS: !!hasGrowthHS,
+  };
 
   return (
     <TooltipProvider>

@@ -5,6 +5,8 @@ import type { Lead } from '@/hooks/useLeads';
 export interface EcosystemInfo {
   nexus_contact_id: string | null;
   mentoria_client_id: string | null;
+  growthhs_card_id: number | null;
+  growthhs_card_url: string | null;
   hasNexusEvents?: boolean;
   hasMentoriaEvents?: boolean;
   hasScheduledMeeting?: boolean;
@@ -61,6 +63,8 @@ export function useContactsEnriched(leads: Lead[]) {
         map[dnia] = {
           nexus_contact_id: s.nexus_contact_id,
           mentoria_client_id: s.mentoria_client_id,
+          growthhs_card_id: s.growthhs_card_id,
+          growthhs_card_url: s.growthhs_card_url,
           hasNexusEvents: s.tem_eventos_nexus,
           hasMentoriaEvents: s.tem_eventos_mentoria,
           hasScheduledMeeting: s.tem_agendamento_aberto,

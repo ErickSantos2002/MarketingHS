@@ -11,6 +11,7 @@ id e a rota literal nunca é alcançada.
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.crm import growthhs
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 
@@ -182,9 +183,11 @@ async def enriquecimento(dados: EnriquecimentoIn, _: Usuario = Depends(usuario_a
     de meeting/demo, não conta — igual ao original.
     """
     ids = dados.dnia_ids
+    cfg = await growthhs.ler_config()
     async with sessao(role="service_role") as conn:
         identidades = await conn.fetch(
-            """SELECT dnia_id::text, nexus_contact_id::text, mentoria_client_id::text
+            """SELECT dnia_id::text, nexus_contact_id::text, mentoria_client_id::text,
+                      growthhs_card_id
                  FROM ecosystem_identities WHERE dnia_id = ANY($1::uuid[])""",
             ids)
         sinais = await conn.fetch(
@@ -221,6 +224,8 @@ async def enriquecimento(dados: EnriquecimentoIn, _: Usuario = Depends(usuario_a
         i["dnia_id"]: {
             "nexus_contact_id": i["nexus_contact_id"],
             "mentoria_client_id": i["mentoria_client_id"],
+            "growthhs_card_id": i["growthhs_card_id"],
+            "growthhs_card_url": cfg.url_do_card(i["growthhs_card_id"]),
             "tem_eventos_nexus": por_id.get(i["dnia_id"], {}).get("tem_eventos_nexus", False),
             "tem_eventos_mentoria": por_id.get(i["dnia_id"], {}).get("tem_eventos_mentoria", False),
             "tem_agendamento_aberto": por_id.get(i["dnia_id"], {}).get("tem_agendamento_aberto", False),

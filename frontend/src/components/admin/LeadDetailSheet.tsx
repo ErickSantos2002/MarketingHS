@@ -22,7 +22,7 @@ import {
   getQualificationColor,
 } from '@/hooks/useLeadQualification';
 import { conversoesDoContato } from '@/lib/leitura';
-import { DniaIdChip, NexusLink, StatusTagsSection, NotesSection } from './contacts/DetailSections';
+import { DniaIdChip, GrowthHSLink, StatusTagsSection, NotesSection } from './contacts/DetailSections';
 import { EventsTimeline } from './contacts/EventsTimeline';
 import { EcosystemPills } from './contacts/EcosystemPills';
 import { QualifiedBanner } from './contacts/QualifiedBanner';
@@ -203,7 +203,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               {lead.empresa && (
                 <p className="text-muted-foreground mt-1 truncate">{lead.empresa}</p>
               )}
-              {/* DN.IA ID + Ecosystem pills + Nexus link */}
+              {/* DN.IA ID + Ecosystem pills + GrowthHS link */}
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <DniaIdChip dniaId={enrichedLead.dnia_id} />
                 <EcosystemPills
@@ -211,15 +211,21 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                   hasMentoria={!!enrichedLead.ecosystem?.mentoria_client_id}
                   hasNexusEvents={!!enrichedLead.ecosystem?.hasNexusEvents}
                   hasMentoriaEvents={!!enrichedLead.ecosystem?.hasMentoriaEvents}
+                  hasGrowthHS={!!enrichedLead.ecosystem?.growthhs_card_id}
                   size={12}
                 />
-                <NexusLink nexusContactId={enrichedLead.ecosystem?.nexus_contact_id ?? null} />
+                <GrowthHSLink growthhsCardUrl={enrichedLead.ecosystem?.growthhs_card_url ?? null} />
                 {/* Botão manual, admin-only (POST /crm/enviar/{lead_id} — a
                     rota é `Depends(admin_atual)`). Entra na mesma fila que a
                     regra e a jornada usam (crm_handoffs); o backend responde
                     `ja_na_fila` quando o lead já está lá, e a entrega
-                    acontece em segundo plano pelo worker. */}
-                {isAdmin && enrichedLead.etiqueta === 'hotlead' && !enrichedLead.ecosystem?.nexus_contact_id && (
+                    acontece em segundo plano pelo worker.
+                    ⚠️ A visibilidade é "ainda não está no GrowthHS"
+                    (`!growthhs_card_id`), não mais "sem agendamento no Nexus"
+                    (`!nexus_contact_id`) — `nexus_contact_id` é do PRODUTO de
+                    agendamento (dn.nexus) e escondia o botão de quem já tinha
+                    marcado reunião mas nunca foi ao CRM. */}
+                {isAdmin && enrichedLead.etiqueta === 'hotlead' && !enrichedLead.ecosystem?.growthhs_card_id && (
                   <Button
                     variant="outline"
                     size="sm"
