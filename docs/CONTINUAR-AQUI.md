@@ -1,5 +1,68 @@
 # Continuar aqui
 
+> ## 🌅 Comece por aqui — 23/09/2026
+>
+> **O que fazer hoje:** executar a **Fase 1 do visual** (casca, login,
+> primitivos, gráficos). O plano está escrito e commitado:
+> `docs/superpowers/plans/2026-09-22-marketinghs-visual-fase-1-casca-primitivos.md`,
+> na branch **`visual-fase-1`** (a partir de `main` `2e39aae`, só o commit do
+> plano). Abra a sessão dentro do repo, use
+> `superpowers:subagent-driven-development` e comece pela Tarefa 1.
+> O spec que governa é
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
+>
+> **Onde tudo está:** `main` = `2e39aae`, igual ao `origin/main` (nada
+> pendente de push). A travessia do remix **acabou** no lote 8E; o que corre
+> agora é o visual.
+>
+> **Regra nova, nascida de um acidente em 22/09:** no navegador, o Claude só
+> navega por URL, lê, usa o console e abre diálogo/menu de visualização —
+> **nunca clica em botão de ação** (salvar, arquivar, excluir, ativar, enviar,
+> ícone sem rótulo em linha de lista). Id de registro se descobre por leitura
+> (GET na API ou `SELECT` no psql), nunca clicando na tela.
+>
+> ### Decisões que esperam o Erick
+>
+> 1. **Fluxo "Conferência lote 4"** (`d6bb2185-c1b1-4a3c-a585-7d8ae173b180`):
+>    estava **Pausado**, um clique acidental o arquivou, e "Desarquivar" o
+>    deixou em **Rascunho** (`draft`), que é o estado de hoje. Rascunho não
+>    dispara nada. Opções: deixar assim; o Erick ativar e pausar pela tela; ou
+>    um script SQL `draft` → `paused` (sem passar por ativo, para não arriscar
+>    disparo) que ele roda no Konsole.
+> 2. **Recálculo de pontuação e sync do DataCore** disparam as regras de
+>    automação e podem mandar muitos leads ao comercial de uma vez, inclusive
+>    clientes do ERP (8D). Deve ser assim, ou os dois ficam fora?
+> 3. **Peso 0 numa variante de teste A/B** vale 1, como na origem — deve
+>    significar "sem tráfego"? (8C)
+> 4. **Projeto Unlayer `dnmkt`** (id 288591), usado pelo editor de e-mail: a
+>    conta é da Health & Safety ou da dn.ia? (8E)
+> 5. **Colunas de funil da dn.ia** na tela de Contatos: viram assunto de outro
+>    lote? (8E)
+> 6. **Cor padrão do botão das landing pages** ainda é o vermelho da dn.ia
+>    (`#E41A11`, `PageConfigEditor.tsx`): troca pelo azul da marca? Mexe na
+>    landing, por isso é decisão do Erick (Fase 2 do visual, grupo G5).
+>
+> ### Pendências combinadas, para quando o sistema estiver no ar
+>
+> - **Apagar a conta admin do Claude** (`claude.dev@example.com`) — combinado
+>   para o fim; o Erick pediu em 22/09 para manter até tudo estar pronto.
+>   Redefinir também a senha de `erick@healthsafety.com.br`, que se perdeu.
+> - **Ligar o GrowthHS** (chave, `board_id`, URL base em Configurações →
+>   GrowthHS) quando o endpoint do lado dele existir — ver
+>   `docs/contratos/2026-09-02-endpoint-card-comercial-growthhs.md`.
+>
+> ### O dia 22/09 em uma linha cada
+>
+> - **Lote 8D** (handoff ao GrowthHS): portão fechado e mergeado. Suíte
+>   **360 testes**.
+> - **Lote 8E** (limpeza final): portão fechado e mergeado — **a travessia
+>   acabou**. Saíram o toco do Supabase, `backend/supabase/`, os rastreadores
+>   de terceiro do `index.html`, as dependências e a marca dn.ia visível.
+>   Placar final: **47 functions portadas, 7 descartadas, restam 0**.
+> - **Visual, Fase 0** (fundação): tokens oficiais copiados do Claude Design,
+>   ponte shadcn → tokens, tema claro/escuro, guarda visual. Mergeada.
+> - **Visual, Fase 1**: spec e plano escritos; execução começa agora.
+
 > ## ✅ Visual — Fase 0 (fundação), 22/09/2026
 >
 > **A fundação visual entrou.** O Design System oficial da Health & Safety
@@ -12,8 +75,8 @@
 > classe `dark` no `<html>` (`src/lib/tema.ts`, chave `marketinghs-tema`,
 > script anti-piscada no `index.html`); e o guarda visual
 > (`npm run guarda:visual`) mede cor fora de token por pasta. Branch
-> `visual-fase-0` (a partir de `main` `2ae02cf`), **aguardando o merge com o
-> Erick**. Spec:
+> `visual-fase-0` (a partir de `main` `2ae02cf`) — **mergeada em 22/09**
+> (fast-forward até `2e39aae`) e empurrada para o `origin/main`. Spec:
 > `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`;
 > plano: `docs/superpowers/plans/2026-09-22-marketinghs-visual-fase-0-fundacao.md`.
 >
@@ -149,8 +212,8 @@
 > chamada de rede nem marca da origem na tela — frase que só ficou verdadeira
 > depois da onda de correção final (rodada 2, abaixo): faltava o `bun.lock`
 > (texto, além do binário já apagado) e `docs/ROADMAP_dnmarketing.md`. Branch
-> `lote-8e` (a partir de `main` `193bbcc`), **aguardando o merge com o
-> Erick**. Plano:
+> `lote-8e` (a partir de `main` `193bbcc`) — **mergeada em 22/09**
+> (fast-forward até `193bbcc`) e empurrada para o `origin/main`. Plano:
 > `docs/superpowers/plans/2026-09-22-marketinghs-lote-8e-limpeza-final.md`.
 >
 > **O que saiu — as cinco frentes:**
@@ -318,7 +381,7 @@
 
 > ## ✅ Sub-lote 8D (handoff ao GrowthHS) — portão fechado, 22/09/2026
 >
-> **Branch `lote-8d`, aguardando o merge com o Erick** (a partir de `main`
+> **Branch `lote-8d` — mergeada em 22/09** (fast-forward até `193bbcc`) (a partir de `main`
 > `883727b`). Plano:
 > `docs/superpowers/plans/2026-09-21-marketinghs-lote-8d-handoff-growthhs.md`.
 >
