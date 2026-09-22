@@ -1,55 +1,57 @@
 # Continuar aqui
 
-> ## ⏸️ Onde paramos — 21/09/2026, fim do dia: 8D implementado, portão NO MEIO
+> ## ✅ Sub-lote 8D (handoff ao GrowthHS) — portão fechado, 22/09/2026
 >
-> **Branch `lote-8d`, NÃO mergeada** (a partir de `main` `883727b`). Plano:
+> **Branch `lote-8d`, aguardando o merge com o Erick** (a partir de `main`
+> `883727b`). Plano:
 > `docs/superpowers/plans/2026-09-21-marketinghs-lote-8d-handoff-growthhs.md`.
-> Estado fino (ledger com cada decisão, relatórios, pacotes de revisão):
-> `.superpowers/sdd/2026-09-21-marketinghs-lote-8d-handoff-growthhs/`
-> (ignorado pelo git, só nesta máquina) — **o `progress.md` de lá é o mapa;
-> confie nele e no `git log`.**
 >
-> **Feito (tarefas 1-7, todas revisadas e aprovadas):** migration 018 (fila
-> `crm_handoffs`, `growthhs_config`, colunas `growthhs_*`, vocabulário novo,
-> `nexus_config` apagada); cliente do GrowthHS (`app/crm/growthhs.py`); config
-> + `GrowthHSCard` no lugar do `NexusCard`; fila de entrega com laço próprio no
-> worker (`app/crm/entrega.py`); migration 019 (o avaliador de regras volta
-> como gatilho, enfileirando); nó de jornada e botão "Enviar ao comercial"
-> (`POST /crm/enviar/{id}`); telas de automação/jornada/contato falando
-> GrowthHS. Decisões do Erick de 21/09: avaliador de regras volta no 8D; modo
-> público `direct_stage` descartado.
+> **O que entrou:** migrations 018 (fila `crm_handoffs`, `growthhs_config`,
+> colunas `growthhs_*`, vocabulário `create_in_growthhs` /
+> `move_stage_growthhs` / `block_growthhs` / nó `handoff_growthhs`,
+> `nexus_config` apagada), 019 (o avaliador de regras volta como gatilho,
+> enfileirando) e 020 (lead já entregue não reentra na fila) — **as três já
+> aplicadas no banco**; cliente `app/crm/growthhs.py`; fila com laço próprio
+> no worker (`app/crm/entrega.py`); `POST /crm/enviar/{id}` e
+> `GET /crm/estado`; `GrowthHSCard` no lugar do `NexusCard`; telas de
+> automação, jornada e contato falando GrowthHS.
 >
-> **⚠️ Produção já está à frente do código da `main`:** 018 e 019 estão
-> APLICADAS no banco (fila, gatilho vivo, `nexus_config` apagada), mas a
-> `main` ainda escreve `create_in_nexus`/`handoff_nexus`. Salvar regra de
-> automação ou jornada com nó de handoff falha até o 8D entrar e ser
-> implantado. Hoje há 0 regras e 0 jornadas com esse nó. (Mesma defasagem da
-> 017 no 8C.)
+> **Decisões do Erick (21/09):** o avaliador de regras volta no 8D; o modo
+> público `direct_stage` é descartado.
 >
-> **O que falta, em ordem:**
+> **A revisão final pediu uma onda de correção, feita:** condição "tag" e
+> regra "mover" recusadas ao salvar (nunca disparavam / não há rota);
+> guarda contra card duplicado olha a pessoa (`dnia_id`), não só o lead;
+> chave ou funil errado (401/403/404) **pausa** a fila em vez de falhar tudo;
+> re-tentativa até ~24 h; botão "Reenfileirar falhas"; parada do worker não
+> corta entre pedidos; telas avisam "GrowthHS ainda não configurado — o
+> contato fica na fila".
 >
-> 1. **Onda de correção da revisão final** — a lista, com as decisões já
->    tomadas, está em `.superpowers/sdd/2026-09-21-marketinghs-lote-8d-handoff-growthhs/final-review-findings.md`:
->    I1 condição "tag" nunca dispara (recusar ao salvar); I2 guarda de card
->    duplicado por identidade; I3 erro de configuração pausa a fila em vez de
->    falhar tudo + re-tentativa de ~24 h + "reenfileirar falhas" + teste não
->    sobrescreve chave real; I4 migration 020 (lead já entregue não reentra na
->    fila) + recusar regra "mover"; I5 parada do worker não corta entrega
->    depois do 2xx; I6 telas avisam quando o GrowthHS não está configurado;
->    mais 5 menores. Um subagente só, depois re-revisão escopada.
-> 2. **Suíte inteira** — a de hoje foi **interrompida** a ~90% (parada pedida
->    no fim do dia; o agente caiu e levou o pytest junto). Conferido depois no
->    banco: nada ficou para trás (growthhs_config, chave, fila, regras, leads,
->    ab_* e usuários de teste = 0). Rodar de novo depois da onda, até o fim.
-> 3. **Navegador** (passo 3 da Tarefa 8 do plano) — conta admin do Claude
->    existe (recriada hoje).
-> 4. **Capacidade por capacidade** contra a origem (passo 4) — ainda não foi
->    feita; o agente que ia fazê-la foi parado junto com a suíte.
-> 5. `git rm` de `handoff-to-nexus`, `nexus-config`, `get-nexus-stages` e
->    `_shared/nexusConfig.ts`; acrescentar ao contrato os três pedidos do 8D
->    (rota de mover card, o que fazer ao excluir contato, rota de leitura
->    autenticada); placar **47 portadas, 7 descartadas, restam 0**; commit.
-> 6. Finalizar a branch (merge com o Erick) e seguir para o **8E**.
+> **Portão:** buscas limpas (o toco só é importado por `LimiteDeErro` — **é o
+> critério do 8E**); 25 capacidades conferidas contra a origem, nenhuma
+> perdida sem decisão; telas conferidas no navegador (6/6, zero erro de
+> console); suíte inteira: **360 passaram**, 0 falhas (25 min). Banco
+> conferido limpo depois de cada rodada.
+>
+> **Placar: 47 functions portadas, 7 descartadas, restam 0.** (O modo público
+> `direct_stage` foi descartado *dentro* de uma function portada — não muda
+> a contagem.) O **8E** é o próximo: apagar o toco do Supabase.
+>
+> **Para ligar o GrowthHS de verdade** (além do endpoint do lado dele — ver o
+> contrato, que ganhou os pedidos do 8D): chave, `board_id` e URL base em
+> Configurações → GrowthHS. Antes disso:
+> - a corrida entre os testes e o worker de produção (um teste pode ter o
+>   pedido reivindicado pelo worker real quando houver configuração);
+> - o fallback de ambiente do `ler_segredo` torna "limpar chave" inócuo se
+>   `GROWTHHS_API_KEY` existir no ambiente;
+> - a função do gatilho é SECURITY DEFINER com dono superusuário.
+>
+> **Pequenos, registrados e deixados:** `fila.pausada.desde` avança a cada
+> ciclo de 10 min (o aviso diz "desde agora" numa pausa longa); a proteção
+> da gravação pós-2xx não sobrevive ao desligamento real do worker (janela
+> pequena, fecha com a restrição do contrato); o contador de falhas inclui
+> casos que "Reenfileirar" não pega (o número pode não cair); o card não tem
+> botão de limpar a chave (a origem também não tinha; a rota aceita).
 >
 > **Perguntas abertas ao Erick:**
 > - O **recálculo de pontuação** e a **sincronização do DataCore** agora
@@ -61,13 +63,7 @@
 >   significar "sem tráfego"? (do 8C)
 > - **Push**: a `main` está ~198 commits à frente do `origin/main`.
 >
-> **Antes de ligar o GrowthHS de verdade** (além do endpoint do lado dele):
-> a corrida entre os testes e o worker de produção (um teste pode ter o
-> pedido reivindicado pelo worker real); o fallback de ambiente do
-> `ler_segredo` torna "limpar chave" inócuo se `GROWTHHS_API_KEY` existir no
-> ambiente; a função do gatilho é SECURITY DEFINER com dono superusuário.
->
-> Sobra antiga no banco (não é de hoje): identidade
+> Sobra antiga no banco (não é do 8D): identidade
 > `sonda-captura@exemplo.invalid` (criada 21/09 07:28, sem lead) — o teste de
 > captura não apaga a identidade que cria.
 

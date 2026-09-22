@@ -5,7 +5,7 @@ Nada aqui se implementa dentro do MarketingHS — o MarketingHS é o *chamador*.
 
 **Data:** 2 de setembro de 2026
 **Origem:** lote 5A do MarketingHS (`docs/superpowers/specs/2026-08-31-marketinghs-design.md`, seção 8.A)
-**Estado:** especificado, não implementado
+**Estado:** o lado do MarketingHS está pronto (lote 8D, 22/09/2026); falta o endpoint no GrowthHS
 
 ---
 
@@ -213,10 +213,40 @@ Para fechar o lote 5A do nosso lado:
    mesmo servidor, ou externa).
 4. Confirmação de como o GrowthHS trata `origin` (lista fechada ou texto livre).
 
-Enquanto não chegar, o MarketingHS mantém o handoff **desligado e dizendo que
-está desligado** — `NODE_NAO_LIGADO` em `frontend/src/lib/journeys.ts` e
-`AUTOMACAO_NAO_LIGADA` em `frontend/src/lib/automacoes.ts`. Apagar a entrada de
-cada um religa a interface.
+Os itens 1 a 3 entram em **Configurações → GrowthHS** (a chave vai para
+`integration_secrets`, nunca para o `.env`). Enquanto não chegarem, o
+MarketingHS **enfileira e espera**: regra, nó de jornada e botão "Enviar ao
+comercial" gravam o pedido em `crm_handoffs`, e as telas avisam que o GrowthHS
+ainda não está configurado. Quando a configuração entra, o worker entrega a
+fila. Chave ou `board_id` errado (401/403/404) **pausa** a fila em vez de
+falhar pedido a pedido; o estado aparece no card de configuração.
+
+---
+
+## Pedidos acrescentados em 21/09 (lote 8D)
+
+Apareceram ao implementar o lado do MarketingHS. Nenhum bloqueia ligar o
+handoff; cada um fecha uma lacuna que hoje falha à vista.
+
+**(a) Rota para mover card de etapa.** A origem tinha regras de automação que
+moviam o card no CRM quando a etiqueta do lead mudava. O contrato só cria.
+Até existir a rota, salvar regra `move_stage_growthhs` é recusado (400) e a
+opção aparece desabilitada no formulário.
+
+**(b) O que fazer com o card quando o contato é excluído no MarketingHS.** A
+origem apagava o contato no Nexus. Hoje o card fica — apagar card de vendedor
+é decisão do CRM. Precisamos saber se o GrowthHS quer ser avisado (e por qual
+rota), ou se o card simplesmente segue.
+
+**(c) Uma rota de leitura autenticada e barata** (ex.: `GET /integration/whoami`).
+O "Testar conexão" hoje só confere `GET {base}/health`, que não prova que a
+chave vale — testar a chave de verdade exigiria criar um card. Com a rota, o
+teste confere a chave e o escopo `cards:create`.
+
+**(d) — reforço, não pedido novo:** a restrição única `(external_source,
+external_id)` do contrato é a única coisa que fecha de vez o card duplicado
+numa corrida rara (worker desligado entre o 2xx e a gravação). Do nosso lado
+há guarda por lead e por pessoa, mas ela depende de a gravação ter acontecido.
 
 ---
 
