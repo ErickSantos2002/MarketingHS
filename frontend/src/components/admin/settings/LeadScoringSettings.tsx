@@ -203,7 +203,7 @@ export default function LeadScoringSettings() {
               <label className="text-[10px] text-muted-foreground">Sources qualificadas (separadas por vírgula)</label>
               <Input
                 className="text-xs mt-1"
-                placeholder="programadeiaficacao, instagram, google"
+                placeholder="landing-exemplo, instagram, google"
                 value={(criteria.origem.sources || []).join(', ')}
                 onChange={(e) => updateCriteria('origem', 'sources', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
               />
