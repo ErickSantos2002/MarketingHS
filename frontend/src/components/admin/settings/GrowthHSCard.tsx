@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Wifi, WifiOff, CheckCircle2, Eye, EyeOff, Save } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, CheckCircle2, Eye, EyeOff, Save, PauseCircle, RotateCcw } from 'lucide-react';
 import { api, ErroApi } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -18,7 +18,14 @@ type ConfigGrowthHS = {
   app_url: string | null;
   api_key: { configurado: boolean; ultimos4: string | null };
   configurado: boolean;
-  fila: { pendentes: number; falhas: number; ultimas_falhas: Falha[] };
+  fila: {
+    pendentes: number;
+    falhas: number;
+    ultimas_falhas: Falha[];
+    // Revisão final do 8D (I3): o GrowthHS recusou a configuração
+    // (401/403/404) — a fila inteira espera, sem gastar tentativa.
+    pausada: { motivo: string; desde: string } | null;
+  };
 };
 
 export default function GrowthHSCard() {
@@ -32,6 +39,7 @@ export default function GrowthHSCard() {
   const [appUrlInput, setAppUrlInput] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const [reenfileirando, setReenfileirando] = useState(false);
 
   const loadConfig = async () => {
     setLoading(true);
@@ -72,6 +80,27 @@ export default function GrowthHSCard() {
     } catch (e) {
       setStatus('error');
       setErrorMsg(e instanceof ErroApi ? e.message : 'Falha ao conectar ao GrowthHS.');
+    }
+  };
+
+  const handleReenfileirar = async () => {
+    setReenfileirando(true);
+    try {
+      const { reenfileirados } = await api.post<{ reenfileirados: number }>(
+        '/config/growthhs/reenfileirar',
+      );
+      toast.success(
+        reenfileirados === 1
+          ? '1 contato voltou para a fila'
+          : `${reenfileirados} contatos voltaram para a fila`,
+      );
+      await loadConfig();
+    } catch (e) {
+      toast.error('Falha ao reenfileirar', {
+        description: e instanceof ErroApi ? e.message : undefined,
+      });
+    } finally {
+      setReenfileirando(false);
     }
   };
 
@@ -118,7 +147,10 @@ export default function GrowthHSCard() {
   };
 
   const badge = badgeMap[status];
-  const canTest = Boolean(baseUrlInput.trim()) && !loading;
+  // M4 (revisão final do 8D): o teste usa o endereço SALVO — testar com outro
+  // digitado na tela daria um "Conectado" que não é do endereço que se vê.
+  const enderecoMudou = !!config && baseUrlInput.trim().replace(/\/+$/, '') !== (config.base_url || '');
+  const canTest = Boolean(baseUrlInput.trim()) && !loading && !enderecoMudou;
   const hasChanges =
     !!config &&
     (baseUrlInput !== (config.base_url || '') ||
@@ -245,6 +277,12 @@ export default function GrowthHSCard() {
           </div>
         )}
 
+        {enderecoMudou && baseUrlInput.trim() && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed">
+            O endereço digitado é diferente do salvo — salve antes de testar.
+          </p>
+        )}
+
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           Testar conexão confere que a API do GrowthHS responde; não confere a chave — isso só se
           vê na primeira entrega.
@@ -278,9 +316,38 @@ export default function GrowthHSCard() {
 
         {!loading && config && (
           <div className="pt-2 border-t border-border/30 space-y-2">
-            <p className="text-xs text-muted-foreground">
-              {config.fila.pendentes} aguardando entrega · {config.fila.falhas} falharam
-            </p>
+            {config.fila.pausada && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
+                <PauseCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-amber-500" />
+                <div className="text-[10px] leading-relaxed text-amber-700 dark:text-amber-400">
+                  <p className="font-medium">
+                    Fila pausada desde {new Date(config.fila.pausada.desde).toLocaleString('pt-BR')}
+                  </p>
+                  <p>{config.fila.pausada.motivo}</p>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {config.fila.pendentes} aguardando entrega · {config.fila.falhas} falharam
+              </p>
+              {config.fila.falhas > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-6 text-[10px]"
+                  onClick={handleReenfileirar}
+                  disabled={reenfileirando}
+                >
+                  {reenfileirando ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3 w-3" />
+                  )}
+                  Reenfileirar falhas
+                </Button>
+              )}
+            </div>
             {config.fila.ultimas_falhas.length > 0 && (
               <ul className="space-y-1">
                 {config.fila.ultimas_falhas.map((f) => (
