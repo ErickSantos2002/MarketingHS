@@ -94,7 +94,7 @@ export default function Segments() {
                     variant="outline"
                     size="sm"
                     className="gap-1.5 flex-1"
-                    onClick={() => navigate(`/adnia/campaigns?segment_id=${seg.id}`)}
+                    onClick={() => navigate('/campaigns')}
                   >
                     <Send className="h-3 w-3" /> Enviar campanha
                   </Button>
