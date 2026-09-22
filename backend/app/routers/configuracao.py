@@ -809,8 +809,17 @@ class GrowthHSIn(BaseModel):
         return valor
 
 
+# Revisão final do 8D (M3): falha que já foi resolvida — o lead chegou ao
+# comercial depois, por reenfileiramento, botão ou regra — não é falha. O
+# painel acusando o que já está no GrowthHS ensina a ignorar o painel.
+_FALHA_EM_ABERTO = """h.status = 'falhou'
+    AND NOT EXISTS (SELECT 1 FROM crm_handoffs e
+                     WHERE e.lead_id = h.lead_id AND e.acao = 'criar'
+                       AND e.status = 'entregue' AND e.id > h.id)"""
+
+
 async def _estado_growthhs() -> dict:
-    from app.crm import growthhs
+    from app.crm import entrega, growthhs
 
     cfg = await growthhs.ler_config()
     chave = cfg.api_key or ""
@@ -818,17 +827,28 @@ async def _estado_growthhs() -> dict:
         pendentes = await conn.fetchval(
             "SELECT count(*) FROM crm_handoffs WHERE status = 'pendente'")
         falhas = await conn.fetchval(
-            "SELECT count(*) FROM crm_handoffs WHERE status = 'falhou'")
+            f"SELECT count(*) FROM crm_handoffs h WHERE {_FALHA_EM_ABERTO}")
         ultimas = await conn.fetch(
-            """SELECT lead_id::text, erro, atualizado_em::text FROM crm_handoffs
-                WHERE status = 'falhou' ORDER BY atualizado_em DESC LIMIT 5""")
+            f"""SELECT h.lead_id::text, h.erro, h.atualizado_em::text FROM crm_handoffs h
+                 WHERE {_FALHA_EM_ABERTO} ORDER BY h.atualizado_em DESC LIMIT 5""")
+        # I3: a pausa de configuração (401/403/404) não é falha de nenhum
+        # lead — é a fila inteira parada. O motivo é o do pedido pausado mais
+        # recente; `desde`, o da pausa mais antiga ainda de pé.
+        pausa = await conn.fetchrow(
+            """SELECT (array_agg(erro ORDER BY atualizado_em DESC))[1] AS motivo,
+                      min(atualizado_em)::text AS desde
+                 FROM crm_handoffs
+                WHERE status = 'pendente' AND erro LIKE $1 || '%'""",
+            entrega.PREFIXO_PAUSA)
     return {
         "base_url": cfg.base_url, "board_id": cfg.board_id, "app_url": cfg.app_url,
         "api_key": {"configurado": bool(chave),
                     "ultimos4": chave[-4:] if len(chave) >= 4 else None},
         "configurado": cfg.configurado,
         "fila": {"pendentes": pendentes, "falhas": falhas,
-                 "ultimas_falhas": [dict(l) for l in ultimas]},
+                 "ultimas_falhas": [dict(l) for l in ultimas],
+                 "pausada": ({"motivo": pausa["motivo"], "desde": pausa["desde"]}
+                             if pausa and pausa["motivo"] else None)},
     }
 
 
@@ -890,3 +910,30 @@ async def testar_config_growthhs(_: Usuario = Depends(admin_atual)):
     except growthhs.ErroTransitorio as erro:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(erro))
     return {"alcancavel": codigo < 500, "status": codigo}
+
+
+@router.post("/config/growthhs/reenfileirar")
+async def reenfileirar_falhas_growthhs(_: Usuario = Depends(admin_atual)):
+    """Devolve à fila as falhas em aberto (revisão final do 8D, I3) — até
+    aqui a única recuperação era clicar lead a lead.
+
+    Um pedido por lead (o mais recente), só de criar card — `mover` falharia
+    de novo, pelo mesmo motivo —, só de lead que não foi apagado, não tem
+    entrega `entregue` e não tem pedido pendente (o índice único de pendente
+    recusaria o segundo). Tentativas zeradas, visível na hora."""
+    async with sessao(role="service_role") as conn:
+        ids = await conn.fetch(
+            """UPDATE crm_handoffs h
+                  SET status = 'pendente', tentativas = 0, visivel_em = now(),
+                      erro = NULL, atualizado_em = now()
+                WHERE h.id IN (
+                      SELECT DISTINCT ON (f.lead_id) f.id
+                        FROM crm_handoffs f JOIN leads l ON l.id = f.lead_id
+                       WHERE f.status = 'falhou' AND f.acao = 'criar'
+                         AND l.deleted_at IS NULL
+                         AND NOT EXISTS (SELECT 1 FROM crm_handoffs e
+                                          WHERE e.lead_id = f.lead_id AND e.acao = 'criar'
+                                            AND e.status IN ('entregue', 'pendente'))
+                       ORDER BY f.lead_id, f.id DESC)
+            RETURNING h.id""")
+    return {"reenfileirados": len(ids)}
