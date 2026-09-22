@@ -1,5 +1,95 @@
 # Continuar aqui
 
+> ## ✅ Sub-lote 8E (limpeza final) — implementado, portão a seguir, 22/09/2026
+>
+> **A travessia acabou.** O MarketingHS não tem mais arquivo, dependência,
+> chamada de rede nem marca da origem na tela. Branch `lote-8e` (a partir de
+> `main` `193bbcc`), **aguardando o portão e o merge com o Erick**. Plano:
+> `docs/superpowers/plans/2026-09-22-marketinghs-lote-8e-limpeza-final.md`.
+>
+> **O que saiu — as cinco frentes:**
+> 1. **A casca** — `index.html` reescrito do zero no molde do HS.OS (título
+>    "MarketingHS — Marketing da Health &amp; Safety", ícone `hs.ico`); saíram
+>    o Meta Pixel, o Google Analytics / Tag Manager, o rastreador do Supabase
+>    (que disparava o `get-tests`) e o do Lovable, o CSS da landing da dn.ia,
+>    `og:*`/`twitter:*`. `robots.txt` passou a `Disallow: /`. Saíram de
+>    `public/` o `favicon.png`, o `placeholder.svg` e duas imagens da dn.ia.
+> 2. **O toco** — `src/integrations/supabase/` apagada; o `LimiteDeErro` ficou
+>    só como error boundary. `@supabase/supabase-js` e `lovable-tagger` saíram
+>    do `package.json`; `bun.lockb` saiu (o lockfile é o `package-lock.json`);
+>    34 arquivos sem importador saíram de `src/assets` (fotos da dn.ia e
+>    `.asset.json` do Lovable).
+> 3. **A marca** — logo da casa (`logo-hs-padrao.png` do HS.OS →
+>    `frontend/src/assets/logo-hs.png`) na barra lateral, no login e na
+>    Documentação da API; "Assistente de dados"; chip "ID do contato"; modelo
+>    padrão de e-mail em nome da Health & Safety; card do webhook explicando
+>    que o token é o `WEBHOOK_SECRET` do servidor; OpenAPI renomeado para
+>    `public/api/marketinghs-api.yaml`. No mesmo arquivo, o enum `action_type`
+>    de automações ainda documentava as ações do Nexus — corrigido para as do
+>    GrowthHS (`create_in_growthhs`, `move_stage_growthhs`, `block_growthhs`),
+>    que é o que o backend aceita desde o 8D. Os guias "Nexus — passo a passo"
+>    e "mentor.ia — passo a passo" saíram da tela de Documentação da API.
+> 4. **Nexus e mentor.ia fora da tela** — pílulas reduzidas a "M ·
+>    MarketingHS" e "G · GrowthHS"; o filtro de histórico ficou `Todos` ·
+>    `MarketingHS` · `Website`, e "MarketingHS" casa `source_app`
+>    `marketinghs` **e** `dnmarketing` (os eventos herdados continuam no
+>    filtro); o card "mentor.ia" de Configurações saiu. **Filtros que saíram:**
+>    o controle "PLATAFORMA" inteiro do painel de filtros (Todas / No Nexus /
+>    No mentor.ia / Nos dois) e os chips "Plataforma: Nexus/mentor.ia"; os
+>    checkboxes "No Nexus" / "No mentor.ia" da barra de filtros. **Exportação:**
+>    as flags N e M saíram da coluna combinada "Ecossistema" — que já era
+>    sempre vazia antes (nenhum código preenche `has_nexus`/`has_mentoria`/
+>    `has_dnia`). Também saíram: a seção "dn.nexus" da configuração do A/B
+>    (`ExperimentsSetup.tsx`), "dnMarketing" e "DN.IA" da tela de chaves de
+>    API, "(Nexus)" do evento "Atividade criada" nos segmentos, o domínio
+>    `dnia.ai/` do preview de slug de página nova, e uma segunda
+>    `EventsTimeline` morta em `DetailSections.tsx` (nunca importada).
+> 5. **A especificação e a documentação da origem** — `backend/supabase/`
+>    (o que restava: `config.toml` e `functions/_shared/`) e `docs/ab-testing/`
+>    (documentação do A/B da dn.ia, `go.dnia.ai`, Supabase) apagadas. O
+>    `CLAUDE.md` registra o fim da travessia.
+>
+> **Decisões do Erick (22/09):**
+> - **E1** — nenhum rastreador do `index.html` é da Health & Safety; saem
+>   todos. Rastreamento de landing continua por página (`pages.config`,
+>   `useClarity`).
+> - **E2** — Nexus e mentor.ia saem da interface; **colunas e dados do banco
+>   ficam** (0 de 2.084 identidades com `nexus_contact_id` ou
+>   `mentoria_client_id`; 2 de 3.303 `contact_events` com `source_app='nexus'`).
+> - **E3** — modelo padrão de e-mail com "Health & Safety" e
+>   `https://healthsafety.com.br` no lugar de "DN.IA" / `https://dnia.ai`.
+> - **E4** — o assistente de IA do painel se chama "Assistente de dados".
+>
+> **Templates no banco com "DN.IA"/"dnia.ai": 0** — a tabela
+> `email_templates` está vazia, então o número não prova nada sobre o
+> passado. Nenhum dado foi tocado; banco e backend não mudaram neste lote.
+>
+> **Sobra deixada de propósito (decisão 12):** o backend ainda aceita e
+> devolve os filtros/campos de Nexus e mentor.ia (`leitura_contatos.py`), e
+> `/publico/*` ainda aceita `source_app` `nexus`/`mentoria` — tirar seria
+> mudança de contrato. A tela só deixou de pedir e mostrar.
+>
+> **A corrigir na onda final do 8E:** `Segments.tsx:97` — o botão "Enviar
+> campanha" do segmento navega para `/adnia/campaigns` (rota legada, que
+> redireciona para a Home e perde o `segment_id`).
+>
+> **Pequenos, registrados e deixados:** warning de React pré-existente no
+> `DniaIdChip` (`TooltipTrigger asChild` + `Badge`); o enum de `source_app`
+> no OpenAPI não lista `marketinghs`, que o backend aceita; `TagIcon` sem uso
+> em `DetailSections.tsx` e imports sem uso em `ApiDocumentation.tsx`; a
+> coluna "Ecossistema" da exportação segue sempre vazia.
+>
+> **Portão:** a preencher (buscas, build, navegador — Tarefa 6).
+>
+> **Lembretes que passam a valer:**
+> - **Apagar a conta admin do Claude** (`claude.dev@example.com`) — combinado
+>   para o fim da travessia (item 25). Credencial em
+>   `~/.config/marketinghs/claude-admin.env`.
+> - **Perguntas abertas do 8D e do 8C:** o recálculo de pontuação e a
+>   sincronização do DataCore disparando as regras de automação (devem?);
+>   peso 0 numa variante de A/B valendo 1 (deve ser "sem tráfego"?); push da
+>   `main` (217 commits à frente do `origin/main` em 22/09).
+
 > ## ✅ Sub-lote 8D (handoff ao GrowthHS) — portão fechado, 22/09/2026
 >
 > **Branch `lote-8d`, aguardando o merge com o Erick** (a partir de `main`
@@ -118,6 +208,8 @@
 > **Para o 8E:** `docs/ab-testing/` é a documentação da origem (dn.ia,
 > `go.dnia.ai`, Supabase) e contradiz o código; a casca do app chama um
 > endpoint supabase (`get-tests`) e `lovableproject.com` durante a navegação.
+> → resolvido no 8E (22/09): `docs/ab-testing/` apagada; os rastreadores
+> saíram do `index.html`.
 >
 > A conta admin do Claude foi **recriada** em 21/09 com ok do Erick — apagar
 > no fim da travessia.
@@ -990,6 +1082,7 @@ o defeito dos 2.080 volta, calado.
     `<title>` e `og:title`); há um botão flutuante **"Abrir DNIA AI"**; a ficha
     do contato mostra **"DN.IA ID"** e filtros de histórico **dnMarketing /
     Nexus / mentor.ia**; e `public/ab.js` aponta para `dnmkt.dnia.ai`.
+    → resolvido: o `ab.js` no 8C, o resto no 8E (22/09/2026).
 27. **A timeline da ficha esconde reconversão feita em até 60 segundos** do
     cadastro — trata como duplicata do "Primeiro cadastro"
     (`LeadDetailSheet.tsx:130`). Herdado, intocado no porte; os dados estão
@@ -1017,7 +1110,7 @@ o defeito dos 2.080 volta, calado.
     "Configure WEBHOOK_SECRET no Supabase Secrets" — texto morto, o
     Supabase saiu e o segredo agora vive em `integration_secrets`. E há um
     card "mentor.ia" da dn.ia na mesma tela. Nenhuma tarefa do 8A tinha
-    escopo sobre esses três.
+    escopo sobre esses três. → resolvido no 8E (22/09/2026).
 31. **Lead Qualificado avança o contato para `opportunity` no ecossistema?**
     A origem avançava (`resolve_or_create_identity` com `p_stage:
     'opportunity'`) e a documentação publicada prometia; a rota do admin já

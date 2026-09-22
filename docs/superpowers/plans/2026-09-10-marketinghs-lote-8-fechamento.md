@@ -155,6 +155,6 @@ trás. Ao fechar cada sub-lote, compare **com a function**, não com o plano.
 | 8B | 42 | 7 | 5 |
 | 8C | 44 | 7 | 3 |
 | 8D | 47 | 7 | 0 |
-| 8E | — | — | a pasta `backend/supabase/` não existe |
+| 8E ✅ | 47 | 7 | cumprido em 22/09/2026 — a pasta `backend/supabase/` não existe |
 
 (Os dois números nunca se somam — regra do `CLAUDE.md`.)

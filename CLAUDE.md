@@ -9,13 +9,15 @@ qualifica, entrega o qualificado ao comercial, conversa com a base por e-mail e
 mede o resultado. É o 9º sistema interno da casa.
 
 Ele veio de um **remix do dn.marketing** ("AI Fastlane"), produto da dn.ia que
-roda em `dnmkt.dnia.ai`, e está sendo reconstruído por dentro para virar produto
+roda em `dnmkt.dnia.ai`, e foi reconstruído por dentro para virar produto
 próprio — mesma travessia que o **TalentHS** e o **HS.OS** fizeram antes, e as
-duas são a referência para as decisões daqui.
+duas são a referência para as decisões daqui. A travessia acabou no lote 8E
+(22/09/2026).
 
 **O Lovable e o Supabase saíram.** Qualquer instrução herdada que fale em
 `lovable-workflow`, sync com o Lovable, `supabase functions deploy` ou
-`supabase db push` está morta. O repositório é a fonte da verdade.
+`supabase db push` está morta. O repositório é a fonte da verdade — e desde o
+8E não resta nele arquivo de nenhum dos dois.
 
 - **Spec:** `docs/superpowers/specs/2026-08-31-marketinghs-design.md` — as 7
   decisões, os 8 lotes, os riscos. É a autoridade.
@@ -28,7 +30,6 @@ duas são a referência para as decisões daqui.
 backend/     FastAPI + asyncpg
   app/       config · database · dependencies · auth/ · routers/ · middleware/
   migrations/  SQL numerado, aplicado por scripts/aplicar-migrations.sh
-  supabase/  as edge functions da origem — ESPECIFICAÇÃO, não código vivo
   tests/     só o que executar não prova (hoje: security.py)
 frontend/    React 18 + Vite + shadcn + TanStack Query
 worker/      vazio até o lote 3 (motor de fila e agendamento)
@@ -115,9 +116,14 @@ TI, admin reseta a de quem esquecer. Um caminho de acesso a menos.
 
 **`.env` nunca é versionado.**
 
-## O portão de pronto
+## O portão que fechou a travessia
 
-Uma tela só está portada quando **as quatro** condições valem:
+A portagem acabou no lote 8E (22/09/2026): 47 functions portadas, 7
+descartadas, nenhuma restando. Este é o registro do portão que cada tela
+precisou passar — e as lições dele valem para qualquer reescrita futura,
+porque o corte silencioso não é coisa do Supabase, é coisa de reescrever.
+
+Uma tela só contava como portada quando **as quatro** condições valiam:
 
 ```bash
 # 1. a tela não fala mais com o Supabase
@@ -131,9 +137,12 @@ grep -rn "<nome-da-function>" frontend/src
 # 4. a tela ainda FAZ O QUE FAZIA — comparar capacidade por capacidade
 git diff <commit antes do porte> -- frontend/src/<a tela>
 
-# só então a function sai da especificação
-git rm -r backend/supabase/functions/<nome>
+# só então a function saía da especificação (backend/supabase/functions/<nome>)
 ```
+
+A especificação era `backend/supabase/functions/`; a pasta não existe mais —
+saiu inteira no 8E, e continua no histórico do git para quem precisar da
+origem.
 
 ⚠️ **O passo 4 nasceu no lote 6, que o violou três vezes num lote só** — e os
 três passariam pelos passos 1, 2 e 3 sem tropeço:
@@ -187,13 +196,8 @@ grep -rn "supabase as any\|= supabase;" frontend/src --include=*.ts --include=*.
 **O placar conta dois números e nunca os soma:** functions portadas *e* telas
 migradas. Foi juntá-los num número só que escondeu telas quebradas no HS.OS.
 
-## Quando algo não estiver portado
-
-`frontend/src/integrations/supabase/client.ts` é um **toco**: qualquer uso
-estoura com `[MarketingHS] não portado: <alvo>`. O `LimiteDeErro` contém a
-explosão para que a casca do admin sobreviva e dê para navegar até uma tela que
-funciona. **Quando esse arquivo puder ser apagado sem quebrar nada, a portagem
-acabou.**
+Desde o lote 8E (22/09/2026) não há toco: `integrations/supabase/` foi
+apagada; o `LimiteDeErro` segue como error boundary da casca.
 
 ## Banco
 
