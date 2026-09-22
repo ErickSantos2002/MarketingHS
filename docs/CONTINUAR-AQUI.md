@@ -1111,6 +1111,9 @@ o defeito dos 2.080 volta, calado.
     Supabase saiu e o segredo agora vive em `integration_secrets`. E há um
     card "mentor.ia" da dn.ia na mesma tela. Nenhuma tarefa do 8A tinha
     escopo sobre esses três. → resolvido no 8E (22/09/2026).
+    ⚠️ Correção (22/09): o `WEBHOOK_SECRET` do webhook de eventos é variável
+    de ambiente do backend (`app/config.py`), não `integration_secrets` —
+    quem vive lá é o `RESEND_WEBHOOK_SECRET`. O card agora diz isso.
 31. **Lead Qualificado avança o contato para `opportunity` no ecossistema?**
     A origem avançava (`resolve_or_create_identity` com `p_stage:
     'opportunity'`) e a documentação publicada prometia; a rota do admin já
