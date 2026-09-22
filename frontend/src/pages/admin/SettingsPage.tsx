@@ -17,7 +17,6 @@ import UserManagement from '@/components/admin/settings/UserManagement';
 import SuppressionList from '@/components/admin/settings/SuppressionList';
 import SocialLinksSettings from '@/components/admin/settings/SocialLinksSettings';
 
-const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
 // ⚠️ Era a URL das Edge Functions do Supabase. Agora é a nossa API — e o
 // endpoint mudou de nome junto: receive-contact-event virou
 // /publico/evento-de-contato.

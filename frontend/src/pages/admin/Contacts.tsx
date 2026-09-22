@@ -176,10 +176,9 @@ export default function Contacts() {
       </div>
 
       {/* Bulk actions bar (above table) */}
-      {/* A barra de ações em massa é do lote 1C e ainda fala com o Supabase.
-          Isolada aqui para que a explosão dela não leve a TABELA junto — sem
-          isto, a tela inteira de Contatos vira um cartão de erro e não dá para
-          conferir a leitura, que é o que este lote entrega. */}
+      {/* Isolada aqui para que a explosão da barra de ações em massa não leve
+          a TABELA junto — sem isto, a tela inteira de Contatos vira um
+          cartão de erro. */}
       <LimiteDeErro area="ações em massa">
         <ContactsBulkBar
           selectedLeads={selectedLeads}
