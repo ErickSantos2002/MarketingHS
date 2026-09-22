@@ -3,8 +3,11 @@
 > ## ✅ Sub-lote 8E (limpeza final) — implementado, portão a seguir, 22/09/2026
 >
 > **A travessia acabou.** O MarketingHS não tem mais arquivo, dependência,
-> chamada de rede nem marca da origem na tela. Branch `lote-8e` (a partir de
-> `main` `193bbcc`), **aguardando o portão e o merge com o Erick**. Plano:
+> chamada de rede nem marca da origem na tela — frase que só ficou verdadeira
+> depois da onda de correção final (rodada 2, abaixo): faltava o `bun.lock`
+> (texto, além do binário já apagado) e `docs/ROADMAP_dnmarketing.md`. Branch
+> `lote-8e` (a partir de `main` `193bbcc`), **aguardando o portão e o merge
+> com o Erick**. Plano:
 > `docs/superpowers/plans/2026-09-22-marketinghs-lote-8e-limpeza-final.md`.
 >
 > **O que saiu — as cinco frentes:**
@@ -16,19 +19,27 @@
 >    `public/` o `favicon.png`, o `placeholder.svg` e duas imagens da dn.ia.
 > 2. **O toco** — `src/integrations/supabase/` apagada; o `LimiteDeErro` ficou
 >    só como error boundary. `@supabase/supabase-js` e `lovable-tagger` saíram
->    do `package.json`; `bun.lockb` saiu (o lockfile é o `package-lock.json`);
->    34 arquivos sem importador saíram de `src/assets` (fotos da dn.ia e
->    `.asset.json` do Lovable).
+>    do `package.json`; `bun.lockb` **e** `bun.lock` saíram (o lockfile é o
+>    `package-lock.json` — o Lovable tinha deixado os dois, o binário e o de
+>    texto; só o binário saiu na rodada 1); 34 arquivos sem importador saíram
+>    de `src/assets` (fotos da dn.ia e `.asset.json` do Lovable).
 > 3. **A marca** — logo da casa (`logo-hs-padrao.png` do HS.OS →
 >    `frontend/src/assets/logo-hs.png`) na barra lateral, no login e na
 >    Documentação da API; "Assistente de dados"; chip "ID do contato"; modelo
 >    padrão de e-mail em nome da Health & Safety; card do webhook explicando
->    que o token é o `WEBHOOK_SECRET` do servidor; OpenAPI renomeado para
->    `public/api/marketinghs-api.yaml`. No mesmo arquivo, o enum `action_type`
->    de automações ainda documentava as ações do Nexus — corrigido para as do
->    GrowthHS (`create_in_growthhs`, `move_stage_growthhs`, `block_growthhs`),
->    que é o que o backend aceita desde o 8D. Os guias "Nexus — passo a passo"
->    e "mentor.ia — passo a passo" saíram da tela de Documentação da API.
+>    que o token é o `WEBHOOK_SECRET` do servidor; OpenAPI renomeado e movido
+>    para `public/openapi/marketinghs-api.yaml` (nasceu em `public/api/`, que
+>    colidia com o proxy `/api` do backend — os dois links da tela ("Swagger
+>    UI", "OpenAPI YAML") davam 404; movido e conferido no navegador na rodada
+>    2). No mesmo arquivo, o enum `action_type` de automações ainda
+>    documentava as ações do Nexus — corrigido para as do GrowthHS
+>    (`create_in_growthhs`, `move_stage_growthhs`, `block_growthhs`), que é o
+>    que o backend aceita desde o 8D; o enum de `source_app` passou a listar
+>    `marketinghs` (o backend já aceitava, a documentação não citava), e os
+>    exemplos que respondiam `source_app: "nexus"` / `ecosystem.dnmarketing`
+>    viraram `"website"` / `ecosystem.marketinghs`. Os guias "Nexus — passo a
+>    passo" e "mentor.ia — passo a passo" saíram da tela de Documentação da
+>    API.
 > 4. **Nexus e mentor.ia fora da tela** — pílulas reduzidas a "M ·
 >    MarketingHS" e "G · GrowthHS"; o filtro de histórico ficou `Todos` ·
 >    `MarketingHS` · `Website`, e "MarketingHS" casa `source_app`
@@ -45,9 +56,12 @@
 >    `dnia.ai/` do preview de slug de página nova, e uma segunda
 >    `EventsTimeline` morta em `DetailSections.tsx` (nunca importada).
 > 5. **A especificação e a documentação da origem** — `backend/supabase/`
->    (o que restava: `config.toml` e `functions/_shared/`) e `docs/ab-testing/`
->    (documentação do A/B da dn.ia, `go.dnia.ai`, Supabase) apagadas. O
->    `CLAUDE.md` registra o fim da travessia.
+>    (o que restava: `config.toml` e `functions/_shared/`), `docs/ab-testing/`
+>    (documentação do A/B da dn.ia, `go.dnia.ai`, Supabase) e
+>    `docs/ROADMAP_dnmarketing.md` (roadmap do "AI Fastlane") apagados. O
+>    `CLAUDE.md` registra o fim da travessia — inclusive onde o worker
+>    realmente mora (`app/worker.py`, não a pasta `worker/` que nunca existiu)
+>    e sem falar do motor de fila como futuro do lote 3, que já é passado.
 >
 > **Decisões do Erick (22/09):**
 > - **E1** — nenhum rastreador do `index.html` é da Health & Safety; saem
@@ -69,15 +83,33 @@
 > `/publico/*` ainda aceita `source_app` `nexus`/`mentoria` — tirar seria
 > mudança de contrato. A tela só deixou de pedir e mostrar.
 >
-> **A corrigir na onda final do 8E:** `Segments.tsx:97` — o botão "Enviar
-> campanha" do segmento navega para `/adnia/campaigns` (rota legada, que
-> redireciona para a Home e perde o `segment_id`).
+> **Onda de correção final (rodada 2, revisão em
+> `.superpowers/sdd/2026-09-22-marketinghs-lote-8e-limpeza-final/final-review.md`),
+> 14 itens, todos feitos:** `frontend/bun.lock` saiu; `ZAPI_INSTANCE_URL` e
+> `ZAPI_TOKEN` saíram do card de variáveis de ambiente da Documentação da API
+> (ninguém lê, e o `Settings` recusa chave desconhecida — seguir a instrução
+> derrubava o boot); OpenAPI movido para `public/openapi/`, os dois links
+> conferidos abrindo no navegador; `Segments.tsx:97` — "Enviar campanha" agora
+> navega para `/campaigns` (**sem** `segment_id`: a tela de Campanhas nunca
+> leu esse parâmetro, então prometê-lo seria mentira nova, não conserto);
+> exportação de contatos — coluna "Ecossistema" agora preenche "M" sempre e
+> "G" quando há `growthhs_card_id`, igual à pílula da tabela (antes ficava
+> sempre vazia, com a letra "D" da dn.ia morta no código); exemplos da
+> Documentação da API e enum do `marketinghs-api.yaml` sem `source_app:
+> "nexus"`/`ecosystem.dnmarketing`, com `marketinghs` no enum;
+> `docs/ROADMAP_dnmarketing.md` apagado; `CLAUDE.md` sem o futuro que já
+> passou (worker, testes, lote 3); comentário de `index.html:11` em
+> português; comentário do cabeçalho de e-mail em `emailEditorConfig.ts`
+> reescrito para descrever o presente; comentários "DN.IA ID" em
+> `DetailSections.tsx` e `LeadDetailSheet.tsx` viraram "ID do contato";
+> imports sem uso saíram de `ApiDocumentation.tsx` e `DetailSections.tsx`
+> (`AlertTriangle`, `Eye`, `EyeOff`, `TagIcon`, `StatusDropdown`); e, como
+> item opcional (14), `programadeiaficacao`/`programa-iaficacao` (produto da
+> dn.ia) viraram `landing-exemplo`/`campanha-exemplo` nos exemplos da
+> Documentação da API e do yaml.
 >
 > **Pequenos, registrados e deixados:** warning de React pré-existente no
-> `DniaIdChip` (`TooltipTrigger asChild` + `Badge`); o enum de `source_app`
-> no OpenAPI não lista `marketinghs`, que o backend aceita; `TagIcon` sem uso
-> em `DetailSections.tsx` e imports sem uso em `ApiDocumentation.tsx`; a
-> coluna "Ecossistema" da exportação segue sempre vazia.
+> `DniaIdChip` (`TooltipTrigger asChild` + `Badge`).
 >
 > **Portão:** a preencher (buscas, build, navegador — Tarefa 6).
 >
@@ -89,6 +121,16 @@
 >   sincronização do DataCore disparando as regras de automação (devem?);
 >   peso 0 numa variante de A/B valendo 1 (deve ser "sem tráfego"?); push da
 >   `main` (217 commits à frente do `origin/main` em 22/09).
+> - **Perguntas abertas da revisão final do 8E** (registro apenas — não é
+>   correção, e não foram respondidas nesta rodada):
+>   - o editor de e-mail autentica no projeto Unlayer `dnmkt` (id 288591,
+>     `emailEditorConfig.ts:101`) — se essa conta Unlayer é da dn.ia, é
+>     dependência viva da origem que nenhuma busca de código pega. De quem é
+>     a conta?
+>   - colunas de funil da dn.ia em Contatos ("Quem te indicou?", "Presença",
+>     "Interesse Ecossistema/MTIA/Formação", "Data Interesse" —
+>     `ColumnSelector.tsx:26,35,46-49`, campos do banco, fora do escopo do
+>     8E) — viram backlog?
 
 > ## ✅ Sub-lote 8D (handoff ao GrowthHS) — portão fechado, 22/09/2026
 >
