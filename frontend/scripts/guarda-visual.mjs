@@ -33,6 +33,9 @@ const EXCECOES = [
 const HEX = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
 const LITERAL =
   /\b(?:bg|text|border|ring|from|via|to|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/g;
+// Cor numérica direta (hsl/hsla/rgb/rgba com dígito logo após o parêntese) —
+// o mesmo defeito do hex, só que escrito por função em vez de literal.
+const NUMERICA = /\b(?:hsla?|rgba?)\(\s*\d/g;
 
 function* arquivos(dir) {
   for (const nome of readdirSync(dir)) {
@@ -45,16 +48,35 @@ function* arquivos(dir) {
 const rel = (p) => relative(RAIZ, p).split(sep).join('/');
 const isento = (p) => EXCECOES.some((e) => rel(p).startsWith(e));
 
-const area = process.argv[2]?.replace(/\/$/, '');
+// Normaliza o argumento: tira "./" e "frontend/" do início (quem roda de
+// fora de frontend/ ou copia o caminho do editor cola um dos dois) e a
+// barra final. Sem isso, "./src/x" e "frontend/src/x" davam falso-zero.
+const areaBruta = process.argv[2];
+const area = areaBruta
+  ? areaBruta.replace(/^\.\//, '').replace(/^frontend\//, '').replace(/\/$/, '')
+  : undefined;
+
+const todos = [...arquivos(SRC)].map((caminho) => ({ caminho, r: rel(caminho) }));
+
+// Área que não casa com nenhum arquivo .ts/.tsx existente é erro do
+// chamador (pasta errada, digitação errada) — não "zero dívida". Antes
+// isso dava 0 total e saída 0, o verde falso que a revisão final pegou.
+if (area && !todos.some(({ r }) => r.startsWith(area))) {
+  console.error(`Área não encontrada: ${area}`);
+  process.exit(2);
+}
+
 const porPasta = new Map();
 let total = 0;
 
-for (const arquivo of arquivos(SRC)) {
-  const r = rel(arquivo);
-  if (isento(arquivo)) continue;
+for (const { caminho, r } of todos) {
+  if (isento(caminho)) continue;
   if (area && !r.startsWith(area)) continue;
-  const texto = readFileSync(arquivo, 'utf8');
-  const n = (texto.match(HEX)?.length ?? 0) + (texto.match(LITERAL)?.length ?? 0);
+  const texto = readFileSync(caminho, 'utf8');
+  const n =
+    (texto.match(HEX)?.length ?? 0) +
+    (texto.match(LITERAL)?.length ?? 0) +
+    (texto.match(NUMERICA)?.length ?? 0);
   if (n === 0) continue;
   const pasta = r.split('/').slice(0, -1).join('/');
   porPasta.set(pasta, (porPasta.get(pasta) ?? 0) + n);
