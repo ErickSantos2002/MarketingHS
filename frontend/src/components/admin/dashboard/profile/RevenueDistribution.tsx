@@ -69,7 +69,7 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
                 tickLine={false}
                 width={70}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--accent)', opacity: 0.1 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
               <Bar 
                 dataKey="count" 
                 radius={[0, 6, 6, 0]}

@@ -76,7 +76,7 @@ function MiniGauge({
 export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
   const gauges = [
     { value: data.cargo, label: 'Cargo', icon: Briefcase, color: 'var(--primary)' },
-    { value: data.empresa, label: 'Empresa', icon: Building, color: 'var(--accent)' },
+    { value: data.empresa, label: 'Empresa', icon: Building, color: 'var(--color-info-500)' },
     { value: data.faturamento, label: 'Faturamento', icon: DollarSign, color: '#10B981' },
     { value: data.desafios, label: 'Desafios', icon: MessageSquare, color: 'var(--primary)' },
   ];

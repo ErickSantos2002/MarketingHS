@@ -40,7 +40,7 @@ export function TopKeywordsChart({ data }: TopKeywordsChartProps) {
             <BarChart data={data.slice(0, 15)} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 10 }}>
               <defs>
                 <linearGradient id="keywordGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.9} />
+                  <stop offset="0%" stopColor="var(--color-info-500)" stopOpacity={0.9} />
                   <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.6} />
                 </linearGradient>
               </defs>
@@ -54,7 +54,7 @@ export function TopKeywordsChart({ data }: TopKeywordsChartProps) {
                 tickLine={false}
                 width={70}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--accent)', opacity: 0.1 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
               <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={20}>
                 {data.slice(0, 15).map((entry, index) => {
                   const intensity = 0.4 + (entry.count / maxCount) * 0.6;

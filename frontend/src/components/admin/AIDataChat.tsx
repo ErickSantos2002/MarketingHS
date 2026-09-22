@@ -52,7 +52,7 @@ export function AIDataChat() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-primary to-accent shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-primary to-info shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center group"
         aria-label="Abrir Assistente de dados"
       >
         <Sparkles className="h-7 w-7 text-white group-hover:animate-pulse" />
@@ -63,7 +63,7 @@ export function AIDataChat() {
   return (
     <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[500px] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-primary to-accent text-white">
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-primary to-info text-white">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5" />
           <span className="font-semibold">Assistente de dados</span>
@@ -125,7 +125,7 @@ export function AIDataChat() {
             type="submit"
             size="icon"
             disabled={!input.trim() || isLoading}
-            className="h-11 w-11 shrink-0 bg-gradient-to-r from-primary to-accent hover:opacity-90"
+            className="h-11 w-11 shrink-0 bg-gradient-to-r from-primary to-info hover:opacity-90"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -144,7 +144,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         className={cn(
           'max-w-[85%] rounded-xl px-3 py-2 text-sm',
           isUser
-            ? 'bg-gradient-to-r from-primary to-accent text-white'
+            ? 'bg-gradient-to-r from-primary to-info text-white'
             : 'bg-muted text-foreground'
         )}
       >

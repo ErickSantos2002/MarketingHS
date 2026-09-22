@@ -176,8 +176,8 @@ export function CampaignTimeAnalysis({ leads }: CampaignTimeAnalysisProps) {
       <CardContent className="space-y-4">
         {/* Insight Card */}
         {topInsight && (
-          <div className="p-3 rounded-xl bg-gradient-to-r from-accent/10 to-primary/10 border border-accent/20">
-            <div className="flex items-center gap-2 text-accent mb-1">
+          <div className="p-3 rounded-xl bg-gradient-to-r from-info/10 to-primary/10 border border-info/20">
+            <div className="flex items-center gap-2 text-info mb-1">
               <Lightbulb className="h-4 w-4" />
               <span className="text-xs font-medium">Insight</span>
             </div>

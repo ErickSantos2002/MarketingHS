@@ -13,7 +13,7 @@ interface MediumDistributionChartProps {
 }
 
 const COLORS = [
-  'var(--accent)',            // dn.ia red
+  'var(--color-info-500)',            // dn.ia red
   'var(--primary)',            // dn.ia blue
   'hsl(142, 71%, 45%)', // emerald
   'hsl(48, 96%, 53%)',  // yellow

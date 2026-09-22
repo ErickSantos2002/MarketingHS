@@ -8,7 +8,7 @@ interface ChallengeThemesChartProps {
 }
 
 const THEME_CONFIG: Record<string, { color: string; icon: React.ComponentType<{ className?: string }> }> = {
-  'IA/Automação': { color: 'var(--accent)', icon: Cpu },         // Vermelho (tema CORE)
+  'IA/Automação': { color: 'var(--color-info-500)', icon: Cpu },         // Vermelho (tema CORE)
   'Conhecimento': { color: 'var(--primary)', icon: BookOpen },     // Azul (tema principal)
   'Ferramentas': { color: '#e63946', icon: Wrench },        // Vermelho suave
   'Dados': { color: '#5a7fff', icon: Database },            // Azul suave
@@ -43,11 +43,11 @@ export function ChallengeThemesChart({ data }: ChallengeThemesChartProps) {
   }, [data]);
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-accent/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="bg-gradient-to-br from-card via-card to-info/10 border-border/50 shadow-lg overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-accent/20">
-            <Lightbulb className="h-5 w-5 text-accent" />
+          <div className="p-2 rounded-lg bg-info/20">
+            <Lightbulb className="h-5 w-5 text-info" />
           </div>
           Temas de Desafios
         </CardTitle>
@@ -74,7 +74,7 @@ export function ChallengeThemesChart({ data }: ChallengeThemesChartProps) {
                 tickLine={false}
                 width={90}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--accent)', opacity: 0.1 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
               <Bar dataKey="count" radius={[0, 8, 8, 0]} maxBarSize={28}>
                 {chartData.map((entry, index) => (
                   <Cell 

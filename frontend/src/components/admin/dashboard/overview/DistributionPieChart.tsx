@@ -7,7 +7,7 @@ interface DistributionPieChartProps {
 }
 
 const COLORS = [
-  'var(--accent)',              // dn.ia Red
+  'var(--color-info-500)',              // dn.ia Red
   'var(--primary)',              // dn.ia Blue
   'hsl(142, 76%, 36%)',   // Green
   '#ffffff',              // White

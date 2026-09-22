@@ -13,7 +13,7 @@ const LEVEL_COLORS: Record<string, string> = {
   'Direção': '#5a4fea',      // Azul-roxo
   'Gerência': '#8B5CF6',     // Roxo (intermediário)
   'Especialista': '#b83d8a', // Vermelho-roxo
-  'Analista': 'var(--accent)',     // Vermelho dn.ia (base)
+  'Analista': 'var(--color-info-500)',     // Vermelho dn.ia (base)
   'Não identificado': '#6B7280',
 };
 
@@ -66,7 +66,7 @@ export function RoleDistribution({ data }: RoleDistributionProps) {
                 tickLine={false}
                 width={90}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--accent)', opacity: 0.1 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
               <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={24}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={LEVEL_COLORS[entry.level] || '#6B7280'} />

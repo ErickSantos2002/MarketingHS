@@ -287,7 +287,7 @@ export function KPICards({
             title={totalLeadsTitle}
             value={hasDateFilter ? periodConversions : totalLeads.length}
             icon={<Users className="h-5 w-5 text-white" />}
-            gradient="bg-gradient-to-br from-accent to-primary"
+            gradient="bg-gradient-to-br from-info to-primary"
             glowColor="primary"
             delay="0ms"
             onClick={() => onCardClick('total', totalLeads, totalLeadsTitle)}

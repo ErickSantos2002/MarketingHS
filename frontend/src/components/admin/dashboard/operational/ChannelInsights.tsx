@@ -104,7 +104,7 @@ export function ChannelInsights({ sourcePerformance, mediumPerformance, totalLea
       case 'success': return <CheckCircle className="h-4 w-4 text-emerald-400" />;
       case 'warning': return <TrendingDown className="h-4 w-4 text-yellow-400" />;
       case 'info': return <TrendingUp className="h-4 w-4 text-primary" />;
-      case 'alert': return <AlertCircle className="h-4 w-4 text-accent" />;
+      case 'alert': return <AlertCircle className="h-4 w-4 text-info" />;
     }
   };
 
@@ -113,7 +113,7 @@ export function ChannelInsights({ sourcePerformance, mediumPerformance, totalLea
       case 'success': return 'bg-emerald-500/10 border-emerald-500/20';
       case 'warning': return 'bg-yellow-500/10 border-yellow-500/20';
       case 'info': return 'bg-primary/10 border-primary/20';
-      case 'alert': return 'bg-accent/10 border-accent/20';
+      case 'alert': return 'bg-info/10 border-info/20';
     }
   };
 

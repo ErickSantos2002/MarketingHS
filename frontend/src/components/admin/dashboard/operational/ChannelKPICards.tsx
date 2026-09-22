@@ -54,8 +54,8 @@ export function ChannelKPICards({ sourcePerformance, campaignPerformance }: Chan
       value: bestHotRateSource ? `${bestHotRateSource.hotRate.toFixed(0)}%` : '-',
       subtitle: bestHotRateSource?.source || 'sem dados',
       icon: Target,
-      iconColor: 'text-accent',
-      bgColor: 'bg-accent/10',
+      iconColor: 'text-info',
+      bgColor: 'bg-info/10',
     },
     {
       title: 'Top Campanha',

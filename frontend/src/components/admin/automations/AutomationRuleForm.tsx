@@ -349,8 +349,8 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
       {/* Action */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-accent/10">
-            <Play className="h-3.5 w-3.5 text-accent" />
+          <div className="p-1.5 rounded-lg bg-info/10">
+            <Play className="h-3.5 w-3.5 text-info" />
           </div>
           <Label className="text-sm font-semibold">Ação — ENTÃO...</Label>
         </div>

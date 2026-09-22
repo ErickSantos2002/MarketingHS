@@ -206,12 +206,12 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <ComposedChart data={dailyHotData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLeadsComposed" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="var(--color-info-500)" stopOpacity={0.4} />
                       <stop offset="50%" stopColor="var(--primary)" stopOpacity={0.2} />
                       <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="lineGradientComposed" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="var(--accent)" />
+                      <stop offset="0%" stopColor="var(--color-info-500)" />
                       <stop offset="100%" stopColor="var(--primary)" />
                     </linearGradient>
                   </defs>
@@ -265,7 +265,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     dot={false}
                     activeDot={{
                       r: 6,
-                      fill: 'var(--accent)',
+                      fill: 'var(--color-info-500)',
                       stroke: 'var(--background)',
                       strokeWidth: 2,
                     }}
@@ -290,12 +290,12 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+                      <stop offset="5%" stopColor="var(--color-info-500)" stopOpacity={0.4} />
                       <stop offset="50%" stopColor="var(--primary)" stopOpacity={0.2} />
                       <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="var(--accent)" />
+                      <stop offset="0%" stopColor="var(--color-info-500)" />
                       <stop offset="100%" stopColor="var(--primary)" />
                     </linearGradient>
                   </defs>
@@ -322,7 +322,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                       boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
                     }}
                     labelStyle={{ color: 'var(--foreground)', fontWeight: 600 }}
-                    itemStyle={{ color: 'var(--accent)' }}
+                    itemStyle={{ color: 'var(--color-info-500)' }}
                     formatter={(value: number) => [value.toLocaleString('pt-BR'), dataMode === 'conversions' ? 'Conversões' : 'Leads']}
                   />
                   <Area
@@ -334,7 +334,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     dot={false}
                     activeDot={{
                       r: 6,
-                      fill: 'var(--accent)',
+                      fill: 'var(--color-info-500)',
                       stroke: 'var(--background)',
                       strokeWidth: 2,
                     }}
@@ -345,7 +345,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <ComposedChart data={hourlyData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="barGradientComposed" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={1} />
+                      <stop offset="0%" stopColor="var(--color-info-500)" stopOpacity={1} />
                       <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.8} />
                     </linearGradient>
                   </defs>
@@ -410,7 +410,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <BarChart data={hourlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={1} />
+                      <stop offset="0%" stopColor="var(--color-info-500)" stopOpacity={1} />
                       <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.8} />
                     </linearGradient>
                   </defs>
@@ -438,7 +438,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                       boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
                     }}
                     labelStyle={{ color: 'var(--foreground)', fontWeight: 600 }}
-                    itemStyle={{ color: 'var(--accent)' }}
+                    itemStyle={{ color: 'var(--color-info-500)' }}
                     formatter={(value: number) => [value.toLocaleString('pt-BR'), 'Conversões']}
                   />
                   <Bar
@@ -454,7 +454,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
           {viewMode === 'hourly' && isSingleDayFilter && (
             <div className="flex items-center justify-center gap-6 mt-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: 'linear-gradient(to bottom, var(--accent), var(--primary))' }} />
+                <div className="w-3 h-3 rounded-sm" style={{ background: 'linear-gradient(to bottom, var(--color-info-500), var(--primary))' }} />
                 <span>Volume/Hora</span>
               </div>
               <div className="flex items-center gap-1.5">
