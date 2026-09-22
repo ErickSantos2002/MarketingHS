@@ -46,10 +46,10 @@ export function LeadGoalGauge({
   ];
 
   const getColor = () => {
-    if (percentage >= 100) return 'var(--chart-2)';
-    if (percentage >= 70) return 'var(--chart-3)';
-    if (percentage >= 40) return 'var(--chart-4)';
-    return 'var(--chart-5)';
+    if (percentage >= 100) return 'var(--color-success-500)';
+    if (percentage >= 70) return 'var(--color-primary-500)';
+    if (percentage >= 40) return 'var(--color-warning-500)';
+    return 'var(--color-danger-500)';
   };
 
   const handleSave = async () => {
