@@ -498,14 +498,14 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1140px] max-h-[88vh] overflow-hidden p-0 border-border bg-card backdrop-blur-2xl shadow-[0_0_80px_-20px_color-mix(in srgb, var(--primary) calc(0.15 * 100%), transparent)]">
+      <DialogContent className="max-w-[1140px] max-h-[88vh] overflow-hidden p-0 border-border bg-card backdrop-blur-2xl shadow-[0_0_80px_-20px_color-mix(in_srgb,var(--primary)_15%,transparent)]">
         {/* Aurora glow effects */}
         <div className="pointer-events-none absolute -top-40 -right-40 w-80 h-80 rounded-full bg-primary/5 blur-[100px]" />
-        <div className="pointer-events-none absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-accent/5 blur-[100px]" />
+        <div className="pointer-events-none absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-info/5 blur-[100px]" />
 
         <DialogHeader className="relative p-6 pb-4">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 border border-border/70 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-info/20 border border-border/70 flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <div>
@@ -742,7 +742,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                 <div className="space-y-4">
                   {/* Big count */}
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                    <span className="text-4xl font-bold bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
                       {previewCount}
                     </span>
                     <span className="text-xs text-muted-foreground">contatos correspondem</span>
@@ -753,7 +753,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                     <div className="space-y-1 border-t border-border/70 pt-3">
                       {previewLeads.map(l => (
                         <div key={l.id} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded-md hover:bg-muted/20 transition-colors">
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
                             {(l.nome || '?')[0]?.toUpperCase()}
                           </div>
                           <span className="truncate flex-1">{l.nome || 'Sem nome'}</span>
@@ -775,7 +775,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
             ) : (
               <div className="space-y-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                  <span className="text-4xl font-bold bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
                     {selectedLeads.length}
                   </span>
                   <span className="text-xs text-muted-foreground">contatos selecionados</span>
@@ -784,7 +784,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                   <div className="space-y-1 border-t border-border/70 pt-3">
                     {selectedLeads.slice(0, 5).map(l => (
                       <div key={l.id} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded-md">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
                           {(l.nome || l.email || '?')[0]?.toUpperCase()}
                         </div>
                         <span className="truncate">{l.nome || l.email || 'Lead'}</span>
