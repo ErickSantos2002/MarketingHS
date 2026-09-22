@@ -28,14 +28,14 @@ export const EMAIL_MERGE_TAGS = {
 export const BASE_EMAIL_DESIGN = {
   body: {
     rows: [
-      // Cabecalho em TEXTO, nao imagem. O src anterior apontava para
-      // ai-fastlane.lovable.app/lovable-uploads/logo-placeholder.png -- host
-      // antigo, arquivo que nunca existiu -> todo email saia com um icone de
-      // imagem quebrada no topo. Texto e a escolha certa aqui por dois motivos:
-      // nao ha asset de logo no repo (public/ so tem favicon e placeholder), e a
-      // maioria dos clientes de email bloqueia imagens por padrao -- um cabecalho
-      // em texto aparece sempre. Para usar a logo real: subir a imagem pelo
-      // proprio editor (o Unlayer hospeda) e trocar este bloco.
+      // Cabeçalho em TEXTO, não imagem. O src anterior apontava para
+      // ai-fastlane.lovable.app/lovable-uploads/logo-placeholder.png — host
+      // antigo, arquivo que nunca existiu -> todo e-mail saía com um ícone de
+      // imagem quebrada no topo. Texto continua sendo a escolha certa: a
+      // maioria dos clientes de e-mail bloqueia imagens por padrão — um
+      // cabeçalho em texto aparece sempre, mesmo com imagem bloqueada. Para
+      // usar o logo da casa: subir a imagem pelo próprio editor (o Unlayer
+      // hospeda) e trocar este bloco.
       {
         cells: [1],
         columns: [{

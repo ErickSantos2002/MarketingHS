@@ -204,7 +204,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               {lead.empresa && (
                 <p className="text-muted-foreground mt-1 truncate">{lead.empresa}</p>
               )}
-              {/* DN.IA ID + Ecosystem pills + GrowthHS link */}
+              {/* ID do contato + Ecosystem pills + GrowthHS link */}
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <DniaIdChip dniaId={enrichedLead.dnia_id} />
                 <EcosystemPills

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  X, Plus, Trash2, StickyNote, Tag as TagIcon,
+  X, Plus, Trash2, StickyNote,
   Copy, ExternalLink,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
@@ -15,7 +15,6 @@ import { aplicarTag } from '@/lib/contatos';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { StatusDropdown } from './StatusDropdown';
 import { StatusBadge } from './StatusBadge';
 import { getTagColor } from './TagsCell';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
@@ -36,7 +35,7 @@ interface Note {
   created_at: string;
 }
 
-// ─── DN.IA ID Chip ───
+// ─── ID do contato — Chip ───
 export function DniaIdChip({ dniaId }: { dniaId: string | null }) {
   if (!dniaId) return null;
   const short = dniaId.slice(0, 8);
