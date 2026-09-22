@@ -366,7 +366,9 @@ async def _laco_entregas() -> None:
     global _growthhs_avisado
     while not _parar.is_set():
         try:
-            resultado = await entrega.rodar_entregas()
+            # I5 (revisão final do 8D): a entrega confere `_parar` entre um
+            # pedido e outro, e devolve à fila o que não chegou a tentar.
+            resultado = await entrega.rodar_entregas(parar=_parar)
             if resultado.get("desligado"):
                 # Uma vez por processo — não a cada passada, para sempre.
                 if not _growthhs_avisado:
