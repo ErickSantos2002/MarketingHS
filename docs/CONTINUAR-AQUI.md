@@ -108,6 +108,15 @@
 > dn.ia) viraram `landing-exemplo`/`campanha-exemplo` nos exemplos da
 > Documentação da API e do yaml.
 >
+> **Achado ao clicar de fato no link (não estava na lista dos 14):**
+> `/publico/contato` existia como **duas** chaves de mapa no
+> `marketinghs-api.yaml` (uma para GET, outra para PATCH) — YAML não garante
+> qual sobrevive, e o js-yaml do Swagger UI recusava o arquivo inteiro
+> ("Parser error … duplicated mapping key", nenhum endpoint renderizava).
+> Pré-existente a este lote (confirmado com `git show` em commit anterior ao
+> 8E), só apareceu porque a rodada 2 abriu o link de verdade em vez de só
+> `grep`ar. Corrigido juntando GET e PATCH sob a mesma chave.
+>
 > **Pequenos, registrados e deixados:** warning de React pré-existente no
 > `DniaIdChip` (`TooltipTrigger asChild` + `Badge`).
 >
