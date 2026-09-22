@@ -1,13 +1,13 @@
 # Continuar aqui
 
-> ## ✅ Sub-lote 8E (limpeza final) — implementado, portão a seguir, 22/09/2026
+> ## ✅ Sub-lote 8E (limpeza final) — portão fechado, 22/09/2026
 >
 > **A travessia acabou.** O MarketingHS não tem mais arquivo, dependência,
 > chamada de rede nem marca da origem na tela — frase que só ficou verdadeira
 > depois da onda de correção final (rodada 2, abaixo): faltava o `bun.lock`
 > (texto, além do binário já apagado) e `docs/ROADMAP_dnmarketing.md`. Branch
-> `lote-8e` (a partir de `main` `193bbcc`), **aguardando o portão e o merge
-> com o Erick**. Plano:
+> `lote-8e` (a partir de `main` `193bbcc`), **aguardando o merge com o
+> Erick**. Plano:
 > `docs/superpowers/plans/2026-09-22-marketinghs-lote-8e-limpeza-final.md`.
 >
 > **O que saiu — as cinco frentes:**
@@ -120,7 +120,39 @@
 > **Pequenos, registrados e deixados:** warning de React pré-existente no
 > `DniaIdChip` (`TooltipTrigger asChild` + `Badge`).
 >
-> **Portão:** a preencher (buscas, build, navegador — Tarefa 6).
+> **Portão (Tarefa 6), fechado em 22/09:** as quatro buscas do brief rodaram
+> limpas — a segunda achou só um comentário de linhagem novo (histórico do
+> logo quebrado em `emailEditorConfig.ts:32`, mantido: conta o passado, não
+> mente sobre o presente); a terceira (marca `dn.ia`) só achou comentário de
+> paleta/tema (`index.css`, gráficos — visual não muda) e comentário de
+> linhagem; a quarta (`supabase` em `src`) só achou dois comentários de
+> linhagem em `api.ts`/`jornadas.ts`; a busca acrescentada
+> (`programadeiaficacao|/adnia/campaigns`) veio vazia. `tsc --noEmit`: **4
+> erros antes e depois** (`LeadScoringSettings` ×1, `useJourneys` ×3, os
+> mesmos, pré-existentes ao lote). `vite build`: ok; `dist/` caiu de **3,0 MB
+> para 2,7 MB** (2.633.949 → 2.368.283 bytes, medido contra o build da `main`
+> em `193bbcc`). Backend: `git diff 193bbcc -- backend/app` só muda duas
+> linhas de comentário/docstring (nome do arquivo OpenAPI) — a suíte
+> `pytest` não rodou, por não se aplicar (nada de código mudou). Navegador
+> (conta admin do Claude, backend :8100 + Vite 127.0.0.1:8080): título e
+> ícone da aba corretos; rede em `/`, `/contacts` e navegação livre por 6 s+
+> só bateu em `127.0.0.1` e `fonts.googleapis.com`/`fonts.gstatic.com` — zero
+> rastreador; login, sidebar, "Assistente de dados", ficha de contato (pílulas
+> `M`/`G`, "ID do contato"), filtros de Contatos (sem PLATAFORMA/Nexus/
+> mentor.ia), exportação CSV (coluna "Ecossistema" só "M"/"M G" conforme
+> `growthhs_card_id`), `/templates/new` (Unlayer carrega, nada salvo),
+> Configurações (Webhook sem botão de revelar, GrowthHS, Meta, IA — sem
+> card mentor.ia) e Documentação da API (os dois links, `/openapi/docs/
+> index.html` e `/openapi/marketinghs-api.yaml`, abrindo 200, Swagger UI sem
+> o erro de chave duplicada) — tudo conferido. Zero erro de console novo; o
+> único visto (`Function components cannot be given refs` no `DniaIdChip`) é
+> o mesmo pré-existente já registrado acima. Nenhuma escrita no banco.
+> Capacidade por capacidade (`git diff 193bbcc --stat -- frontend/src`, 67
+> arquivos): toda diferença é **(a)** marca/texto ou **(b)** corte
+> autorizado (E2, decisão 5 do `LimiteDeErro` — que ainda tem
+> `getDerivedStateFromError` e captura erro de verdade —, decisão 10 do
+> webhook); **nenhuma "(c)" (corte sem decisão) encontrada.** Relatório
+> completo: `.superpowers/sdd/2026-09-22-marketinghs-lote-8e-limpeza-final/task-6-report.md`.
 >
 > **Lembretes que passam a valer:**
 > - **Apagar a conta admin do Claude** (`claude.dev@example.com`) — combinado
