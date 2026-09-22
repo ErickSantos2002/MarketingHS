@@ -916,7 +916,7 @@ async def criar_template_publico(dados: TemplatePublicoIn,
 # ⚠️ A tela não é o portão inteiro: `automations-api` aceitava CHAVE DE API com
 # escopo read/write, não só o admin. Portar a tela de Automações não a torna
 # órfã — integrador externo continua do outro lado, e a URL está ensinada na
-# tela de Documentação da API e no `dnmarketing-api.yaml`. Mesma armadilha de
+# tela de Documentação da API e no `marketinghs-api.yaml`. Mesma armadilha de
 # `campaigns-api` e `templates-api` no lote 3A.
 #
 # ⚠️ O que estas rotas fazem é CADASTRO. Nenhuma regra dispara: as três ações
@@ -1470,7 +1470,7 @@ async def atualizar_pagina_publico(slug: str, dados: PaginaPublicaPatch,
     request — o código nunca fez isso — e devolve caminho relativo
     (`/{slug}?...`), que resolve contra o host de quem consome. É deliberado:
     o host de produção deste sistema é pendência aberta (por isso
-    `dnmarketing-api.yaml` tem `PREENCHER-O-HOST-DE-PRODUCAO`), e cravar um
+    `marketinghs-api.yaml` tem `PREENCHER-O-HOST-DE-PRODUCAO`), e cravar um
     host aqui seria repetir o mesmo defeito da origem com outro valor. O
     commit `dcc0742` corrigiu a mesma cravação no frontend por este motivo —
     os dois lados precisam concordar.

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { DniaLogo } from './DniaLogo';
-import dnMarketingLogo from '@/assets/dnmarketing-logo.png';
+import logoHs from '@/assets/logo-hs.png';
 import {
   LayoutDashboard, BarChart2, Users, Filter, Send, Layout,
   Upload, Settings, ChevronLeft, ChevronRight, ChevronDown,
@@ -184,9 +183,9 @@ export function AdminSidebar() {
       {/* Logo */}
       <div className="px-4 py-5 flex items-center justify-center">
         {collapsed ? (
-          <DniaLogo className="h-5" />
+          <img src={logoHs} alt="MarketingHS" className="h-6 w-auto" />
         ) : (
-          <img src={dnMarketingLogo} alt="dnMarketing" className="h-12 w-auto" />
+          <img src={logoHs} alt="MarketingHS" className="h-12 w-auto" />
         )}
       </div>
 

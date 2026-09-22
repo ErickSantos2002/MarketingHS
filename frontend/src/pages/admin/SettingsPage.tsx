@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plug, Bell, UserCircle, Copy, Check, Eye, EyeOff, Send, Loader2, BookOpen, Target, Key, Users, MailX, Share2 } from 'lucide-react';
+import { Plug, Bell, UserCircle, Copy, Check, Send, Loader2, BookOpen, Target, Key, Users, MailX, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ApiDocumentation from '@/components/admin/settings/ApiDocumentation';
 import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings';
@@ -25,7 +25,6 @@ const BASE = import.meta.env.VITE_API_URL ?? `${window.location.origin}/api`;
 export default function SettingsPage() {
   const endpointUrl = `${BASE}/publico/evento-de-contato`;
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [tokenRevealed, setTokenRevealed] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -118,12 +117,10 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Token de autenticação</label>
-                  <div className="flex gap-2">
-                    <Input readOnly type={tokenRevealed ? 'text' : 'password'} value="Configure WEBHOOK_SECRET no Supabase Secrets" className="text-xs font-mono bg-muted/30" />
-                    <Button variant="outline" size="sm" className="flex-shrink-0" onClick={() => setTokenRevealed(!tokenRevealed)}>
-                      {tokenRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </Button>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    O token é o <code className="bg-muted/50 px-1 py-0.5 rounded">WEBHOOK_SECRET</code> do
+                    servidor — definido pelo TI no ambiente do backend. Por segurança, esta tela não o mostra.
+                  </p>
                   <p className="text-[10px] text-muted-foreground mt-1">
                     Envie como header: <code className="bg-muted/50 px-1 py-0.5 rounded">Authorization: Bearer SEU_TOKEN</code>
                   </p>

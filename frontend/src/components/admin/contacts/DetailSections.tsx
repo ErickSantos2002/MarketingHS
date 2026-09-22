@@ -92,7 +92,7 @@ export function DniaIdChip({ dniaId }: { dniaId: string | null }) {
             onClick={handleCopy}
           >
             <Copy className="h-2.5 w-2.5" />
-            DN.IA ID · {short}
+            ID do contato · {short}
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs font-mono">

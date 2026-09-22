@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dnMarketing API — Swagger UI</title>
+  <title>MarketingHS API — Swagger UI</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -22,7 +22,7 @@
     }
     .topbar-wrapper img { display: none; }
     .topbar-wrapper::before {
-      content: 'dnMarketing API';
+      content: 'MarketingHS API';
       font-size: 18px;
       font-weight: 700;
       color: #fff;
@@ -145,7 +145,7 @@
 <body>
   <div id="swagger-ui"></div>
   <div class="footer-link">
-    <a href="/adnia/settings" target="_blank">← Voltar para o painel dnMarketing</a>
+    <a href="/settings" target="_blank">← Voltar para o painel MarketingHS</a>
   </div>
 
   <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
@@ -153,7 +153,7 @@
   <script>
     window.onload = () => {
       window.ui = SwaggerUIBundle({
-        url: '../dnmarketing-api.yaml',
+        url: '../marketinghs-api.yaml',
         dom_id: '#swagger-ui',
         deepLinking: true,
         presets: [

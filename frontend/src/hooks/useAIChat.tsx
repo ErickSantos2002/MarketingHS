@@ -21,7 +21,7 @@ export interface UseAIChatReturn {
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Olá! 👋 Sou o **DNIA AI**, seu analista de dados superinteligente. Posso responder qualquer pergunta sobre seus leads!\n\nExemplos:\n- "Quantos leads tivemos hoje?"\n- "Qual cargo mais comum?"\n- "Compare os leads de ontem com os de hoje"',
+  content: 'Olá! 👋 Sou o **Assistente de dados** do MarketingHS. Posso responder qualquer pergunta sobre seus leads!\n\nExemplos:\n- "Quantos leads tivemos hoje?"\n- "Qual cargo mais comum?"\n- "Compare os leads de ontem com os de hoje"',
   timestamp: new Date(),
 };
 

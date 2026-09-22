@@ -53,7 +53,7 @@ export function AIDataChat() {
       <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-primary to-accent shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center group"
-        aria-label="Abrir DNIA AI"
+        aria-label="Abrir Assistente de dados"
       >
         <Sparkles className="h-7 w-7 text-white group-hover:animate-pulse" />
       </button>
@@ -66,8 +66,7 @@ export function AIDataChat() {
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-primary to-accent text-white">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5" />
-          <span className="font-semibold">DNIA AI</span>
-          <span className="text-xs opacity-80">Analista de Dados</span>
+          <span className="font-semibold">Assistente de dados</span>
         </div>
         <div className="flex items-center gap-1">
           <Button

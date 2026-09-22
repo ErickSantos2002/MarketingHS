@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/
 import { Label } from '@/components/ui/label';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { z } from 'zod';
-import dniaLogo from '@/assets/dnia-logo.png';
+import logoHs from '@/assets/logo-hs.png';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -65,7 +65,7 @@ export default function AdminLogin() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4 theme-dnmarketing">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <img src={dniaLogo} alt="MarketingHS" className="h-10 mx-auto mb-4" />
+          <img src={logoHs} alt="MarketingHS" className="h-10 mx-auto mb-4" />
           <CardDescription>Acesse o painel administrativo</CardDescription>
         </CardHeader>
         <CardContent>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import dnMarketingLogo from '@/assets/dnmarketing-logo.png';
+import logoHs from '@/assets/logo-hs.png';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -101,7 +101,7 @@ const ENDPOINTS = [
     params: [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone no formato +55...' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email do contato' },
-      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID do ecossistema' },
+      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
     ],
     curl: `curl -X GET \\
   '${BASE_URL}/publico/identidade?phone=+5511999999999' \\
@@ -142,7 +142,7 @@ const ENDPOINTS = [
     params: [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone no formato +55...' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email do contato' },
-      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID do ecossistema' },
+      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
     ],
     curl: `curl -X GET \\
   '${BASE_URL}/publico/contato?phone=+5511999999999' \\
@@ -267,7 +267,7 @@ const ENDPOINTS = [
     method: 'POST',
     path: '/publico/identidade',
     title: 'Criar ou atualizar identidade',
-    description: 'Cria uma nova identidade ou atualiza uma existente. Usado pelo Nexus ao criar contatos.',
+    description: 'Cria uma nova identidade ou atualiza uma existente. Usado por sistemas integrados ao criar contatos.',
     params: [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone (preferencial)' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email (fallback se phone ausente)' },
@@ -356,11 +356,11 @@ const ENDPOINTS = [
     method: 'POST',
     path: '/publico/evento-de-contato',
     title: 'Registrar evento na timeline',
-    description: 'Registra um evento na timeline unificada do contato. Usado por Nexus e mentor.ia.',
+    description: 'Registra um evento na timeline unificada do contato. Usado por sistemas integrados.',
     params: [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone do contato' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email do contato' },
-      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID' },
+      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
       { name: 'source_app', type: 'string', required: 'Sim', description: '"nexus", "mentoria", "dnmarketing" ou "website"' },
       { name: 'event_type', type: 'string', required: 'Sim', description: 'Tipo do evento (ver tabela abaixo)' },
       { name: 'title', type: 'string', required: 'Sim', description: 'Título descritivo do evento' },
@@ -414,7 +414,7 @@ const ENDPOINTS = [
     params: [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone do contato' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email do contato' },
-      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID' },
+      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
       { name: 'status', type: 'string (body)', required: 'Não', description: 'Um dos status cadastrados (ex: Lead Qualificado). Desconhecido: 400.' },
       { name: 'nome', type: 'string (body)', required: 'Não', description: 'Nome' },
       { name: 'cargo', type: 'string (body)', required: 'Não', description: 'Cargo' },
@@ -453,7 +453,7 @@ const ENDPOINTS = [
     description: 'Registra uma nova conversão para um lead existente. Atualiza last_conversion_date e aplica tag automaticamente.',
     params: [
       { name: 'lead_id', type: 'uuid', required: 'Condicional', description: 'ID do lead (preferencial)' },
-      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'DN.IA ID do ecossistema' },
+      { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email para resolver o lead' },
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone/WhatsApp para resolver o lead' },
       { name: 'tipo', type: 'string', required: 'Sim', description: 'Tipo da conversão (ex: modal_pago)' },
@@ -618,7 +618,7 @@ curl -X POST \\
     description: 'Espelha o conjunto completo de tags de um contato. Envie sempre TODAS as tags — o endpoint adiciona as novas, mantém as existentes e remove as que não vieram. Use tags: [] para limpar tudo. Tags inexistentes são criadas automaticamente. Aceita PUT (semântica padrão) ou POST (alias para clientes que não suportam PUT). Ideal para sincronização contínua a partir do CRM.',
     params: [
       { name: 'dnia_id', type: 'uuid (body)', required: 'Um dos 3', description: 'Identificador único do contato (preferencial)' },
-      { name: 'nexus_contact_id', type: 'uuid (body)', required: 'Um dos 3', description: 'ID do contato no Nexus CRM' },
+      { name: 'nexus_contact_id', type: 'uuid (body)', required: 'Um dos 3', description: 'ID do contato no CRM integrado' },
       { name: 'email', type: 'string (body)', required: 'Um dos 3', description: 'Email do contato (fallback)' },
       { name: 'tags', type: 'string[] (body)', required: 'Sim', description: 'Lista completa de tags. Strings normalizadas (trim + lowercase). [] remove todas.' },
     ],
@@ -786,9 +786,9 @@ curl -X POST \\
 ];
 
 const ENV_VARS = [
-  { name: 'WEBHOOK_SECRET', desc: 'Token de autenticação compartilhado com Nexus e mentor.ia' },
+  { name: 'WEBHOOK_SECRET', desc: 'Token de autenticação compartilhado com sistemas integrados' },
   { name: 'RESEND_API_KEY', desc: 'Chave Resend para envio de emails' },
-  { name: 'EMAIL_FROM', desc: 'Remetente. Ex: DN.IA <noreply@dnia.ai>' },
+  { name: 'EMAIL_FROM', desc: 'Remetente. Ex: Health & Safety <noreply@healthsafety.com.br>' },
   { name: 'ZAPI_INSTANCE_URL', desc: 'URL da instância Z-API (WhatsApp)' },
   { name: 'ZAPI_TOKEN', desc: 'Token Z-API' },
 ];
@@ -817,32 +817,12 @@ const NAV_SECTIONS = [
     items: ENDPOINTS.map(e => ({ id: e.id, label: `${e.method} ${e.path}` })),
   },
   {
-    title: 'Guia de Integração',
-    items: [
-      { id: 'guide-nexus', label: 'Nexus — passo a passo' },
-      { id: 'guide-mentoria', label: 'mentor.ia — passo a passo' },
-    ],
-  },
-  {
     title: 'Configuração',
     items: [{ id: 'env-vars', label: 'Variáveis de Ambiente' }],
   },
 ];
 
 const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items);
-
-/* ── Integration Step ── */
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-4 mb-6">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center">{n}</div>
-      <div className="flex-1 min-w-0">
-        <h4 className="text-sm font-semibold mb-1">{title}</h4>
-        <div className="text-xs text-muted-foreground space-y-2">{children}</div>
-      </div>
-    </div>
-  );
-}
 
 export default function ApiDocumentation() {
   const [activeSection, setActiveSection] = useState('overview');
@@ -927,7 +907,7 @@ export default function ApiDocumentation() {
         {/* ═══ VISÃO GERAL ═══ */}
         <section id="doc-overview">
           <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <img src={dnMarketingLogo} alt="dnMarketing" className="h-14 w-auto" />
+            <img src={logoHs} alt="MarketingHS" className="h-14 w-auto" />
             <span className="text-lg font-bold">API</span>
             <Badge variant="outline" className="text-[10px]">v1.0</Badge>
             <Badge className="text-[10px] bg-primary/15 text-primary border-0">Interno</Badge>
@@ -943,7 +923,7 @@ export default function ApiDocumentation() {
                 </Button>
               </a>
               <a
-                href="/api/dnmarketing-api.yaml"
+                href="/api/marketinghs-api.yaml"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -955,7 +935,7 @@ export default function ApiDocumentation() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            O dnMarketing é o master de identidade do ecossistema DN.IA. Esta API permite que o Nexus e o mentor.ia se integrem para buscar identidades, listar leads e registrar eventos na timeline unificada de cada contato.
+            O MarketingHS é a plataforma de marketing da Health & Safety. Esta API permite que outros sistemas integrem contatos, segmentos, campanhas, páginas, automações e conversões.
           </p>
         </section>
 
@@ -967,7 +947,7 @@ export default function ApiDocumentation() {
         <section id="doc-auth">
           <h3 className="text-sm font-semibold mb-2">Autenticação</h3>
           <p className="text-xs text-muted-foreground mb-3">
-            A API do dnMarketing aceita dois tipos de chave de autenticação:
+            A API do MarketingHS aceita dois tipos de chave de autenticação:
           </p>
           <CodeBlock code={`Authorization: Bearer <SUA_CHAVE>\nContent-Type: application/json`} />
           <div className="mt-3 space-y-3">
@@ -978,7 +958,7 @@ export default function ApiDocumentation() {
                 <Badge variant="outline" className="text-[9px] h-4">Master</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Chave master configurada nos Secrets do backend (Lovable Cloud). Use para integrações de sistema de alta confiança.
+                Chave master configurada no ambiente do backend. Use para integrações de sistema de alta confiança.
               </p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
@@ -1067,85 +1047,6 @@ export default function ApiDocumentation() {
           </section>
         ))}
 
-        {/* ═══ GUIA NEXUS ═══ */}
-        <section id="doc-guide-nexus">
-          <h3 className="text-base font-bold mb-4">Integrando o Nexus</h3>
-
-          <Step n={1} title="Obter credenciais">
-            <p>Solicite o WEBHOOK_SECRET e a URL base ao time do dnMarketing.</p>
-          </Step>
-
-          <Step n={2} title="Ao criar um contato no Nexus">
-            <p className="mb-2">Envie os dados do contato para criar/vincular a identidade unificada:</p>
-            <CodeBlock code={`POST /publico/identidade
-{
-  "phone": "+5511999999999",
-  "email": "joao@empresa.com",
-  "nome": "João Silva",
-  "source_app": "nexus",
-  "local_id": "[ID-NO-NEXUS]",
-  "stage": "opportunity"
-}`} />
-            <p className="mt-2 text-[11px] text-primary font-medium">Guarde o dnia_id retornado. Use em todas as chamadas futuras.</p>
-          </Step>
-
-          <Step n={3} title="Registrar atividades">
-            <p>Chame <code className="bg-muted/50 px-1 py-0.5 rounded font-mono">/publico/evento-de-contato</code> para cada evento relevante: reunião agendada, proposta enviada, deal movido.</p>
-          </Step>
-
-          <Step n={4} title="Ao fechar um deal">
-            <CodeBlock code={`POST /publico/evento-de-contato
-{
-   "dnia_id": "[DNIA_ID]",
-  "source_app": "nexus",
-  "event_type": "deal_won",
-  "title": "Negócio fechado",
-  "metadata": { "value": 15000 }
-}`} />
-            <p className="mt-2 text-[11px] text-primary font-medium">O stage avança para "client" automaticamente.</p>
-          </Step>
-        </section>
-
-        {/* ═══ GUIA MENTORIA ═══ */}
-        <section id="doc-guide-mentoria">
-          <h3 className="text-base font-bold mb-4">Integrando o mentor.ia</h3>
-
-          <Step n={1} title="Obter credenciais">
-            <p>Solicite o WEBHOOK_SECRET e a URL base ao time do dnMarketing.</p>
-          </Step>
-
-          <Step n={2} title="Ao receber um cliente fechado">
-            <CodeBlock code={`POST /publico/identidade
-{
-  "phone": "+5511999999999",
-  "source_app": "mentoria",
-  "local_id": "[ID-NO-MENTORIA]",
-  "stage": "client"
-}`} />
-          </Step>
-
-          <Step n={3} title="Ao iniciar onboarding">
-            <CodeBlock code={`POST /publico/evento-de-contato
-{
-   "dnia_id": "[DNIA_ID]",
-  "source_app": "mentoria",
-  "event_type": "onboarding_started",
-  "title": "Onboarding iniciado"
-}`} />
-          </Step>
-
-          <Step n={4} title="Atualizações periódicas de health score">
-            <CodeBlock code={`POST /publico/evento-de-contato
-{
-  "dnia_id": "[DNIA_ID]",
-  "source_app": "mentoria",
-  "event_type": "health_updated",
-  "title": "Health score atualizado",
-  "metadata": { "score": 85, "status": "saudavel" }
-}`} />
-          </Step>
-        </section>
-
         {/* ═══ VARIÁVEIS DE AMBIENTE ═══ */}
         <section id="doc-env-vars">
           <h3 className="text-sm font-semibold mb-3">Variáveis de Ambiente</h3>
@@ -1168,7 +1069,7 @@ export default function ApiDocumentation() {
             </table>
           </div>
           <p className="text-[11px] text-muted-foreground mt-3">
-            Configurar em: <strong>Backend → Settings → Edge Functions → Secrets</strong>
+            Configurar em: <strong>ambiente do backend (arquivo .env)</strong>
           </p>
         </section>
 

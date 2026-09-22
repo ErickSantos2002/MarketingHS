@@ -1,14 +1,14 @@
 openapi: '3.0.3'
 info:
-  title: dnMarketing API
+  title: MarketingHS API
   version: '2.0.0'
   description: |
-    O dnMarketing é o master de identidade do ecossistema DN.IA.
-    Esta API permite que o Nexus, mentor.ia e agentes de IA se integrem para
-    gerenciar contatos, segmentos, campanhas, páginas, automações e analytics.
+    API pública do MarketingHS, a plataforma de marketing da Health & Safety.
+    Permite a sistemas integrados gerenciar contatos, segmentos, campanhas,
+    páginas, automações e conversões.
   contact:
-    name: DN.IA
-    url: https://dnia.ai
+    name: Health & Safety
+    url: https://healthsafety.com.br
 
 servers:
   - url: https://{host}/api
@@ -356,7 +356,7 @@ paths:
           schema:
             type: string
             format: uuid
-          description: DN.IA ID do ecossistema
+          description: ID da identidade unificada (dnia_id)
       responses:
         '200':
           description: Identidade encontrada
@@ -395,7 +395,7 @@ paths:
         
         **Merge automático:** Se o telefone informado pertence a uma identidade e o email
         pertence a outra, o sistema automaticamente mescla os dois registros, mantendo o
-        DNIA_ID mais antigo. Nesse caso, a resposta inclui `merged: true` e `merged_from`.
+        dnia_id mais antigo. Nesse caso, a resposta inclui `merged: true` e `merged_from`.
       tags:
         - Identidade
       requestBody:
@@ -958,7 +958,7 @@ paths:
           schema:
             type: string
             format: uuid
-          description: DN.IA ID
+          description: ID da identidade unificada (dnia_id)
       requestBody:
         required: true
         content:
@@ -1185,7 +1185,7 @@ paths:
                 nexus_contact_id:
                   type: string
                   format: uuid
-                  description: ID do contato no Nexus CRM (alternativo ao dnia_id)
+                  description: ID do contato no CRM integrado (alternativo ao dnia_id)
                 email:
                   type: string
                   format: email
@@ -1939,9 +1939,10 @@ paths:
       summary: Listar regras de automação
       description: >
         Retorna todas as regras de automação, por prioridade decrescente.
-        ATENÇÃO: as regras são cadastro. A ação de todas elas é o handoff para
-        o Nexus, que ainda não está ligado neste sistema — a regra fica salva e
-        pronta, mas nada dispara.
+        A ação de toda regra é o GrowthHS (create_in_growthhs,
+        move_stage_growthhs, block_growthhs). Quem avalia e enfileira é o
+        gatilho do banco em toda mudança de etiqueta, status ou pontuação;
+        esta rota só cadastra e lista.
       tags:
         - Automações
       responses:
@@ -2027,7 +2028,7 @@ paths:
                   enum: [and, or]
                 action_type:
                   type: string
-                  enum: [create_in_nexus, move_stage_nexus, block_nexus]
+                  enum: [create_in_growthhs, move_stage_growthhs, block_growthhs]
                 action_value:
                   type: string
                 action_metadata:
@@ -2114,7 +2115,7 @@ paths:
                 dnia_id:
                   type: string
                   format: uuid
-                  description: DN.IA ID do ecossistema (alternativa a lead_id/email/phone)
+                  description: ID da identidade unificada (dnia_id), alternativa a lead_id/email/phone
                 email:
                   type: string
                   format: email

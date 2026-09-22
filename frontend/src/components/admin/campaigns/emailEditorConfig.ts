@@ -42,7 +42,7 @@ export const BASE_EMAIL_DESIGN = {
           contents: [{
             type: 'text',
             values: {
-              text: '<p style="font-size:24px;font-weight:bold;color:#534AB7;text-align:center;margin:0;">DN.IA</p>',
+              text: '<p style="font-size:24px;font-weight:bold;color:#534AB7;text-align:center;margin:0;">Health &amp; Safety</p>',
             },
           }],
         }],
@@ -67,11 +67,11 @@ export const BASE_EMAIL_DESIGN = {
             values: {
               // href OBRIGATORIO: sem ele o botao nao aponta para nada -- CTA
               // quebrado numa campanha real, e nenhum link rastreavel para o
-              // tracking de clique do Resend reescrever. https://dnia.ai e so um
-              // destino padrao; o admin troca por campanha no editor.
+              // tracking de clique do Resend reescrever. https://healthsafety.com.br
+              // e so um destino padrao; o admin troca por campanha no editor.
               href: {
                 name: 'web',
-                values: { href: 'https://dnia.ai', target: '_blank' },
+                values: { href: 'https://healthsafety.com.br', target: '_blank' },
               },
               text: 'Ver mais',
               backgroundColor: '#534AB7',
@@ -88,7 +88,7 @@ export const BASE_EMAIL_DESIGN = {
           contents: [{
             type: 'text',
             values: {
-              text: '<p style="font-size:12px;color:#888;">DN.IA — Você está recebendo este email pois se cadastrou em um de nossos eventos.</p>',
+              text: '<p style="font-size:12px;color:#888;">Health &amp; Safety — Você está recebendo este e-mail porque se cadastrou em um de nossos canais.</p>',
             },
           }],
         }],
