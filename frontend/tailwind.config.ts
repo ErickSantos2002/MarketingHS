@@ -1,5 +1,10 @@
 import type { Config } from "tailwindcss";
 
+// Uma cor de token com suporte a modificador de opacidade (bg-primary/20).
+// O token é hexadecimal; color-mix aplica o alfa sem precisar de canais HSL.
+const cor = (variavel: string) =>
+  `color-mix(in srgb, var(${variavel}) calc(<alpha-value> * 100%), transparent)`;
+
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
@@ -14,62 +19,57 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Blinker', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        blinker: ['Blinker', 'sans-serif'],
-        display: ['Rajdhani', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ["var(--font-sans)"],
+        mono: ["var(--font-mono)"],
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        "background-secondary": "hsl(var(--background-secondary))",
-        "background-tertiary": "hsl(var(--background-tertiary))",
-        foreground: "hsl(var(--foreground))",
+        // shadcn — apelidos definidos em src/index.css
+        border: cor("--border"),
+        input: cor("--input"),
+        ring: cor("--ring"),
+        background: cor("--background"),
+        foreground: cor("--foreground"),
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-          glow: "hsl(var(--primary-glow))",
+          DEFAULT: cor("--primary"),
+          foreground: cor("--primary-foreground"),
+          50: cor("--color-primary-50"),
+          100: cor("--color-primary-100"),
+          200: cor("--color-primary-200"),
+          300: cor("--color-primary-300"),
+          400: cor("--color-primary-400"),
+          500: cor("--color-primary-500"),
+          600: cor("--color-primary-600"),
+          700: cor("--color-primary-700"),
+          800: cor("--color-primary-800"),
+          900: cor("--color-primary-900"),
         },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+        secondary: { DEFAULT: cor("--secondary"), foreground: cor("--secondary-foreground") },
+        destructive: { DEFAULT: cor("--destructive"), foreground: cor("--destructive-foreground") },
+        success: { DEFAULT: cor("--success"), foreground: cor("--success-foreground") },
+        muted: { DEFAULT: cor("--muted"), foreground: cor("--muted-foreground") },
+        accent: { DEFAULT: cor("--accent"), foreground: cor("--accent-foreground") },
+        popover: { DEFAULT: cor("--popover"), foreground: cor("--popover-foreground") },
+        card: { DEFAULT: cor("--card"), foreground: cor("--card-foreground") },
+        // Design System — vocabulário do adocao.md, para as telas migradas
+        action: { DEFAULT: cor("--action"), hover: cor("--action-hover"), tint: cor("--action-tint") },
+        surface: { DEFAULT: cor("--surface"), base: cor("--bg-base"), elevated: cor("--surface-elevated") },
+        borda: { DEFAULT: cor("--border-color"), muted: cor("--border-muted"), strong: cor("--border-strong") },
+        conteudo: {
+          DEFAULT: cor("--text-body"),
+          heading: cor("--text-heading"),
+          muted: cor("--text-muted"),
+          faint: cor("--text-faint"),
         },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        success: {
-          DEFAULT: "hsl(var(--success))",
-          foreground: "hsl(var(--success-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-        "text-secondary": "hsl(var(--text-secondary))",
-        "text-muted": "hsl(var(--text-muted))",
-        overlay: "hsl(var(--overlay))",
-        glass: "hsl(var(--glass))",
-        "glass-border": "hsl(var(--glass-border))",
+        danger: cor("--color-danger-500"),
+        warning: cor("--color-warning-500"),
+        info: cor("--color-info-500"),
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sm: "var(--radius-sm)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
+        "2xl": "var(--radius-2xl)",
       },
       keyframes: {
         "accordion-down": {

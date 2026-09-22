@@ -111,7 +111,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
   const emptyMessage = viewMode === 'daily' ? 'Nenhum dado disponível' : 'Nenhum dado no período';
 
   return (
-    <div className="glass-card p-6">
+    <div className="bg-card border rounded-xl p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           {viewMode === 'daily' ? (

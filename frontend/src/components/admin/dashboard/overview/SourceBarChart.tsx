@@ -8,7 +8,7 @@ interface SourceBarChartProps {
 export function SourceBarChart({ data }: SourceBarChartProps) {
   if (data.length === 0) {
     return (
-      <div className="glass-card p-6">
+      <div className="bg-card border rounded-xl p-6">
         <div className="flex items-center gap-2 mb-6">
           <BarChart3 className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold text-foreground">Distribuição por Source</h3>
@@ -24,7 +24,7 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
   const chartData = data.slice(0, 8);
 
   return (
-    <div className="glass-card p-6">
+    <div className="bg-card border rounded-xl p-6">
       <div className="flex items-center gap-2 mb-6">
         <BarChart3 className="h-5 w-5 text-primary" />
         <h3 className="text-lg font-semibold text-foreground">Distribuição por Source</h3>

@@ -509,7 +509,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-lg font-semibold font-[Rajdhani]">{segment ? 'Editar segmento' : 'Novo segmento'}</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">{segment ? 'Editar segmento' : 'Novo segmento'}</DialogTitle>
               <DialogDescription className="text-xs">
                 {segment ? 'Atualize as configurações do segmento' : 'Defina regras para agrupar contatos'}
               </DialogDescription>
@@ -742,7 +742,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                 <div className="space-y-4">
                   {/* Big count */}
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold font-[Rajdhani] bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                    <span className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                       {previewCount}
                     </span>
                     <span className="text-xs text-muted-foreground">contatos correspondem</span>
@@ -775,7 +775,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
             ) : (
               <div className="space-y-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold font-[Rajdhani] bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                  <span className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                     {selectedLeads.length}
                   </span>
                   <span className="text-xs text-muted-foreground">contatos selecionados</span>

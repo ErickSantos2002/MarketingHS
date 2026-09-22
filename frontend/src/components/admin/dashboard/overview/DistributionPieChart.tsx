@@ -19,7 +19,7 @@ const COLORS = [
 export function DistributionPieChart({ data, title = "Distribuição por Modal" }: DistributionPieChartProps) {
   if (data.length === 0) {
     return (
-      <div className="glass-card p-6">
+      <div className="bg-card border rounded-xl p-6">
         <div className="flex items-center gap-2 mb-6">
           <PieChartIcon className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold text-foreground">{title}</h3>
@@ -34,7 +34,7 @@ export function DistributionPieChart({ data, title = "Distribuição por Modal" 
   const total = data.reduce((sum, item) => sum + item.count, 0);
 
   return (
-    <div className="glass-card p-6">
+    <div className="bg-card border rounded-xl p-6">
       <div className="flex items-center gap-2 mb-6">
         <PieChartIcon className="h-5 w-5 text-primary" />
         <h3 className="text-lg font-semibold text-foreground">{title}</h3>

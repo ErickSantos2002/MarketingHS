@@ -58,7 +58,7 @@ function KPICard({ title, value, icon, gradient, glowColor, delay = '0ms', onCli
     <button
       onClick={onClick}
       className={cn(
-        "glass-card p-6 relative overflow-hidden group cursor-pointer text-left w-full",
+        "bg-card border rounded-xl p-6 relative overflow-hidden group cursor-pointer text-left w-full",
         "hover:border-primary/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
       )}
       style={{ animationDelay: delay }}
@@ -136,7 +136,7 @@ function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, de
   return (
     <div
       className={cn(
-        "glass-card p-6 relative overflow-hidden group text-left w-full",
+        "bg-card border rounded-xl p-6 relative overflow-hidden group text-left w-full",
         "hover:border-primary/30 transition-all duration-300"
       )}
       style={{ animationDelay: delay }}

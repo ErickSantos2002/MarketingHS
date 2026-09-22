@@ -25,7 +25,7 @@ export function QualificationGauge({ rate }: QualificationGaugeProps) {
   };
 
   return (
-    <div className="glass-card p-6">
+    <div className="bg-card border rounded-xl p-6">
       <div className="flex items-center gap-2 mb-6">
         <Gauge className="h-5 w-5 text-primary" />
         <h3 className="text-lg font-semibold text-foreground">Taxa de Qualificação</h3>
