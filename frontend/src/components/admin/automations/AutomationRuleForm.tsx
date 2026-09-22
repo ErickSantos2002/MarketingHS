@@ -21,9 +21,14 @@ interface Props {
 // "Etiqueta" = tag vinculada ao contato (lead_tags); "Qualificação" = coluna
 // leads.etiqueta (hotlead/warm/raw). Só os RÓTULOS mudaram — os valores
 // ('tag', 'etiqueta') continuam os mesmos que Automations.tsx avalia.
+//
+// ⚠️ Revisão final do 8D (I1): 'tag' ("Etiqueta") saiu das opções. O gatilho
+// que avalia as regras não tem ramo para ela (nem a origem tinha) e adicionar
+// tag grava `lead_tags`, não `leads` — a regra ficaria "ativa" sem nunca
+// disparar. O backend recusa ao salvar; o mapa de operadores de 'tag' abaixo
+// fica só para exibir regra antiga.
 const CONDITION_TYPES = [
   { value: 'status', label: 'Status' },
-  { value: 'tag', label: 'Etiqueta' },
   { value: 'etiqueta', label: 'Qualificação' },
   { value: 'score', label: 'Score' },
   { value: 'created_at', label: 'Período (data de criação)' },
@@ -59,9 +64,11 @@ const OPERATORS_MAP: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
-const ACTION_TYPES = [
+// ⚠️ Revisão final do 8D (I4): "Mover etapa" fica à vista, mas desabilitada —
+// o contrato do GrowthHS não tem a rota, e o backend recusa ao salvar.
+const ACTION_TYPES: { value: string; label: string; indisponivel?: string }[] = [
   { value: 'create_in_growthhs', label: 'Criar card no GrowthHS' },
-  { value: 'move_stage_growthhs', label: 'Mover etapa no GrowthHS' },
+  { value: 'move_stage_growthhs', label: 'Mover etapa no GrowthHS', indisponivel: AUTOMACAO_NAO_LIGADA },
   { value: 'block_growthhs', label: 'Não enviar ao GrowthHS (bloquear)' },
 ];
 
@@ -354,7 +361,16 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
             <Select value={actionType} onValueChange={(v) => { setActionType(v); setActionValue(''); setActionMetadata({}); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ACTION_TYPES.map(at => <SelectItem key={at.value} value={at.value}>{at.label}</SelectItem>)}
+                {ACTION_TYPES.map(at => (
+                  <SelectItem key={at.value} value={at.value} disabled={!!at.indisponivel}>
+                    <span className="block">{at.label}</span>
+                    {at.indisponivel && (
+                      <span className="block text-[10px] text-muted-foreground leading-snug max-w-xs whitespace-normal">
+                        {at.indisponivel}
+                      </span>
+                    )}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

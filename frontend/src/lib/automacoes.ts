@@ -6,8 +6,9 @@
 // `crm_handoffs`. As três ações possíveis são `create_in_growthhs`,
 // `move_stage_growthhs` e `block_growthhs` — ver AUTOMACAO_COMO_FUNCIONA.
 // `move_stage_growthhs` é a exceção: o contrato do GrowthHS ainda não tem
-// rota para mover card de etapa, então uma regra dessas é registrada e falha
-// na entrega, à vista — ver AUTOMACAO_NAO_LIGADA.
+// rota para mover card de etapa, e desde a revisão final do 8D (I4) salvar
+// uma regra dessas é recusado (400) — ver AUTOMACAO_NAO_LIGADA. Condição por
+// tag também é recusada (I1): o gatilho não a avalia.
 import { api } from '@/lib/api';
 
 export interface AutomationCondition {
@@ -41,12 +42,12 @@ export const AUTOMACAO_COMO_FUNCIONA =
   'aparece na linha do tempo do contato; falhas, em Configurações → GrowthHS.';
 
 // A única ação que ainda não roda: o GrowthHS não tem rota para mover card de
-// etapa. Usado só no aviso de `move_stage_growthhs` em AutomationRuleForm —
-// as outras duas ações (criar, bloquear) já funcionam.
+// etapa. É o mesmo texto do 400 do backend (`MSG_MOVER` em
+// routers/automacoes.py); em AutomationRuleForm, é o motivo da opção
+// desabilitada — as outras duas ações (criar, bloquear) já funcionam.
 export const AUTOMACAO_NAO_LIGADA =
-  'O GrowthHS ainda não tem como mover card de etapa. Uma regra destas é ' +
-  'registrada e falha na entrega, à vista — ela passa a funcionar quando o ' +
-  'GrowthHS ganhar a rota.';
+  'O GrowthHS ainda não tem rota para mover card de etapa — regra de mover ' +
+  'fica disponível quando o contrato tiver a rota.';
 
 export const listarRegras = () => api.get<AutomationRule[]>('/automacoes');
 
