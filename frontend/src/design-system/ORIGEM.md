@@ -42,6 +42,10 @@ Registrados para o Erick decidir no projeto oficial — **não** se corrigem aqu
   1,13:1 e 1,48:1 contra as superfícies, abaixo dos 3:1 da WCAG 1.4.11.
 - Não há paleta de gráfico: as séries do `chartTheme.ts` (Fase 1) saem da
   rampa primária e das semânticas.
+- `--primary-foreground` (branco) sobre `--action` do tema escuro
+  (`--color-primary-400`, `#47a6e1`) dá ~2,7:1 — abaixo do AA de 4,5:1. É o
+  par oficial do DS (branco sobre o botão primário); não se corrige aqui.
+  Achado na revisão final da Fase 0 (item M4, 22/09/2026).
 
 ## A fonte por `@import`
 
