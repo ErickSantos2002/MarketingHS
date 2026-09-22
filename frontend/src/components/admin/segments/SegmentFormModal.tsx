@@ -68,7 +68,7 @@ const INTERACTION_FIELD_OPTIONS = [
 ];
 
 const INTERACTION_EVENT_VALUES = [
-  { value: 'activity_created', label: 'Atividade criada (Nexus)' },
+  { value: 'activity_created', label: 'Atividade criada' },
   { value: 'activity_completed', label: 'Atividade concluída' },
   { value: 'activity_cancelled', label: 'Atividade cancelada' },
   { value: 'activity_no_show', label: 'Atividade no-show' },

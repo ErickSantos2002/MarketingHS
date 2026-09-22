@@ -96,7 +96,7 @@ export function NewPageDialog({ open, onOpenChange, pages, onCreated }: NewPageD
               }}
             />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground font-mono">dnia.ai/{slug}</span>
+              <span className="text-xs text-muted-foreground font-mono">/{slug}</span>
               {slug && (
                 slugExists ? (
                   <Badge variant="destructive" className="text-[10px] gap-1">

@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   X, Plus, Trash2, StickyNote, Tag as TagIcon,
   Copy, ExternalLink,

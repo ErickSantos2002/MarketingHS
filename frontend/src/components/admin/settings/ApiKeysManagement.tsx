@@ -278,7 +278,7 @@ export default function ApiKeysManagement() {
               <Textarea
                 value={formDesc}
                 onChange={e => setFormDesc(e.target.value)}
-                placeholder='ex: "Acesso para o agente SDR da DN.IA"'
+                placeholder='ex: "Acesso para o agente SDR"'
                 className="text-xs min-h-[60px] resize-none"
               />
             </div>
