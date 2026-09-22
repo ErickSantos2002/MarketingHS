@@ -22,7 +22,8 @@ export function formatCell(lead: any, key: string): string {
       return v ? 'Sim' : '';
     case 'ecosystem': {
       const parts: string[] = [];
-      if (lead?.has_dnia) parts.push('D');
+      parts.push('M');
+      if (lead?.ecosystem?.growthhs_card_id) parts.push('G');
       return parts.join('/');
     }
     case 'tags': {
