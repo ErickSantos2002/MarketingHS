@@ -1,5 +1,78 @@
 # Continuar aqui
 
+> ## ✅ Visual — Fase 0 (fundação), 22/09/2026
+>
+> **A fundação visual entrou.** O Design System oficial da Health & Safety
+> (`frontend/src/design-system/`, cópia byte a byte do projeto
+> `ef9f35f6-3af0-4651-9dee-45d08884432a`, `ORIGEM.md` com os hashes) está no
+> repositório; `index.css` virou a ponte shadcn → tokens (de 885 para 46
+> linhas); o Tailwind aponta pros tokens (`cor()`/`color-mix`); as classes de
+> efeito da dn.ia saíram (`theme-dnmarketing`, `theme-fev2425`, `glass-card`,
+> `ds-card`, `font-[Rajdhani]`); o tema tem claro por padrão e escuro pela
+> classe `dark` no `<html>` (`src/lib/tema.ts`, chave `marketinghs-tema`,
+> script anti-piscada no `index.html`); e o guarda visual
+> (`npm run guarda:visual`) mede cor fora de token por pasta. Branch
+> `visual-fase-0` (a partir de `main` `2ae02cf`), **aguardando o merge com o
+> Erick**. Spec:
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`;
+> plano: `docs/superpowers/plans/2026-09-22-marketinghs-visual-fase-0-fundacao.md`.
+>
+> **Placar do guarda (22/09/2026): 876** pontos de cor fora de token no admin
+> (exceções: `src/landing/`, `src/design-system/`,
+> `emailEditorConfig.ts` — HTML de e-mail enviado). Por pasta:
+> `dashboard/challenges` 121 · `settings` 108 · `dashboard/insights` 95 ·
+> `contacts` 78 · `pages/admin` 66 · `dashboard/overview` 65 · `campaigns` 61 ·
+> `dashboard/operational` 57 · `automations` 40 · `dashboard` 38 ·
+> `dashboard/profile` 33 · `admin` (raiz) 31 · `dashboard/tactical` 27 ·
+> `pages` (admin) 24 · `hooks` 22 · `ui` 8 · `pages` (raiz) 2. É o número que
+> as Fases 1 e 2 vão reduzir; `npm run guarda:visual -- <pasta>` audita uma
+> área isolada (código de saída 1 se houver dívida).
+>
+> **A fonte.** Medido na Tarefa 2: a Plus Jakarta Sans chega ao navegador pelo
+> `@import url(...)` de `tokens/typography.css`, sem precisar de `<link>`
+> manual no `index.html` (`document.fonts.check('14px "Plus Jakarta Sans"')` =
+> `true`, requisição a `fonts.googleapis.com` visível na rede). Não era
+> defeito — o item provisório saiu da lista "Defeitos conhecidos" do
+> `ORIGEM.md` e virou nota separada.
+>
+> **O portão da fase (Tarefa 5):** `tsc` com os mesmos 4 erros
+> pré-existentes (nenhum novo); `vite build` e `build:landing` passando; os 7
+> hashes do Design System conferem; `git diff main --stat` só lista arquivo
+> novo em `design-system/`; nenhuma classe/cor da dn.ia restando
+> (`theme-dnmarketing`, `glass-card`, `Rajdhani`… todos vazios); as 16 telas
+> abertas nos dois temas (Playwright, login com a conta admin do Claude) sem
+> erro de console novo e sem layout se mover; `git diff main` fora de
+> `design-system/`/`index.css` só tem classe, o mecanismo de tema
+> (`src/lib/tema.ts`, `main.tsx`) ou comentário — nenhuma mudança de lógica,
+> rota, API ou texto.
+>
+> **Dívida visual anotada no Step 2** (não é falha desta fase — é insumo para
+> a Fase 1/2, nada foi corrigido aqui):
+> - `src/components/ui/sidebar.tsx:421` usa `hsl(var(--sidebar-border))` e
+>   `hsl(var(--sidebar-accent))`, variáveis que não existem em `src/index.css`
+>   nem em `design-system/` — mas o componente não tem importador em `src/`
+>   hoje. Se algum dia for importado, resolver a sintaxe e as duas variáveis
+>   juntas.
+> - `src/components/admin/campaigns/CampaignWizard.tsx:647` —
+>   `backgroundColor: '#075E54'` no preview de WhatsApp do wizard (mockup de
+>   marca de terceiro, não e-mail nem landing). Fica contado no guarda;
+>   decisão de tratar como exceção ou não fica para o grupo G3 da Fase 2.
+> - `src/components/admin/pages/PageConfigEditor.tsx:209/214` —
+>   `config.cta_color || '#E41A11'`, valor padrão (vermelho da dn.ia) do
+>   color picker do CTA da landing pública. Fica contado no guarda; decisão de
+>   mover para token ou manter como fallback de dado fica para o grupo G5 da
+>   Fase 2.
+> - Aviso de console pré-existente, sem relação com cor/tema: `Warning:
+>   Function components cannot be given refs` ao abrir a ficha de um contato
+>   (`Badge` dentro de `DniaIdChip`, `DetailSections.tsx`) — não foi tocado
+>   por esta fase, registrado para o Erick decidir se abre item à parte.
+>
+> **Próximo passo: Fase 1** — casca (topbar, sidebar), `/login`, primitivos
+> (os 5 portais — dialog/select/popover/dropdown-menu/sheet — já saíram do
+> fundo cravado na Tarefa 2, mas seguem sem restilo próprio) e `chartTheme.ts`
+> (paleta de gráfico que falta no Design System oficial, ver "Defeitos
+> conhecidos" no `ORIGEM.md`).
+
 > ## ✅ Sub-lote 8E (limpeza final) — portão fechado, 22/09/2026
 >
 > **A travessia acabou.** O MarketingHS não tem mais arquivo, dependência,

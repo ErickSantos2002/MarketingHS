@@ -42,9 +42,16 @@ Registrados para o Erick decidir no projeto oficial — **não** se corrigem aqu
   1,13:1 e 1,48:1 contra as superfícies, abaixo dos 3:1 da WCAG 1.4.11.
 - Não há paleta de gráfico: as séries do `chartTheme.ts` (Fase 1) saem da
   rampa primária e das semânticas.
-- `tokens/typography.css` carrega a fonte por `@import url(...)` externo
-  dentro de um arquivo que é importado depois de outras regras — ver o que a
-  Tarefa 2 mediu sobre a fonte chegar ou não ao navegador.
+
+## A fonte por `@import`
+
+`tokens/typography.css` carrega a Plus Jakarta Sans por `@import url(...)`
+externo, dentro de um arquivo importado depois de outras regras — não é um
+defeito, é só um ponto que parecia arriscado até ser medido. Medido na
+Tarefa 2 (22/09/2026): o `@import` sobrevive ao bundle do Vite/PostCSS sem
+precisar de `<link>` manual no `index.html`.
+`document.fonts.check('14px "Plus Jakarta Sans"')` dá `true` e a requisição a
+`fonts.googleapis.com` aparece na rede. Nenhum ajuste foi necessário.
 
 ## O que o MarketingHS faz com eles
 

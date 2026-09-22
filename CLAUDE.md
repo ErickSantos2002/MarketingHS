@@ -116,6 +116,23 @@ TI, admin reseta a de quem esquecer. Um caminho de acesso a menos.
 
 **`.env` nunca é versionado.**
 
+## Visual
+
+O visual vem do **Design System da Health & Safety** (projeto
+`ef9f35f6-3af0-4651-9dee-45d08884432a` no Claude Design), copiado em
+`frontend/src/design-system/` — **não se edita ali**; ver `ORIGEM.md`. Só a
+versão oficial vale, nunca a cópia do HelpHS.
+
+**Nenhum hexadecimal nem cor literal do Tailwind no JSX — cor sai de token.**
+As classes do shadcn (`bg-primary`, `text-muted-foreground`…) já apontam para
+os tokens pela ponte do `index.css`; para o resto, o vocabulário do
+`adocao.md` (`bg-action`, `bg-surface`, `text-conteudo-muted`,
+`border-borda`…). Exceções: HTML de e-mail e a landing pública.
+`npm run guarda:visual -- <pasta>` diz se uma área está limpa.
+
+Tema: claro por padrão; escuro pela classe `dark` no `<html>`
+(`src/lib/tema.ts`) — nunca no `<body>`.
+
 ## O portão que fechou a travessia
 
 A portagem acabou no lote 8E (22/09/2026): 47 functions portadas, 7
