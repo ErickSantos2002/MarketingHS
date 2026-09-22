@@ -72,7 +72,7 @@ export function ProfileTab({ leads }: ProfileTabProps) {
                         className="h-full rounded-full transition-all duration-700 ease-out"
                         style={{ 
                           width: `${item.percentage}%`,
-                          background: `linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.6) 100%)`,
+                          background: `linear-gradient(90deg, var(--primary) 0%, color-mix(in srgb, var(--primary) calc(0.6 * 100%), transparent) 100%)`,
                           animationDelay: `${index * 100}ms`
                         }}
                       />

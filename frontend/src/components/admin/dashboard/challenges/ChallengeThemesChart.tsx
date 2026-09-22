@@ -8,8 +8,8 @@ interface ChallengeThemesChartProps {
 }
 
 const THEME_CONFIG: Record<string, { color: string; icon: React.ComponentType<{ className?: string }> }> = {
-  'IA/Automação': { color: 'hsl(var(--accent))', icon: Cpu },         // Vermelho (tema CORE)
-  'Conhecimento': { color: 'hsl(var(--primary))', icon: BookOpen },     // Azul (tema principal)
+  'IA/Automação': { color: 'var(--accent)', icon: Cpu },         // Vermelho (tema CORE)
+  'Conhecimento': { color: 'var(--primary)', icon: BookOpen },     // Azul (tema principal)
   'Ferramentas': { color: '#e63946', icon: Wrench },        // Vermelho suave
   'Dados': { color: '#5a7fff', icon: Database },            // Azul suave
   'Execução': { color: '#c1121f', icon: Zap },              // Vermelho escuro
@@ -64,17 +64,17 @@ export function ChallengeThemesChart({ data }: ChallengeThemesChartProps) {
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} horizontal={false} />
-              <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} horizontal={false} />
+              <XAxis type="number" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis 
                 dataKey="theme" 
                 type="category" 
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} 
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} 
                 axisLine={false} 
                 tickLine={false}
                 width={90}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--accent))', opacity: 0.1 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--accent)', opacity: 0.1 }} />
               <Bar dataKey="count" radius={[0, 8, 8, 0]} maxBarSize={28}>
                 {chartData.map((entry, index) => (
                   <Cell 

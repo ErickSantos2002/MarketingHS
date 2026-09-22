@@ -7,8 +7,8 @@ interface DistributionPieChartProps {
 }
 
 const COLORS = [
-  'hsl(var(--accent))',              // dn.ia Red
-  'hsl(var(--primary))',              // dn.ia Blue
+  'var(--accent)',              // dn.ia Red
+  'var(--primary)',              // dn.ia Blue
   'hsl(142, 76%, 36%)',   // Green
   '#ffffff',              // White
   'hsl(280, 87%, 65%)',   // Purple

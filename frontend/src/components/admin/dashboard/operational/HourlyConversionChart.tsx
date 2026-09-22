@@ -132,37 +132,37 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={hourlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
               <XAxis
                 dataKey="hourLabel"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                axisLine={{ stroke: 'var(--border)' }}
                 tickLine={false}
                 interval={2}
               />
               <YAxis
                 yAxisId="left"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                axisLine={{ stroke: 'var(--border)' }}
                 tickLine={false}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                axisLine={{ stroke: 'var(--border)' }}
                 tickLine={false}
                 domain={[0, 100]}
                 tickFormatter={(value) => `${value}%`}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
+                  backgroundColor: 'var(--card)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                 }}
-                labelStyle={{ color: 'hsl(var(--foreground))' }}
-                itemStyle={{ color: 'hsl(var(--foreground))' }}
+                labelStyle={{ color: 'var(--foreground)' }}
+                itemStyle={{ color: 'var(--foreground)' }}
                 formatter={(value: number, name: string) => {
                   if (name === 'hotRate') return [`${value}%`, 'Taxa Hot'];
                   if (name === 'total') return [value, 'Total Leads'];
@@ -180,9 +180,9 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
                 yAxisId="right"
                 type="monotone"
                 dataKey="hotRate"
-                stroke="hsl(var(--primary))"
+                stroke="var(--primary)"
                 strokeWidth={2}
-                dot={{ fill: 'hsl(var(--primary))', strokeWidth: 0, r: 3 }}
+                dot={{ fill: 'var(--primary)', strokeWidth: 0, r: 3 }}
                 activeDot={{ r: 5 }}
               />
             </ComposedChart>

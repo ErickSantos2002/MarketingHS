@@ -35,8 +35,8 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
           <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="sourceBarGradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="hsl(var(--accent))" />
-                <stop offset="100%" stopColor="hsl(var(--primary))" />
+                <stop offset="0%" stopColor="var(--accent)" />
+                <stop offset="100%" stopColor="var(--primary)" />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 20%)" horizontal={false} />

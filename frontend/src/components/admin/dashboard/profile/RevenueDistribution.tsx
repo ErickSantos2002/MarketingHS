@@ -59,17 +59,17 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
                   <stop offset="100%" stopColor="#34D399" stopOpacity={0.9} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} horizontal={false} />
-              <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} horizontal={false} />
+              <XAxis type="number" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis 
                 dataKey="shortLabel" 
                 type="category" 
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} 
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} 
                 axisLine={false} 
                 tickLine={false}
                 width={70}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--accent))', opacity: 0.1 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--accent)', opacity: 0.1 }} />
               <Bar 
                 dataKey="count" 
                 radius={[0, 6, 6, 0]}

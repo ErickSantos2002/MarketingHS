@@ -544,8 +544,8 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
             <span
               className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
               style={{
-                backgroundColor: ETIQUETA_STYLES[lead.etiqueta]?.bg || 'hsl(var(--secondary))',
-                color: ETIQUETA_STYLES[lead.etiqueta]?.color || 'hsl(var(--secondary-foreground))',
+                backgroundColor: ETIQUETA_STYLES[lead.etiqueta]?.bg || 'var(--secondary)',
+                color: ETIQUETA_STYLES[lead.etiqueta]?.color || 'var(--secondary-foreground)',
               }}
             >
               {lead.etiqueta}
@@ -706,8 +706,8 @@ function EcosystemBadges({ lead }: { lead: EnrichedLead }) {
               className="inline-flex items-center justify-center rounded-sm font-bold select-none"
               style={{
                 width: 18, height: 18, fontSize: 10, lineHeight: 1,
-                backgroundColor: pill.active ? pill.activeBg : 'hsl(var(--secondary))',
-                color: pill.active ? pill.activeColor : 'hsl(var(--muted-foreground))',
+                backgroundColor: pill.active ? pill.activeBg : 'var(--secondary)',
+                color: pill.active ? pill.activeColor : 'var(--muted-foreground)',
                 opacity: pill.active ? 1 : 0.4,
               }}
             >

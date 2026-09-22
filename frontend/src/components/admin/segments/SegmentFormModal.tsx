@@ -498,7 +498,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1140px] max-h-[88vh] overflow-hidden p-0 border-border bg-card backdrop-blur-2xl shadow-[0_0_80px_-20px_hsl(var(--primary)/0.15)]">
+      <DialogContent className="max-w-[1140px] max-h-[88vh] overflow-hidden p-0 border-border bg-card backdrop-blur-2xl shadow-[0_0_80px_-20px_color-mix(in srgb, var(--primary) calc(0.15 * 100%), transparent)]">
         {/* Aurora glow effects */}
         <div className="pointer-events-none absolute -top-40 -right-40 w-80 h-80 rounded-full bg-primary/5 blur-[100px]" />
         <div className="pointer-events-none absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-accent/5 blur-[100px]" />

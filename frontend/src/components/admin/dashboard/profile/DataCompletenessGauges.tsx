@@ -41,7 +41,7 @@ function MiniGauge({
             cx="48"
             cy="48"
             r={radius}
-            stroke="hsl(var(--muted))"
+            stroke="var(--muted)"
             strokeWidth="8"
             fill="none"
             className="opacity-30"
@@ -75,10 +75,10 @@ function MiniGauge({
 
 export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
   const gauges = [
-    { value: data.cargo, label: 'Cargo', icon: Briefcase, color: 'hsl(var(--primary))' },
-    { value: data.empresa, label: 'Empresa', icon: Building, color: 'hsl(var(--accent))' },
+    { value: data.cargo, label: 'Cargo', icon: Briefcase, color: 'var(--primary)' },
+    { value: data.empresa, label: 'Empresa', icon: Building, color: 'var(--accent)' },
     { value: data.faturamento, label: 'Faturamento', icon: DollarSign, color: '#10B981' },
-    { value: data.desafios, label: 'Desafios', icon: MessageSquare, color: 'hsl(var(--primary))' },
+    { value: data.desafios, label: 'Desafios', icon: MessageSquare, color: 'var(--primary)' },
   ];
 
   return (

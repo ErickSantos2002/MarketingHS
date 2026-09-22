@@ -56,21 +56,21 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
               <XAxis 
                 dataKey="name" 
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
-                tickLine={{ stroke: 'hsl(var(--border))' }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                axisLine={{ stroke: 'var(--border)' }}
+                tickLine={{ stroke: 'var(--border)' }}
                 interval={0}
                 angle={-20}
                 textAnchor="end"
                 height={50}
               />
               <YAxis 
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                axisLine={{ stroke: 'hsl(var(--border))' }}
-                tickLine={{ stroke: 'hsl(var(--border))' }}
+                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                axisLine={{ stroke: 'var(--border)' }}
+                tickLine={{ stroke: 'var(--border)' }}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend 

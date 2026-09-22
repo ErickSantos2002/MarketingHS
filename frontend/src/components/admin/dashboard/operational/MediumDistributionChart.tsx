@@ -13,8 +13,8 @@ interface MediumDistributionChartProps {
 }
 
 const COLORS = [
-  'hsl(var(--accent))',            // dn.ia red
-  'hsl(var(--primary))',            // dn.ia blue
+  'var(--accent)',            // dn.ia red
+  'var(--primary)',            // dn.ia blue
   'hsl(142, 71%, 45%)', // emerald
   'hsl(48, 96%, 53%)',  // yellow
   'hsl(280, 65%, 60%)', // purple
@@ -77,7 +77,7 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
                 innerRadius={40}
                 fill="#8884d8"
                 dataKey="value"
-                stroke="hsl(var(--background))"
+                stroke="var(--background)"
                 strokeWidth={2}
               >
                 {chartData.map((entry, index) => (

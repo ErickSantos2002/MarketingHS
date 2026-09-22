@@ -206,26 +206,26 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <ComposedChart data={dailyHotData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLeadsComposed" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.4} />
-                      <stop offset="50%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+                      <stop offset="50%" stopColor="var(--primary)" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="lineGradientComposed" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="hsl(var(--accent))" />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" />
+                      <stop offset="0%" stopColor="var(--accent)" />
+                      <stop offset="100%" stopColor="var(--primary)" />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="dateFormatted"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
                     yAxisId="left"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
@@ -243,12 +243,12 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                       boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
                     }}
-                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
+                    labelStyle={{ color: 'var(--foreground)', fontWeight: 600 }}
                     formatter={(value: number, name: string) => {
                       if (name === 'hotRate') return [`${value}%`, 'Taxa Hot'];
                       if (name === 'hotCount') return [value.toLocaleString('pt-BR'), 'Hot Leads'];
@@ -265,8 +265,8 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     dot={false}
                     activeDot={{
                       r: 6,
-                      fill: 'hsl(var(--accent))',
-                      stroke: 'hsl(var(--background))',
+                      fill: 'var(--accent)',
+                      stroke: 'var(--background)',
                       strokeWidth: 2,
                     }}
                   />
@@ -283,32 +283,32 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     stroke="#10b981"
                     strokeWidth={2}
                     dot={{ fill: '#10b981', r: 3 }}
-                    activeDot={{ r: 5, fill: '#10b981', stroke: 'hsl(var(--background))', strokeWidth: 2 }}
+                    activeDot={{ r: 5, fill: '#10b981', stroke: 'var(--background)', strokeWidth: 2 }}
                   />
                 </ComposedChart>
               ) : (
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.4} />
-                      <stop offset="50%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+                      <stop offset="50%" stopColor="var(--primary)" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="hsl(var(--accent))" />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" />
+                      <stop offset="0%" stopColor="var(--accent)" />
+                      <stop offset="100%" stopColor="var(--primary)" />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="dateFormatted"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
@@ -316,13 +316,13 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                       boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
                     }}
-                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
-                    itemStyle={{ color: 'hsl(var(--accent))' }}
+                    labelStyle={{ color: 'var(--foreground)', fontWeight: 600 }}
+                    itemStyle={{ color: 'var(--accent)' }}
                     formatter={(value: number) => [value.toLocaleString('pt-BR'), dataMode === 'conversions' ? 'Conversões' : 'Leads']}
                   />
                   <Area
@@ -334,8 +334,8 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     dot={false}
                     activeDot={{
                       r: 6,
-                      fill: 'hsl(var(--accent))',
-                      stroke: 'hsl(var(--background))',
+                      fill: 'var(--accent)',
+                      stroke: 'var(--background)',
                       strokeWidth: 2,
                     }}
                   />
@@ -345,14 +345,14 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <ComposedChart data={hourlyData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="barGradientComposed" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={1} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.8} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="hourLabel"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
@@ -360,7 +360,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                   />
                   <YAxis
                     yAxisId="left"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
@@ -377,12 +377,12 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                       boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
                     }}
-                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
+                    labelStyle={{ color: 'var(--foreground)', fontWeight: 600 }}
                     formatter={(value: number, name: string) => {
                       if (name === 'cumulative') return [value.toLocaleString('pt-BR'), 'Acumulado'];
                       return [value.toLocaleString('pt-BR'), 'Volume/Hora'];
@@ -402,7 +402,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     stroke="#8b5cf6"
                     strokeWidth={2.5}
                     dot={{ fill: '#8b5cf6', r: 3 }}
-                    activeDot={{ r: 5, fill: '#8b5cf6', stroke: 'hsl(var(--background))', strokeWidth: 2 }}
+                    activeDot={{ r: 5, fill: '#8b5cf6', stroke: 'var(--background)', strokeWidth: 2 }}
                     name="cumulative"
                   />
                 </ComposedChart>
@@ -410,21 +410,21 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                 <BarChart data={hourlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={1} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={1} />
+                      <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.8} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="hourLabel"
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={10}
                     tickLine={false}
                     axisLine={false}
                     interval={1}
                   />
                   <YAxis
-                    stroke="hsl(var(--muted-foreground))"
+                    stroke="var(--muted-foreground)"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
@@ -432,13 +432,13 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                       boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
                     }}
-                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
-                    itemStyle={{ color: 'hsl(var(--accent))' }}
+                    labelStyle={{ color: 'var(--foreground)', fontWeight: 600 }}
+                    itemStyle={{ color: 'var(--accent)' }}
                     formatter={(value: number) => [value.toLocaleString('pt-BR'), 'Conversões']}
                   />
                   <Bar
@@ -454,7 +454,7 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
           {viewMode === 'hourly' && isSingleDayFilter && (
             <div className="flex items-center justify-center gap-6 mt-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ background: 'linear-gradient(to bottom, hsl(var(--accent)), hsl(var(--primary)))' }} />
+                <div className="w-3 h-3 rounded-sm" style={{ background: 'linear-gradient(to bottom, var(--accent), var(--primary))' }} />
                 <span>Volume/Hora</span>
               </div>
               <div className="flex items-center gap-1.5">

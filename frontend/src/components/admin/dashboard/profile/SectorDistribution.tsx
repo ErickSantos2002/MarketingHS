@@ -8,7 +8,7 @@ interface SectorDistributionProps {
 }
 
 const COLORS = [
-  'hsl(var(--accent))', 'hsl(var(--primary))', '#10B981', '#F7C94B', '#8B5CF6', 
+  'var(--accent)', 'var(--primary)', '#10B981', '#F7C94B', '#8B5CF6', 
   '#EC4899', '#F59E0B', '#06B6D4', '#84CC16', '#6B7280'
 ];
 

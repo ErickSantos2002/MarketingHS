@@ -46,10 +46,10 @@ export function LeadGoalGauge({
   ];
 
   const getColor = () => {
-    if (percentage >= 100) return 'hsl(var(--chart-2))';
-    if (percentage >= 70) return 'hsl(var(--chart-3))';
-    if (percentage >= 40) return 'hsl(var(--chart-4))';
-    return 'hsl(var(--chart-5))';
+    if (percentage >= 100) return 'var(--chart-2)';
+    if (percentage >= 70) return 'var(--chart-3)';
+    if (percentage >= 40) return 'var(--chart-4)';
+    return 'var(--chart-5)';
   };
 
   const handleSave = async () => {
@@ -202,7 +202,7 @@ export function LeadGoalGauge({
                 stroke="none"
               >
                 <Cell fill={getColor()} />
-                <Cell fill="hsl(var(--muted))" />
+                <Cell fill="var(--muted)" />
               </Pie>
             </PieChart>
           </ResponsiveContainer>

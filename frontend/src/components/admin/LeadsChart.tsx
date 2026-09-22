@@ -79,7 +79,7 @@ export function LeadsChart({ leads }: LeadsChartProps) {
             <CartesianGrid 
               strokeDasharray="3 3" 
               vertical={true} 
-              stroke="hsl(var(--border))" 
+              stroke="var(--border)" 
               opacity={0.3}
             />
             <XAxis
@@ -88,18 +88,18 @@ export function LeadsChart({ leads }: LeadsChartProps) {
               axisLine={false}
               tickMargin={8}
               fontSize={12}
-              stroke="hsl(var(--muted-foreground))"
+              stroke="var(--muted-foreground)"
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               fontSize={12}
-              stroke="hsl(var(--muted-foreground))"
+              stroke="var(--muted-foreground)"
               allowDecimals={false}
             />
             <ChartTooltip
-              cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1 }}
+              cursor={{ stroke: 'var(--muted-foreground)', strokeWidth: 1 }}
               content={<ChartTooltipContent indicator="line" />}
             />
             <Area

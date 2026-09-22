@@ -129,8 +129,8 @@ const GlowingEffect = memo(
             background: `
               radial-gradient(
                 circle at 50% 50%,
-                hsl(var(--primary) / 0.35) 0%,
-                hsl(var(--primary) / 0.15) 40%,
+                color-mix(in srgb, var(--primary) calc(0.35 * 100%), transparent) 0%,
+                color-mix(in srgb, var(--primary) calc(0.15 * 100%), transparent) 40%,
                 transparent 70%
               )
             `,
@@ -149,8 +149,8 @@ const GlowingEffect = memo(
               "--gradient": `
                 repeating-conic-gradient(
                   from calc(var(--start) * 1deg) at 50% 50%,
-                  hsl(var(--primary)) 0%,
-                  hsl(var(--primary) / 0.8) calc(100% / var(--repeating-conic-gradient-times))
+                  var(--primary) 0%,
+                  color-mix(in srgb, var(--primary) calc(0.8 * 100%), transparent) calc(100% / var(--repeating-conic-gradient-times))
                 )
               `,
               "--movement-duration": `${movementDuration}s`,
