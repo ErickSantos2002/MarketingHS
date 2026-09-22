@@ -9,7 +9,8 @@
     "build:dev": "vite build --mode development",
     "build:landing": "vite build --config vite.landing.config.ts",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "guarda:visual": "node scripts/guarda-visual.mjs"
   },
   "dependencies": {
     "@fontsource/outfit": "^5.2.8",
