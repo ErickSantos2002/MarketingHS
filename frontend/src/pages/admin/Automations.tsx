@@ -11,6 +11,7 @@ import { useAutomationRules } from '@/hooks/useAutomationRules';
 import { AutomationRuleForm } from '@/components/admin/automations/AutomationRuleForm';
 import { toast } from 'sonner';
 import { AUTOMACAO_COMO_FUNCIONA, previaDaRegra, type AutomationRule } from '@/lib/automacoes';
+import { GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { JourneysTab } from '@/components/admin/automations/JourneysTab';
 
@@ -42,6 +43,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function Automations() {
   const { rules, loading, toggleRule, deleteRule, saveRule } = useAutomationRules();
+  const { configurado: crmConfigurado } = useCrmEstado();
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -128,9 +130,18 @@ export default function Automations() {
       <Card className="border-amber-500/30 bg-amber-500/5">
         <CardContent className="py-3 flex items-start gap-3">
           <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            {AUTOMACAO_COMO_FUNCIONA}
-          </p>
+          <div className="space-y-1">
+            {/* I6 (revisão final do 8D): sem o GrowthHS ligado a regra
+                enfileira e o contato espera — o aviso vem primeiro. */}
+            {crmConfigurado === false && (
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                {GROWTHHS_NAO_CONFIGURADO}
+              </p>
+            )}
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              {AUTOMACAO_COMO_FUNCIONA}
+            </p>
+          </div>
         </CardContent>
       </Card>
 

@@ -12,7 +12,7 @@ import {
   StickyNote, History, Send, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { enviarAoComercial, GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 import { useAuth } from '@/hooks/useAuth';
 import type { Lead } from '@/hooks/useLeads';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
@@ -70,6 +70,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
   const [loadingConversions, setLoadingConversions] = useState(false);
   const [scoreBreakdown, setScoreBreakdown] = useState<ScoreBreakdown | null>(null);
   const [enviandoAoComercial, setEnviandoAoComercial] = useState(false);
+  const { configurado: crmConfigurado } = useCrmEstado();
 
   // Cast to enriched if available
   const enrichedLead = lead ? {
@@ -234,10 +235,15 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                     onClick={async () => {
                       setEnviandoAoComercial(true);
                       try {
-                        const { ja_na_fila } = await api.post<{ handoff_id: number | null; ja_na_fila: boolean }>(
-                          `/crm/enviar/${lead.id}`,
-                        );
-                        toast.success(ja_na_fila ? 'Já estava na fila' : 'Enviado para a fila do comercial');
+                        const { ja_na_fila } = await enviarAoComercial(lead.id);
+                        const titulo = ja_na_fila ? 'Já estava na fila' : 'Enviado para a fila do comercial';
+                        // I6 (revisão final do 8D): sem o GrowthHS ligado,
+                        // o pedido só espera na fila — o aviso diz isso.
+                        if (crmConfigurado === false) {
+                          toast.warning(titulo, { description: GROWTHHS_NAO_CONFIGURADO });
+                        } else {
+                          toast.success(titulo);
+                        }
                         onDataChanged?.();
                       } catch (err: any) {
                         toast.error(err?.message || 'Erro ao enviar ao comercial');
@@ -326,7 +332,12 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
           </div>
         </DialogHeader>
 
-        <QualifiedBanner status={enrichedLead.status} leadId={lead.id} onSent={onDataChanged} />
+        <QualifiedBanner
+          status={enrichedLead.status}
+          leadId={lead.id}
+          jaNoGrowthHS={!!enrichedLead.ecosystem?.growthhs_card_id}
+          onSent={onDataChanged}
+        />
 
         <ScrollArea className="max-h-[calc(90vh-120px)]">
           <div className="p-6 space-y-6">

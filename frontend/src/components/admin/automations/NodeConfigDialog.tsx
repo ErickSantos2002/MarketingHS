@@ -10,6 +10,7 @@ import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSegments } from '@/hooks/useSegments';
 import { NODE_LABELS, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
+import { GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 
 // Mesmo vocabulário field/operator/value que build_segment_condition
 // (migration 20260713250000) mapeia -- evaluate_rules_for_lead (Task 6.4)
@@ -86,6 +87,7 @@ interface Props {
 export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, sendEmailNodes, onSave }: Props) {
   const { templates } = useTemplates();
   const { segments } = useSegments();
+  const { configurado: crmConfigurado } = useCrmEstado();
 
   // send_email
   const [templateId, setTemplateId] = useState('');
@@ -480,6 +482,17 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                 O contato entra na etapa de entrada do funil configurado em
                 Configurações → GrowthHS. A entrega acontece em segundo
                 plano; o fluxo segue sem esperar.
+              </p>
+            </div>
+          )}
+
+          {/* I6 (revisão final do 8D): sem o GrowthHS ligado, o passo
+              enfileira e o contato ESPERA — a tela não pode sugerir envio. */}
+          {type === 'handoff_growthhs' && crmConfigurado === false && (
+            <div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {GROWTHHS_NAO_CONFIGURADO}
               </p>
             </div>
           )}

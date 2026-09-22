@@ -2,17 +2,21 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { enviarAoComercial, GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 
 interface Props {
   status: string | null;
   leadId: string;
+  /** O contato já tem card no GrowthHS (`ecosystem.growthhs_card_id`) — o
+   *  botão some, como o do cabeçalho da ficha (revisão final do 8D, M5). */
+  jaNoGrowthHS?: boolean;
   onSent?: () => void;
 }
 
-export function QualifiedBanner({ status, leadId, onSent }: Props) {
+export function QualifiedBanner({ status, leadId, jaNoGrowthHS = false, onSent }: Props) {
   const { isAdmin } = useAuth();
+  const { configurado } = useCrmEstado();
   const [enviando, setEnviando] = useState(false);
 
   if (status !== 'Lead Qualificado') return null;
@@ -20,10 +24,14 @@ export function QualifiedBanner({ status, leadId, onSent }: Props) {
   const handleEnviar = async () => {
     setEnviando(true);
     try {
-      const { ja_na_fila } = await api.post<{ handoff_id: number | null; ja_na_fila: boolean }>(
-        `/crm/enviar/${leadId}`,
-      );
-      toast.success(ja_na_fila ? 'Já estava na fila' : 'Enviado para a fila do comercial');
+      const { ja_na_fila } = await enviarAoComercial(leadId);
+      const titulo = ja_na_fila ? 'Já estava na fila' : 'Enviado para a fila do comercial';
+      // I6: sem o GrowthHS ligado, o pedido só espera — o aviso diz isso.
+      if (configurado === false) {
+        toast.warning(titulo, { description: GROWTHHS_NAO_CONFIGURADO });
+      } else {
+        toast.success(titulo);
+      }
       onSent?.();
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao enviar ao comercial');
@@ -37,7 +45,7 @@ export function QualifiedBanner({ status, leadId, onSent }: Props) {
       <p className="text-sm text-blue-400 font-medium">
         Este lead está pronto para o comercial
       </p>
-      {isAdmin && (
+      {isAdmin && !jaNoGrowthHS && (
         <Button
           size="sm"
           variant="outline"
