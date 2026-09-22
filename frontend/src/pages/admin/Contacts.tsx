@@ -62,8 +62,6 @@ export default function Contacts() {
     // Local
     count += contactsFilters.statuses.length;
     count += contactsFilters.tagIds.length;
-    if (contactsFilters.hasNexus) count++;
-    if (contactsFilters.hasMentoria) count++;
     if (contactsFilters.hasScheduled) count++;
     // Global
     count += dashboardFilters.activeFiltersCount;
@@ -92,7 +90,7 @@ export default function Contacts() {
   };
 
   const handleResetAll = () => {
-    setContactsFilters({ statuses: [], tagIds: [], hasNexus: false, hasMentoria: false, hasScheduled: false });
+    setContactsFilters({ statuses: [], tagIds: [], hasScheduled: false });
     dashboardFilters.resetFilters();
     setSelectedIds(new Set());
     setSelectAll(false);

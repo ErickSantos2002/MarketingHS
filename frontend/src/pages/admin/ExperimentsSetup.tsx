@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Save, Settings2, Cloud, Globe, ShieldAlert, ShieldCheck, Code2, Zap, CalendarClock } from "lucide-react";
+import { ArrowLeft, Copy, Save, Settings2, Cloud, Globe, ShieldAlert, ShieldCheck, Code2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -114,41 +114,6 @@ export default function ExperimentsSetup() {
   const exemploDominio = prodNormalized || "exemplo.com.br";
   const exemploRedirecionador = domainOf(cleanBase) || `go.${exemploDominio}`;
   const snippet = `<script src="${window.location.origin}/ab.js" async data-endpoint="${collector}" data-cookie-domain=".${exemploDominio}"></script>`;
-
-  // Payloads que o Nexus deve enviar ao MarketingHS (etapa 1, etapas 2-3, confirmação).
-  const nexusUpsert = `POST ${API_URL}/publico/identidade
-Authorization: Bearer <API key ou WEBHOOK_SECRET>
-Content-Type: application/json
-
-{
-  "source_app": "nexus",
-  "local_id": "<nexus_contact_id>",
-  "nome": "...", "email": "...", "phone": "...",
-  "stage": "lead",
-  "ab_vid": "v_...", "ab_test": "t_...", "ab_var": "A",
-  "metadata": { "ab_vid": "v_...", "ab_test": "t_...", "ab_var": "A" }
-}`;
-
-  const nexusStep = `POST ${collector}
-Content-Type: application/json
-
-{ "ab_vid": "v_...", "ab_test": "t_...", "ab_var": "A",
-  "event_type": "schedule_step", "event_name": "2",
-  "metadata": { "step": 2 } }`;
-
-  const nexusConfirm = `POST ${API_URL}/publico/evento-de-contato
-Authorization: Bearer <API key ou WEBHOOK_SECRET>
-Content-Type: application/json
-
-{
-  "source_app": "nexus",
-  "event_type": "meeting_scheduled",
-  "title": "Reunião agendada",
-  "email": "...", "phone": "...",
-  "occurred_at": "<ISO>",
-  "metadata": { "ab_vid": "v_...", "ab_test": "t_...", "ab_var": "A",
-                "agendamento_id": "<id>" }
-}`;
 
   // O redirecionador tem de ser o próprio domínio de produção ou um subdomínio
   // dele — senão o cookie não gruda e o anúncio vira cross-domain redirect
@@ -370,51 +335,6 @@ Content-Type: application/json
         </p>
       </Card>
 
-      {/* Nexus */}
-      <Card className="p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-primary" />
-          <h2 className="font-semibold">dn.nexus — configuração no agendamento</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          O <strong>Nexus</strong> é outra base de código. O iframe <code>nexus.dnia.ai/schedule</code>
-          recebe <code>ab_vid/ab_test/ab_var</code> na própria URL (injetados pelo <code>ab.js</code>) e
-          repassa ao dnmkt pelas APIs que já existem. Mudanças necessárias LÁ:
-        </p>
-        <ol className="space-y-3">
-          <Step n={1}>
-            Ao montar o <code>schedule</code>, ler <code>ab_vid/ab_test/ab_var</code> de
-            <code> window.location.search</code> e mantê-los no estado do formulário pelas 3 etapas.
-            Se ausentes, seguir normalmente (fallback server-side por email/whatsapp cobre).
-          </Step>
-          <Step n={2}>
-            <strong>Etapa 1 (dados básicos)</strong> — no upsert de contato que já é feito, incluir os
-            campos <code>ab_*</code> (chamada crítica: cria o vínculo cedo e atribui até quem abandona
-            nas etapas seguintes):
-            <div className="mt-2"><CodeBlock code={nexusUpsert} label="Upsert etapa 1" /></div>
-          </Step>
-          <Step n={3}>
-            <strong>Etapas 2 e 3 (avanços)</strong> — enviar um evento <code>schedule_step</code> ao
-            coletor (fire-and-forget, sem auth; use <code>sendBeacon</code>/<code>keepalive</code>):
-            <div className="mt-2"><CodeBlock code={nexusStep} label="schedule_step" /></div>
-          </Step>
-          <Step n={4}>
-            <strong>Confirmação do agendamento</strong> — na chamada que já reporta o agendamento,
-            incluir <code>ab_*</code> (redundância proposital ao evento client-side; ambos idempotentes):
-            <div className="mt-2"><CodeBlock code={nexusConfirm} label="Confirmação" /></div>
-          </Step>
-        </ol>
-        <Separator />
-        <div className="text-sm text-muted-foreground space-y-1">
-          <p><strong>Idempotência:</strong> reenvio nunca duplica contato nem conversão (chave por
-            <code> agendamento_id</code>; no dnmkt a conversão dedup por <code>ab_vid+ab_test</code>).</p>
-          <p><strong>Não-bloqueio:</strong> nenhuma chamada de tracking pode travar o avanço do
-            formulário — falha vai para retry/fila.</p>
-          <p><strong>Fallback:</strong> agendamento sem <code>ab_vid</code> é casado server-side por
-            email/whatsapp — rede de segurança, não o caminho feliz.</p>
-          <p className="text-xs">Spec completa: <code>docs/ab-testing/nexus-spec.md</code>.</p>
-        </div>
-      </Card>
     </div>
   );
 }

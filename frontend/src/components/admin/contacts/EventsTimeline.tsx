@@ -46,20 +46,33 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
   crm_handoff_falhou: AlertTriangle,
 };
 
+// `dnmarketing` é o valor herdado (antes da troca de nome) e `marketinghs` é
+// o atual — os dois são o mesmo sistema e casam sob o mesmo rótulo/filtro.
 const APP_COLORS: Record<string, { label: string; color: string; name: string }> = {
-  dnmarketing: { label: 'D', color: '#534AB7', name: 'dnMarketing' },
-  nexus: { label: 'N', color: '#185FA5', name: 'Nexus' },
-  mentoria: { label: 'M', color: '#0F6E56', name: 'mentor.ia' },
+  dnmarketing: { label: 'M', color: '#534AB7', name: 'MarketingHS' },
+  marketinghs: { label: 'M', color: '#534AB7', name: 'MarketingHS' },
   website: { label: 'W', color: '#A8557C', name: 'Website' },
 };
 
+// Origem sem marca própria na tela (ex.: os eventos legados do Nexus) cai no
+// genérico abaixo — mostra o valor cru de `source_app`, sem inventar marca.
+const UNKNOWN_APP = (sourceApp: string) => ({
+  label: sourceApp.charAt(0).toUpperCase(),
+  color: '#6B7280',
+  name: sourceApp,
+});
+
 const FILTER_OPTIONS = [
   { key: 'all', label: 'Todos' },
-  { key: 'dnmarketing', label: 'dnMarketing' },
-  { key: 'nexus', label: 'Nexus' },
-  { key: 'mentoria', label: 'mentor.ia' },
+  { key: 'marketinghs', label: 'MarketingHS' },
   { key: 'website', label: 'Website' },
 ] as const;
+
+function matchesAppFilter(sourceApp: string, filter: string): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'marketinghs') return sourceApp === 'marketinghs' || sourceApp === 'dnmarketing';
+  return sourceApp === filter;
+}
 
 function getDateGroupLabel(dateStr: string): string {
   const date = new Date(dateStr);
@@ -140,7 +153,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
   const filteredEvents = useMemo(() => {
     const q = search.trim().toLowerCase();
     return events.filter(e => {
-      if (filter !== 'all' && e.source_app !== filter) return false;
+      if (!matchesAppFilter(e.source_app, filter)) return false;
       if (selectedTypes.length > 0 && !selectedTypes.includes(e.event_type)) return false;
       if (q) {
         const hay = `${e.title || ''} ${e.description || ''} ${e.event_type}`.toLowerCase();
@@ -280,7 +293,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
             <div className="relative">
               {dateEvents.map((evt, idx) => {
                 const Icon = EVENT_ICONS[evt.event_type] || Circle;
-                const app = APP_COLORS[evt.source_app] || APP_COLORS.dnmarketing;
+                const app = APP_COLORS[evt.source_app] || UNKNOWN_APP(evt.source_app);
                 const isLast = idx === dateEvents.length - 1;
                 // `crm_handoff_falhou` não grava `description` — o motivo
                 // mora em `metadata.erro` (ver backend/app/crm/entrega.py).

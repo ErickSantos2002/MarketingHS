@@ -452,9 +452,7 @@ export function ContactsTable({
             <AlertDialogHeader>
               <AlertDialogTitle>Apagar contato</AlertDialogTitle>
               <AlertDialogDescription>
-                {deleteTarget?.ecosystem?.nexus_contact_id
-                  ? `Este contato (${deleteTarget?.nome || deleteTarget?.email || 'sem nome'}) também será removido do Nexus. Esta ação não pode ser desfeita.`
-                  : `Tem certeza que deseja apagar "${deleteTarget?.nome || deleteTarget?.email || 'este contato'}"? Esta ação não pode ser desfeita.`}
+                {`Tem certeza que deseja apagar "${deleteTarget?.nome || deleteTarget?.email || 'este contato'}"? Esta ação não pode ser desfeita.`}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -695,9 +693,7 @@ function SortableHead({
 /* ── Ecosystem badges ── */
 function EcosystemBadges({ lead }: { lead: EnrichedLead }) {
   const pills = [
-    { label: 'D', active: true, activeBg: '#EEEDFE', activeColor: '#3C3489', tooltip: 'Presente no dnMarketing' },
-    { label: 'N', active: !!lead.ecosystem?.nexus_contact_id || !!lead.ecosystem?.hasNexusEvents, activeBg: '#E6F1FB', activeColor: '#0C447C', tooltip: lead.ecosystem?.nexus_contact_id ? 'Presente no Nexus' : 'Não está no Nexus' },
-    { label: 'M', active: !!lead.ecosystem?.mentoria_client_id || !!lead.ecosystem?.hasMentoriaEvents, activeBg: '#E1F5EE', activeColor: '#085041', tooltip: lead.ecosystem?.mentoria_client_id ? 'Presente no mentor.ia' : 'Não está no mentor.ia' },
+    { label: 'M', active: true, activeBg: '#EEEDFE', activeColor: '#3C3489', tooltip: 'Presente no MarketingHS' },
     { label: 'G', active: !!lead.ecosystem?.growthhs_card_id, activeBg: '#DCFCE7', activeColor: '#15803D', tooltip: lead.ecosystem?.growthhs_card_id ? 'Presente no GrowthHS' : 'Não está no GrowthHS' },
   ];
 

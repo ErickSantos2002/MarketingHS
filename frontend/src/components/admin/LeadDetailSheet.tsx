@@ -208,10 +208,6 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <DniaIdChip dniaId={enrichedLead.dnia_id} />
                 <EcosystemPills
-                  hasNexus={!!enrichedLead.ecosystem?.nexus_contact_id}
-                  hasMentoria={!!enrichedLead.ecosystem?.mentoria_client_id}
-                  hasNexusEvents={!!enrichedLead.ecosystem?.hasNexusEvents}
-                  hasMentoriaEvents={!!enrichedLead.ecosystem?.hasMentoriaEvents}
                   hasGrowthHS={!!enrichedLead.ecosystem?.growthhs_card_id}
                   size={12}
                 />

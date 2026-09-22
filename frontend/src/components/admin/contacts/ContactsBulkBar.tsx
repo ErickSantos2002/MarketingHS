@@ -275,13 +275,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
           <AlertDialogHeader>
             <AlertDialogTitle>Apagar {selectedLeads.length} contato{selectedLeads.length > 1 ? 's' : ''}</AlertDialogTitle>
             <AlertDialogDescription>
-              {(() => {
-                const nexusCount = selectedLeads.filter(l => l.ecosystem?.nexus_contact_id).length;
-                if (nexusCount > 0) {
-                  return `${nexusCount} contato${nexusCount > 1 ? 's' : ''} também ser${nexusCount > 1 ? 'ão' : 'á'} removido${nexusCount > 1 ? 's' : ''} do Nexus. Esta ação não pode ser desfeita.`;
-                }
-                return 'Esta ação não pode ser desfeita. Todos os dados associados (tags, notas, eventos) serão removidos.';
-              })()}
+              Esta ação não pode ser desfeita. Todos os dados associados (tags, notas, eventos) serão removidos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

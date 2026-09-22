@@ -23,8 +23,6 @@ export function formatCell(lead: any, key: string): string {
     case 'ecosystem': {
       const parts: string[] = [];
       if (lead?.has_dnia) parts.push('D');
-      if (lead?.has_nexus) parts.push('N');
-      if (lead?.has_mentoria) parts.push('M');
       return parts.join('/');
     }
     case 'tags': {

@@ -18,12 +18,10 @@ export function ContactsFiltersBar({ filters, onChange, allTags }: ContactsFilte
   const activeCount =
     filters.statuses.length +
     filters.tagIds.length +
-    (filters.hasNexus ? 1 : 0) +
-    (filters.hasMentoria ? 1 : 0) +
     (filters.hasScheduled ? 1 : 0);
 
   const clearAll = () =>
-    onChange({ statuses: [], tagIds: [], hasNexus: false, hasMentoria: false, hasScheduled: false });
+    onChange({ statuses: [], tagIds: [], hasScheduled: false });
 
   const toggleStatus = (s: string) => {
     const next = filters.statuses.includes(s)
@@ -100,24 +98,6 @@ export function ContactsFiltersBar({ filters, onChange, allTags }: ContactsFilte
           </PopoverContent>
         </Popover>
       )}
-
-      {/* Platform filter */}
-      <div className="flex items-center gap-2 text-xs">
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <Checkbox
-            checked={filters.hasNexus}
-            onCheckedChange={(v) => onChange({ ...filters, hasNexus: !!v })}
-          />
-          <span className="font-medium" style={{ color: '#185FA5' }}>No Nexus</span>
-        </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <Checkbox
-            checked={filters.hasMentoria}
-            onCheckedChange={(v) => onChange({ ...filters, hasMentoria: !!v })}
-          />
-          <span className="font-medium" style={{ color: '#0F6E56' }}>No mentor.ia</span>
-        </label>
-      </div>
 
       {activeCount > 0 && (
         <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={clearAll}>

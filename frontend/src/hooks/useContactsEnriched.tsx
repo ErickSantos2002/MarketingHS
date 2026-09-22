@@ -7,8 +7,6 @@ export interface EcosystemInfo {
   mentoria_client_id: string | null;
   growthhs_card_id: number | null;
   growthhs_card_url: string | null;
-  hasNexusEvents?: boolean;
-  hasMentoriaEvents?: boolean;
   hasScheduledMeeting?: boolean;
 }
 
@@ -29,8 +27,6 @@ export interface EnrichedLead extends Lead {
 export interface ContactsFilters {
   statuses: string[];
   tagIds: string[];
-  hasNexus: boolean;
-  hasMentoria: boolean;
   hasScheduled: boolean;
 }
 
@@ -41,8 +37,6 @@ export function useContactsEnriched(leads: Lead[]) {
   const [contactsFilters, setContactsFilters] = useState<ContactsFilters>({
     statuses: [],
     tagIds: [],
-    hasNexus: false,
-    hasMentoria: false,
     hasScheduled: false,
   });
 
@@ -65,8 +59,6 @@ export function useContactsEnriched(leads: Lead[]) {
           mentoria_client_id: s.mentoria_client_id,
           growthhs_card_id: s.growthhs_card_id,
           growthhs_card_url: s.growthhs_card_url,
-          hasNexusEvents: s.tem_eventos_nexus,
-          hasMentoriaEvents: s.tem_eventos_mentoria,
           hasScheduledMeeting: s.tem_agendamento_aberto,
         };
       }
@@ -133,14 +125,6 @@ export function useContactsEnriched(leads: Lead[]) {
       result = result.filter(l =>
         l.tags?.some(t => contactsFilters.tagIds.includes(t.id))
       );
-    }
-
-    if (contactsFilters.hasNexus) {
-      result = result.filter(l => l.ecosystem?.nexus_contact_id || l.ecosystem?.hasNexusEvents);
-    }
-
-    if (contactsFilters.hasMentoria) {
-      result = result.filter(l => l.ecosystem?.mentoria_client_id || l.ecosystem?.hasMentoriaEvents);
     }
 
     if (contactsFilters.hasScheduled) {

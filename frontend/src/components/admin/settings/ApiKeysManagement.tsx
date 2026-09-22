@@ -151,7 +151,7 @@ export default function ApiKeysManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-bold">API Keys</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Gerencie as chaves de acesso à API do dnMarketing</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Gerencie as chaves de acesso à API do MarketingHS</p>
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
@@ -171,7 +171,7 @@ export default function ApiKeysManagement() {
           </div>
           <p className="text-sm font-medium">Nenhuma chave criada</p>
           <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-            Crie chaves para integrar agentes, automações e plataformas externas à API do dnMarketing
+            Crie chaves para integrar agentes, automações e plataformas externas à API do MarketingHS
           </p>
         </div>
       ) : (
@@ -269,7 +269,7 @@ export default function ApiKeysManagement() {
               <Input
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
-                placeholder='ex: "Agente Lia", "Nexus", "N8N Flows"'
+                placeholder='ex: "Agente Lia", "N8N Flows"'
                 className="text-xs h-9"
               />
             </div>

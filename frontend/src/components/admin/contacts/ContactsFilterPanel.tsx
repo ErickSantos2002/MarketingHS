@@ -79,28 +79,14 @@ export function ContactsFilterPanel({
 
   if (!open) return null;
 
-  const platformValue = localContacts.hasNexus && localContacts.hasMentoria
-    ? 'both'
-    : localContacts.hasNexus ? 'nexus'
-    : localContacts.hasMentoria ? 'mentoria'
-    : 'all';
-
-  const handlePlatformChange = (val: string) => {
-    setLocalContacts({
-      ...localContacts,
-      hasNexus: val === 'nexus' || val === 'both',
-      hasMentoria: val === 'mentoria' || val === 'both',
-    });
-  };
-
   const handleApply = () => {
     onContactsChange(localContacts);
     onClose();
   };
 
   const handleClearAll = () => {
-    setLocalContacts({ statuses: [], tagIds: [], hasNexus: false, hasMentoria: false, hasScheduled: false });
-    onContactsChange({ statuses: [], tagIds: [], hasNexus: false, hasMentoria: false, hasScheduled: false });
+    setLocalContacts({ statuses: [], tagIds: [], hasScheduled: false });
+    onContactsChange({ statuses: [], tagIds: [], hasScheduled: false });
     onResetAll();
   };
 
@@ -285,18 +271,6 @@ export function ContactsFilterPanel({
           options={availableSources}
           selected={dashboardFilters.sources || []}
           onChange={(sources) => onDashboardUpdate({ sources })}
-        />
-
-        <FilterSelect
-          label="PLATAFORMA"
-          value={platformValue}
-          onValueChange={handlePlatformChange}
-          options={[
-            { value: 'all', label: 'Todas' },
-            { value: 'nexus', label: 'No Nexus' },
-            { value: 'mentoria', label: 'No mentor.ia' },
-            { value: 'both', label: 'Nos dois' },
-          ]}
         />
 
         <QualificationField
@@ -582,12 +556,6 @@ export function ActiveFilterChips({
   for (const tagId of filters.tagIds) {
     const tag = allTags.find(t => t.id === tagId);
     chips.push({ label: `Tag: ${tag?.name || tagId}`, onRemove: () => onChange({ ...filters, tagIds: filters.tagIds.filter(x => x !== tagId) }) });
-  }
-  if (filters.hasNexus) {
-    chips.push({ label: 'Plataforma: Nexus', onRemove: () => onChange({ ...filters, hasNexus: false }) });
-  }
-  if (filters.hasMentoria) {
-    chips.push({ label: 'Plataforma: mentor.ia', onRemove: () => onChange({ ...filters, hasMentoria: false }) });
   }
   if (filters.hasScheduled) {
     chips.push({ label: 'Qualificação: Agendados', onRemove: () => onChange({ ...filters, hasScheduled: false }) });

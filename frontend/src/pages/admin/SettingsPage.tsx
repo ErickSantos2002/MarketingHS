@@ -156,19 +156,6 @@ export default function SettingsPage() {
             {/* IA Card */}
             <IACard />
 
-            {/* Mentoria Card */}
-            <Card className="border-border/40">
-              <CardHeader className="flex flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: '#0F6E56' }}>M</div>
-                  <div>
-                    <CardTitle className="text-base">mentor.ia</CardTitle>
-                    <CardDescription className="text-xs">Gestão de mentorias</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-
             {/* Notifications */}
             <Card className="border-border/40">
               <CardHeader className="flex flex-row items-center gap-3">
