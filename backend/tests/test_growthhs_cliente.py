@@ -112,3 +112,25 @@ def test_configurado_e_link_do_card():
     assert CFG.url_do_card(4821) == "https://app.growthhs.exemplo.invalid/cards/4821"
     assert not Config(base_url=None, board_id=3, app_url=None, api_key="k").configurado
     assert Config(base_url="x", board_id=3, app_url=None, api_key="k").url_do_card(1) is None
+
+
+@pytest.mark.parametrize("codigo", [200, 201, 202, 204, 299])
+async def test_todo_2xx_e_sucesso(codigo):
+    """Revisão final do 8D, M1: um 2xx fora de 200/201 já criou o card — tratá-
+    lo como erro re-enviaria e criaria o SEGUNDO. Corpo vazio (204) vira {}."""
+    def responder(request):
+        if codigo == 204:
+            return httpx.Response(204)
+        return httpx.Response(codigo, json={"id": 7})
+    devolvido = await criar_card(CFG, montar_card(LEAD, 3),
+                                 transporte=httpx.MockTransport(responder))
+    assert devolvido == ({} if codigo == 204 else {"id": 7})
+
+
+@pytest.mark.parametrize("codigo", [401, 403, 404, 422])
+async def test_erro_definitivo_carrega_o_status(codigo):
+    """Revisão final do 8D, I3: a fila decide pausar (401/403/404) ou falhar o
+    pedido (422) pelo status — ele precisa viajar no erro."""
+    with pytest.raises(ErroDefinitivo) as erro:
+        await criar_card(CFG, montar_card(LEAD, 3), transporte=_transporte(codigo))
+    assert erro.value.status == codigo

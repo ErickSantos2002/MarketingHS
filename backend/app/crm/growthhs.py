@@ -147,7 +147,15 @@ def montar_card(lead: dict, board_id: int) -> dict:
 
 
 class ErroDefinitivo(Exception):
-    """4xx: configuração ou corpo — re-tentar não muda nada."""
+    """4xx: configuração ou corpo — re-tentar não muda nada.
+
+    `status` viaja no erro (revisão final do 8D, I3): 401/403/404 são
+    configuração — a mesma para todos os pedidos — e pausam a fila; 422 é o
+    corpo daquele lead e falha só o pedido dele."""
+
+    def __init__(self, detalhe: str, status: int | None = None):
+        super().__init__(detalhe)
+        self.status = status
 
 
 class ErroTransitorio(Exception):
@@ -163,14 +171,18 @@ async def criar_card(cfg: Config, corpo: dict, *,
                                           headers={"X-API-Key": cfg.api_key})
     except httpx.HTTPError as erro:
         raise ErroTransitorio(f"sem resposta do GrowthHS: {erro}") from erro
-    if resposta.status_code in (200, 201):
+    if 200 <= resposta.status_code < 300:
         # ⚠️ Um 2xx já criou o card do lado do GrowthHS — daqui para frente
         # NUNCA se levanta exceção, mesmo que o corpo não sirva para nada.
         # Levantar aqui devolveria um pedido "sem resposta" para quem chama,
         # que re-tentaria e criaria um SEGUNDO card (achado I1 do round 1 de
         # revisão do 8D/Tarefa 4). Corpo que não é JSON, ou é JSON mas não é
         # objeto, vira dict vazio: quem chama grava a entrega sem
-        # card_id/person_id, mas grava.
+        # card_id/person_id, mas grava. Revisão final do 8D (M1): TODO 2xx
+        # é sucesso, não só 200/201 — um 202 ou 204 tratado como erro seria
+        # re-enviado e viraria o segundo card. Corpo vazio (204) é `{}`.
+        if not resposta.content:
+            return {}
         try:
             corpo_resposta = resposta.json()
         except ValueError:
@@ -185,7 +197,7 @@ async def criar_card(cfg: Config, corpo: dict, *,
     detalhe = f"{resposta.status_code}: {resposta.text[:400]}"
     if resposta.status_code >= 500 or resposta.status_code == 429:
         raise ErroTransitorio(detalhe)
-    raise ErroDefinitivo(detalhe)
+    raise ErroDefinitivo(detalhe, resposta.status_code)
 
 
 async def testar(cfg: Config, *,
