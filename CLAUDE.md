@@ -30,9 +30,9 @@ duas são a referência para as decisões daqui. A travessia acabou no lote 8E
 backend/     FastAPI + asyncpg
   app/       config · database · dependencies · auth/ · routers/ · middleware/
   migrations/  SQL numerado, aplicado por scripts/aplicar-migrations.sh
-  tests/     só o que executar não prova (hoje: security.py)
+  app/worker.py  motor de fila e agendamento (laço asyncio), desde o lote 3
+  tests/     só o que executar não prova
 frontend/    React 18 + Vite + shadcn + TanStack Query
-worker/      vazio até o lote 3 (motor de fila e agendamento)
 docs/referencia/  /humanoseagentes, molde do fluxo de captura
 ```
 
@@ -216,16 +216,16 @@ não sair do host.
 `uniq_journey_runs_open`. Eles são a garantia, no nível do banco, de não
 disparar e-mail duplicado. Não relaxe nenhum deles.
 
-## O que o lote 3 vai ter de reimplementar
+## O motor de fila (lote 3)
 
-O motor de fila e agendamento mora no Postgres do Supabase e não veio: 14
+O motor de fila e agendamento morava no Postgres do Supabase e não veio: 14
 funções e 2 triggers foram removidos do schema por dependerem de `pgmq`,
-`pg_cron`, `pg_net` ou `vault`. São duas filas (`email_send_queue` e
-`journey_events`), que viram tabela comum + `FOR UPDATE SKIP LOCKED`, e o
-agendador vira laço `asyncio` no `worker/`.
+`pg_cron`, `pg_net` ou `vault`. As duas filas (`email_send_queue` e
+`journey_events`) são hoje tabela comum + `FOR UPDATE SKIP LOCKED`, e o
+agendador é o laço `asyncio` de `app/worker.py`.
 
-O `invoke_edge_function` **não volta**: era o banco chamando a aplicação por
+O `invoke_edge_function` não voltou: era o banco chamando a aplicação por
 HTTP, indireção que só existia porque o Supabase separa os dois.
 
-Essa é a única parte do projeto que nasce com teste automatizado. Um e-mail
+Essa é a única parte do projeto que nasceu com teste automatizado. Um e-mail
 enviado duas vezes para a base inteira queima o domínio.
