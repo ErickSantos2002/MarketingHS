@@ -326,7 +326,7 @@ components:
         source:
           type: string
           nullable: true
-          example: programadeiaficacao
+          example: landing-exemplo
           description: Origem da conversão
         created_at:
           type: string
@@ -416,7 +416,7 @@ paths:
                   type: string
                 source_app:
                   type: string
-                  enum: [nexus, mentoria, dnmarketing, website]
+                  enum: [marketinghs, dnmarketing, nexus, mentoria, website]
                   description: Aplicação de origem do contato.
                 local_id:
                   type: string
@@ -782,7 +782,7 @@ paths:
                   format: uuid
                 source_app:
                   type: string
-                  enum: [nexus, mentoria, dnmarketing, website]
+                  enum: [marketinghs, dnmarketing, nexus, mentoria, website]
                   description: Aplicação de origem do evento.
                 event_type:
                   type: string
@@ -2156,7 +2156,7 @@ paths:
                 source:
                   type: string
                   nullable: true
-                  description: "Origem da conversão (ex: programadeiaficacao)"
+                  description: "Origem da conversão (ex: landing-exemplo)"
                 apply_tag:
                   type: boolean
                   default: true

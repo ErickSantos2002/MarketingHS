@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Copy, Check, AlertTriangle, ChevronRight, ExternalLink, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Copy, Check, ChevronRight, ExternalLink, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -124,8 +124,8 @@ const ENDPOINTS = [
         etiqueta: "hotlead",
         status: "Qualificado",
         utm_source: "instagram",
-        utm_campaign: "programa-iaficacao",
-        page_slug: "programadeiaficacao",
+        utm_campaign: "campanha-exemplo",
+        page_slug: "landing-exemplo",
         created_at: "2026-03-29T20:00:00Z"
       },
       last_seen_at: "2026-03-30T10:00:00Z",
@@ -167,8 +167,8 @@ const ENDPOINTS = [
         lead_score: 85,
         status: "Qualificado",
         utm_source: "instagram",
-        utm_campaign: "programa-iaficacao",
-        page_slug: "programadeiaficacao",
+        utm_campaign: "campanha-exemplo",
+        page_slug: "landing-exemplo",
         created_at: "2026-03-01T10:00:00Z"
       },
       scoring: { score: 85, etiqueta: "hotlead", faixa: "hotlead" },
@@ -176,22 +176,22 @@ const ENDPOINTS = [
       segments: [{ id: "uuid", name: "Hot Leads", type: "dynamic" }],
       notes: [{ id: "uuid", content: "Interessado no programa", created_at: "2026-03-29T20:00:00Z" }],
       ecosystem: {
-        dnmarketing: true,
-        nexus: true,
+        marketinghs: true,
+        nexus: false,
         mentoria: false,
-        nexus_contact_id: "uuid",
+        nexus_contact_id: null,
         mentoria_client_id: null
       },
       timeline: [{
         id: "uuid",
-        source_app: "nexus",
+        source_app: "website",
         event_type: "meeting_scheduled",
         title: "Reunião agendada",
         description: null,
         metadata: { date: "2026-04-01" },
         occurred_at: "2026-03-30T10:00:00Z"
       }],
-      conversions: [{ page_slug: "programadeiaficacao", tipo: "lead", utm_source: "instagram", utm_campaign: "programa-iaficacao", converted_at: "2026-03-01T10:00:00Z" }],
+      conversions: [{ page_slug: "landing-exemplo", tipo: "lead", utm_source: "instagram", utm_campaign: "campanha-exemplo", converted_at: "2026-03-01T10:00:00Z" }],
       campaigns_received: [{
         campaign_name: "Convite Evento VIP",
         channel: "email",
@@ -220,7 +220,7 @@ const ENDPOINTS = [
   -H 'Content-Type: application/json' \\
   -d '{
     "email": "joao@empresa.com",
-    "page_slug": "programadeiaficacao",
+    "page_slug": "landing-exemplo",
     "session_id": "abc123",
     "fields": {
       "nome": "João Silva",
@@ -230,7 +230,7 @@ const ENDPOINTS = [
       "faturamento": "100k-500k",
       "funcionarios": "11-50",
       "desafios": "Escalar vendas",
-      "source": "programadeiaficacao",
+      "source": "landing-exemplo",
       "utm_source": "instagram",
       "utm_campaign": "abr-2026"
     }
@@ -272,7 +272,7 @@ const ENDPOINTS = [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone (preferencial)' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email (fallback se phone ausente)' },
       { name: 'nome', type: 'string', required: 'Não', description: 'Nome do contato' },
-      { name: 'source_app', type: 'string', required: 'Sim', description: '"nexus", "mentoria", "dnmarketing" ou "website"' },
+      { name: 'source_app', type: 'string', required: 'Sim', description: '"marketinghs", "dnmarketing", "nexus", "mentoria" ou "website"' },
       { name: 'local_id', type: 'uuid', required: 'Sim', description: 'ID do contato no sistema de origem' },
       { name: 'stage', type: 'string', required: 'Não', description: 'Stage — só avança (nunca retrocede)' },
       { name: 'source', type: 'string', required: 'Não', description: 'Origem de negócio (ex: nome da landing). Grava em leads.source; em lead existente só preenche se vazio.' },
@@ -293,10 +293,10 @@ const ENDPOINTS = [
   -H 'Content-Type: application/json' \\
   -d '{
     "phone": "+5511999999999",
-    "source_app": "nexus",
-    "local_id": "uuid-do-nexus",
+    "source_app": "website",
+    "local_id": "uuid-do-sistema-de-origem",
     "stage": "opportunity",
-    "source": "programadeiaficacao",
+    "source": "landing-exemplo",
     "utm_source": "instagram",
     "utm_campaign": "abr-2026"
   }'`,
@@ -342,7 +342,7 @@ const ENDPOINTS = [
         status: "Qualificado",
         stage: "opportunity",
         utm_source: "instagram",
-        page_slug: "programadeiaficacao",
+        page_slug: "landing-exemplo",
         nexus_contact_id: null,
         mentoria_client_id: null,
         created_at: "2026-03-01T10:00:00Z"
@@ -361,7 +361,7 @@ const ENDPOINTS = [
       { name: 'phone', type: 'string', required: 'Condicional', description: 'Telefone do contato' },
       { name: 'email', type: 'string', required: 'Condicional', description: 'Email do contato' },
       { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
-      { name: 'source_app', type: 'string', required: 'Sim', description: '"nexus", "mentoria", "dnmarketing" ou "website"' },
+      { name: 'source_app', type: 'string', required: 'Sim', description: '"marketinghs", "dnmarketing", "nexus", "mentoria" ou "website"' },
       { name: 'event_type', type: 'string', required: 'Sim', description: 'Tipo do evento (ver tabela abaixo)' },
       { name: 'title', type: 'string', required: 'Sim', description: 'Título descritivo do evento' },
       { name: 'description', type: 'string', required: 'Não', description: 'Descrição detalhada' },
@@ -378,7 +378,7 @@ const ENDPOINTS = [
   -H 'Content-Type: application/json' \\
   -d '{
     "phone": "+5511999999999",
-    "source_app": "nexus",
+    "source_app": "website",
     "event_type": "meeting_scheduled",
     "title": "Reunião agendada",
     "metadata": { "date": "2026-04-01", "channel": "zoom" }
@@ -465,7 +465,7 @@ const ENDPOINTS = [
       { name: 'utm_campaign', type: 'string', required: 'Não', description: 'UTM campaign' },
       { name: 'utm_term', type: 'string', required: 'Não', description: 'UTM term' },
       { name: 'utm_content', type: 'string', required: 'Não', description: 'UTM content' },
-      { name: 'source', type: 'string', required: 'Não', description: 'Origem da conversão (ex: programadeiaficacao)' },
+      { name: 'source', type: 'string', required: 'Não', description: 'Origem da conversão (ex: landing-exemplo)' },
       { name: 'apply_tag', type: 'boolean', required: 'Não', description: 'Aplica tag do page_slug (default: true)' },
     ],
     curl: `curl -X POST \\
@@ -475,7 +475,7 @@ const ENDPOINTS = [
   -d '{
     "dnia_id": "uuid-do-contato",
     "tipo": "modal_pago",
-    "page_slug": "programadeiaficacao",
+    "page_slug": "landing-exemplo",
     "utm_source": "instagram"
   }'`,
     response: JSON.stringify({
@@ -485,7 +485,7 @@ const ENDPOINTS = [
         id: "uuid",
         lead_id: "uuid",
         tipo: "modal_pago",
-        page_slug: "programadeiaficacao",
+        page_slug: "landing-exemplo",
         converted_at: "2026-03-29T20:00:00Z",
         session_id: null,
         source: null,
@@ -533,7 +533,7 @@ curl -X POST \\
         lead_id: "uuid",
         converted_at: "2026-06-05T10:00:00Z",
         tipo: "modal_pago",
-        page_slug: "programadeiaficacao",
+        page_slug: "landing-exemplo",
         session_id: "uuid-da-sessao"
       }]
     }, null, 2),
@@ -576,7 +576,7 @@ curl -X POST \\
         lead_id: "uuid",
         converted_at: "2026-05-12T10:00:00Z",
         tipo: "modal_pago",
-        page_slug: "programadeiaficacao",
+        page_slug: "landing-exemplo",
         session_id: "uuid-da-sessao"
       }]
     }, null, 2),
@@ -747,7 +747,7 @@ curl -X POST \\
     response: JSON.stringify({
       data: [{
         id: "uuid",
-        slug: "programadeiaficacao",
+        slug: "landing-exemplo",
         title: "Programa de IAficação",
         active: true,
         total_leads: 347,
@@ -789,8 +789,6 @@ const ENV_VARS = [
   { name: 'WEBHOOK_SECRET', desc: 'Token de autenticação compartilhado com sistemas integrados' },
   { name: 'RESEND_API_KEY', desc: 'Chave Resend para envio de emails' },
   { name: 'EMAIL_FROM', desc: 'Remetente. Ex: Health & Safety <noreply@healthsafety.com.br>' },
-  { name: 'ZAPI_INSTANCE_URL', desc: 'URL da instância Z-API (WhatsApp)' },
-  { name: 'ZAPI_TOKEN', desc: 'Token Z-API' },
 ];
 
 const RESPONSE_CODES = [
@@ -913,7 +911,7 @@ export default function ApiDocumentation() {
             <Badge className="text-[10px] bg-primary/15 text-primary border-0">Interno</Badge>
             <div className="ml-auto flex gap-2">
               <a
-                href="/api/docs/index.html"
+                href="/openapi/docs/index.html"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -923,7 +921,7 @@ export default function ApiDocumentation() {
                 </Button>
               </a>
               <a
-                href="/api/marketinghs-api.yaml"
+                href="/openapi/marketinghs-api.yaml"
                 target="_blank"
                 rel="noopener noreferrer"
               >

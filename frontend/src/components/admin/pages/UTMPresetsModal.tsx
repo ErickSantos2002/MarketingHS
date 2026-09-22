@@ -36,7 +36,7 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
   const [content, setContent] = useState('');
 
   // O host de produção do MarketingHS ainda não foi decidido (pendência do
-  // Erick; frontend/public/api/marketinghs-api.yaml tem
+  // Erick; frontend/public/openapi/marketinghs-api.yaml tem
   // PREENCHER-O-HOST-DE-PRODUCAO em `servers:`). window.location.origin é a
   // única base verdadeira que esta tela tem à mão — mesma decisão que a rota
   // PATCH /publico/paginas/{slug} já tomou no backend, trocando o link
