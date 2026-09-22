@@ -5,7 +5,7 @@
 > **A fundação visual entrou.** O Design System oficial da Health & Safety
 > (`frontend/src/design-system/`, cópia byte a byte do projeto
 > `ef9f35f6-3af0-4651-9dee-45d08884432a`, `ORIGEM.md` com os hashes) está no
-> repositório; `index.css` virou a ponte shadcn → tokens (de 885 para 46
+> repositório; `index.css` virou a ponte shadcn → tokens (de 885 para 53
 > linhas); o Tailwind aponta pros tokens (`cor()`/`color-mix`); as classes de
 > efeito da dn.ia saíram (`theme-dnmarketing`, `theme-fev2425`, `glass-card`,
 > `ds-card`, `font-[Rajdhani]`); o tema tem claro por padrão e escuro pela
@@ -17,16 +17,24 @@
 > `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`;
 > plano: `docs/superpowers/plans/2026-09-22-marketinghs-visual-fase-0-fundacao.md`.
 >
-> **Placar do guarda (22/09/2026): 876** pontos de cor fora de token no admin
-> (exceções: `src/landing/`, `src/design-system/`,
-> `emailEditorConfig.ts` — HTML de e-mail enviado). Por pasta:
-> `dashboard/challenges` 121 · `settings` 108 · `dashboard/insights` 95 ·
-> `contacts` 78 · `pages/admin` 66 · `dashboard/overview` 65 · `campaigns` 61 ·
-> `dashboard/operational` 57 · `automations` 40 · `dashboard` 38 ·
-> `dashboard/profile` 33 · `admin` (raiz) 31 · `dashboard/tactical` 27 ·
-> `pages` (admin) 24 · `hooks` 22 · `ui` 8 · `pages` (raiz) 2. É o número que
-> as Fases 1 e 2 vão reduzir; `npm run guarda:visual -- <pasta>` audita uma
-> área isolada (código de saída 1 se houver dívida).
+> **Placar do guarda (22/09/2026, onda de correção I1): 929** pontos de cor
+> fora de token no admin (subiu de 876 porque o guarda passou a contar cor
+> numérica — `hsl(`/`hsla(`/`rgb(`/`rgba(` com dígito logo depois do
+> parêntese —, além do hex e da paleta literal do Tailwind que já contava;
+> exceções: `src/landing/`, `src/design-system/`, `emailEditorConfig.ts` —
+> HTML de e-mail enviado). Por pasta:
+> `dashboard/challenges` 129 · `settings` 108 · `dashboard/insights` 95 ·
+> `dashboard/overview` 94 · `contacts` 79 · `dashboard/operational` 68 ·
+> `pages/admin` (é `src/pages/admin`) 66 · `campaigns` 61 · `automations` 40 ·
+> `dashboard` 38 · `admin` (raiz) 35 · `dashboard/profile` 33 ·
+> `dashboard/tactical` 27 · `components/admin/pages` 24 (rótulo antigo "pages
+> (admin)" trocado por este — ficava ambíguo ao lado de `pages/admin`) ·
+> `hooks` 22 · `ui` 8 · `pages` (raiz) 2. É o número que as Fases 1 e 2 vão
+> reduzir; `npm run guarda:visual -- <pasta>` audita uma área isolada (o
+> argumento aceita `./` ou `frontend/` na frente, tira sozinho; código de
+> saída 1 se houver dívida, **2** se a área não casar com nenhum arquivo
+> `.ts`/`.tsx` — antes disso dava `0`/saída `0`, verde falso pego na revisão
+> final, item I1).
 >
 > **A fonte.** Medido na Tarefa 2: a Plus Jakarta Sans chega ao navegador pelo
 > `@import url(...)` de `tokens/typography.css`, sem precisar de `<link>`
@@ -39,12 +47,74 @@
 > pré-existentes (nenhum novo); `vite build` e `build:landing` passando; os 7
 > hashes do Design System conferem; `git diff main --stat` só lista arquivo
 > novo em `design-system/`; nenhuma classe/cor da dn.ia restando
-> (`theme-dnmarketing`, `glass-card`, `Rajdhani`… todos vazios); as 16 telas
-> abertas nos dois temas (Playwright, login com a conta admin do Claude) sem
-> erro de console novo e sem layout se mover; `git diff main` fora de
-> `design-system/`/`index.css` só tem classe, o mecanismo de tema
+> (`theme-dnmarketing`, `glass-card`, `Rajdhani`… todos vazios); **15 das 16
+> telas** abertas nos dois temas (Playwright, login com a conta admin do
+> Claude) sem erro de console novo — `/pages/<slug>/edit` ficou sem dado no
+> banco e foi pulada, o próprio relatório da Tarefa 5 já dizia isso; a frase
+> "16 telas" aqui estava errada (item M2 da revisão final); `git diff main`
+> fora de `design-system/`/`index.css` só tem classe, o mecanismo de tema
 > (`src/lib/tema.ts`, `main.tsx`) ou comentário — nenhuma mudança de lógica,
 > rota, API ou texto.
+>
+> **Onda de correção da revisão final (22/09/2026), 8 itens, todos
+> feitos** (`.superpowers/sdd/2026-09-22-marketinghs-visual-fase-0-fundacao/final-review.md`
+> → `final-fix-report.md`):
+> - **C1** — `--accent` continua = `--surface-elevated` (é o que os
+>   primitivos de `ui/` leem para hover de item); nas telas, todo uso de
+>   `accent` como COR de marca/série virou `info`: 23 × `var(--accent)` →
+>   `var(--color-info-500)` e ~29 classes `text-/bg-/from-/to-/border-accent`
+>   → `…-info`, em `LeadsLineChart`, `AIDataChat`, `SegmentFormModal` e mais
+>   uns 10 arquivos. Nenhum uso de `bg-accent` como fundo de hover de item foi
+>   achado fora de `ui/` — não houve caso a manter. Conferido no navegador:
+>   `/analytics` (legenda "Analista" e ícone "Tamanho das Empresas" visíveis)
+>   e o cabeçalho do Assistente de dados (gradiente azul, texto branco
+>   legível).
+> - **C2** — `LeadGoalGauge.tsx` (medidor de meta em `/`, "Mostrar mais
+>   detalhes") trocou `var(--chart-2..5)` (indefinidas desde que `--chart-*`
+>   saiu do `index.css`) por tokens semânticos: `--color-success-500` (≥100%),
+>   `--color-primary-500` (≥70%), `--color-warning-500` (≥40%),
+>   `--color-danger-500` (resto). Conferido: o número da meta sai vermelho a
+>   0%.
+> - **I1** — o guarda (`guarda-visual.mjs`) normaliza o argumento (tira `./` e
+>   `frontend/`, tira barra final), sai com código **2** e "Área não
+>   encontrada: <área>" se nada casar, e passa a contar cor numérica
+>   (`hsl(`/`hsla(`/`rgb(`/`rgba(` com dígito). Placar novo: **929** (era
+>   876). Ver placar por pasta acima.
+> - **I2** — refotografadas `/`, `/contacts` e `/settings` no viewport exato
+>   do "antes" (1440 px em `/`, 1425 px em `/contacts` e `/settings` — os
+>   PNGs originais não eram todos 1440), tema claro. Nenhum bloco mudou de
+>   posição ou ordem nas três telas; a diferença de altura (`/settings`: 2901
+>   → 2868 px, ~1%) é da tipografia do `base.css` oficial, não de layout.
+>   Efeitos do `base.css` registrados como insumo da Fase 1 — corpo cai de 16
+>   px (padrão do navegador) para 14 px (`body { font-size: var(--text-sm) }`
+>   do DS); `h1–h4` ganham `color: var(--text-heading)` e
+>   `letter-spacing: -0.01em`; `a:hover` ganha `text-decoration: underline`
+>   (especificidade 0,1,1 vence classe de cor sem `hover:`) — todo link do
+>   admin sublinha no hover. Nenhum ajustado aqui; decisão é da casca (Fase
+>   1).
+> - **M1** — `SegmentFormModal.tsx:501`: a sombra arbitrária com espaço
+>   (`color-mix(in srgb, ...)`) virou `color-mix(in_srgb,var(--primary)_15%,transparent)`
+>   com `_` — conferida presente em `dist/assets/*.css` depois do build.
+> - **M2** — números do CONTINUAR corrigidos: `index.css` 885 → **53** linhas
+>   (não 46); "16 telas" → "15 das 16 (uma sem dado)"; pasta `components/admin/pages`
+>   com rótulo próprio (não mais "pages (admin)", ambíguo ao lado de
+>   `src/pages/admin`).
+> - **M3** — `--chart-1..5` saíram do `index.css` sem constar na tabela do
+>   spec; depois do C2 não sobra consumidor real. `text-chart-2` em
+>   `KPICards.tsx:188` e `LeadGoalGauge.tsx:170` nunca teve cor no Tailwind
+>   (no-op já no `main`) — anotado para quando a Fase 2 mexer nesses
+>   arquivos.
+> - **M4** — contraste `--primary-foreground` (branco) sobre `--action` do
+>   escuro (~2,7:1, abaixo do AA) registrado em "Defeitos conhecidos do
+>   oficial" do `ORIGEM.md`, para o Erick levar ao projeto oficial. Tokens não
+>   mudam.
+>
+> **Não entraram nesta onda** (decisão do controlador): **M5** —
+> `/descadastrar` e `/templates/:id/preview` ficaram fora das 16 telas do
+> portão; `Descadastrar.tsx` usa só classes de token (baixo risco). Fica como
+> insumo para a Fase 1 dar uma olhada rápida no navegador. **M6** —
+> `ui/sidebar.tsx:421` (`hsl(var(--sidebar-*))`, variáveis inexistentes, sem
+> importador) segue adiado, como já estava.
 >
 > **Dívida visual anotada no Step 2** (não é falha desta fase — é insumo para
 > a Fase 1/2, nada foi corrigido aqui):
