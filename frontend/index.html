@@ -6,6 +6,17 @@
     <title>MarketingHS — Marketing da Health &amp; Safety</title>
     <meta name="description" content="MarketingHS — plataforma de marketing da Health &amp; Safety." />
     <meta name="robots" content="noindex, nofollow" />
+
+    <!-- Aplica o tema salvo antes do React montar, para a tela não piscar
+         branca no tema escuro. Mesma chave de src/lib/tema.ts. -->
+    <script>
+      try {
+        if (localStorage.getItem('marketinghs-tema') === 'escuro') {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
+
     <link rel="icon" type="image/x-icon" href="/hs.ico" />
 
     <!-- Pré-conexão com as fontes do Google -->
