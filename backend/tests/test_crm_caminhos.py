@@ -205,3 +205,92 @@ async def test_botao_manual_404_para_lead_apagado(cliente, token_admin, lead_rea
             "UPDATE leads SET deleted_at = now() WHERE id = $1::uuid", lead_real)
     r = await cliente.post(f"/crm/enviar/{lead_real}", headers=_auth(token_admin))
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Revisão final do 8D — I1, I4, I6
+# ---------------------------------------------------------------------------
+
+async def test_lead_ja_entregue_nao_volta_para_a_fila(conexao):
+    """I4: o gatilho reavalia a cada mudança de etiqueta/status/pontuação —
+    sem esta guarda, o lead já entregue reentrava na fila a cada mudança (e
+    cada pedido virava uma linha "já estava no comercial")."""
+    await _regra(conexao, [{"type": "status", "operator": "is_not", "value": "__nenhum__"}])
+    lead = await _lead(conexao)
+    await conexao.execute(
+        "UPDATE crm_handoffs SET status = 'entregue', card_id = 4821 WHERE lead_id = $1::uuid",
+        lead)
+    await conexao.execute("UPDATE leads SET etiqueta = 'hotlead' WHERE id = $1::uuid", lead)
+    await conexao.execute("UPDATE leads SET etiqueta = 'warm' WHERE id = $1::uuid", lead)
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1::uuid AND status = 'pendente'",
+        lead) == 0
+
+
+REGRA_BASE = {"name": "8D revisão", "condition_type": "etiqueta", "condition_operator": "is",
+              "condition_value": "hotlead", "action_type": "create_in_growthhs"}
+MSG_TAG = ("Condição por tag ainda não dispara envio ao GrowthHS; use etiqueta, status, "
+           "pontuação ou data de criação.")
+MSG_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — regra de mover fica "
+             "disponível quando o contrato tiver a rota.")
+REGRA_ALHEIA = "00000000-0000-0000-0000-000000000000"
+
+
+@pytest_asyncio.fixture
+async def sem_regra_de_teste():
+    """⚠️ Estes testes passam pelas rotas, que COMITAM no banco de produção. Se
+    a recusa falhar (foi o que aconteceu na rodada vermelha), a regra fica
+    gravada e ATIVA — e dispara em lead de verdade. Apaga antes e depois."""
+    await db.init_db()
+
+    async def limpar():
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM automation_rules WHERE name = $1",
+                               REGRA_BASE["name"])
+    await limpar()
+    yield
+    await limpar()
+
+
+async def test_regra_por_tag_e_recusada_ao_salvar(cliente, token_admin, chave_de,
+                                                   sem_regra_de_teste):
+    """I1: o gatilho não tem ramo 'tag' (nem a origem tinha) e adicionar tag
+    grava `lead_tags`, não `leads` — a regra ficaria "ativa" sem nunca
+    disparar. Recusar ao salvar, nas rotas de admin e nas públicas."""
+    por_lista = {**REGRA_BASE, "conditions": [{"type": "tag", "operator": "contains",
+                                               "value": "vip"}]}
+    por_campo = {**REGRA_BASE, "condition_type": "tag", "condition_operator": "contains"}
+    admin = _auth(token_admin)
+    chave = _auth(await chave_de("write"))
+    for corpo in (por_lista, por_campo):
+        for rota, cab in (("/automacoes", admin), ("/publico/automacoes", chave)):
+            r = await cliente.post(rota, json=corpo, headers=cab)
+            assert r.status_code == 400 and r.json()["detail"] == MSG_TAG, (rota, r.text)
+            r = await cliente.patch(f"{rota}/{REGRA_ALHEIA}", json=corpo, headers=cab)
+            assert r.status_code == 400 and r.json()["detail"] == MSG_TAG, (rota, r.text)
+
+
+async def test_regra_de_mover_e_recusada_ao_salvar(cliente, token_admin, chave_de,
+                                                    sem_regra_de_teste):
+    """I4: sem rota de mover no contrato, a regra só gerava um fluxo de
+    falhas. Recusar ao salvar."""
+    corpo = {**REGRA_BASE, "action_type": "move_stage_growthhs"}
+    admin = _auth(token_admin)
+    chave = _auth(await chave_de("write"))
+    for rota, cab in (("/automacoes", admin), ("/publico/automacoes", chave)):
+        r = await cliente.post(rota, json=corpo, headers=cab)
+        assert r.status_code == 400 and r.json()["detail"] == MSG_MOVER, (rota, r.text)
+        r = await cliente.patch(f"{rota}/{REGRA_ALHEIA}",
+                                json={"action_type": "move_stage_growthhs"}, headers=cab)
+        assert r.status_code == 400 and r.json()["detail"] == MSG_MOVER, (rota, r.text)
+
+
+async def test_estado_do_crm_so_diz_se_esta_configurado(cliente, token_usuario):
+    """I6: as telas precisam saber se o GrowthHS está ligado para não dizer
+    "enviado" quando o pedido só vai esperar — e nada além disso vaza para
+    quem não é admin."""
+    r = await cliente.get("/crm/estado")
+    assert r.status_code == 401
+    r = await cliente.get("/crm/estado", headers=_auth(token_usuario))
+    assert r.status_code == 200
+    assert set(r.json()) == {"configurado"} and isinstance(r.json()["configurado"], bool)

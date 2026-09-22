@@ -7,9 +7,22 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.crm.entrega import enfileirar
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, usuario_atual
 
 router = APIRouter(prefix="/crm", tags=["crm"])
+
+
+@router.get("/estado")
+async def estado_do_crm(_: Usuario = Depends(usuario_atual)):
+    """Se o GrowthHS está configurado — e só isso (revisão final do 8D, I6).
+
+    As telas de Automações, o nó de jornada e o botão manual usam isto para
+    não dizer "enviado" quando o pedido só vai esperar na fila. `usuario_atual`
+    porque essas telas não são só de admin; por isso NADA da configuração
+    (endereço, funil, chave) sai daqui."""
+    from app.crm import growthhs
+
+    return {"configurado": (await growthhs.ler_config()).configurado}
 
 
 @router.post("/enviar/{lead_id}", status_code=status.HTTP_202_ACCEPTED)

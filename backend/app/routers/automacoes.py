@@ -235,7 +235,32 @@ async def previa(dados: PreviaIn, _: Usuario = Depends(admin_atual)):
 # funções. Duas cópias do INSERT divergiriam no dia em que uma coluna nova
 # entrasse — e a que ninguém olha é a pública.
 
+# Revisão final do 8D (I1, I4): o que o vocabulário do banco ACEITA mas a
+# regra não consegue CUMPRIR. Recusado ao salvar — admin e `/publico` passam
+# pelas duas funções abaixo —, porque uma regra "ativa" que nunca dispara (tag)
+# ou que só gera falha (mover) é o modo de falhar calado que este lote existe
+# para evitar. A prévia continua contando tag: é leitura.
+MSG_TAG = ("Condição por tag ainda não dispara envio ao GrowthHS; use etiqueta, "
+           "status, pontuação ou data de criação.")
+MSG_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — regra de "
+             "mover fica disponível quando o contrato tiver a rota.")
+
+
+def _recusar_o_que_nao_dispara(condition_type: str | None,
+                               conditions: list[Condicao] | None,
+                               action_type: str | None) -> None:
+    """I1: o gatilho (019/020) não tem ramo 'tag' — nem a origem tinha — e
+    adicionar tag grava `lead_tags`, não `leads`. I4: o contrato do GrowthHS
+    não tem rota de mover card. Confere só o que veio: num PATCH, o campo
+    ausente é o que já está gravado."""
+    if condition_type == "tag" or any(c.type == "tag" for c in conditions or []):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, MSG_TAG)
+    if action_type == "move_stage_growthhs":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, MSG_MOVER)
+
+
 async def inserir_regra(dados: RegraIn) -> str:
+    _recusar_o_que_nao_dispara(dados.condition_type, dados.conditions, dados.action_type)
     campos = dados.model_dump()
     campos["conditions"] = [c.model_dump() for c in dados.conditions]
     colunas = list(campos)
@@ -257,6 +282,7 @@ async def atualizar_regra(regra_id: str, dados: RegraPatch) -> None:
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada a atualizar.")
+    _recusar_o_que_nao_dispara(dados.condition_type, dados.conditions, dados.action_type)
     if "conditions" in campos and dados.conditions is not None:
         campos["conditions"] = [c.model_dump() for c in dados.conditions]
 
