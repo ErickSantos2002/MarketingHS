@@ -52,10 +52,10 @@ export function AIDataChat() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-primary to-info shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-action text-[--color-white] shadow-lg transition-colors hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Abrir Assistente de dados"
       >
-        <Sparkles className="h-7 w-7 text-white group-hover:animate-pulse" />
+        <Sparkles className="h-7 w-7" />
       </button>
     );
   }
@@ -63,7 +63,7 @@ export function AIDataChat() {
   return (
     <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[500px] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-primary to-info text-white">
+      <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 text-conteudo-heading">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5" />
           <span className="font-semibold">Assistente de dados</span>
@@ -72,7 +72,7 @@ export function AIDataChat() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-white hover:bg-white/20"
+            className="h-7 w-7"
             onClick={clearMessages}
             title="Limpar conversa"
           >
@@ -81,7 +81,7 @@ export function AIDataChat() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-white hover:bg-white/20"
+            className="h-7 w-7"
             onClick={() => setIsOpen(false)}
             title="Fechar"
           >

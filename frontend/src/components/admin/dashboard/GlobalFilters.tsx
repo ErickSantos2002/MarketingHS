@@ -133,7 +133,9 @@ export function GlobalFilters({
   const challengeThemeOptions = Object.keys(CHALLENGE_THEMES);
 
   return (
-    <div className="bg-card border rounded-xl p-4 mb-6 animate-fade-in">
+    // A faixa que envolve este componente (bg-surface/border-b) já vem do
+    // AdminLayout — este wrapper não repete mais o visual de card avulso.
+    <div>
       <div className="flex items-center gap-4 mb-3">
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-primary" />
