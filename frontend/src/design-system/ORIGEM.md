@@ -42,6 +42,22 @@ Registrados para o Erick decidir no projeto oficial — **não** se corrigem aqu
   1,13:1 e 1,48:1 contra as superfícies, abaixo dos 3:1 da WCAG 1.4.11.
 - Não há paleta de gráfico: as séries do `chartTheme.ts` (Fase 1) saem da
   rampa primária e das semânticas.
+- **Seis cores de série não cobrem nove categorias.** Como não há paleta
+  oficial, o `chartTheme.ts` tem seis (`--grafico-1..6`) e `serie(i)` usa
+  `i % 6` — da sétima categoria em diante a cor repete. Medido com
+  `getComputedStyle` nos dois temas na Tarefa 6 (23/09/2026), duas telas
+  colidem hoje: **`ChallengeThemesChart`** (9 temas — IA/Automação =
+  Estratégia, Conhecimento = Equipe, Ferramentas = Outros) e
+  **`SectorDistribution`** (até 9 setores — Outros = Consultoria, Tecnologia
+  = Educação, Indústria = 2º Outros; os nomes dependem da ordem do dado em
+  runtime, a colisão não). Duas fatias de significados diferentes saem com o
+  mesmo pixel. A decisão é do projeto oficial: uma paleta de gráfico com mais
+  séries, ou aceitar a repetição.
+- Menor, na mesma família: no tema escuro, `serie(4)` (`--grafico-5`,
+  `primary-200`, `rgb(184,221,245)`) e `serie(5)` (`--grafico-6`,
+  `slate-500`, `rgb(100,116,139)`) ficam próximos em luminosidade — matizes
+  diferentes, distinguíveis, mas com menos contraste que no claro
+  (`Cargos` e `Setores Identificados`).
 - `--primary-foreground` (branco) sobre `--action` do tema escuro
   (`--color-primary-400`, `#47a6e1`) dá ~2,7:1 — abaixo do AA de 4,5:1. É o
   par oficial do DS (branco sobre o botão primário); não se corrige aqui.

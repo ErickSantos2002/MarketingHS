@@ -1,5 +1,216 @@
 # Continuar aqui
 
+> ## ✅ Visual — Fase 1 (casca, primitivos, gráficos), 23/09/2026
+>
+> **A Fase 1 fechou.** Branch `visual-fase-1` (a partir de `main` `2e39aae`),
+> **não mergeada** — o merge é decisão do Erick. As sete tarefas do plano
+> `docs/superpowers/plans/2026-09-22-marketinghs-visual-fase-1-casca-primitivos.md`
+> saíram; o spec que governa continua sendo
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
+> O bloco "🌅 Comece por aqui — 23/09" logo abaixo descreve a manhã em que a
+> fase ia **começar**; ela terminou no fim do mesmo dia.
+>
+> **O que entrou, tarefa a tarefa:**
+>
+> | Commit | O que entrou |
+> |---|---|
+> | `4267b03` | Primitivos de base — botão, card, badge, rótulo, aviso, progresso, esqueleto, separador |
+> | `780a641` | Campos de formulário (10 arquivos) + conserto da geometria do interruptor (trilho 48×28, polegar 20 px, curso 20 px, recuo 4 px nos quatro lados) |
+> | `aadae50` | Sobreposições, tabela e abas (13 arquivos) + conserto do contorno duplo do `Command` (a raiz não desenha mais borda/sombra; o hospedeiro é quem desenha) |
+> | `6eaeef7` | A casca — sidebar 256/72 px, topbar de 64 px, `ChaveDeTema` — e 6 consertos: topbar `sticky top-0 z-30`, overlay em `--overlay`, gradiente fora da bolha do assistente, rodapé recolhido, divisor em `border-border`, hover com guarda de desabilitado |
+> | `b9bf289` | `/login` e as duas telas de fora (`/descadastrar`, `/templates/:id/preview`) |
+> | `a95e5dc` | Tema único de gráfico (`src/lib/chartTheme.ts` + `--grafico-1..6` no `index.css`, 14 gráficos) + conserto de Hot/Warm/Raw |
+>
+> **Uma mudança visível fora do escopo declarado:** a bolha do usuário no
+> Assistente de dados trocou o gradiente (`from-primary to-info`) por
+> `bg-action` chapado. Foi decisão do controlador na Tarefa 4 — o gradiente
+> feria a regra global de cor e o guarda provadamente não o enxerga. É a única
+> coisa que muda de aparência sem ter sido pedida; reversível numa linha.
+>
+> **Placar do guarda: 929 → 825.** Por área, o que mudou: `ui` 8 → **5**,
+> `dashboard` (com as subpastas) 484 → **389** — os 14 gráficos foram de 99 a
+> **0** —, `admin` (raiz) 35 → 31, `dashboard/profile` 33 → 7,
+> `dashboard/overview` 94 → 61, `dashboard/operational` 68 → 46,
+> `dashboard/challenges` 129 → 115, `src/pages` (raiz) 2 → **0**
+> (`Descadastrar.tsx`). `src/pages/admin` segue **66**, intocado — é a Fase 2.
+>
+> **Portão (Tarefa 7), conferido em 23/09:** `tsc --noEmit -p tsconfig.app.json`
+> com os mesmos **4** erros pré-existentes (`LeadScoringSettings` ×1,
+> `useJourneys` ×3), nenhum novo; `vite build` e `build:landing` passando; os
+> **7 hashes** do Design System conferindo com o `ORIGEM.md`; `card.tsx` sem
+> nenhum `shadow-`; nenhum `active:scale`/`backdrop-blur` novo (os três
+> `backdrop-blur-[4px]` que o diff acrescenta são o do overlay de modal, que a
+> tabela oficial pede). **15 das 16 telas** abertas nos dois temas, a 1440 px
+> — `/pages/<slug>/edit` ficou **sem dado** de novo (a tabela `pages` está
+> vazia), como na Fase 0. Capacidade por capacidade (`git diff main`, 50
+> arquivos): toda linha é classe, cor, medida ou comentário — **nenhuma
+> mudança de API, de estrutura Radix ou de lógica**; nenhum `export`, nome de
+> prop, nome de variante ou `displayName` foi tocado em `components/ui/`.
+> Zero erro de console novo; o único visto é o `Function components cannot be
+> given refs` do `DniaIdChip`, já registrado na Fase 0.
+>
+> ### Telas com título duplicado — insumo da Fase 2, não defeito
+>
+> A topbar nova escreve o título da rota; onze telas continuam escrevendo o
+> seu no corpo. Não se mexeu em nenhuma: a remoção é trabalho da Fase 2.
+>
+> | Rota | Topbar | Corpo |
+> |---|---|---|
+> | `/contacts` | Contatos | "Contatos" |
+> | `/segments` | Segmentos | "Segmentos" |
+> | `/campaigns` | Campanhas | "Campanhas" |
+> | `/automations` | Automações | "Automações" |
+> | `/automations/fluxos/:id` | Fluxo | `{journey.name}` (textos diferentes, duas áreas de título) |
+> | `/import` | Importar | "Importar" |
+> | `/settings` | Configurações | "Configurações" |
+> | `/templates` | Templates | "Templates de email" |
+> | `/experiments` | Testes A/B | "Testes A/B" |
+> | `/experiments/setup` | Configurar teste A/B | "Configuração & Instruções — Teste A/B" |
+> | `/experiments/:id` | Teste A/B | `{test.name}` |
+>
+> Onde a tela não tem título próprio (`/`, `/analytics`, `/pages`,
+> `/pages/:slug/edit`, `/templates/new`, `/templates/:id/edit`) não há
+> duplicação.
+>
+> ### Dívida anotada
+>
+> **⚠️ O guarda visual tem ponto cego — o "0" dele não prova ausência de cor
+> literal.** A regex `LITERAL` de `scripts/guarda-visual.mjs:36` exige família
+> de cor **com número** (`bg-blue-600`), então `bg-white`, `bg-black`,
+> `text-white`, `text-black` e as bordas equivalentes passam invisíveis.
+> Descoberto duas vezes durante a fase (Tarefas 2 e 4) e confirmado no portão:
+> um `grep` manual em `ui/`, `components/admin/` e `pages/` acha **43**
+> ocorrências que o guarda nunca contou — nenhuma em arquivo que esta fase
+> tocou. **Proposta para a Fase 2:** acrescentar `|white|black` à alternância
+> de famílias da regex e tratar o número como opcional para esses dois, o que
+> traz as 43 para o placar de uma vez (e sobe o número de partida da Fase 2).
+> Enquanto isso, o `grep` manual continua obrigatório em toda tarefa:
+> `grep -rn "bg-black\|bg-white\|text-white\|text-black\|border-white\|border-black" src/... --include=*.tsx`
+>
+> - **Os 5 pontos que restam em `src/components/ui` são falso-positivo.** Os
+>   cinco estão na mesma linha, `chart.tsx:48`, e são **seletores CSS** do
+>   recharts (`[&_.recharts-cartesian-grid_line[stroke='#ccc']]`,
+>   `[&_.recharts-dot[stroke='#fff']]`, `[&_.recharts-polar-grid_[stroke='#ccc']]`,
+>   `[&_.recharts-reference-line_[stroke='#ccc']]`,
+>   `[&_.recharts-sector[stroke='#fff']]`): casam a cor que o recharts desenha
+>   sozinho para então sobrescrevê-la por token. Não é cor aplicada.
+>   `chart.tsx` não entrou em nenhuma tarefa da fase. **Pergunta da Fase 2:**
+>   o `ChartContainer` do shadcn ainda se justifica depois do `chartTheme.ts`?
+>   Se não, o arquivo sai e os 5 somem juntos.
+> - **`src/components/admin/LeadsChart.tsx` é código morto** — nenhum
+>   importador, conferido com busca que não prende tipo de aspa. É o único
+>   consumidor do `chart.tsx`. Candidato a remoção na Fase 2; as duas coisas
+>   caem juntas.
+> - **O gradiente banido sobrou no botão de enviar do assistente**
+>   (`AIDataChat.tsx:128`, `bg-gradient-to-r from-primary to-info`). É irmão
+>   do que foi tirado da bolha na Tarefa 4 e ficou fora do ruling, que falava
+>   só da bolha. Mesmo arquivo, mesma família de defeito.
+> - **As larguras de modal da tabela oficial não existem como variante.** A
+>   tabela pede sm 384 · md 448 · lg 512 · xl 672 · 2xl 768; o `DialogContent`
+>   tem `max-w-lg` fixo e cada tela sobrescreve por classe. Criar a variante
+>   seria API nova, proibida nesta fase. Decisão da Fase 2.
+> - **Card clicável sem afordância.** A tabela oficial diz que o card clicável
+>   troca a borda por `--action` no hover; `card.tsx` não tem prop para isso e
+>   criar uma feriria "a API não muda". Fica para a Fase 2, onde as telas
+>   podem passar a classe elas mesmas.
+> - `input.tsx` perdeu as classes `file:*` ao ser reescrito. Não quebra nada
+>   hoje — o único `type="file"` do app (`LeadsImport.tsx:419`) é um `<input>`
+>   cru e escondido, não o primitivo.
+> - **⚠️ `popover.tsx` passou de `p-4` para `p-1`** (vocabulário de lista
+>   flutuante, Tarefa 3) — e **um uso paga por isso**. Dos 25
+>   `<PopoverContent>` do app, 24 passam o próprio `p-*` e o tailwind-merge
+>   vence; o 25º, `SendTestEmailPopover.tsx:73`, passa só `w-80 space-y-3`.
+>   Aquele popover tem formulário dentro (rótulo, campo de e-mail, texto de
+>   ajuda e botão "Enviar") e hoje renderiza com 4 px de respiro em vez de 16:
+>   o conteúdo encosta na borda. Não é capacidade perdida — é aperto visual —,
+>   e não foi visto ao vivo porque os dois gatilhos dele
+>   (`EmailTemplatePreviewDialog` e `/templates/:id/preview`) exigem um
+>   template no banco, e a tabela está vazia. **Conserto de uma classe**
+>   (`className="w-80 space-y-3 p-4"` no uso, ou devolver o padding ao
+>   primitivo); deixado para o Erick decidir, porque mexer no primitivo agora
+>   sairia do escopo do portão.
+> - `select.tsx` — o item marcado perdeu o fundo `bg-primary/10`; hoje marca
+>   só pela cor do texto e pelo tique. `command.tsx` — `CommandItem` perdeu
+>   `data-[selected=true]:text-accent-foreground` sem substituto, enquanto o
+>   `dropdown-menu` manteve o equivalente: vocabulário inconsistente entre as
+>   três listas.
+> - `alert.tsx` — a variante `default`, que era neutra
+>   (`bg-background text-foreground`), virou tinta de informação
+>   (`--tint-info`). É o que a tabela oficial pede para "Aviso", mas muda a
+>   aparência de todo `<Alert>` sem variante explícita.
+> - `table.tsx` — a borda do cabeçalho saiu de `[&_tr]:border-b` para o
+>   próprio `thead`. Idêntico com uma linha de cabeçalho, diferente com duas
+>   (não há nenhuma hoje).
+> - Miudezas registradas e deixadas: `label.tsx` perdeu `leading-none`;
+>   `button.tsx` deu borda ao `destructive`, que a tabela só especifica para o
+>   primário (mesma cor do fundo, sem efeito); `switch.tsx` mantém `shadow-sm`
+>   no polegar, que a tabela de medidas pede e a regra global de sombras não
+>   prevê — contradição do próprio documento; `sheet.tsx` mantém duração
+>   assimétrica (300 fecha / 500 abre) contra os "300 ms" da tabela;
+>   `AIDataChat.tsx:64` usa `shadow-2xl` num painel flutuante (a lista
+>   permitida diz `shadow-lg`); `AdminLayout.tsx:119` devolve `''` para rota
+>   não mapeada, então rota nova nasce com `<h1>` vazio e sem aviso;
+>   `MAIN_ITEMS`/`SYSTEM_ITEMS` e `TITULOS_ROTA` repetem 11 rótulos e podem
+>   divergir; `GlobalFilters.tsx:132` ficou com um `div` raiz sem classe, onde
+>   cabia fragmento; `Login.tsx:64` repete no `Card` classes que o primitivo
+>   já aplica; `ChallengeThemesChart.tsx:181` tem `serie(9)` de fallback, que
+>   resolve para `serie(3)` e nunca dispara — forma confusa de escrever "cor
+>   de reserva"; a legenda "Volume/Hora" do `LeadsLineChart` trocou um
+>   gradiente de duas cores por `serie(0)` sólido; e o aviso de console
+>   `Function components cannot be given refs` (`Badge` sem `forwardRef`
+>   dentro de `TooltipTrigger asChild`, `badge.tsx` + `DetailSections.tsx`)
+>   continua lá, pré-existente.
+>
+> ### Lacunas de verificação — o que ninguém viu funcionando, e por quê
+>
+> Nenhuma destas é falha: em todas, ver custaria escrever no banco de
+> produção, e a troca não compensa. Ficam para conferência oportunista.
+>
+> - **As fases com token do descadastro** (`conferindo`, `saindo`, `pronto` —
+>   é a `pronto` que ganhou `--tint-success`/`--on-tint-success`). Sem token
+>   assinado, `/descadastrar` só renderiza "Link inválido", que foi o que se
+>   viu nos dois temas. Gerar token seria escrita.
+> - **O cabeçalho preenchido do `TemplatePreview`** — a tabela
+>   `email_templates` está vazia (confirmado por GET autenticado), então o
+>   `<header>` nunca apareceu com nome e categoria de verdade.
+> - **A variante `showHotMetrics` do `LeadsLineChart`** (o `ComposedChart` com
+>   barra Hot e linha de Taxa Hot) — provada por leitura de código e pelo
+>   diff; não houve combinação de filtro na base atual que a fizesse aparecer.
+> - **O `AlertDialog` e o avisador (`sonner`)** — todo gatilho deles no app é
+>   ação destrutiva (excluir, arquivar) ou de escrita, e a regra do navegador
+>   proíbe clicar. Provados por leitura de código nas Tarefas 3 e 7.
+> - **`/pages/<slug>/edit`** — sem dado (`pages` vazia), pulada, como na
+>   Fase 0.
+> - Em toda tela, "nenhuma capacidade sumiu" quer dizer **o botão existe, está
+>   habilitado e no lugar** — não que ele funciona. Onde só o clique provaria,
+>   o portão registra "presente, não exercitado".
+>
+> ### Decisões que esperam o Erick (a nova é a primeira)
+>
+> 1. **Duas colisões de cor de gráfico — 9 categorias contra 6 cores.** Não é
+>    descuido: o Design System oficial **não tem paleta de gráfico**, o
+>    `chartTheme.ts` inventou seis (`--grafico-1..6`) e `serie(i)` usa
+>    `i % 6`, então a 7ª, 8ª e 9ª categorias repetem a 1ª, 2ª e 3ª. Medido com
+>    `getComputedStyle` nos dois temas: em **Desafios → Temas**
+>    (`ChallengeThemesChart`) IA/Automação = Estratégia, Conhecimento =
+>    Equipe, Ferramentas = Outros; em **Perfil → Setores Identificados**
+>    (`SectorDistribution`) Outros = Consultoria, Tecnologia = Educação,
+>    Indústria = 2º "Outros" (os nomes dependem da ordem do dado; a colisão,
+>    não). Duas fatias de significados diferentes saem com o mesmo pixel.
+>    Opções: pedir uma paleta de gráfico ao projeto oficial (o caminho certo,
+>    e já registrado em `ORIGEM.md`); esticar as seis com variações de
+>    luminosidade; ou aceitar a repetição e agrupar a cauda em "Outros" de
+>    verdade. Nada foi mexido.
+> 2. Continuam abertas as seis decisões listadas no bloco de 23/09 abaixo
+>    (fluxo `d6bb2185…` em rascunho, recálculo/sync disparando automações,
+>    peso 0 no A/B, conta Unlayer `dnmkt`, colunas de funil da dn.ia, cor do
+>    botão das landing pages).
+>
+> **Próximo passo: Fase 2** — as telas. É onde entram os 825 pontos restantes
+> do guarda (com `src/pages/admin` em 66 e `dashboard/challenges` em 115 na
+> frente), a remoção dos onze títulos duplicados, a correção da regex do
+> guarda e a limpeza do `chart.tsx`/`LeadsChart.tsx`.
+
 > ## 🌅 Comece por aqui — 23/09/2026
 >
 > **O que fazer hoje:** executar a **Fase 1 do visual** (casca, login,

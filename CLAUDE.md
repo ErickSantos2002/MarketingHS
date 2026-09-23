@@ -123,6 +123,9 @@ O visual vem do **Design System da Health & Safety** (projeto
 `frontend/src/design-system/` — **não se edita ali**; ver `ORIGEM.md`. Só a
 versão oficial vale, nunca a cópia do HelpHS.
 
+Os primitivos de `components/ui/` carregam as medidas do Design System (raio,
+padding, altura, peso, anel de foco): medida se muda lá, nunca na tela.
+
 **Nenhum hexadecimal nem cor literal do Tailwind no JSX — cor sai de token.**
 As classes do shadcn (`bg-primary`, `text-muted-foreground`…) já apontam para
 os tokens pela ponte do `index.css`; para o resto, o vocabulário do
