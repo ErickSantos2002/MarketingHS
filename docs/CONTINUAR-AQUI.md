@@ -185,9 +185,72 @@
 >   habilitado e no lugar** — não que ele funciona. Onde só o clique provaria,
 >   o portão registra "presente, não exercitado".
 >
+> ### Onda de conserto — revisão final da branch, 23/09/2026
+>
+> A revisão da branch inteira (13 commits, 54 arquivos), antes do merge, achou
+> **zero Crítico** — nenhuma API mudou, nenhum comportamento mudou — mas
+> catorze regressões visuais que as sete revisões por tarefa não viram, quase
+> todas a mesma família: um primitivo mudou de medida e o consumidor não
+> acompanhou. Todas corrigidas na própria branch:
+>
+> - `ColumnSelector.tsx`: botão "Colunas" da barra de `/contacts` 6 px mais
+>   baixo que os vizinhos — ganhou `h-9`, como os outros três.
+> - `AdminSidebar.tsx`: item ativo perdia a tinta ao passar o mouse — o hover
+>   agora só entra quando `!active`, igual ao submenu.
+> - `checkbox.tsx`: tique de 16 px cortado numa caixa que encolheu para 14 —
+>   virou `h-3 w-3`.
+> - `DistributionPieChart.tsx`: halo da rosca em "/" virou cor cheia na troca
+>   de tema de gráfico — voltou a ter 30% de alfa, via `color-mix`.
+> - `AIDataChat.tsx`: o botão de enviar manteve o gradiente que a Tarefa 4
+>   tirou da bolha — foi para `bg-action`.
+> - `design-system/ORIGEM.md`: registrada a pergunta nova sobre a paleta de
+>   série usar cores semânticas (ver decisão 2 abaixo).
+> - `RevenueDistribution.tsx`: a faixa de faturamento (ordinal) tinha virado
+>   paleta categórica — voltou a ser rampa de opacidade sobre `serie(0)`,
+>   como o `TopKeywordsChart`; saiu também o gradiente e o `shadow-lg` do
+>   `Card`.
+> - `SendTestEmailPopover.tsx`: popover com formulário ficou com 4 px de
+>   respiro quando `popover.tsx` virou lista flutuante — devolvido o `p-4`
+>   no uso, como os outros 24 `<PopoverContent>` do app.
+> - `table.tsx`: a régua do cabeçalho saía na cor errada porque a borda da
+>   própria linha vencia a do `thead` — `TableHeader` ganhou
+>   `[&_tr]:border-b-border`.
+> - `select.tsx`: padding do viewport (`p-1.5`) fora de passo com
+>   popover/dropdown/command (`p-1`) — igualado.
+> - `dropdown-menu.tsx`, `select.tsx`, `command.tsx`: três vocabulários
+>   diferentes para a cor do item realçado — todos foram para
+>   `text-conteudo-heading`, sem trocar o modificador de cada um.
+> - `badge.tsx`: anel de foco sem offset, terceira forma de anel do conjunto —
+>   ganhou `ring-offset-2`/`ring-offset-background`.
+> - `ChallengeThemesChart.tsx`: fallback de cor caía no vermelho de perigo
+>   (`serie(9)`) — trocado por `serie(0)`.
+> - `glowing-effect.tsx`: órfão que o spec já mandava tirar na Fase 1 e o
+>   plano não abriu tarefa para isso — confirmado sem importador (grep sem
+>   prender tipo de aspa) e apagado.
+>
+> **Fica para a Fase 2** (dívida registrada, nada mexido): o desencontro
+> `leading-tight`/`text-sm` de botão e campo (decisão nova abaixo); o
+> `shadow-2xl` do painel do assistente; as larguras de modal sem variante; a
+> duração assimétrica da gaveta; o `p-6` do Content de modal/gaveta em vez de
+> cabeçalho/corpo; os dois `<h1>` por página; o header de `sheet`/`dialog`; as
+> duas fontes de verdade do mapa de rotas; os `YAxis` sem cor de série; o
+> e-mail do usuário escondido abaixo de 640 px; a cor semântica em
+> `style={{}}` inline em vez de classe; e o `Badge` sem `forwardRef`.
+>
+> **Contradição spec × plano, para a próxima pessoa não tropeçar:** o spec
+> pede fundo `--surface-elevated` no cabeçalho da tabela; o plano pede "sem
+> fundo". Implementou-se o plano — o `thead` de `table.tsx` não tem
+> `bg-*` nenhum.
+>
 > ### Decisões que esperam o Erick (a nova é a primeira)
 >
-> 1. **Duas colisões de cor de gráfico — 9 categorias contra 6 cores.** Não é
+> 1. **Desencontro de altura entre botão e campo — 35,5 px contra 38 px.** O
+>    `leading-tight` do botão e o `text-sm` do campo vêm os dois da tabela de
+>    medidas oficial, e ela não concilia os dois. Hoje passa despercebido
+>    porque toda tela que põe botão ao lado de campo passa `h-9` na mão nos
+>    dois — é essa muleta que a Fase 2 remove; quando remover, o desencontro
+>    aparece. Pergunta ao oficial, não conserto de código.
+> 2. **Duas colisões de cor de gráfico — 9 categorias contra 6 cores.** Não é
 >    descuido: o Design System oficial **não tem paleta de gráfico**, o
 >    `chartTheme.ts` inventou seis (`--grafico-1..6`) e `serie(i)` usa
 >    `i % 6`, então a 7ª, 8ª e 9ª categorias repetem a 1ª, 2ª e 3ª. Medido com
@@ -201,7 +264,14 @@
 >    e já registrado em `ORIGEM.md`); esticar as seis com variações de
 >    luminosidade; ou aceitar a repetição e agrupar a cauda em "Outros" de
 >    verdade. Nada foi mexido.
-> 2. Continuam abertas as seis decisões listadas no bloco de 23/09 abaixo
+>    **Segundo defeito, achado na revisão final e diferente deste:** as
+>    seis cores de série não são neutras — `--grafico-2/3/4` são
+>    `warning-500`, `success-500` e `danger-500`. Em "Top 10 Cargos"
+>    (`/analytics?tab=profile`), "Gerência" sai verde de sucesso e
+>    "Especialista" sai vermelho de perigo, sem que o dado diga isso.
+>    Registrado em `ORIGEM.md`; a pergunta ao oficial é a mesma dos dois
+>    problemas: uma paleta de gráfico própria, sem as cores semânticas.
+> 3. Continuam abertas as seis decisões listadas no bloco de 23/09 abaixo
 >    (fluxo `d6bb2185…` em rascunho, recálculo/sync disparando automações,
 >    peso 0 no A/B, conta Unlayer `dnmkt`, colunas de funil da dn.ia, cor do
 >    botão das landing pages).
