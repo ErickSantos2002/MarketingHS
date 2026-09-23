@@ -62,7 +62,7 @@ export default function TemplatePreview() {
 
   return (
     <div className="h-screen flex flex-col bg-muted/30">
-      <header className="shrink-0 border-b bg-background px-4 py-3 flex items-center gap-3 flex-wrap">
+      <header className="shrink-0 border-b border-border bg-background px-4 py-3 flex items-center gap-3 flex-wrap">
         <div className="min-w-0 flex-1 flex items-center gap-2">
           <p className="font-medium truncate">{template?.name}</p>
           {template?.category && <Badge variant="outline" className="text-xs shrink-0">{template.category}</Badge>}

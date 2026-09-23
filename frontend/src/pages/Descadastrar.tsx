@@ -65,7 +65,7 @@ export default function Descadastrar() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="w-full max-w-md rounded-xl border bg-card p-8 text-center space-y-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center space-y-4">
         {estado.fase === 'conferindo' && (
           <>
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
@@ -94,8 +94,8 @@ export default function Descadastrar() {
 
         {estado.fase === 'pronto' && (
           <>
-            <div className="h-10 w-10 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto">
-              <Check className="h-5 w-5 text-emerald-500" />
+            <div className="h-10 w-10 rounded-full bg-[--tint-success] flex items-center justify-center mx-auto">
+              <Check className="h-5 w-5 text-[--on-tint-success]" />
             </div>
             <h1 className="text-lg font-semibold">Pronto</h1>
             <p className="text-sm text-muted-foreground">
