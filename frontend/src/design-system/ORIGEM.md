@@ -53,6 +53,14 @@ Registrados para o Erick decidir no projeto oficial — **não** se corrigem aqu
   runtime, a colisão não). Duas fatias de significados diferentes saem com o
   mesmo pixel. A decisão é do projeto oficial: uma paleta de gráfico com mais
   séries, ou aceitar a repetição.
+- **A paleta de série é feita de cores semânticas.** `--grafico-2/3/4` são
+  `warning-500`, `success-500` e `danger-500` — não cores neutras de gráfico.
+  Como `serie(i)` colore categorias sem ordem nem valência, a categoria cai
+  na cor por acaso: em "Top 10 Cargos" (`/analytics?tab=profile`), "Gerência"
+  sai verde de sucesso e "Especialista" sai vermelho de perigo, sem que o
+  dado diga isso. É um defeito diferente da colisão acima (lá faltam cores;
+  aqui as cores que existem já significam outra coisa). Pergunta ao projeto
+  oficial: uma paleta de gráfico própria, sem as cores semânticas.
 - Menor, na mesma família: no tema escuro, `serie(4)` (`--grafico-5`,
   `primary-200`, `rgb(184,221,245)`) e `serie(5)` (`--grafico-6`,
   `slate-500`, `rgb(100,116,139)`) ficam próximos em luminosidade — matizes

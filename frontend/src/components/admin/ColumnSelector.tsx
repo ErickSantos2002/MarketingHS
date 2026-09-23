@@ -248,7 +248,7 @@ export function ColumnSelector({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="h-9">
           <Settings2 className="h-4 w-4 mr-2" />
           Colunas ({visibleCount})
         </Button>

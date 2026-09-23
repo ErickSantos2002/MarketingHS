@@ -70,7 +70,7 @@ export function SendTestEmailPopover({ templateId, templateName }: Props) {
           <Send className="h-4 w-4" /> Enviar teste
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 space-y-3">
+      <PopoverContent align="end" className="w-80 space-y-3 p-4">
         <div className="space-y-1.5">
           <Label htmlFor="test-email">Enviar email de teste para</Label>
           <Input

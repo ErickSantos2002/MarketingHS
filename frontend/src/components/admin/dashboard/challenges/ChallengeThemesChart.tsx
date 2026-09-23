@@ -42,7 +42,7 @@ export function ChallengeThemesChart({ data }: ChallengeThemesChartProps) {
   const chartData = useMemo(() => {
     return data.map((item) => ({
       ...item,
-      color: THEME_CONFIG[item.theme]?.color || serie(9),
+      color: THEME_CONFIG[item.theme]?.color || serie(0),
     }));
   }, [data]);
 

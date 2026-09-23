@@ -121,7 +121,7 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
         className={cn(
           'group relative flex w-full items-center gap-3 rounded-lg border-l-2 border-transparent px-3 py-2 text-sm font-medium text-conteudo-muted transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          !item.disabled && 'hover:bg-surface-elevated',
+          !active && !item.disabled && 'hover:bg-surface-elevated',
           active && !item.disabled && 'border-action bg-action-tint text-action',
           item.disabled && 'cursor-not-allowed opacity-50',
           collapsed && 'justify-center border-l-0 py-2.5',

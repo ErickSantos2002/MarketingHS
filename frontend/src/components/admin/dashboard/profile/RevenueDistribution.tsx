@@ -35,12 +35,13 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
         .replace(' milhões', 'M')
         .replace(' milhão', 'M')
         .replace(' mil', 'K'),
-      color: serie(index),
+      color: serie(0),
+      opacity: data.length > 1 ? 0.4 + (index / (data.length - 1)) * 0.6 : 1,
     }));
   }, [data]);
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-primary/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="bg-card border-border/50 overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <div className="p-2 rounded-lg bg-primary/20">
@@ -74,7 +75,7 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
                 maxBarSize={24}
               >
                 {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+                  <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={entry.opacity} />
                 ))}
               </Bar>
             </BarChart>

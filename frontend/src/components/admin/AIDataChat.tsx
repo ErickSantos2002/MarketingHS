@@ -125,7 +125,7 @@ export function AIDataChat() {
             type="submit"
             size="icon"
             disabled={!input.trim() || isLoading}
-            className="h-11 w-11 shrink-0 bg-gradient-to-r from-primary to-info hover:opacity-90"
+            className="h-11 w-11 shrink-0 bg-action hover:bg-action-hover"
           >
             <Send className="h-4 w-4" />
           </Button>
