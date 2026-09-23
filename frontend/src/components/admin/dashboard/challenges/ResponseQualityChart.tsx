@@ -1,16 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import type { ResponseQuality } from '@/hooks/useLeadAnalytics';
+import { tooltip, legenda } from '@/lib/chartTheme';
 
 interface ResponseQualityChartProps {
   quality: ResponseQuality;
 }
 
+// Qualidade de resposta é ordinal (alta → sem resposta) e a cor carrega esse
+// significado — sucesso/aviso/perigo/neutro —, não é uma série qualquer.
 const COLORS = {
-  high: '#22c55e',      // green-500
-  medium: '#eab308',    // yellow-500
-  low: '#f97316',       // orange-500
-  none: '#6b7280',      // gray-500
+  high: 'var(--color-success-500)',
+  medium: 'var(--color-warning-500)',
+  low: 'var(--color-danger-500)',
+  none: 'var(--color-slate-400)',
 };
 
 export function ResponseQualityChart({ quality }: ResponseQualityChartProps) {
@@ -106,8 +109,8 @@ export function ResponseQualityChart({ quality }: ResponseQualityChartProps) {
                   />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend content={renderLegend} />
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
+              <Legend {...legenda} content={renderLegend} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -115,7 +118,7 @@ export function ResponseQualityChart({ quality }: ResponseQualityChartProps) {
         {/* Stats summary */}
         <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-border/50">
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-500">
+            <div className="text-2xl font-bold text-success">
               {quality.approvalRate.toFixed(1)}%
             </div>
             <div className="text-xs text-muted-foreground">

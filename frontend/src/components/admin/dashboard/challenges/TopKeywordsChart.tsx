@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Hash } from 'lucide-react';
+import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
 interface TopKeywordsChartProps {
   data: Array<{ keyword: string; count: number }>;
@@ -40,28 +41,27 @@ export function TopKeywordsChart({ data }: TopKeywordsChartProps) {
             <BarChart data={data.slice(0, 15)} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 10 }}>
               <defs>
                 <linearGradient id="keywordGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="var(--color-info-500)" stopOpacity={0.9} />
-                  <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.6} />
+                  <stop offset="0%" stopColor={serie(0)} stopOpacity={0.9} />
+                  <stop offset="100%" stopColor={serie(0)} stopOpacity={0.6} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} horizontal={false} />
-              <XAxis type="number" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis 
-                dataKey="keyword" 
-                type="category" 
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} 
-                axisLine={false} 
-                tickLine={false}
+              <CartesianGrid {...grade} horizontal={false} />
+              <XAxis type="number" {...eixo} />
+              <YAxis
+                dataKey="keyword"
+                type="category"
                 width={70}
+                {...eixo}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
               <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={20}>
                 {data.slice(0, 15).map((entry, index) => {
                   const intensity = 0.4 + (entry.count / maxCount) * 0.6;
                   return (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={`rgba(222, 26, 17, ${intensity})`}
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={serie(0)}
+                      fillOpacity={intensity}
                     />
                   );
                 })}

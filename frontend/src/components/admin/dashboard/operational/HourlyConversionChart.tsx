@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lead } from '@/hooks/useLeads';
 import type { EnrichedLead } from '@/hooks/useLeadQualification';
+import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
 interface HourlyConversionChartProps {
   leads: (Lead | EnrichedLead)[];
@@ -97,8 +98,8 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
         {/* KPI Cards */}
         <div className="grid grid-cols-3 gap-3">
           {bestHour && (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <div className="flex items-center gap-2 text-emerald-400 mb-1">
+            <div className="p-3 rounded-xl bg-[--tint-success] border border-success/30">
+              <div className="flex items-center gap-2 text-[--on-tint-success] mb-1">
                 <TrendingUp className="h-4 w-4" />
                 <span className="text-xs font-medium">Melhor Horário</span>
               </div>
@@ -107,8 +108,8 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
             </div>
           )}
           {worstHour && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-              <div className="flex items-center gap-2 text-red-400 mb-1">
+            <div className="p-3 rounded-xl bg-[--tint-danger] border border-danger/30">
+              <div className="flex items-center gap-2 text-[--on-tint-danger] mb-1">
                 <TrendingDown className="h-4 w-4" />
                 <span className="text-xs font-medium">Pior Horário</span>
               </div>
@@ -132,37 +133,25 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={hourlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+              <CartesianGrid {...grade} />
               <XAxis
                 dataKey="hourLabel"
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-                axisLine={{ stroke: 'var(--border)' }}
-                tickLine={false}
                 interval={2}
+                {...eixo}
               />
               <YAxis
                 yAxisId="left"
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-                axisLine={{ stroke: 'var(--border)' }}
-                tickLine={false}
+                {...eixo}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-                axisLine={{ stroke: 'var(--border)' }}
-                tickLine={false}
                 domain={[0, 100]}
                 tickFormatter={(value) => `${value}%`}
+                {...eixo}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                }}
-                labelStyle={{ color: 'var(--foreground)' }}
-                itemStyle={{ color: 'var(--foreground)' }}
+                {...tooltip}
                 formatter={(value: number, name: string) => {
                   if (name === 'hotRate') return [`${value}%`, 'Taxa Hot'];
                   if (name === 'total') return [value, 'Total Leads'];
@@ -174,15 +163,15 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
                 dataKey="total"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={20}
-                fill="rgba(222, 26, 17, 0.4)"
+                fill={serie(0)}
               />
               <Line
                 yAxisId="right"
                 type="monotone"
                 dataKey="hotRate"
-                stroke="var(--primary)"
+                stroke={serie(1)}
                 strokeWidth={2}
-                dot={{ fill: 'var(--primary)', strokeWidth: 0, r: 3 }}
+                dot={{ fill: serie(1), strokeWidth: 0, r: 3 }}
                 activeDot={{ r: 5 }}
               />
             </ComposedChart>
@@ -191,11 +180,11 @@ export function HourlyConversionChart({ leads }: HourlyConversionChartProps) {
 
         <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(222, 26, 17, 0.6)' }} />
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: serie(0) }} />
             <span>Volume de Leads</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-primary" />
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: serie(1) }} />
             <span>Taxa Hot</span>
           </div>
         </div>

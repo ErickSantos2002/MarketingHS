@@ -50,4 +50,22 @@
   body {
     @apply bg-background text-foreground antialiased font-sans;
   }
+
+  /* Gráfico: as séries precisam ser distinguíveis ENTRE SI, o que é um
+     problema diferente do contraste de texto. O Design System oficial não
+     tem paleta de gráfico; estas seis saem da rampa da marca e das
+     semânticas, e o escuro troca as que somem no navy. */
+  :root {
+    --grafico-1: var(--color-primary-500);
+    --grafico-2: var(--color-warning-500);
+    --grafico-3: var(--color-success-500);
+    --grafico-4: var(--color-danger-500);
+    --grafico-5: var(--color-primary-800);
+    --grafico-6: var(--color-slate-400);
+  }
+  .dark {
+    --grafico-1: var(--color-primary-400);
+    --grafico-5: var(--color-primary-200);
+    --grafico-6: var(--color-slate-500);
+  }
 }

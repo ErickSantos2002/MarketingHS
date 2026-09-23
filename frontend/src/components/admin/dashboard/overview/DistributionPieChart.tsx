@@ -1,20 +1,11 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { PieChartIcon } from 'lucide-react';
+import { tooltip, legenda, serie } from '@/lib/chartTheme';
 
 interface DistributionPieChartProps {
   data: { tipo: string; count: number; percentage: number }[];
   title?: string;
 }
-
-const COLORS = [
-  'var(--color-info-500)',              // dn.ia Red
-  'var(--primary)',              // dn.ia Blue
-  'hsl(142, 76%, 36%)',   // Green
-  '#ffffff',              // White
-  'hsl(280, 87%, 65%)',   // Purple
-  'hsl(47, 100%, 50%)',   // Yellow
-  'hsl(180, 70%, 45%)',   // Cyan
-];
 
 export function DistributionPieChart({ data, title = "Distribuição por Modal" }: DistributionPieChartProps) {
   if (data.length === 0) {
@@ -57,30 +48,26 @@ export function DistributionPieChart({ data, title = "Distribuição por Modal" 
               {data.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={COLORS[index % COLORS.length]}
+                  fill={serie(index)}
                   style={{
-                    filter: 'drop-shadow(0 0 8px rgba(222, 26, 17, 0.3))',
+                    filter: `drop-shadow(0 0 8px ${serie(index)})`,
                   }}
                 />
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{
-                backgroundColor: 'hsl(0, 0%, 10%)',
-                border: '1px solid hsl(0, 0%, 20%)',
-                borderRadius: '8px',
-                boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
-              }}
+              {...tooltip}
               formatter={(value: number, name: string) => [
                 `${value.toLocaleString('pt-BR')} (${((value / total) * 100).toFixed(1)}%)`,
                 name,
               ]}
             />
             <Legend
+              {...legenda}
               verticalAlign="bottom"
               height={36}
               formatter={(value) => (
-                <span style={{ color: 'hsl(0, 0%, 80%)', fontSize: '12px' }}>{value}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{value}</span>
               )}
             />
             {/* Center label */}
@@ -89,7 +76,7 @@ export function DistributionPieChart({ data, title = "Distribuição por Modal" 
               y="50%"
               textAnchor="middle"
               dominantBaseline="middle"
-              fill="hsl(0, 0%, 100%)"
+              fill="var(--text-heading)"
               fontSize={24}
               fontWeight="bold"
             >

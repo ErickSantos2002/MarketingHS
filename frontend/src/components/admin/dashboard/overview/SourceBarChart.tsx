@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { BarChart3 } from 'lucide-react';
+import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
 interface SourceBarChartProps {
   data: { source: string; count: number; percentage: number }[];
@@ -35,37 +36,25 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
           <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="sourceBarGradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="var(--color-info-500)" />
-                <stop offset="100%" stopColor="var(--primary)" />
+                <stop offset="0%" stopColor={serie(0)} stopOpacity={1} />
+                <stop offset="100%" stopColor={serie(0)} stopOpacity={0.7} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 20%)" horizontal={false} />
+            <CartesianGrid {...grade} horizontal={false} />
             <XAxis
               type="number"
-              stroke="hsl(0, 0%, 50%)"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
+              {...eixo}
             />
             <YAxis
               dataKey="source"
               type="category"
-              stroke="hsl(0, 0%, 50%)"
-              fontSize={11}
-              tickLine={false}
-              axisLine={false}
               width={100}
               tickFormatter={(value) => value.length > 15 ? `${value.slice(0, 15)}...` : value}
+              {...eixo}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: 'hsl(0, 0%, 10%)',
-                border: '1px solid hsl(0, 0%, 20%)',
-                borderRadius: '8px',
-                boxShadow: '0 10px 40px -10px rgba(222, 26, 17, 0.3)',
-              }}
+              {...tooltip}
               formatter={(value: number) => [value.toLocaleString('pt-BR'), 'Leads']}
-              cursor={{ fill: 'hsl(0, 0%, 15%)' }}
             />
             <Bar
               dataKey="count"
@@ -77,7 +66,7 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
                 <Cell
                   key={`cell-${index}`}
                   style={{
-                    filter: 'drop-shadow(0 0 6px rgba(222, 26, 17, 0.2))',
+                    filter: `drop-shadow(0 0 6px ${serie(0)})`,
                   }}
                 />
               ))}

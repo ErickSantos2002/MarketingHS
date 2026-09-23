@@ -2,21 +2,25 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Lightbulb, Cpu, BookOpen, Wrench, Database, Zap, Target, Users, HelpCircle } from 'lucide-react';
+import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
 interface ChallengeThemesChartProps {
   data: Array<{ theme: string; count: number; percentage: number }>;
 }
 
+// 9 temas contra 6 cores de série: acima do índice 5 a cor se repete
+// (serie(6)=serie(0), serie(7)=serie(1), serie(8)=serie(2)) — três pares
+// de temas ficam com a mesma cor. Ver relatório da Tarefa 6.
 const THEME_CONFIG: Record<string, { color: string; icon: React.ComponentType<{ className?: string }> }> = {
-  'IA/Automação': { color: 'var(--color-info-500)', icon: Cpu },         // Vermelho (tema CORE)
-  'Conhecimento': { color: 'var(--primary)', icon: BookOpen },     // Azul (tema principal)
-  'Ferramentas': { color: '#e63946', icon: Wrench },        // Vermelho suave
-  'Dados': { color: '#5a7fff', icon: Database },            // Azul suave
-  'Execução': { color: '#c1121f', icon: Zap },              // Vermelho escuro
-  'Produtividade': { color: '#4d6bfe', icon: Target },      // Azul médio
-  'Estratégia': { color: '#8B5CF6', icon: Lightbulb },      // Roxo (blend)
-  'Equipe': { color: '#a855f7', icon: Users },              // Roxo claro
-  'Outros': { color: '#6B7280', icon: HelpCircle },
+  'IA/Automação': { color: serie(0), icon: Cpu },
+  'Conhecimento': { color: serie(1), icon: BookOpen },
+  'Ferramentas': { color: serie(2), icon: Wrench },
+  'Dados': { color: serie(3), icon: Database },
+  'Execução': { color: serie(4), icon: Zap },
+  'Produtividade': { color: serie(5), icon: Target },
+  'Estratégia': { color: serie(6), icon: Lightbulb },
+  'Equipe': { color: serie(7), icon: Users },
+  'Outros': { color: serie(8), icon: HelpCircle },
 };
 
 const CustomTooltip = ({ active, payload }: any) => {
@@ -38,7 +42,7 @@ export function ChallengeThemesChart({ data }: ChallengeThemesChartProps) {
   const chartData = useMemo(() => {
     return data.map((item) => ({
       ...item,
-      color: THEME_CONFIG[item.theme]?.color || '#6B7280',
+      color: THEME_CONFIG[item.theme]?.color || serie(9),
     }));
   }, [data]);
 
@@ -64,17 +68,15 @@ export function ChallengeThemesChart({ data }: ChallengeThemesChartProps) {
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} horizontal={false} />
-              <XAxis type="number" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis 
-                dataKey="theme" 
-                type="category" 
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} 
-                axisLine={false} 
-                tickLine={false}
+              <CartesianGrid {...grade} horizontal={false} />
+              <XAxis type="number" {...eixo} />
+              <YAxis
+                dataKey="theme"
+                type="category"
                 width={90}
+                {...eixo}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
               <Bar dataKey="count" radius={[0, 8, 8, 0]} maxBarSize={28}>
                 {chartData.map((entry, index) => (
                   <Cell 

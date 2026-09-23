@@ -2,12 +2,11 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { DollarSign } from 'lucide-react';
+import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
 interface RevenueDistributionProps {
   data: Array<{ faturamento: string; count: number; percentage: number }>;
 }
-
-const COLORS = ['#10B981', '#34D399', '#6EE7B7', '#A7F3D0', '#D1FAE5', '#ECFDF5', '#F0FDF4'];
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -16,7 +15,7 @@ const CustomTooltip = ({ active, payload }: any) => {
       <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-xl px-4 py-3 shadow-xl">
         <p className="text-sm font-medium text-foreground">{data.faturamento}</p>
         <p className="text-sm text-muted-foreground mt-1">
-          <span className="text-emerald-400 font-semibold">{data.count}</span> leads ({data.percentage.toFixed(1)}%)
+          <span className="font-semibold" style={{ color: data.color }}>{data.count}</span> leads ({data.percentage.toFixed(1)}%)
         </p>
       </div>
     );
@@ -26,7 +25,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 
 export function RevenueDistribution({ data }: RevenueDistributionProps) {
   const chartData = useMemo(() => {
-    return data.map((item) => ({
+    return data.map((item, index) => ({
       ...item,
       shortLabel: item.faturamento
         .replace('De R$ ', 'R$')
@@ -36,15 +35,16 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
         .replace(' milhões', 'M')
         .replace(' milhão', 'M')
         .replace(' mil', 'K'),
+      color: serie(index),
     }));
   }, [data]);
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-emerald-950/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="bg-gradient-to-br from-card via-card to-primary/10 border-border/50 shadow-lg overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-emerald-500/20">
-            <DollarSign className="h-5 w-5 text-emerald-400" />
+          <div className="p-2 rounded-lg bg-primary/20">
+            <DollarSign className="h-5 w-5 text-primary" />
           </div>
           Distribuição por Faturamento
         </CardTitle>
@@ -55,28 +55,26 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
             <BarChart data={chartData} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 10 }}>
               <defs>
                 <linearGradient id="revenueGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#10B981" stopOpacity={0.8} />
-                  <stop offset="100%" stopColor="#34D399" stopOpacity={0.9} />
+                  <stop offset="0%" stopColor={serie(0)} stopOpacity={0.8} />
+                  <stop offset="100%" stopColor={serie(0)} stopOpacity={0.9} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} horizontal={false} />
-              <XAxis type="number" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis 
-                dataKey="shortLabel" 
-                type="category" 
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} 
-                axisLine={false} 
-                tickLine={false}
+              <CartesianGrid {...grade} horizontal={false} />
+              <XAxis type="number" {...eixo} />
+              <YAxis
+                dataKey="shortLabel"
+                type="category"
                 width={70}
+                {...eixo}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-info-500)', opacity: 0.1 }} />
-              <Bar 
-                dataKey="count" 
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
+              <Bar
+                dataKey="count"
                 radius={[0, 6, 6, 0]}
                 maxBarSize={24}
               >
-                {chartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Bar>
             </BarChart>

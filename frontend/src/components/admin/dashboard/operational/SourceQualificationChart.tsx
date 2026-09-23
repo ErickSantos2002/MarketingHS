@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { eixo, grade, tooltip, legenda, serie } from '@/lib/chartTheme';
 
 interface SourcePerformance {
   source: string;
@@ -36,9 +37,9 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
         <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-xl">
           <p className="font-medium text-foreground mb-2">{data.fullName}</p>
           <div className="space-y-1 text-sm">
-            <p className="text-emerald-400">Hot: {data.Hot} ({((data.Hot / data.total) * 100).toFixed(1)}%)</p>
-            <p className="text-yellow-400">Warm: {data.Warm} ({((data.Warm / data.total) * 100).toFixed(1)}%)</p>
-            <p className="text-zinc-400">Raw: {data.Raw} ({((data.Raw / data.total) * 100).toFixed(1)}%)</p>
+            <p style={{ color: serie(0) }}>Hot: {data.Hot} ({((data.Hot / data.total) * 100).toFixed(1)}%)</p>
+            <p style={{ color: serie(1) }}>Warm: {data.Warm} ({((data.Warm / data.total) * 100).toFixed(1)}%)</p>
+            <p style={{ color: serie(2) }}>Raw: {data.Raw} ({((data.Raw / data.total) * 100).toFixed(1)}%)</p>
             <p className="text-muted-foreground mt-2 pt-2 border-t border-border">Total: {data.total}</p>
           </div>
         </div>
@@ -56,30 +57,27 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                axisLine={{ stroke: 'var(--border)' }}
-                tickLine={{ stroke: 'var(--border)' }}
+              <CartesianGrid {...grade} />
+              <XAxis
+                dataKey="name"
                 interval={0}
                 angle={-20}
                 textAnchor="end"
                 height={50}
+                {...eixo}
               />
-              <YAxis 
-                tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                axisLine={{ stroke: 'var(--border)' }}
-                tickLine={{ stroke: 'var(--border)' }}
+              <YAxis
+                {...eixo}
               />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend 
-                wrapperStyle={{ paddingTop: '10px' }}
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
+              <Legend
+                {...legenda}
+                wrapperStyle={{ ...legenda.wrapperStyle, paddingTop: '10px' }}
                 formatter={(value) => <span className="text-xs text-muted-foreground">{value}</span>}
               />
-              <Bar dataKey="Hot" stackId="a" fill="hsl(142, 71%, 45%)" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="Warm" stackId="a" fill="hsl(48, 96%, 53%)" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="Raw" stackId="a" fill="hsl(240, 5%, 65%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Hot" stackId="a" fill={serie(0)} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Warm" stackId="a" fill={serie(1)} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Raw" stackId="a" fill={serie(2)} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

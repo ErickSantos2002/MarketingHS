@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { tooltip, legenda, serie } from '@/lib/chartTheme';
 
 interface MediumPerformance {
   medium: string;
@@ -12,17 +13,6 @@ interface MediumDistributionChartProps {
   data: MediumPerformance[];
 }
 
-const COLORS = [
-  'var(--color-info-500)',            // dn.ia red
-  'var(--primary)',            // dn.ia blue
-  'hsl(142, 71%, 45%)', // emerald
-  'hsl(48, 96%, 53%)',  // yellow
-  'hsl(280, 65%, 60%)', // purple
-  'hsl(180, 60%, 50%)', // cyan
-  'hsl(340, 75%, 55%)', // pink
-  'hsl(240, 5%, 65%)',  // gray
-];
-
 export function MediumDistributionChart({ data }: MediumDistributionChartProps) {
   // Filter and prepare data
   const chartData = data
@@ -32,7 +22,7 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
       value: item.total,
       hot: item.hot,
       hotRate: item.hotRate,
-      color: COLORS[index % COLORS.length],
+      color: serie(index),
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
@@ -45,7 +35,7 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
           <p className="font-medium text-foreground mb-1">{data.name}</p>
           <div className="text-sm space-y-0.5">
             <p className="text-muted-foreground">Total: {data.value}</p>
-            <p className="text-emerald-400">Hot: {data.hot} ({data.hotRate.toFixed(1)}%)</p>
+            <p style={{ color: serie(1) }}>Hot: {data.hot} ({data.hotRate.toFixed(1)}%)</p>
           </div>
         </div>
       );
@@ -75,7 +65,7 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
                 label={renderCustomLabel}
                 outerRadius={80}
                 innerRadius={40}
-                fill="#8884d8"
+                fill={serie(0)}
                 dataKey="value"
                 stroke="var(--background)"
                 strokeWidth={2}
@@ -84,8 +74,9 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
               <Legend
+                {...legenda}
                 layout="vertical"
                 align="right"
                 verticalAlign="middle"

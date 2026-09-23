@@ -5,6 +5,7 @@ import { Area, AreaChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer } fro
 import { format, subDays, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Lead } from '@/hooks/useLeads';
+import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
 interface LeadsChartProps {
   leads: Lead[];
@@ -13,7 +14,7 @@ interface LeadsChartProps {
 const chartConfig = {
   leads: {
     label: "Leads",
-    color: "hsl(25, 95%, 53%)", // Orange color like the reference
+    color: serie(0),
   },
 };
 
@@ -72,40 +73,32 @@ export function LeadsChart({ leads }: LeadsChartProps) {
           >
             <defs>
               <linearGradient id="fillLeads" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(25, 95%, 53%)" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="hsl(25, 95%, 53%)" stopOpacity={0.1} />
+                <stop offset="5%" stopColor={serie(0)} stopOpacity={0.8} />
+                <stop offset="95%" stopColor={serie(0)} stopOpacity={0.1} />
               </linearGradient>
             </defs>
-            <CartesianGrid 
-              strokeDasharray="3 3" 
-              vertical={true} 
-              stroke="var(--border)" 
-              opacity={0.3}
+            <CartesianGrid
+              {...grade}
+              vertical={true}
             />
             <XAxis
               dataKey="displayDate"
-              tickLine={false}
-              axisLine={false}
               tickMargin={8}
-              fontSize={12}
-              stroke="var(--muted-foreground)"
+              {...eixo}
             />
             <YAxis
-              tickLine={false}
-              axisLine={false}
               tickMargin={8}
-              fontSize={12}
-              stroke="var(--muted-foreground)"
               allowDecimals={false}
+              {...eixo}
             />
             <ChartTooltip
-              cursor={{ stroke: 'var(--muted-foreground)', strokeWidth: 1 }}
+              {...tooltip}
               content={<ChartTooltipContent indicator="line" />}
             />
             <Area
               type="monotone"
               dataKey="leads"
-              stroke="hsl(25, 95%, 53%)"
+              stroke={serie(0)}
               strokeWidth={2}
               fill="url(#fillLeads)"
               name="Leads"

@@ -2,15 +2,15 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Building2 } from 'lucide-react';
+import { tooltip, legenda, serie } from '@/lib/chartTheme';
 
 interface SectorDistributionProps {
   data: Array<{ sector: string; count: number; percentage: number }>;
 }
 
-const COLORS = [
-  'var(--color-info-500)', 'var(--primary)', '#10B981', '#F7C94B', '#8B5CF6', 
-  '#EC4899', '#F59E0B', '#06B6D4', '#84CC16', '#6B7280'
-];
+// Até 9 setores (8 + "Outros") contra 6 cores de série: do índice 6 em
+// diante a cor se repete (serie(6)=serie(0) etc.). Ver relatório da Tarefa 6.
+const COLORS = Array.from({ length: 10 }, (_, index) => serie(index));
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -89,10 +89,11 @@ export function SectorDistribution({ data }: SectorDistributionProps) {
                   />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend 
-                layout="vertical" 
-                align="right" 
+              <Tooltip {...tooltip} content={<CustomTooltip />} />
+              <Legend
+                {...legenda}
+                layout="vertical"
+                align="right"
                 verticalAlign="middle"
                 iconType="circle"
                 iconSize={8}
