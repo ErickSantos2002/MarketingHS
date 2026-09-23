@@ -119,8 +119,9 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
         onClick={() => handleNav(item)}
         disabled={item.disabled}
         className={cn(
-          'group relative flex w-full items-center gap-3 rounded-lg border-l-2 border-transparent px-3 py-2 text-sm font-medium text-conteudo-muted transition-colors hover:bg-surface-elevated',
+          'group relative flex w-full items-center gap-3 rounded-lg border-l-2 border-transparent px-3 py-2 text-sm font-medium text-conteudo-muted transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          !item.disabled && 'hover:bg-surface-elevated',
           active && !item.disabled && 'border-action bg-action-tint text-action',
           item.disabled && 'cursor-not-allowed opacity-50',
           collapsed && 'justify-center border-l-0 py-2.5',
@@ -221,7 +222,7 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
           </div>
         ))}
 
-        <div className="my-3 border-t border-border/30" />
+        <div className="my-3 border-t border-border" />
 
         {!collapsed && (
           <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-conteudo-faint">
@@ -232,15 +233,14 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
       </nav>
 
       {/* Rodapé — e-mail do usuário e Sair mudaram para a topbar. Recolhido,
-          o texto não cabe em 72px; some junto com os rótulos de grupo. */}
-      <div className="border-t border-border px-5 py-4 text-center">
-        {!collapsed && (
-          <>
-            <p className="truncate text-xs font-medium text-conteudo-muted">MarketingHS</p>
-            <p className="truncate text-[11px] text-conteudo-faint">© 2026 Health &amp; Safety Tech</p>
-          </>
-        )}
-      </div>
+          o texto não cabe em 72px; some junto com os rótulos de grupo (e a
+          faixa com borda some junto, não fica vazia). */}
+      {!collapsed && (
+        <div className="border-t border-border px-5 py-4 text-center">
+          <p className="truncate text-xs font-medium text-conteudo-muted">MarketingHS</p>
+          <p className="truncate text-[11px] text-conteudo-faint">© 2026 Health &amp; Safety Tech</p>
+        </div>
+      )}
     </div>
   );
 
@@ -249,7 +249,7 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
       {/* Menu do celular — controlado pela topbar (AdminLayout) */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="fixed inset-0 bg-black/60" onClick={() => onMobileOpenChange(false)} />
+          <div className="fixed inset-0 bg-[--overlay]" onClick={() => onMobileOpenChange(false)} />
           <div className="relative z-10 h-full">
             <Button
               variant="ghost"

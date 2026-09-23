@@ -144,7 +144,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         className={cn(
           'max-w-[85%] rounded-xl px-3 py-2 text-sm',
           isUser
-            ? 'bg-gradient-to-r from-primary to-info text-white'
+            ? 'bg-action text-primary-foreground'
             : 'bg-muted text-foreground'
         )}
       >

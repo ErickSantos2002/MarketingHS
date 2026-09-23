@@ -65,8 +65,10 @@ function AdminLayoutInner() {
     <div className="flex min-h-screen bg-background">
       <AdminSidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar */}
-        <div className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
+        {/* Topbar — sticky: sem isso, Sair e o menu do celular rolam para
+            fora da tela em listas longas (antes, os dois eram sempre
+            visíveis: o rodapé da sidebar era sticky e o hambúrguer, fixed). */}
+        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
