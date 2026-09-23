@@ -1,6 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
-import { eixo, grade, tooltip, legenda, serie } from '@/lib/chartTheme';
+import { eixo, grade, tooltip, legenda } from '@/lib/chartTheme';
+
+// Hot/Warm/Raw é status de qualificação do lead (getQualificationColor em
+// useLeadQualification.tsx), não série arbitrária — a cor tem de bater com
+// o resto do app: verde/amarelo/neutro, nessa ordem, sempre.
+const COR_HOT = 'var(--color-success-500)';
+const COR_WARM = 'var(--color-warning-500)';
+const COR_RAW = 'var(--color-slate-400)';
 
 interface SourcePerformance {
   source: string;
@@ -37,9 +44,9 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
         <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-xl">
           <p className="font-medium text-foreground mb-2">{data.fullName}</p>
           <div className="space-y-1 text-sm">
-            <p style={{ color: serie(0) }}>Hot: {data.Hot} ({((data.Hot / data.total) * 100).toFixed(1)}%)</p>
-            <p style={{ color: serie(1) }}>Warm: {data.Warm} ({((data.Warm / data.total) * 100).toFixed(1)}%)</p>
-            <p style={{ color: serie(2) }}>Raw: {data.Raw} ({((data.Raw / data.total) * 100).toFixed(1)}%)</p>
+            <p style={{ color: COR_HOT }}>Hot: {data.Hot} ({((data.Hot / data.total) * 100).toFixed(1)}%)</p>
+            <p style={{ color: COR_WARM }}>Warm: {data.Warm} ({((data.Warm / data.total) * 100).toFixed(1)}%)</p>
+            <p style={{ color: COR_RAW }}>Raw: {data.Raw} ({((data.Raw / data.total) * 100).toFixed(1)}%)</p>
             <p className="text-muted-foreground mt-2 pt-2 border-t border-border">Total: {data.total}</p>
           </div>
         </div>
@@ -75,9 +82,9 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
                 wrapperStyle={{ ...legenda.wrapperStyle, paddingTop: '10px' }}
                 formatter={(value) => <span className="text-xs text-muted-foreground">{value}</span>}
               />
-              <Bar dataKey="Hot" stackId="a" fill={serie(0)} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="Warm" stackId="a" fill={serie(1)} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="Raw" stackId="a" fill={serie(2)} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Hot" stackId="a" fill={COR_HOT} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Warm" stackId="a" fill={COR_WARM} radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Raw" stackId="a" fill={COR_RAW} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

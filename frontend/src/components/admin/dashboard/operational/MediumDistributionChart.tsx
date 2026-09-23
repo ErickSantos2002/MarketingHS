@@ -35,7 +35,7 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
           <p className="font-medium text-foreground mb-1">{data.name}</p>
           <div className="text-sm space-y-0.5">
             <p className="text-muted-foreground">Total: {data.value}</p>
-            <p style={{ color: serie(1) }}>Hot: {data.hot} ({data.hotRate.toFixed(1)}%)</p>
+            <p style={{ color: 'var(--color-success-500)' }}>Hot: {data.hot} ({data.hotRate.toFixed(1)}%)</p>
           </div>
         </div>
       );

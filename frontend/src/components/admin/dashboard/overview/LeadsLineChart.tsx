@@ -256,10 +256,13 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                       strokeWidth: 2,
                     }}
                   />
+                  {/* "Hot" é status de qualificação do lead (getQualificationColor em
+                      useLeadQualification.tsx), não série arbitrária — fica sempre
+                      verde, igual às badges do resto do app. */}
                   <Bar
                     yAxisId="left"
                     dataKey="hotCount"
-                    fill={serie(1)}
+                    fill="var(--color-success-500)"
                     fillOpacity={0.4}
                     radius={[4, 4, 0, 0]}
                   />
@@ -267,10 +270,10 @@ export function LeadsLineChart({ data, conversionData = [], allConversionData = 
                     yAxisId="right"
                     type="monotone"
                     dataKey="hotRate"
-                    stroke={serie(1)}
+                    stroke="var(--color-success-500)"
                     strokeWidth={2}
-                    dot={{ fill: serie(1), r: 3 }}
-                    activeDot={{ r: 5, fill: serie(1), stroke: 'var(--background)', strokeWidth: 2 }}
+                    dot={{ fill: 'var(--color-success-500)', r: 3 }}
+                    activeDot={{ r: 5, fill: 'var(--color-success-500)', stroke: 'var(--background)', strokeWidth: 2 }}
                   />
                 </ComposedChart>
               ) : (
