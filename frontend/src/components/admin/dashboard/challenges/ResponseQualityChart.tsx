@@ -79,10 +79,10 @@ export function ResponseQualityChart({ quality }: ResponseQualityChartProps) {
   };
 
   return (
-    <Card className="bg-gradient-to-br from-background to-muted/30 border-border/50">
+    <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+          <span className="text-conteudo-heading">
             Distribuição de Qualidade
           </span>
         </CardTitle>

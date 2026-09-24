@@ -2,21 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TagCloud } from 'react-tagcloud';
 import { Cloud } from 'lucide-react';
 import { useMemo } from 'react';
+import { serie } from '@/lib/chartTheme';
 
 interface WordCloudChartProps {
   data: Array<{ keyword: string; count: number }>;
 }
-
-// Color palette based on design tokens
-const colors = [
-  'hsl(262, 83%, 58%)', // violet-500
-  'hsl(263, 70%, 50%)', // violet-600
-  'hsl(250, 95%, 64%)', // indigo-500
-  'hsl(217, 91%, 60%)', // blue-500
-  'hsl(199, 89%, 48%)', // cyan-500
-  'hsl(280, 87%, 65%)', // purple-500
-  'hsl(292, 91%, 73%)', // fuchsia-400
-];
 
 export function WordCloudChart({ data }: WordCloudChartProps) {
   const cloudData = useMemo(() => {
@@ -24,7 +14,7 @@ export function WordCloudChart({ data }: WordCloudChartProps) {
       value: item.keyword,
       count: item.count,
       key: `${item.keyword}-${index}`,
-      color: colors[index % colors.length],
+      color: serie(index),
     }));
   }, [data]);
 
@@ -54,11 +44,11 @@ export function WordCloudChart({ data }: WordCloudChartProps) {
 
   if (!data.length) {
     return (
-      <Card className="bg-gradient-to-br from-card via-card to-violet-950/10 border-border/50 shadow-lg">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <div className="p-2 rounded-lg bg-violet-500/20">
-              <Cloud className="h-5 w-5 text-violet-400" />
+            <div className="p-2 rounded-lg bg-[--tint-primary]">
+              <Cloud className="h-5 w-5 text-primary" />
             </div>
             Nuvem de Palavras
           </CardTitle>
@@ -73,11 +63,11 @@ export function WordCloudChart({ data }: WordCloudChartProps) {
   }
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-violet-950/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-violet-500/20">
-            <Cloud className="h-5 w-5 text-violet-400" />
+          <div className="p-2 rounded-lg bg-[--tint-primary]">
+            <Cloud className="h-5 w-5 text-primary" />
           </div>
           Nuvem de Palavras
         </CardTitle>

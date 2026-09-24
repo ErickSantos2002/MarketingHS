@@ -15,8 +15,8 @@ export function ResponseQualityFunnel({ quality, onStageClick }: ResponseQuality
       count: quality.total,
       percentage: 100,
       icon: Users,
-      color: 'from-slate-500 to-slate-400',
-      bgColor: 'bg-slate-500/10',
+      color: 'bg-conteudo-faint',
+      bgColor: 'bg-[--tint-neutral]',
     },
     {
       id: 'withResponse' as const,
@@ -24,8 +24,8 @@ export function ResponseQualityFunnel({ quality, onStageClick }: ResponseQuality
       count: quality.withResponse,
       percentage: quality.responseRate,
       icon: MessageSquare,
-      color: 'from-blue-500 to-blue-400',
-      bgColor: 'bg-blue-500/10',
+      color: 'bg-info',
+      bgColor: 'bg-[--tint-info]',
     },
     {
       id: 'aproveitaveis' as const,
@@ -33,8 +33,8 @@ export function ResponseQualityFunnel({ quality, onStageClick }: ResponseQuality
       count: quality.highQuality + quality.mediumQuality,
       percentage: quality.approvalRate,
       icon: CheckCircle,
-      color: 'from-emerald-500 to-emerald-400',
-      bgColor: 'bg-emerald-500/10',
+      color: 'bg-success',
+      bgColor: 'bg-[--tint-success]',
     },
     {
       id: 'highQuality' as const,
@@ -42,16 +42,16 @@ export function ResponseQualityFunnel({ quality, onStageClick }: ResponseQuality
       count: quality.highQuality,
       percentage: quality.highQualityRate,
       icon: Award,
-      color: 'from-amber-500 to-yellow-400',
-      bgColor: 'bg-amber-500/10',
+      color: 'bg-warning',
+      bgColor: 'bg-[--tint-warning]',
     },
   ];
 
   return (
-    <Card className="bg-gradient-to-br from-background to-muted/30 border-border/50">
+    <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+          <span className="text-conteudo-heading">
             Funil de Qualidade
           </span>
         </CardTitle>
@@ -81,8 +81,8 @@ export function ResponseQualityFunnel({ quality, onStageClick }: ResponseQuality
                   </div>
                 </div>
                 <div className="mt-2 h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full bg-gradient-to-r ${stage.color} transition-all duration-500`}
+                  <div
+                    className={`h-full ${stage.color} transition-all duration-500`}
                     style={{ width: `${stage.percentage}%` }}
                   />
                 </div>
@@ -102,23 +102,23 @@ export function ResponseQualityFunnel({ quality, onStageClick }: ResponseQuality
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
               <div className="text-xs text-muted-foreground">Resposta → Aproveitável</div>
-              <div className="text-sm font-semibold text-blue-500">
-                {quality.withResponse > 0 
-                  ? (((quality.highQuality + quality.mediumQuality) / quality.withResponse) * 100).toFixed(1) 
+              <div className="text-sm font-semibold text-[--on-tint-info]">
+                {quality.withResponse > 0
+                  ? (((quality.highQuality + quality.mediumQuality) / quality.withResponse) * 100).toFixed(1)
                   : 0}%
               </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Aproveitável → Alta Qual.</div>
-              <div className="text-sm font-semibold text-emerald-500">
-                {(quality.highQuality + quality.mediumQuality) > 0 
-                  ? ((quality.highQuality / (quality.highQuality + quality.mediumQuality)) * 100).toFixed(1) 
+              <div className="text-sm font-semibold text-[--on-tint-success]">
+                {(quality.highQuality + quality.mediumQuality) > 0
+                  ? ((quality.highQuality / (quality.highQuality + quality.mediumQuality)) * 100).toFixed(1)
                   : 0}%
               </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Total → Alta Qual.</div>
-              <div className="text-sm font-semibold text-amber-500">
+              <div className="text-sm font-semibold text-[--on-tint-warning]">
                 {quality.highQualityRate.toFixed(1)}%
               </div>
             </div>

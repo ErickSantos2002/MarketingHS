@@ -16,32 +16,36 @@ export function TopResponsesCard({ topResponses }: TopResponsesCardProps) {
   
   const displayedResponses = showAll ? topResponses : topResponses.slice(0, 5);
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500/10 text-green-500 border-green-500/20';
-    if (score >= 60) return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-    return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+  const getScoreVariant = (score: number): 'success' | 'info' | 'warning' => {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'info';
+    return 'warning';
   };
 
-  const getThemeColor = (theme: string) => {
-    const colors: Record<string, string> = {
-      'IA/Automação': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-      'Conhecimento': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      'Ferramentas': 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-      'Dados': 'bg-green-500/10 text-green-400 border-green-500/20',
-      'Execução': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-      'Produtividade': 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-      'Estratégia': 'bg-red-500/10 text-red-400 border-red-500/20',
-      'Equipe': 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+  // Cor de categoria sem limiar (o tema não é bom/ruim, só identifica o
+  // assunto) — traduzida pelo matiz de origem via a tabela de tradução.
+  // Conhecimento/Ferramentas dividem info; Execução/Produtividade dividem
+  // warning; IA/Automação/Equipe dividem primary. Ver relatório da Tarefa 6.
+  const getThemeVariant = (theme: string): 'default' | 'info' | 'success' | 'warning' | 'destructive' | 'secondary' => {
+    const variants: Record<string, 'default' | 'info' | 'success' | 'warning' | 'destructive'> = {
+      'IA/Automação': 'default',
+      'Conhecimento': 'info',
+      'Ferramentas': 'info',
+      'Dados': 'success',
+      'Execução': 'warning',
+      'Produtividade': 'warning',
+      'Estratégia': 'destructive',
+      'Equipe': 'default',
     };
-    return colors[theme] || 'bg-muted text-muted-foreground border-border';
+    return variants[theme] || 'secondary';
   };
 
   return (
-    <Card className="bg-gradient-to-br from-background to-muted/30 border-border/50">
+    <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <Award className="h-5 w-5 text-amber-500" />
-          <span className="bg-gradient-to-r from-amber-500 to-yellow-400 bg-clip-text text-transparent">
+          <Award className="h-5 w-5 text-warning" />
+          <span className="text-conteudo-heading">
             Top Respostas de Alta Qualidade
           </span>
           <Badge variant="secondary" className="ml-2">
@@ -63,7 +67,7 @@ export function TopResponsesCard({ topResponses }: TopResponsesCardProps) {
                   className="group relative bg-muted/30 rounded-lg p-4 border border-border/50 hover:border-primary/30 transition-all duration-300"
                 >
                   {/* Rank badge */}
-                  <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 flex items-center justify-center text-xs font-bold text-white shadow-lg">
+                  <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-warning flex items-center justify-center text-xs font-bold text-primary-foreground">
                     {index + 1}
                   </div>
                   
@@ -89,7 +93,7 @@ export function TopResponsesCard({ topResponses }: TopResponsesCardProps) {
                           </>
                         )}
                         {item.lead.faturamento && (
-                          <span className="text-emerald-500/80">
+                          <span className="text-[--on-tint-success]">
                             • {item.lead.faturamento}
                           </span>
                         )}
@@ -97,22 +101,22 @@ export function TopResponsesCard({ topResponses }: TopResponsesCardProps) {
                     </div>
                     
                     {/* Score */}
-                    <Badge 
-                      variant="outline" 
-                      className={`${getScoreColor(item.score)} font-bold`}
+                    <Badge
+                      variant={getScoreVariant(item.score)}
+                      className="font-bold"
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
                       {item.score}
                     </Badge>
                   </div>
-                  
+
                   {/* Themes */}
                   <div className="flex flex-wrap gap-1.5 mb-3 ml-4">
                     {item.themes.filter(t => t !== 'Outros').map((theme) => (
                       <Badge
                         key={theme}
-                        variant="outline"
-                        className={`text-xs ${getThemeColor(theme)}`}
+                        variant={getThemeVariant(theme)}
+                        className="text-xs"
                       >
                         {theme}
                       </Badge>

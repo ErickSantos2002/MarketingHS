@@ -171,15 +171,15 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
   };
 
   const sections = [
-    { id: 'patterns', label: 'Padrões Identificados', icon: Target, color: 'text-blue-500', data: insights?.patterns },
-    { id: 'copy', label: 'Sugestões de Copy', icon: FileText, color: 'text-purple-500', data: insights?.copyRecommendations },
-    { id: 'content', label: 'Recomendações de Conteúdo', icon: Lightbulb, color: 'text-yellow-500', data: insights?.contentSuggestions },
-    { id: 'opportunities', label: 'Oportunidades', icon: Target, color: 'text-green-500', data: insights?.opportunities },
+    { id: 'patterns', label: 'Padrões Identificados', icon: Target, color: 'text-info', data: insights?.patterns },
+    { id: 'copy', label: 'Sugestões de Copy', icon: FileText, color: 'text-primary', data: insights?.copyRecommendations },
+    { id: 'content', label: 'Recomendações de Conteúdo', icon: Lightbulb, color: 'text-warning', data: insights?.contentSuggestions },
+    { id: 'opportunities', label: 'Oportunidades', icon: Target, color: 'text-success', data: insights?.opportunities },
   ];
 
   if (isLoadingHistory) {
     return (
-      <Card className="bg-gradient-to-br from-background to-muted/30 border-border/50">
+      <Card>
         <CardContent className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </CardContent>
@@ -188,13 +188,13 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
   }
 
   return (
-    <Card className="bg-gradient-to-br from-background to-muted/30 border-border/50">
+    <Card>
       <CardHeader>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              <span className="text-conteudo-heading">
                 Insights com IA
               </span>
             </CardTitle>
@@ -256,7 +256,7 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                     key={stored.id}
                     className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                       stored.id === currentInsightId
-                        ? 'bg-primary/10 border-primary'
+                        ? 'bg-[--tint-primary] border-primary/30'
                         : 'bg-background hover:bg-muted/50'
                     }`}
                   >
@@ -385,22 +385,22 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
 
             {/* Gems section - special highlight */}
             {insights.gems && insights.gems.length > 0 && (
-              <div className="border border-amber-500/30 rounded-lg overflow-hidden bg-amber-500/5">
+              <div className="border border-warning/30 rounded-lg overflow-hidden bg-[--tint-warning]">
                 <button
                   onClick={() => setExpandedSection(expandedSection === 'gems' ? null : 'gems')}
-                  className="w-full flex items-center justify-between p-4 hover:bg-amber-500/10 transition-colors"
+                  className="w-full flex items-center justify-between p-4 hover:bg-[--tint-warning] transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <Gem className="h-4 w-4 text-amber-500" />
-                    <span className="font-medium text-amber-500">Respostas Destaque</span>
-                    <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-xs">
+                    <Gem className="h-4 w-4 text-warning" />
+                    <span className="font-medium text-[--on-tint-warning]">Respostas Destaque</span>
+                    <Badge variant="warning" className="text-xs">
                       {insights.gems.length}
                     </Badge>
                   </div>
                   {expandedSection === 'gems' ? (
-                    <ChevronUp className="h-4 w-4 text-amber-500" />
+                    <ChevronUp className="h-4 w-4 text-warning" />
                   ) : (
-                    <ChevronDown className="h-4 w-4 text-amber-500" />
+                    <ChevronDown className="h-4 w-4 text-warning" />
                   )}
                 </button>
 
@@ -410,13 +410,13 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                       {insights.gems.map((gem, idx) => (
                         <div
                           key={idx}
-                          className="p-4 bg-amber-500/10 rounded-lg border border-amber-500/20"
+                          className="p-4 bg-[--tint-warning] rounded-lg border border-warning/30"
                         >
                           <p className="text-sm text-foreground italic mb-2">
                             "{gem.response}"
                           </p>
-                          <p className="text-xs text-amber-600 dark:text-amber-400">
-                            💎 {gem.reason}
+                          <p className="text-xs text-[--on-tint-warning]">
+                            <Gem className="inline h-3.5 w-3.5" /> {gem.reason}
                           </p>
                         </div>
                       ))}

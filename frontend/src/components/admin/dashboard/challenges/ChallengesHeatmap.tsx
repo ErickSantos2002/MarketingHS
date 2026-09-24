@@ -77,10 +77,10 @@ export function ChallengesHeatmap({ leads, type }: ChallengesHeatmapProps) {
   };
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-info/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-info/20">
+          <div className="p-2 rounded-lg bg-[--tint-info]">
             <Flame className="h-5 w-5 text-info" />
           </div>
           Desafios × {type === 'role' ? 'Cargo' : 'Faturamento'}

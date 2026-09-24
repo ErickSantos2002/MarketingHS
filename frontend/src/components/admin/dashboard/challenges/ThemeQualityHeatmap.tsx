@@ -13,27 +13,32 @@ export function ThemeQualityHeatmap({ data }: ThemeQualityHeatmapProps) {
     if (value === 0) return 'bg-muted/30';
     const intensity = (value / maxValue);
     
+    // Alta/Média/Baixa é uma escala ordinal de 3 degraus (boa → ruim); com só
+    // 4 cores semânticas no DS, high/medium/low usam success/warning/danger
+    // (o trio "farol") para não colidir — orange e yellow, ambos "atenção"
+    // pela tabela de tradução, cairiam na mesma cor se traduzidos só pelo
+    // matiz. Ver relatório da Tarefa 6.
     const colors = {
       high: [
-        'bg-green-500/20',
-        'bg-green-500/40',
-        'bg-green-500/60',
-        'bg-green-500/80',
-        'bg-green-500',
+        'bg-success/20',
+        'bg-success/40',
+        'bg-success/60',
+        'bg-success/80',
+        'bg-success',
       ],
       medium: [
-        'bg-yellow-500/20',
-        'bg-yellow-500/40',
-        'bg-yellow-500/60',
-        'bg-yellow-500/80',
-        'bg-yellow-500',
+        'bg-warning/20',
+        'bg-warning/40',
+        'bg-warning/60',
+        'bg-warning/80',
+        'bg-warning',
       ],
       low: [
-        'bg-orange-500/20',
-        'bg-orange-500/40',
-        'bg-orange-500/60',
-        'bg-orange-500/80',
-        'bg-orange-500',
+        'bg-danger/20',
+        'bg-danger/40',
+        'bg-danger/60',
+        'bg-danger/80',
+        'bg-danger',
       ],
     };
     
@@ -42,19 +47,19 @@ export function ThemeQualityHeatmap({ data }: ThemeQualityHeatmapProps) {
   };
 
   const qualityColumns = [
-    { key: 'high' as const, label: 'Alta', color: 'text-green-500' },
-    { key: 'medium' as const, label: 'Média', color: 'text-yellow-500' },
-    { key: 'low' as const, label: 'Baixa', color: 'text-orange-500' },
+    { key: 'high' as const, label: 'Alta', color: 'text-[--on-tint-success]' },
+    { key: 'medium' as const, label: 'Média', color: 'text-[--on-tint-warning]' },
+    { key: 'low' as const, label: 'Baixa', color: 'text-[--on-tint-danger]' },
   ];
 
   // Sort by total (high + medium) descending
   const sortedData = [...data].sort((a, b) => (b.high + b.medium) - (a.high + a.medium));
 
   return (
-    <Card className="bg-gradient-to-br from-background to-muted/30 border-border/50">
+    <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+          <span className="text-conteudo-heading">
             Qualidade por Tema
           </span>
         </CardTitle>
