@@ -26,14 +26,14 @@ export function LeadsListSheet({ leads, title, open, onOpenChange }: LeadsListSh
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-md p-0 gap-0 bg-gradient-to-br from-card via-card to-primary/5 border-border/50">
+        <SheetContent className="w-full sm:max-w-md p-0 gap-0">
           <SheetHeader className="p-6 pb-4 border-b border-border/50">
             <div className="flex items-center justify-between">
               <SheetTitle className="text-lg font-bold flex items-center gap-2">
                 <Flame className="h-5 w-5 text-primary" />
                 {title}
               </SheetTitle>
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+              <Badge variant="default">
                 {leads.length} leads
               </Badge>
             </div>
