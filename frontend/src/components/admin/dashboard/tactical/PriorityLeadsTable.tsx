@@ -87,12 +87,12 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
   };
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-emerald-950/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-lg">
-            <div className="p-2 rounded-lg bg-emerald-500/20">
-              <Target className="h-5 w-5 text-emerald-400" />
+            <div className="p-2 rounded-lg bg-[--tint-success]">
+              <Target className="h-5 w-5 text-[--on-tint-success]" />
             </div>
             Leads Prioritários
           </div>
@@ -162,13 +162,13 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-1.5 max-w-[150px]">
                       {lead.etiqueta === 'hotlead' && (
-                        <Flame className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                        <Flame className="h-4 w-4 text-warning flex-shrink-0" />
                       )}
                       {lead.origem_campanha === 'reconversao_070226' && (
-                        <RefreshCw className="h-4 w-4 text-cyan-500 flex-shrink-0" />
+                        <RefreshCw className="h-4 w-4 text-info flex-shrink-0" />
                       )}
                       {lead.origem_campanha === 'aula_070226' && (
-                        <Sparkles className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                        <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
                       )}
                       <span className="truncate" title={lead.nome || '-'}>
                         {lead.nome || '-'}
@@ -203,7 +203,7 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
                       >
                         {copiedId === lead.id ? (
                           <>
-                            <Check className="h-3 w-3 mr-1 text-emerald-400" />
+                            <Check className="h-3 w-3 mr-1 text-success" />
                             Copiado
                           </>
                         ) : (

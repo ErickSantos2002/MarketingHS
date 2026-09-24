@@ -15,32 +15,32 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
     const raw = leads.filter(l => l.qualification === 'raw').length;
     
     return [
-      { 
-        stage: 'Leads Brutos', 
-        count: raw, 
+      {
+        stage: 'Leads Brutos',
+        count: raw,
         percentage: total > 0 ? (raw / total) * 100 : 0,
-        color: '#6B7280',
+        color: 'var(--color-slate-400)',
         width: 100
       },
-      { 
-        stage: 'Qualificados (Warm)', 
-        count: warm, 
+      {
+        stage: 'Qualificados (Warm)',
+        count: warm,
         percentage: total > 0 ? (warm / total) * 100 : 0,
-        color: '#F59E0B',
+        color: 'var(--color-warning-500)',
         width: total > 0 ? (warm / Math.max(raw, warm, hot, 1)) * 100 : 0
       },
-      { 
-        stage: 'Prontos p/ Venda (Hot)', 
-        count: hot, 
+      {
+        stage: 'Prontos p/ Venda (Hot)',
+        count: hot,
         percentage: total > 0 ? (hot / total) * 100 : 0,
-        color: '#10B981',
+        color: 'var(--color-success-500)',
         width: total > 0 ? (hot / Math.max(raw, warm, hot, 1)) * 100 : 0
       },
     ];
   }, [leads]);
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-primary/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <div className="p-2 rounded-lg bg-primary/20">
@@ -69,12 +69,12 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
                   className="absolute inset-y-0 left-0 rounded-lg transition-all duration-1000 ease-out flex items-center justify-center"
                   style={{
                     width: `${Math.max(stage.width, 5)}%`,
-                    background: `linear-gradient(90deg, ${stage.color}80 0%, ${stage.color} 100%)`,
+                    backgroundColor: stage.color,
                     animationDelay: `${index * 200}ms`
                   }}
                 >
                   {stage.width > 20 && (
-                    <span className="text-sm font-semibold text-white drop-shadow-lg">
+                    <span className="text-sm font-semibold text-primary-foreground">
                       {stage.count}
                     </span>
                   )}
@@ -89,17 +89,17 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
           <div className="grid grid-cols-2 gap-4 text-center">
             <div className="p-3 rounded-lg bg-muted/10">
               <div className="text-xs text-muted-foreground mb-1">Raw → Warm</div>
-              <div className="text-lg font-bold text-yellow-400">
-                {leads.length > 0 
-                  ? ((funnelData[1].count / Math.max(funnelData[0].count, 1)) * 100).toFixed(0) 
+              <div className="text-lg font-bold text-[--on-tint-warning]">
+                {leads.length > 0
+                  ? ((funnelData[1].count / Math.max(funnelData[0].count, 1)) * 100).toFixed(0)
                   : 0}%
               </div>
             </div>
             <div className="p-3 rounded-lg bg-muted/10">
               <div className="text-xs text-muted-foreground mb-1">Warm → Hot</div>
-              <div className="text-lg font-bold text-emerald-400">
-                {leads.length > 0 
-                  ? ((funnelData[2].count / Math.max(funnelData[1].count, 1)) * 100).toFixed(0) 
+              <div className="text-lg font-bold text-[--on-tint-success]">
+                {leads.length > 0
+                  ? ((funnelData[2].count / Math.max(funnelData[1].count, 1)) * 100).toFixed(0)
                   : 0}%
               </div>
             </div>

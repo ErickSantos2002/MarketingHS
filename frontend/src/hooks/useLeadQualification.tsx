@@ -294,18 +294,18 @@ export function getPriorityLevel(score: number): PriorityLevel {
 
 export function getPriorityColor(priority: PriorityLevel): string {
   switch (priority) {
-    case 'P1': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-    case 'P2': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-    case 'P3': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-    case 'P4': return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+    case 'P1': return 'bg-[--tint-success] text-[--on-tint-success] border-success/30';
+    case 'P2': return 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30';
+    case 'P3': return 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30';
+    case 'P4': return 'bg-[--tint-neutral] text-conteudo-muted border-borda';
   }
 }
 
 export function getQualificationColor(segment: QualificationSegment): string {
   switch (segment) {
-    case 'hot': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-    case 'warm': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-    case 'raw': return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+    case 'hot': return 'bg-[--tint-success] text-[--on-tint-success] border-success/30';
+    case 'warm': return 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30';
+    case 'raw': return 'bg-[--tint-neutral] text-conteudo-muted border-borda';
   }
 }
 

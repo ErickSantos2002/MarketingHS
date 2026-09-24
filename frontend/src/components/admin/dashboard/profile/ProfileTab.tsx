@@ -48,7 +48,7 @@ export function ProfileTab({ leads }: ProfileTabProps) {
         )}
 
         {isVisible('company_size') && (
-          <div className="bg-gradient-to-br from-card via-card to-info/10 border border-border/50 rounded-lg shadow-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <div className="p-2 rounded-lg bg-info/20">
                 <svg className="h-5 w-5 text-info" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,11 +68,10 @@ export function ProfileTab({ leads }: ProfileTabProps) {
                       <span className="text-sm font-medium">{item.count}</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
-                      <div 
-                        className="h-full rounded-full transition-all duration-700 ease-out"
-                        style={{ 
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
+                        style={{
                           width: `${item.percentage}%`,
-                          background: `linear-gradient(90deg, var(--primary) 0%, color-mix(in srgb, var(--primary) calc(0.6 * 100%), transparent) 100%)`,
                           animationDelay: `${index * 100}ms`
                         }}
                       />

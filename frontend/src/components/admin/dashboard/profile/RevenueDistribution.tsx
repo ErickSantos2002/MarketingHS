@@ -12,7 +12,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-xl px-4 py-3 shadow-xl">
+      <div className="bg-background/95 border border-border/50 rounded-xl px-4 py-3 shadow-xl">
         <p className="text-sm font-medium text-foreground">{data.faturamento}</p>
         <p className="text-sm text-muted-foreground mt-1">
           <span className="font-semibold" style={{ color: data.color }}>{data.count}</span> leads ({data.percentage.toFixed(1)}%)

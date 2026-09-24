@@ -40,7 +40,7 @@ export function TacticalTab({ leads }: TacticalTabProps) {
           <SalesReadinessFunnel leads={enrichedLeads} />
           <DuplicationCard data={analytics.duplicateEmailsCount} />
           
-          <div className="bg-gradient-to-br from-card via-card to-primary/5 border border-border/50 rounded-lg shadow-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <div className="p-2 rounded-lg bg-primary/20">
                 <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,10 +50,10 @@ export function TacticalTab({ leads }: TacticalTabProps) {
               Ações Rápidas
             </h3>
             <div className="space-y-4">
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <div className="p-3 rounded-lg bg-[--tint-success] border border-success/30">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-muted-foreground">Leads P1 (Hot)</span>
-                  <span className="text-lg font-bold text-emerald-400">
+                  <span className="text-lg font-bold text-[--on-tint-success]">
                     {enrichedLeads.filter(l => l.priorityLevel === 'P1').length}
                   </span>
                 </div>
@@ -61,11 +61,11 @@ export function TacticalTab({ leads }: TacticalTabProps) {
                   Prontos para contato imediato
                 </div>
               </div>
-              
-              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+
+              <div className="p-3 rounded-lg bg-[--tint-warning] border border-warning/30">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-muted-foreground">Leads P2</span>
-                  <span className="text-lg font-bold text-yellow-400">
+                  <span className="text-lg font-bold text-[--on-tint-warning]">
                     {enrichedLeads.filter(l => l.priorityLevel === 'P2').length}
                   </span>
                 </div>

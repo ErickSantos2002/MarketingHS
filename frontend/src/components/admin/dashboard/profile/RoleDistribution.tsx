@@ -22,7 +22,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-xl px-4 py-3 shadow-xl">
+      <div className="bg-background/95 border border-border/50 rounded-xl px-4 py-3 shadow-xl">
         <p className="text-sm font-medium text-foreground">{data.cargo}</p>
         <p className="text-xs text-muted-foreground mt-0.5">Nível: {data.level}</p>
         <p className="text-sm text-muted-foreground mt-1">
@@ -44,7 +44,7 @@ export function RoleDistribution({ data }: RoleDistributionProps) {
   }, [data]);
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-primary/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <div className="p-2 rounded-lg bg-primary/20">

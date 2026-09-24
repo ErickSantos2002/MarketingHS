@@ -28,9 +28,9 @@ function MiniGauge({
   const offset = circumference - progress;
 
   const getColorClass = (val: number) => {
-    if (val >= 70) return 'text-emerald-400';
-    if (val >= 40) return 'text-yellow-400';
-    return 'text-red-400';
+    if (val >= 70) return 'text-[--on-tint-success]';
+    if (val >= 40) return 'text-[--on-tint-warning]';
+    return 'text-[--on-tint-danger]';
   };
 
   return (
@@ -77,12 +77,12 @@ export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
   const gauges = [
     { value: data.cargo, label: 'Cargo', icon: Briefcase, color: 'var(--primary)' },
     { value: data.empresa, label: 'Empresa', icon: Building, color: 'var(--color-info-500)' },
-    { value: data.faturamento, label: 'Faturamento', icon: DollarSign, color: '#10B981' },
+    { value: data.faturamento, label: 'Faturamento', icon: DollarSign, color: 'var(--color-success-500)' },
     { value: data.desafios, label: 'Desafios', icon: MessageSquare, color: 'var(--primary)' },
   ];
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-primary/10 border-border/50 shadow-lg overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-lg">
@@ -92,7 +92,7 @@ export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
             Completude dos Dados
           </div>
           <div className="text-sm font-normal text-muted-foreground">
-            Média: <span className={`font-semibold ${data.average >= 70 ? 'text-emerald-400' : data.average >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+            Média: <span className={`font-semibold ${data.average >= 70 ? 'text-[--on-tint-success]' : data.average >= 40 ? 'text-[--on-tint-warning]' : 'text-[--on-tint-danger]'}`}>
               {data.average.toFixed(0)}%
             </span>
           </div>
