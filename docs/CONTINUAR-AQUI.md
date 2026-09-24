@@ -1,5 +1,173 @@
 # Continuar aqui
 
+> ## ✅ Visual — Fase 2, G2 (Contatos, ficha, Importação), 24/09/2026
+>
+> **O G2 fechou.** Mesma branch `visual-fase-2-g2` (a partir de
+> `visual-fase-2`, base `d4007e6`), **não mergeada** — como as fases e
+> grupos anteriores, o merge é decisão do Erick. As seis tarefas do plano
+> `docs/superpowers/plans/2026-09-24-marketinghs-visual-fase-2-g2-contatos.md`
+> saíram; o spec que governa continua sendo
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
+>
+> **O que entrou, tarefa a tarefa:**
+>
+> | Commit | O que entrou |
+> |---|---|
+> | `24ca424` | O guarda passa a contar gradiente/brilho com token (`bg-gradient-`, `drop-shadow(0 0`, `blur-*` fora de `backdrop-blur`); conserto do selo do medidor do G1, que tinha perdido o fundo por alfa concatenada em `var()` |
+> | `d77f098` | Cor de status e etiqueta vira dado do banco, servida por `src/lib/corDeDado.ts` (`resolverCorDeDado`, `estiloDeCorDeDado`, `COR_DE_DADO_PADRAO`) — `StatusBadge`, `StatusDropdown`, `TagsCell`, `EcosystemPills`, `useLeadStatuses` |
+> | `6acf735` | Lista de contatos (`ContactsTable` e as barras/painéis ao redor) sai do guarda — paginação em frase, `<h1>` duplicado sai de `/contacts` |
+> | `08b0cb2` | `Badge` ganha `forwardRef` — some o aviso `Function components cannot be given refs` |
+> | `2af9e52` | A ficha do contato (`LeadDetailSheet`, `DetailSections`, `EventsTimeline`) sai do guarda |
+> | `8e2db5c` | Importação (`DatacoreImport`, `ImportPage`) e `LimiteDeErro` saem do guarda; `<h1>` duplicado sai de `/import` |
+>
+> **Placar do guarda: 463 → 332** (app inteiro). A Tarefa 1 mudou o que o
+> guarda enxerga antes de tocar qualquer tela: a regex passou a contar
+> gradiente e brilho decorativo (`bg-gradient-`, `drop-shadow(0 0`,
+> `blur-*` fora de `backdrop-blur`), que somaram **+8** (463 → 471) — o
+> mesmo tipo de ponto cego que a Fase 1 já tinha fechado para
+> `white`/`black`. Por pasta, tarefa a tarefa: `src/components/admin/contacts`
+> **105 → 86** (Tarefa 2, cor de status/etiqueta) **→ 14** (Tarefa 3,
+> lista) **→ 0** (Tarefa 4, ficha — `DetailSections.tsx`/
+> `EventsTimeline.tsx` eram os 14 que sobravam); `admin` (raiz —
+> `LeadDetailSheet.tsx`, `DatacoreImport.tsx`, `LimiteDeErro.tsx`)
+> **31 → 11** (Tarefa 4, sai a ficha) **→ 0** (Tarefa 5, sai a
+> importação); `hooks` **1 → 0** (Tarefa 2, `FALLBACK_COLOR`);
+> `dashboard` continua em **0** — sem regressão do G1; `lib` nasce em
+> **0** (`corDeDado.ts`, novo). O que resta no app inteiro (332):
+> `settings` 122, `pages/admin` 68, `campaigns` 65, `automations` 45,
+> `components/admin/pages` 26, `segments` 6 — nenhuma pasta do G2.
+>
+> **Portão (Tarefa 6), conferido em 24/09:** `tsc --noEmit -p
+> tsconfig.app.json` com os mesmos **4** erros pré-existentes
+> (`LeadScoringSettings` ×1, `useJourneys` ×3), nenhum novo; `vite build`
+> e `build:landing` passando; grep de alfa concatenada
+> (`\$\{[^}]+\}[0-9]{2}\b`) em `src/**/*.tsx` — **zero linhas**; os
+> **7 hashes** do Design System conferindo com o `ORIGEM.md` — nenhum
+> arquivo de `design-system/` tocado. Capacidade por capacidade (`git
+> diff d4007e6 -- frontend`, 23 arquivos incluindo `guarda-visual.mjs`,
+> 206 inserções / 186 deleções): todo arquivo tocado é do escopo
+> esperado (os arquivos das Tarefas 2-5, `corDeDado.ts` novo, `badge.tsx`
+> e `QualificationGauge.tsx`/`guarda-visual.mjs` da Tarefa 1). Do que
+> sobra do filtro de diff (165 linhas), nenhuma mexe em
+> `useState`/`onClick`/chamada de API/condição — é tradução de cor
+> (hex/literal → token), o módulo `corDeDado.ts` novo, o `forwardRef` do
+> `Badge` e as duas exceções nomeadas no brief (paginação em frase,
+> remoção do `<h1>` duplicado). **As seis telas** (`/contacts` com
+> filtro, com o menu da linha aberto e na página 2; a ficha do contato;
+> `/import` nas duas abas; `/`) abertas nos dois temas a 1440 px — zero
+> erro de console novo; o aviso `Function components cannot be given
+> refs` do `Badge` **sumiu** (confirmado nos dois contatos de teste da
+> Tarefa 4 e de novo nesta conferência, abrindo a ficha de Carla
+> Menezes). A 390 px, `/contacts` rola horizontalmente (162 px) — a
+> tabela tem 20 colunas, pré-existente e não desta fase: o diff contra
+> `d4007e6` em `ContactsTable.tsx` não toca largura nem grid, só cor.
+>
+> **O que cada Review Focus achou:** (1) cor do banco preservada nos
+> dois temas — os 7 status reais e as etiquetas reais (`purple`/`blue`)
+> saem com a cor do banco na borda/ponto/fundo de 12%, o texto sempre em
+> `--text-heading`, nada virou cinza nem ficou ilegível; (2) alfa
+> concatenada — a única ocorrência do app inteiro era o selo do medidor
+> do G1 (`` `${getColor()}20` ``), consertado na Tarefa 1; grep rodado
+> em toda tarefa desde então, sempre zero; (3) ação destrutiva —
+> "Apagar contato" (menu da linha) e "Apagar"/diálogo em massa da
+> `ContactsBulkBar` continuam vermelhos nos dois temas; (4) paginação —
+> "Mostrando X a Y de Z contatos" bate no primeiro bloco (1 a 15), no
+> segundo (16 a 30) e no último (2071 a 2083 de 2083, página 139), e
+> some com uma página só; (5) os avisos âmbar do `DatacoreImport` (503 e
+> "sem e-mail") e o ícone do `LimiteDeErro` resolvem cor real (nunca
+> `rgba(0, 0, 0, 0)`) nos dois temas, ao vivo e por elemento sintético.
+>
+> **O conserto do selo do medidor — regressão do G1 que as sete
+> revisões por tarefa não viram:** `QualificationGauge.tsx` (medidor de
+> meta em `/`, "Mostrar mais detalhes") usava
+> `` backgroundColor: `${getColor()}20` `` — alfa concatenada numa cor
+> que já vinha de `var(--color-*)` desde a Fase 1, não de hexadecimal.
+> O sufixo `20` só funciona colado num hexadecimal; colado num
+> `var(--...)` o CSS descarta a declaração inteira em silêncio, e o
+> fundo do selo saía `rgba(0, 0, 0, 0)` nos dois temas — sem erro, sem
+> aviso, só o selo sem fundo. Virou
+> `` color-mix(in srgb, ${getColor()} 15%, transparent) ``, a mesma
+> forma que este grupo passou a usar em toda cor de dado
+> (`corDeDado.ts`). A lição, para qualquer fase futura: **nunca
+> `` `${cor}NN` ``** — o guarda não pega isso (é `style={{}}`, não
+> `className`), só o grep dedicado e o `getComputedStyle` do fundo
+> pegam.
+>
+> ### Decisões tomadas nesta fase, reversíveis
+>
+> 1. **Cor de status e etiqueta é dado do banco**: fica a cor escolhida,
+>    na borda, no ponto e num fundo de 12%; o texto passa para a cor de
+>    título (`--text-heading`), não para a cor do dado.
+> 2. **`STATUS_COLORS`** (reserva para quando o banco não responde) **e
+>    as cores nomeadas de etiqueta viraram token**, pelo lugar no funil
+>    ou pelo matiz (`purple`→primária, já que o DS não tem roxo).
+> 3. **Pílulas de ecossistema**: MarketingHS = primária, GrowthHS =
+>    sucesso escuro; a letra de 9 px dentro da pílula fica — é marca,
+>    não texto corrido.
+> 4. **`Badge` ganhou `forwardRef`** (mesma API, aditivo) — resolve o
+>    aviso de ref que vinha desde a Fase 0, em todo `Badge` dentro de
+>    `TooltipTrigger`/`asChild`.
+> 5. **Paginação em frase e fim do `<h1>` duplicado** em `/contacts` e
+>    `/import` — a topbar já escrevia o título, o corpo repetia.
+> 6. **Borda de destaque cheia (ex.: `borderLeft` do toast "Lead
+>    qualificado!") usa a cor cheia do token** (`var(--color-success-600)`),
+>    não a tinta — é linha fina, não superfície.
+> 7. **A célula de etiqueta do `ContactsTable` continua `<span>` com
+>    classes de token, não virou `<Badge>`** — decisão do controlador
+>    depois que o `Badge` ganhou `forwardRef` (Tarefa 4): o
+>    comportamento visual já era equivalente, trocar de componente seria
+>    mudança fora do escopo de cor.
+> 8. **A letra do avatar de plataforma em `EventsTimeline` (`fontSize:
+>    10` inline) fica** — mesma natureza da exceção das
+>    `EcosystemPills` (marca dentro de um círculo de 24 px), não texto
+>    corrido; subir para 12 px estouraria o círculo, mudança de leiaute
+>    fora do escopo desta fase.
+> 9. **Hot = success, Warm = warning** aplicado de novo em
+>    `ContactsTable` e `LeadDetailSheet` (bolinha de score, ícone
+>    `Flame`) — mesma convenção que o G1 já fixou em
+>    `PriorityLeadsTable`, não a leitura literal da Tabela de tradução
+>    (que leria vermelho→perigo para o hotlead, já que a cor de origem
+>    era vermelha).
+> 10. **Categorias sem hierarquia passam a dividir cor quando o Design
+>     System não tem tom para todas**: em `EventsTimeline`,
+>     `dnmarketing`/`marketinghs`/`website` (antes roxo e rosa, matizes
+>     quase indistinguíveis) viraram todos `--color-primary-600` — a
+>     letra do avatar (M/W) continua diferenciando qual é qual.
+> 11. **Nunca `` `${cor}NN` `` para alfa** — só funciona com hexadecimal
+>     e quebra em silêncio com `var(--...)` (foi assim que o selo do
+>     medidor do G1 perdeu o fundo, ver acima). Usar sempre
+>     `` color-mix(in srgb, ${cor} N%, transparent) ``.
+>
+> **Dívida anotada** (nada corrigido, registrada para quando alguém
+> tocar o arquivo de novo):
+> - `ContactsBulkBar.tsx:125` — botão "Apagar" em `border-danger/40`,
+>   enquanto os irmãos (menu da linha, etc.) usam `/30`.
+> - `ContactsTable.tsx:694-698` — `EcosystemBadges` local com
+>   `fontSize: 10` inline, implementação própria e gêmea do
+>   `EcosystemPills` compartilhado (pré-existente, não desta fase).
+> - `frontend/src/components/ui/alert.tsx` não tem variante `warning` —
+>   os avisos âmbar do `DatacoreImport` e do `LimiteDeErro` seguem como
+>   `<div>` com tinta manual, o mesmo padrão pré-existente do
+>   `OverviewTab.tsx:449`. Criar a variante tocaria um arquivo fora do
+>   escopo desta fase; decidir numa fase futura.
+>
+> ### Decisões que esperam o Erick (a nova é a primeira)
+>
+> 1. **Os pontos de status da `ContactsBulkBar` e da
+>    `ContactsFiltersBar` usam `STATUS_COLORS` fixo (mapa por nome), não
+>    a cor real do banco** — herança da dn.ia. `StatusBadge.tsx` já
+>    busca a cor do banco (`getColor()`); esses dois pontos, não.
+>    Unificar os dois caminhos é mudança de lógica (qual fonte de cor
+>    cada componente consulta), fora do escopo desta fase, que só trocou
+>    a apresentação. Decidir se vale a pena antes do G3.
+> 2. Continuam abertas as decisões dos blocos anteriores (Fase 1 e G1,
+>    abaixo): o desencontro de altura botão×campo, as colisões de cor
+>    de gráfico, e as seis de 23/09 (fluxo em rascunho, recálculo/sync
+>    disparando automação, peso 0 no A/B, conta Unlayer `dnmkt`, colunas
+>    de funil da dn.ia, cor do botão das landing pages).
+>
+> **Próximo passo: G3** — Campanhas e Templates.
+
 > ## ✅ Visual — Fase 2, preparação e G1, 24/09/2026
 >
 > **O G1 fechou.** Branch `visual-fase-2` (a partir de `visual-fase-1`, base
