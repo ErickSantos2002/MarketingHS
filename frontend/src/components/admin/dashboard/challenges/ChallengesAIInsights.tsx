@@ -256,7 +256,7 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                     key={stored.id}
                     className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                       stored.id === currentInsightId
-                        ? 'bg-[--tint-primary] border-primary/30'
+                        ? 'bg-[--tint-primary] border-primary'
                         : 'bg-background hover:bg-muted/50'
                     }`}
                   >
@@ -388,7 +388,7 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
               <div className="border border-warning/30 rounded-lg overflow-hidden bg-[--tint-warning]">
                 <button
                   onClick={() => setExpandedSection(expandedSection === 'gems' ? null : 'gems')}
-                  className="w-full flex items-center justify-between p-4 hover:bg-[--tint-warning] transition-colors"
+                  className="w-full flex items-center justify-between p-4 hover:bg-warning/20 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Gem className="h-4 w-4 text-warning" />
