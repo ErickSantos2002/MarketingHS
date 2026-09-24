@@ -1,5 +1,164 @@
 # Continuar aqui
 
+> ## ✅ Visual — Fase 2, preparação e G1, 24/09/2026
+>
+> **O G1 fechou.** Branch `visual-fase-2` (a partir de `visual-fase-1`, base
+> `b63640f`), **não mergeada** — como a Fase 1, o merge é decisão do Erick.
+> As oito tarefas do plano
+> `docs/superpowers/plans/2026-09-24-marketinghs-visual-fase-2-preparacao-e-g1.md`
+> saíram; o spec que governa continua sendo
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
+>
+> **O que entrou, tarefa a tarefa:**
+>
+> | Commit | O que entrou |
+> |---|---|
+> | `111de54` | O guarda passa a contar `white`/`black` sem número — o ponto cego que a Fase 1 tinha registrado fecha |
+> | `f614aa2` | `chart.tsx`/`LeadsChart.tsx` órfãos apagados; `Badge` ganha `success`/`warning`/`info`; `drawer.tsx` sem `bg-black/80` |
+> | `2311c2b` | `GlobalFilters`, `LeadDetailModal` e a aba Visão Geral (`/`) saem do guarda |
+> | `2c4945d` | Abas Perfil e Tático do Analytics saem do guarda; `getPriorityColor`/`getQualificationColor` (hook compartilhado com o G2) traduzidos |
+> | `87b624b` | Aba Operacional do Analytics sai do guarda |
+> | `a8667e9` | Aba Desafios do Analytics sai do guarda |
+> | `dac6013` + `9406fcf` | Aba Insights sai do guarda — `dashboard` inteiro em zero; correção de revisão: Grade D do ranking de campanhas passa a `danger`, não `warning` |
+>
+> **Placar do guarda: 888 → 463** (app inteiro; o "888" já é o ponto de
+> partida com o ponto cego fechado pela Tarefa 1 — 825 da Fase 1 + 63 que o
+> guarda não via). `src/components/admin/dashboard` (as 7 abas + raiz):
+> **398 → 0**, tarefa a tarefa: raiz + `overview` 398 → 292 (T3),
+> `profile` + `tactical` 292 → 257 (T4), `operational` 257 → 211 (T5),
+> `challenges` 211 → 95 (T6), `insights` 95 → 0 (T7). O que resta no app é
+> inteiramente G2 em diante: `settings` 122, `contacts` 105, `pages/admin`
+> 68, `campaigns` 65, `automations` 45, `admin` (raiz) 31, `pages` 26,
+> `hooks` 1.
+>
+> **Portão (Tarefa 8), conferido em 24/09:** `tsc --noEmit -p
+> tsconfig.app.json` com os mesmos **4** erros pré-existentes
+> (`LeadScoringSettings` ×1, `useJourneys` ×3), nenhum novo; `vite build` e
+> `build:landing` passando; os **7 hashes** do Design System conferindo com
+> o `ORIGEM.md` — nenhum arquivo de `design-system/` tocado, nenhum defeito
+> novo do Design System apareceu nas Tarefas 3-7. Capacidade por capacidade
+> (`git diff visual-fase-1`, 46 arquivos, 398 inserções / 828 deleções):
+> todo arquivo tocado é do escopo esperado (as 7 subpastas de `dashboard` +
+> raiz, `useLeadQualification.tsx`, `badge.tsx`, `drawer.tsx`, os dois
+> arquivos mortos apagados); das 661 linhas que sobram do filtro de diff,
+> nenhuma mexe em `useState`/`onClick`/chamada de API/condição/limiar — são
+> strings de classe fora de `className=` (corpo de função `getXColor`), a
+> remoção dos dois arquivos mortos, a troca `getScoreColor`→`getScoreVariant`
+> (mesmo mapeamento, tipo de retorno diferente, de string CSS para nome de
+> `variant`), `<Card>` simplificado, emoji removido e espaço em branco de
+> editor. **As sete telas** (`/`, as cinco abas do Analytics, a ficha do
+> lead) abertas nos dois temas a 1440 px — zero erro de console novo (os 2
+> avisos de React Router e, na ficha do lead, 2 avisos Radix de
+> acessibilidade — "Missing `Description` for `{DialogContent}`" —, todos
+> pré-existentes). A 390 px, `/` e `/analytics?tab=insights` rolam
+> horizontalmente, mas a rolagem já existia antes desta fase tocar os
+> arquivos: `LeadsLineChart.tsx` (o toggle "Por Dia"/"Por Horário" do card
+> "Agendamentos por Dia") não foi tocado por nenhuma tarefa; em
+> `CampaignRankingTable.tsx`/`InsightsTab.tsx` (a tabela mais larga do G1),
+> o diff contra `visual-fase-1` só tem classe/token de cor, nenhuma classe
+> de layout, grid ou largura.
+>
+> ### Decisões tomadas nesta fase, reversíveis
+>
+> 1. **Roxo/violeta/índigo da dn.ia → tinta primária** (o Design System não
+>    tem roxo).
+> 2. **Verde do WhatsApp (`#25D366`) → tinta de sucesso**; não é exceção de
+>    marca de terceiro.
+> 3. **Emoji de fim de frase removido; emoji com sentido virou ícone
+>    `lucide-react`** (`AlertTriangle`, `Gem`, `Check`, `BarChart3`...) — a
+>    frase ao redor não mudou.
+> 4. **`Badge` ganhou `success`, `warning`, `info`** — aditivo, nenhuma
+>    variante existente mudou.
+> 5. **Texto colorido solto usa `--on-tint-*`, não o `-500`** — garante
+>    contraste AA nos dois temas.
+> 6. **Ícone de ~16 px (ação, feedback ou indicador de categoria) pode usar
+>    a cor cheia do token** (`text-success` etc.), mesmo fora de
+>    `--on-tint-*` — o contraste exigido de elemento gráfico é 3:1, não o
+>    4,5:1 de texto. Exemplos: os dois ícones "copiado" do
+>    `LeadDetailModal`; `Flame`/`RefreshCw`/`Sparkles` em
+>    `PriorityLeadsTable`. Texto solto continua em `--on-tint-*`. Custo se
+>    errado: ícones um tom mais claros do que deveriam.
+> 7. **P2 e P3 (prioridade de lead) ficam com a mesma cor — `warning`.** A
+>    Tabela de tradução funde `amber/yellow/orange` num único significado
+>    ("atenção"), e o badge já escreve "P2"/"P3" por extenso, então a ordem
+>    não se perde, só a pista de cor redundante. Custo se errado: o
+>    comercial perde a distinção P2×P3 de relance (vai para as perguntas ao
+>    Erick, abaixo).
+> 8. **`<linearGradient>` SVG dentro de gráfico recharts, com um token só
+>    variando opacidade, fica** — é o tema de gráfico da Fase 1
+>    (`chartTheme.ts`), não gradiente decorativo de superfície (a regra
+>    global mira utilitário Tailwind `bg-gradient-*`/`from-*`). Custo se
+>    errado: a revisão final pede chapar as fatias/áreas.
+> 9. **`getPeriodColor` (Madrugada/Noite → `primary`, Manhã/Tarde →
+>    `warning`) fica como está** — período do dia é categoria sem
+>    significado de bom/ruim, e o chip escreve o nome do período por
+>    extenso. Custo se errado: dois pares de período dividem cor; a
+>    correção volta junto com a pergunta da paleta de gráfico própria
+>    (decisão 2 da Fase 1, abaixo).
+> 10. **`getPriorityColor`/`getQualificationColor`
+>     (`src/hooks/useLeadQualification.tsx`) traduzidos nesta fase (Tarefa
+>     4)** — é hook compartilhado; também alimenta `LeadDetailSheet.tsx`,
+>     que é tela do **G2**. Custo se errado: o G2 herda badges já
+>     traduzidos antes da hora (só visual, reversível).
+> 11. **Escala ordinal Alta/Média/Baixa (`ThemeQualityHeatmap`) foi para
+>     `success`/`warning`/`danger`**, não a leitura literal da Tabela (que
+>     funde Média/`yellow` e Baixa/`orange` os dois em `warning`) — para
+>     não perder a ordem visual de 3 degraus, exatamente o defeito que o
+>     Review Focus 3 vigia. Custo se errado: reverter perde a distinção
+>     Média×Baixa.
+> 12. **Grade D do ranking de campanhas corrigida de `warning` para
+>     `danger`** (fix da revisão da Tarefa 7) — a legenda do próprio
+>     arquivo já agrupava "Grade D/F" num bullet e "Grade C" em outro; D e F
+>     ficaram idênticos (`danger`), C sozinho em `warning`. Custo se errado:
+>     o badge da grade discordaria da legenda escrita ao lado dela.
+> 13. **Os dois ícones "copiado" do `LeadDetailModal` usam `text-success`
+>     direto** (não `--on-tint-success`) — mesma exceção do item 6 (ícone
+>     pequeno de ação/feedback), contraste gráfico 3:1 é suficiente ali.
+>
+> **Dívida anotada** (nada corrigido, registrada para quando alguém tocar o
+> arquivo de novo):
+> - `KPICards.tsx:56` — prop `glowColor` morta (pré-existente); tirar
+>   mudaria a API do componente.
+> - `OverviewTab.tsx` — imports/variáveis não usados, pré-existentes.
+> - `ChannelInsights.tsx:246-247` — ramos `info`/`alert` em `bg-*/10
+>   border-*/20` (pré-existente, já token, só fora do desenho canônico
+>   `--tint-*`).
+> - `CampaignTimeAnalysis.tsx:142` — ícone `Target` em `h-5 w-5`, não `h-4`.
+> - **`ChallengesAIInsights.tsx:388-391`** — hover do botão "Respostas
+>   Destaque" não muda mais de tom (base e hover = `--tint-warning`);
+>   sugerido `hover:bg-warning/20`. Marcado "corrigir na onda final".
+> - `ThemeQualityHeatmap.tsx` — legenda numa rampa de `primary`, dissociada
+>   das colunas `success/warning/danger` (pré-existente).
+> - `ChallengeThemesChart.tsx:94` — destructure de `color` morto
+>   (pré-existente).
+> - `RecommendationsSection.tsx:88-90` — badge de impacto ficou maior (`span
+>   text-[10px]` → `Badge text-xs`); sancionado pelo próprio brief.
+> - **A 390 px, `/` e `/analytics?tab=insights` rolam horizontalmente** (169
+>   px e 78 px) — pré-existente, não desta fase: `LeadsLineChart.tsx`
+>   (toggle "Por Dia"/"Por Horário") não foi tocado por nenhuma tarefa;
+>   `CampaignRankingTable.tsx` só mudou cor. Fica para quem mexer em layout
+>   responsivo.
+> - `src/hooks/useLeadStatuses.ts:6` — `FALLBACK_COLOR = '#888780'` (hex
+>   fora de token), único ponto do guarda em `src/hooks`; fora do escopo de
+>   telas do G1.
+>
+> ### Decisões que esperam o Erick
+>
+> Continuam abertas as da Fase 1 (ver bloco "✅ Visual — Fase 1" abaixo): o
+> desencontro de altura botão×campo, as duas colisões de cor de gráfico
+> (paleta própria de 6 cores para 9+ categorias, com 3 delas coincidindo com
+> tokens semânticos), e as seis de 23/09 (fluxo em rascunho, recálculo/sync
+> disparando automação, peso 0 no A/B, conta Unlayer `dnmkt`, colunas de
+> funil da dn.ia, cor do botão das landing pages). **Duas novas dependem da
+> mesma pergunta da paleta de gráfico (decisão 2 da Fase 1):** P2×P3
+> dividindo cor (item 7 acima) e os chips de período do dia dividindo cor
+> (item 9 acima) — as duas só resolvem "de verdade" se o Design System
+> ganhar mais tons semânticos ou uma paleta de categoria maior.
+>
+> **Próximo passo: G2** — Contatos, a ficha de contato e Importação, onde
+> estão **26 dos 63** `white`/`black` que o guarda só passou a contar na
+> Tarefa 1 desta fase.
+
 > ## ✅ Visual — Fase 1 (casca, primitivos, gráficos), 23/09/2026
 >
 > **A Fase 1 fechou.** Branch `visual-fase-1` (a partir de `main` `2e39aae`),
