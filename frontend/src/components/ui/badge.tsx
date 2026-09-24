@@ -25,8 +25,14 @@ const badgeVariants = cva(
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
-}
+// forwardRef: o Badge entra em TooltipTrigger/PopoverTrigger com `asChild`,
+// que clona o filho e tenta passar `ref` — sem forwardRef, React avisa
+// "Function components cannot be given refs" (DetailSections.tsx, DniaIdChip).
+const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
+  ({ className, variant, ...props }, ref) => {
+    return <div ref={ref} className={cn(badgeVariants({ variant }), className)} {...props} />;
+  },
+);
+Badge.displayName = "Badge";
 
 export { Badge, badgeVariants };
