@@ -41,7 +41,7 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-popover/95 border border-border rounded-lg p-3 shadow-xl">
+        <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
           <p className="font-medium text-foreground mb-2">{data.fullName}</p>
           <div className="space-y-1 text-sm">
             <p style={{ color: COR_HOT }}>Hot: {data.Hot} ({((data.Hot / data.total) * 100).toFixed(1)}%)</p>

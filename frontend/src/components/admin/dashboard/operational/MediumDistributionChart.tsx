@@ -31,7 +31,7 @@ export function MediumDistributionChart({ data }: MediumDistributionChartProps) 
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-popover/95 border border-border rounded-lg p-3 shadow-xl">
+        <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
           <p className="font-medium text-foreground mb-1">{data.name}</p>
           <div className="text-sm space-y-0.5">
             <p className="text-muted-foreground">Total: {data.value}</p>

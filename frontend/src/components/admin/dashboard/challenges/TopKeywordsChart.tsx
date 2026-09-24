@@ -11,7 +11,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-background/95 border border-border/50 rounded-xl px-4 py-3 shadow-xl">
+      <div className="bg-popover border border-border rounded-xl px-4 py-3 shadow-lg">
         <p className="text-sm font-medium text-foreground">"{data.keyword}"</p>
         <p className="text-sm text-muted-foreground mt-1">
           <span className="text-primary font-semibold">{data.count}</span> menções
