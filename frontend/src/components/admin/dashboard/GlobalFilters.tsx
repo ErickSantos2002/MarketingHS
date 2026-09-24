@@ -438,7 +438,7 @@ export function GlobalFilters({
             <Badge
               key={`campaign-${campaign}`}
               variant="info"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-info/20"
               onClick={() => onUpdateFilters({ campaigns: filters.campaigns.filter(c => c !== campaign) })}
             >
               {campaign}
@@ -448,8 +448,8 @@ export function GlobalFilters({
           {filters.qualifications.map(qual => (
             <Badge
               key={`qual-${qual}`}
-              variant="success"
-              className="cursor-pointer"
+              variant="secondary"
+              className="cursor-pointer hover:bg-surface-elevated"
               onClick={() => onUpdateFilters({ qualifications: filters.qualifications.filter(q => q !== qual) })}
             >
               {qual === 'hot' ? 'Hot' : qual === 'warm' ? 'Warm' : 'Raw'}
@@ -460,7 +460,7 @@ export function GlobalFilters({
             <Badge
               key={`fat-${fat}`}
               variant="warning"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-warning/20"
               onClick={() => onUpdateFilters({ faturamentos: filters.faturamentos.filter(f => f !== fat) })}
             >
               {fat}
@@ -471,7 +471,7 @@ export function GlobalFilters({
             <Badge
               key={`cargo-${cargo}`}
               variant="default"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-primary/20"
               onClick={() => onUpdateFilters({ cargos: filters.cargos.filter(c => c !== cargo) })}
             >
               {cargo}
@@ -482,7 +482,7 @@ export function GlobalFilters({
             <Badge
               key={`theme-${theme}`}
               variant="info"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-info/20"
               onClick={() => onUpdateFilters({ challengeThemes: filters.challengeThemes.filter(t => t !== theme) })}
             >
               {theme}
@@ -493,7 +493,7 @@ export function GlobalFilters({
             <Badge
               key={`source-${source}`}
               variant="warning"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-warning/20"
               onClick={() => onUpdateFilters({ sources: (filters.sources || []).filter(s => s !== source) })}
             >
               {source}
@@ -504,7 +504,7 @@ export function GlobalFilters({
             <Badge
               key={`presenca-${presenca}`}
               variant="success"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-success/20"
               onClick={() => onUpdateFilters({ presencas: (filters.presencas || []).filter(p => p !== presenca) })}
             >
               {presenca}
@@ -514,7 +514,7 @@ export function GlobalFilters({
           {filters.interesseEcossistema && (
             <Badge
               variant="default"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-primary/20"
               onClick={() => onUpdateFilters({ interesseEcossistema: null })}
             >
               {filters.interesseEcossistema === 'mtia_e_formacao'
@@ -528,7 +528,7 @@ export function GlobalFilters({
           {filters.onlyReconversions && (
             <Badge
               variant="info"
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-info/20"
               onClick={() => onUpdateFilters({ onlyReconversions: false })}
             >
               Só reconversões
