@@ -28,7 +28,7 @@ export class LimiteDeErro extends Component<Props, State> {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="max-w-lg rounded-lg border border-border/60 bg-card p-6 text-center">
-          <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-500" />
+          <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-warning" />
           <h2 className="mb-2 text-base font-semibold">Algo quebrou nesta tela</h2>
           <p className="text-sm text-muted-foreground">{erro.message}</p>
           {this.props.area && (

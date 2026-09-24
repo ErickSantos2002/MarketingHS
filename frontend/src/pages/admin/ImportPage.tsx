@@ -5,7 +5,7 @@ import { DatacoreImport } from '@/components/admin/DatacoreImport';
 export default function ImportPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold">Importar</h1>
+      {/* A topbar já escreve "Importar" (AdminLayout) — título duplicado sai daqui. */}
       <Tabs defaultValue="csv">
         <TabsList>
           <TabsTrigger value="csv">Arquivo CSV</TabsTrigger>

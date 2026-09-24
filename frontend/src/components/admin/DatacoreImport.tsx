@@ -55,9 +55,9 @@ export function DatacoreImport() {
 
   if (indisponivel) {
     return (
-      <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-        <p className="text-xs text-amber-900 dark:text-amber-200">{indisponivel}</p>
+      <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-[--tint-warning] p-3">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+        <p className="text-xs text-[--on-tint-warning]">{indisponivel}</p>
       </div>
     );
   }
@@ -76,9 +76,9 @@ export function DatacoreImport() {
         </CardContent>
       </Card>
 
-      <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-        <p className="text-xs text-amber-900 dark:text-amber-200">
+      <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-[--tint-warning] p-3">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+        <p className="text-xs text-[--on-tint-warning]">
           <strong>{semEmail}</strong> dos {previa.total} clientes não têm e-mail. Eles entram
           como contato para segmentação — você passa a conseguir separar cliente de lead —,
           mas não recebem e-mail enquanto não tiverem endereço.
