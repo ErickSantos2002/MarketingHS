@@ -237,7 +237,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
           variant="ghost" size="sm"
           onClick={() => setShowDeleteDialog(true)}
           disabled={bulkDeleting}
-          className="text-danger border border-danger/40 hover:bg-danger/20 hover:text-danger gap-1 h-8 text-xs"
+          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 border-transparent gap-1 h-8 text-xs"
         >
           <Trash2 className="h-3 w-3" /> Apagar
         </Button>

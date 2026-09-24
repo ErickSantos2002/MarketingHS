@@ -532,7 +532,9 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
               className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${
                 lead.etiqueta === 'hotlead'
                   ? 'bg-[--tint-success] text-[--on-tint-success] border-success/30'
-                  : 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30'
+                  : lead.etiqueta === 'warm'
+                  ? 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30'
+                  : 'bg-[--tint-neutral] text-[--on-tint-neutral] border-borda'
               }`}
             >
               {lead.etiqueta}

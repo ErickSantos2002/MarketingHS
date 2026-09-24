@@ -3,7 +3,7 @@
 > ## ✅ Visual — Fase 2, G2 (Contatos, ficha, Importação), 24/09/2026
 >
 > **O G2 fechou.** Mesma branch `visual-fase-2-g2` (a partir de
-> `visual-fase-2`, base `d4007e6`), **não mergeada** — como as fases e
+> `visual-fase-1`, base `d4007e6`), **não mergeada** — como as fases e
 > grupos anteriores, o merge é decisão do Erick. As seis tarefas do plano
 > `docs/superpowers/plans/2026-09-24-marketinghs-visual-fase-2-g2-contatos.md`
 > saíram; o spec que governa continua sendo
@@ -64,8 +64,13 @@
 >
 > **O que cada Review Focus achou:** (1) cor do banco preservada nos
 > dois temas — os 7 status reais e as etiquetas reais (`purple`/`blue`)
-> saem com a cor do banco na borda/ponto/fundo de 12%, o texto sempre em
-> `--text-heading`, nada virou cinza nem ficou ilegível; (2) alfa
+> não viraram cinza nem ficaram ilegíveis; mas nem todo ponto usa a cor
+> do banco: só o `StatusBadge` (ficha) resolve `getColor()` e pinta
+> borda/ponto/fundo de 12% com ela, texto sempre em `--text-heading`. O
+> ponto da coluna Status da lista (`ContactsTable.tsx`), o da
+> `ContactsBulkBar` e o da `ContactsFiltersBar` usam `STATUS_COLORS`
+> fixo — ver a divergência registrada abaixo, em "Decisões que esperam
+> o Erick"; (2) alfa
 > concatenada — a única ocorrência do app inteiro era o selo do medidor
 > do G1 (`` `${getColor()}20` ``), consertado na Tarefa 1; grep rodado
 > em toda tarefa desde então, sempre zero; (3) ação destrutiva —
@@ -140,8 +145,11 @@
 >
 > **Dívida anotada** (nada corrigido, registrada para quando alguém
 > tocar o arquivo de novo):
-> - `ContactsBulkBar.tsx:125` — botão "Apagar" em `border-danger/40`,
->   enquanto os irmãos (menu da linha, etc.) usam `/30`.
+> - ~~`ContactsBulkBar.tsx:240` — botão "Apagar" em `border-danger/40`,
+>   enquanto os irmãos (menu da linha, etc.) usam `/30`.~~ Consertado na
+>   Onda de conserto (24/09/2026, ver abaixo) — e era pior que a
+>   divergência de opacidade: `text-danger` sobre o fundo
+>   `var(--color-primary-600)` da barra dava ~1,4:1, ilegível.
 > - `ContactsTable.tsx:694-698` — `EcosystemBadges` local com
 >   `fontSize: 10` inline, implementação própria e gêmea do
 >   `EcosystemPills` compartilhado (pré-existente, não desta fase).
@@ -151,20 +159,61 @@
 >   `OverviewTab.tsx:449`. Criar a variante tocaria um arquivo fora do
 >   escopo desta fase; decidir numa fase futura.
 >
-> ### Decisões que esperam o Erick (a nova é a primeira)
+> ### Decisões que esperam o Erick (as duas novas são as primeiras)
 >
-> 1. **Os pontos de status da `ContactsBulkBar` e da
->    `ContactsFiltersBar` usam `STATUS_COLORS` fixo (mapa por nome), não
->    a cor real do banco** — herança da dn.ia. `StatusBadge.tsx` já
->    busca a cor do banco (`getColor()`); esses dois pontos, não.
->    Unificar os dois caminhos é mudança de lógica (qual fonte de cor
->    cada componente consulta), fora do escopo desta fase, que só trocou
->    a apresentação. Decidir se vale a pena antes do G3.
-> 2. Continuam abertas as decisões dos blocos anteriores (Fase 1 e G1,
+> 1. **O ponto de status diverge em três lugares, não em dois.** Além da
+>    `ContactsBulkBar` e da `ContactsFiltersBar`, a coluna Status da
+>    própria lista (`ContactsTable.tsx:567`) também usa `STATUS_COLORS`
+>    fixo (mapa por nome), não a cor real do banco. Só o `StatusBadge`
+>    da ficha busca `getColor()`. Já era assim antes desta fase — o mapa
+>    hex antigo também divergia da cor do banco, isto só trocou hex por
+>    token no mesmo comportamento. Três status medidos divergem hoje
+>    entre lista e ficha:
+>
+>    | Status | Lista (`STATUS_COLORS`) | Ficha (`getColor()`, cor do banco) |
+>    |---|---|---|
+>    | MQL | azul | verde (`#22c55e`) |
+>    | Em contrato | verde | laranja (`#f97316`) |
+>    | Iniciado | azul-escuro | violeta (`#a78bfa`) |
+>
+>    Unificar (`getColor(s) || STATUS_COLORS[s]`) é mudança de fonte de
+>    dado — qual valor cada componente lê —, fora do escopo desta fase,
+>    que só trocou apresentação. Decidir se vale a pena antes do G3.
+> 2. **Nomes de cor de etiqueta colidem depois da tradução para token.**
+>    `purple` virou primária (azul) e `blue` também é info (azul); o
+>    seletor de cor da ficha oferece 6 amostras e só 4 se distinguem
+>    (purple≈blue, green≈teal). Na base real, 3 etiquetas `purple` e 1
+>    `#3b82f6` ficaram azul×azul — indistinguíveis no seletor e na
+>    lista. Opções: (a) tratar nome de etiqueta como dado com paleta
+>    própria fixa, fora dos 5 tokens semânticos do DS; (b) tirar do
+>    seletor as amostras que colidem, ficando com menos de 6 cores; (c)
+>    aceitar a colisão como está.
+> 3. Continuam abertas as decisões dos blocos anteriores (Fase 1 e G1,
 >    abaixo): o desencontro de altura botão×campo, as colisões de cor
 >    de gráfico, e as seis de 23/09 (fluxo em rascunho, recálculo/sync
 >    disparando automação, peso 0 no A/B, conta Unlayer `dnmkt`, colunas
 >    de funil da dn.ia, cor do botão das landing pages).
+>
+> ### Onda de conserto — revisão final da branch, 24/09/2026
+>
+> A revisão final de toda a branch (`d4007e6..655b712`) achou três
+> defeitos que as sete revisões por tarefa não pegaram, todos
+> consertados nesta onda:
+>
+> 1. `ContactsBulkBar.tsx:240` — botão "Apagar" ilegível
+>    (`text-danger` sobre `var(--color-primary-600)`, ~1,4:1) virou
+>    botão de perigo cheio (`bg-destructive text-destructive-foreground`).
+> 2. `ContactsTable.tsx` — a etiqueta pintava de âmbar qualquer valor
+>    diferente de `hotlead`, inclusive desconhecido; devolvido o
+>    terceiro ramo neutro (`hotlead`→success, `warm`→warning, resto→
+>    neutro), comportamento de antes da fase.
+> 3. `guarda-visual.mjs` — o `EFEITO` não pegava `shadow-[0_0_...]`,
+>    `blur-[...]` fora de `backdrop-`, `drop-shadow-[...]` nem
+>    `linear-/radial-gradient(...)`; alargado. `contacts`, `dashboard`,
+>    `hooks` e `lib` continuam **0**; o novo total do app é **338**
+>    (era 332), e `segments` passa de **6 para 10** — os dois aumentos
+>    são brilho/gradiente que já estava lá (`SegmentFormModal.tsx`,
+>    `sidebar.tsx`), fora do escopo desta onda e não desta fase.
 >
 > **Próximo passo: G3** — Campanhas e Templates.
 

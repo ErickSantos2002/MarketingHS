@@ -44,7 +44,8 @@ const NUMERICA = /\b(?:hsla?|rgba?)\(\s*\d/g;
 // o viam — foi assim que o gradiente do LeadsListSheet passou pelo G1.
 // `backdrop-blur-[4px]` (fundo de modal, permitido) não casa: exige
 // tamanho nomeado e não aceita o prefixo `backdrop-`.
-const EFEITO = /\bbg-gradient-|drop-shadow\(0 0|(?<!backdrop-)\bblur-(?:sm|md|lg|xl|2xl|3xl)\b/g;
+const EFEITO =
+  /\bbg-gradient-|drop-shadow\(0 0|(?<!backdrop-)\bblur-(?:sm|md|lg|xl|2xl|3xl)\b|shadow-\[0_0_|(?<!backdrop-)\bblur-\[|drop-shadow-\[|(?:linear|radial)-gradient/g;
 
 function* arquivos(dir) {
   for (const nome of readdirSync(dir)) {
