@@ -337,7 +337,7 @@ export function KPICards({
           <KPICard
             title="Leads na Semana"
             value={leadsThisWeek.length}
-            icon={<UserCheck className="h-5 w-5 text-primary-foreground" />}
+            icon={<UserCheck className="h-5 w-5 text-[--color-slate-900]" />}
             gradient="bg-warning"
             glowColor="amber"
             delay="200ms"

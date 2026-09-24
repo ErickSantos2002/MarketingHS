@@ -20,6 +20,9 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
         count: raw,
         percentage: total > 0 ? (raw / total) * 100 : 0,
         color: 'var(--color-slate-400)',
+        // Fundo claro (slate-400): texto precisa do escuro fixo, não do
+        // texto-sobre-cor-cheia padrão (contraste < 3:1 com branco).
+        textClass: 'text-[--color-slate-900]',
         width: 100
       },
       {
@@ -27,6 +30,8 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
         count: warm,
         percentage: total > 0 ? (warm / total) * 100 : 0,
         color: 'var(--color-warning-500)',
+        // Mesma razão: warning-500 é claro demais para texto branco.
+        textClass: 'text-[--color-slate-900]',
         width: total > 0 ? (warm / Math.max(raw, warm, hot, 1)) * 100 : 0
       },
       {
@@ -34,6 +39,7 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
         count: hot,
         percentage: total > 0 ? (hot / total) * 100 : 0,
         color: 'var(--color-success-500)',
+        textClass: 'text-primary-foreground',
         width: total > 0 ? (hot / Math.max(raw, warm, hot, 1)) * 100 : 0
       },
     ];
@@ -43,7 +49,7 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-primary/20">
+          <div className="p-2 rounded-lg bg-[--tint-primary]">
             <TrendingUp className="h-5 w-5 text-primary" />
           </div>
           Funil de Prontidão
@@ -74,7 +80,7 @@ export function SalesReadinessFunnel({ leads }: SalesReadinessFunnelProps) {
                   }}
                 >
                   {stage.width > 20 && (
-                    <span className="text-sm font-semibold text-primary-foreground">
+                    <span className={`text-sm font-semibold ${stage.textClass}`}>
                       {stage.count}
                     </span>
                   )}

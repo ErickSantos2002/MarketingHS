@@ -67,7 +67,7 @@ export function TopResponsesCard({ topResponses }: TopResponsesCardProps) {
                   className="group relative bg-muted/30 rounded-lg p-4 border border-border/50 hover:border-primary/30 transition-all duration-300"
                 >
                   {/* Rank badge */}
-                  <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-warning flex items-center justify-center text-xs font-bold text-primary-foreground">
+                  <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-warning flex items-center justify-center text-xs font-bold text-[--color-slate-900]">
                     {index + 1}
                   </div>
                   
