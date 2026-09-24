@@ -31,8 +31,10 @@ const EXCECOES = [
 ];
 
 const HEX = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b/g;
+// `white` e `black` não têm número (bg-white, text-black/80) — antes ficavam
+// fora da conta, e o "0" do guarda não provava ausência de cor literal.
 const LITERAL =
-  /\b(?:bg|text|border|ring|from|via|to|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/g;
+  /\b(?:bg|text|border|ring|from|via|to|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)-(?:(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}|white|black)\b/g;
 // Cor numérica direta (hsl/hsla/rgb/rgba com dígito logo após o parêntese) —
 // o mesmo defeito do hex, só que escrito por função em vez de literal.
 const NUMERICA = /\b(?:hsla?|rgba?)\(\s*\d/g;

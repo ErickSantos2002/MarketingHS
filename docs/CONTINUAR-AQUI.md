@@ -87,6 +87,12 @@
 > Enquanto isso, o `grep` manual continua obrigatório em toda tarefa:
 > `grep -rn "bg-black\|bg-white\|text-white\|text-black\|border-white\|border-black" src/... --include=*.tsx`
 >
+> **✅ Resolvido em 24/09/2026, na Tarefa 1 da Fase 2** (branch
+> `visual-fase-2`): a regex `LITERAL` passou a aceitar `white`/`black` sem
+> número. Placar de partida da Fase 2, com o ponto cego agora visível: **888**
+> no total do app (825 + 63 que o guarda não via) e **398** em
+> `src/components/admin/dashboard`.
+>
 > - **Os 5 pontos que restam em `src/components/ui` são falso-positivo.** Os
 >   cinco estão na mesma linha, `chart.tsx:48`, e são **seletores CSS** do
 >   recharts (`[&_.recharts-cartesian-grid_line[stroke='#ccc']]`,
