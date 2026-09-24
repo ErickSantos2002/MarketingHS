@@ -49,9 +49,9 @@ export function SourcePerformanceTable({ data, onSourceClick, leads = [] }: Sour
   });
 
   const getScoreBadge = (hotRate: number) => {
-    if (hotRate >= 30) return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Alto</Badge>;
-    if (hotRate >= 15) return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Médio</Badge>;
-    return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Baixo</Badge>;
+    if (hotRate >= 30) return <Badge variant="success">Alto</Badge>;
+    if (hotRate >= 15) return <Badge variant="warning">Médio</Badge>;
+    return <Badge variant="secondary">Baixo</Badge>;
   };
 
   const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
@@ -67,7 +67,7 @@ export function SourcePerformanceTable({ data, onSourceClick, leads = [] }: Sour
   };
 
   return (
-    <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium flex items-center gap-2">
           Performance por Source
@@ -92,17 +92,17 @@ export function SourcePerformanceTable({ data, onSourceClick, leads = [] }: Sour
                   </Button>
                 </TableHead>
                 <TableHead className="text-right">
-                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-emerald-400" onClick={() => handleSort('hot')}>
+                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-[--on-tint-success]" onClick={() => handleSort('hot')}>
                     Hot <SortIcon columnKey="hot" />
                   </Button>
                 </TableHead>
                 <TableHead className="text-right">
-                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-yellow-400" onClick={() => handleSort('warm')}>
+                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-[--on-tint-warning]" onClick={() => handleSort('warm')}>
                     Warm <SortIcon columnKey="warm" />
                   </Button>
                 </TableHead>
                 <TableHead className="text-right">
-                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-zinc-400" onClick={() => handleSort('raw')}>
+                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-conteudo-muted" onClick={() => handleSort('raw')}>
                     Raw <SortIcon columnKey="raw" />
                   </Button>
                 </TableHead>
@@ -128,9 +128,9 @@ export function SourcePerformanceTable({ data, onSourceClick, leads = [] }: Sour
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{row.total}</TableCell>
-                  <TableCell className="text-right tabular-nums text-emerald-400">{row.hot}</TableCell>
-                  <TableCell className="text-right tabular-nums text-yellow-400">{row.warm}</TableCell>
-                  <TableCell className="text-right tabular-nums text-zinc-400">{row.raw}</TableCell>
+                  <TableCell className="text-right tabular-nums text-[--on-tint-success]">{row.hot}</TableCell>
+                  <TableCell className="text-right tabular-nums text-[--on-tint-warning]">{row.warm}</TableCell>
+                  <TableCell className="text-right tabular-nums text-conteudo-muted">{row.raw}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{row.hotRate.toFixed(1)}%</TableCell>
                   <TableCell className="text-center">{getScoreBadge(row.hotRate)}</TableCell>
                 </TableRow>

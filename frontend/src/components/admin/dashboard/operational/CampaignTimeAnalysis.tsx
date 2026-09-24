@@ -31,10 +31,10 @@ const getPeriodRange = (period: Period): string => {
 
 const getPeriodColor = (period: Period): string => {
   switch (period) {
-    case 'Madrugada': return 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
-    case 'Manhã': return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-    case 'Tarde': return 'bg-orange-500/20 text-orange-300 border-orange-500/30';
-    case 'Noite': return 'bg-violet-500/20 text-violet-300 border-violet-500/30';
+    case 'Madrugada': return 'bg-[--tint-primary] text-[--on-tint-primary] border-primary/30';
+    case 'Manhã': return 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30';
+    case 'Tarde': return 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30';
+    case 'Noite': return 'bg-[--tint-primary] text-[--on-tint-primary] border-primary/30';
   }
 };
 
@@ -145,11 +145,11 @@ export function CampaignTimeAnalysis({ leads }: CampaignTimeAnalysisProps) {
 
   if (campaignData.length === 0) {
     return (
-      <Card className="bg-gradient-to-br from-card via-card to-emerald-950/10 border-border/50 shadow-lg">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <div className="p-2 rounded-lg bg-emerald-500/20">
-              <Target className="h-5 w-5 text-emerald-400" />
+            <div className="p-2 rounded-lg bg-[--tint-success]">
+              <Target className="h-5 w-5 text-success" />
             </div>
             Melhor Horário por Campanha UTM
           </CardTitle>
@@ -164,11 +164,11 @@ export function CampaignTimeAnalysis({ leads }: CampaignTimeAnalysisProps) {
   }
 
   return (
-    <Card className="bg-gradient-to-br from-card via-card to-emerald-950/10 border-border/50 shadow-lg">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-emerald-500/20">
-            <Target className="h-5 w-5 text-emerald-400" />
+          <div className="p-2 rounded-lg bg-[--tint-success]">
+            <Target className="h-5 w-5 text-success" />
           </div>
           Melhor Horário por Campanha UTM
         </CardTitle>
@@ -176,10 +176,10 @@ export function CampaignTimeAnalysis({ leads }: CampaignTimeAnalysisProps) {
       <CardContent className="space-y-4">
         {/* Insight Card */}
         {topInsight && (
-          <div className="p-3 rounded-xl bg-gradient-to-r from-info/10 to-primary/10 border border-info/20">
-            <div className="flex items-center gap-2 text-info mb-1">
-              <Lightbulb className="h-4 w-4" />
-              <span className="text-xs font-medium">Insight</span>
+          <div className="p-3 rounded-xl bg-[--tint-info] border border-info/30">
+            <div className="flex items-center gap-2 mb-1">
+              <Lightbulb className="h-4 w-4 text-info" />
+              <span className="text-xs font-medium text-[--on-tint-info]">Insight</span>
             </div>
             <p className="text-sm text-foreground">{topInsight}</p>
           </div>
@@ -214,9 +214,9 @@ export function CampaignTimeAnalysis({ leads }: CampaignTimeAnalysisProps) {
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <span className="font-semibold text-emerald-400">{item.bestPeriodHotRate}%</span>
+                        <span className="font-semibold text-[--on-tint-success]">{item.bestPeriodHotRate}%</span>
                         {item.bestPeriodHotRate > item.overallHotRate && (
-                          <TrendingUp className="h-3 w-3 text-emerald-400" />
+                          <TrendingUp className="h-3 w-3 text-success" />
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground">

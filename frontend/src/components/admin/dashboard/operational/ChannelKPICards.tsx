@@ -46,8 +46,8 @@ export function ChannelKPICards({ sourcePerformance, campaignPerformance }: Chan
       value: topSource?.source || '-',
       subtitle: topSource ? `${topSource.total} leads` : 'sem dados',
       icon: TrendingUp,
-      iconColor: 'text-emerald-400',
-      bgColor: 'bg-emerald-500/10',
+      iconColor: 'text-success',
+      bgColor: 'bg-[--tint-success]',
     },
     {
       title: 'Melhor Taxa Hot',
@@ -70,7 +70,7 @@ export function ChannelKPICards({ sourcePerformance, campaignPerformance }: Chan
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {kpis.map((kpi) => (
-        <Card key={kpi.title} className="bg-card/50 backdrop-blur-sm border-border/50">
+        <Card key={kpi.title}>
           <CardContent className="p-4">
             <div className="flex items-start justify-between">
               <div className="space-y-1">

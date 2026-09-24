@@ -63,7 +63,7 @@ export function CampaignPerformanceTable({ data, onCampaignClick, leads = [] }: 
   };
 
   return (
-    <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium flex items-center gap-2">
           Performance por Campanha UTM
@@ -88,7 +88,7 @@ export function CampaignPerformanceTable({ data, onCampaignClick, leads = [] }: 
                   </Button>
                 </TableHead>
                 <TableHead className="text-right">
-                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-emerald-400" onClick={() => handleSort('hot')}>
+                  <Button variant="ghost" size="sm" className="h-auto p-0 font-medium text-[--on-tint-success]" onClick={() => handleSort('hot')}>
                     Hot <SortIcon columnKey="hot" />
                   </Button>
                 </TableHead>
@@ -115,7 +115,7 @@ export function CampaignPerformanceTable({ data, onCampaignClick, leads = [] }: 
                     {row.campaign}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{row.total}</TableCell>
-                  <TableCell className="text-right tabular-nums text-emerald-400">{row.hot}</TableCell>
+                  <TableCell className="text-right tabular-nums text-[--on-tint-success]">{row.hot}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{row.hotRate.toFixed(1)}%</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-xs">

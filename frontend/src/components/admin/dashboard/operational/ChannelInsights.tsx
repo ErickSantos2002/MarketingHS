@@ -101,8 +101,8 @@ export function ChannelInsights({ sourcePerformance, mediumPerformance, totalLea
 
   const getIcon = (type: Insight['type']) => {
     switch (type) {
-      case 'success': return <CheckCircle className="h-4 w-4 text-emerald-400" />;
-      case 'warning': return <TrendingDown className="h-4 w-4 text-yellow-400" />;
+      case 'success': return <CheckCircle className="h-4 w-4 text-success" />;
+      case 'warning': return <TrendingDown className="h-4 w-4 text-warning" />;
       case 'info': return <TrendingUp className="h-4 w-4 text-primary" />;
       case 'alert': return <AlertCircle className="h-4 w-4 text-info" />;
     }
@@ -110,18 +110,18 @@ export function ChannelInsights({ sourcePerformance, mediumPerformance, totalLea
 
   const getBgColor = (type: Insight['type']) => {
     switch (type) {
-      case 'success': return 'bg-emerald-500/10 border-emerald-500/20';
-      case 'warning': return 'bg-yellow-500/10 border-yellow-500/20';
+      case 'success': return 'bg-[--tint-success] border-success/30';
+      case 'warning': return 'bg-[--tint-warning] border-warning/30';
       case 'info': return 'bg-primary/10 border-primary/20';
       case 'alert': return 'bg-info/10 border-info/20';
     }
   };
 
   return (
-    <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-amber-400" />
+          <Lightbulb className="h-4 w-4 text-warning" />
           Insights de Canais
         </CardTitle>
       </CardHeader>

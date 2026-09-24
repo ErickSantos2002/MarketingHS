@@ -41,7 +41,7 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-xl">
+        <div className="bg-popover/95 border border-border rounded-lg p-3 shadow-xl">
           <p className="font-medium text-foreground mb-2">{data.fullName}</p>
           <div className="space-y-1 text-sm">
             <p style={{ color: COR_HOT }}>Hot: {data.Hot} ({((data.Hot / data.total) * 100).toFixed(1)}%)</p>
@@ -56,7 +56,7 @@ export function SourceQualificationChart({ data }: SourceQualificationChartProps
   };
 
   return (
-    <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-medium">Qualificação por Source</CardTitle>
       </CardHeader>
