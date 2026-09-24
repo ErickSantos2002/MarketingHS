@@ -23,8 +23,9 @@
 >
 > **Placar do guarda: 888 → 463** (app inteiro; o "888" já é o ponto de
 > partida com o ponto cego fechado pela Tarefa 1 — 825 da Fase 1 + 63 que o
-> guarda não via). `src/components/admin/dashboard` (as 7 abas + raiz):
-> **398 → 0**, tarefa a tarefa: raiz + `overview` 398 → 292 (T3),
+> guarda não via). `src/components/admin/dashboard` (as 6 subpastas — 5
+> abas do Analytics + a Visão Geral — mais a raiz): **398 → 0**, tarefa a
+> tarefa: raiz + `overview` 398 → 292 (T3),
 > `profile` + `tactical` 292 → 257 (T4), `operational` 257 → 211 (T5),
 > `challenges` 211 → 95 (T6), `insights` 95 → 0 (T7). O que resta no app é
 > inteiramente G2 em diante: `settings` 122, `contacts` 105, `pages/admin`
@@ -37,16 +38,20 @@
 > `build:landing` passando; os **7 hashes** do Design System conferindo com
 > o `ORIGEM.md` — nenhum arquivo de `design-system/` tocado, nenhum defeito
 > novo do Design System apareceu nas Tarefas 3-7. Capacidade por capacidade
-> (`git diff visual-fase-1`, 46 arquivos, 398 inserções / 828 deleções):
-> todo arquivo tocado é do escopo esperado (as 7 subpastas de `dashboard` +
-> raiz, `useLeadQualification.tsx`, `badge.tsx`, `drawer.tsx`, os dois
-> arquivos mortos apagados); das 661 linhas que sobram do filtro de diff,
-> nenhuma mexe em `useState`/`onClick`/chamada de API/condição/limiar — são
-> strings de classe fora de `className=` (corpo de função `getXColor`), a
-> remoção dos dois arquivos mortos, a troca `getScoreColor`→`getScoreVariant`
-> (mesmo mapeamento, tipo de retorno diferente, de string CSS para nome de
-> `variant`), `<Card>` simplificado, emoji removido e espaço em branco de
-> editor. **As sete telas** (`/`, as cinco abas do Analytics, a ficha do
+> (`git diff --stat e9398f3 -- frontend/`, medido depois da onda de conserto
+> de 24/09 abaixo: **50 arquivos, 423 inserções / 854 deleções** — inclui
+> `frontend/scripts/guarda-visual.mjs`, que é o guarda em si, tocado pela
+> Tarefa 1, não uma tela): todo arquivo tocado é do escopo esperado (as 6
+> subpastas de `dashboard` + raiz, `useLeadQualification.tsx`, `badge.tsx`,
+> `drawer.tsx`, `guarda-visual.mjs`, os dois arquivos mortos apagados); do
+> que sobra do filtro de diff, nenhuma linha mexe em
+> `useState`/`onClick`/chamada de API/condição/limiar — são strings de
+> classe fora de `className=` (corpo de função `getXColor`), a remoção dos
+> dois arquivos mortos, a troca `getScoreColor`→`getScoreVariant` (mesmo
+> mapeamento, tipo de retorno diferente, de string CSS para nome de
+> `variant`), o campo `textClass` novo em `SalesReadinessFunnel.tsx`
+> (mesmo padrão do `color` que já existia, para resolver o item 8 da onda),
+> `<Card>` simplificado, emoji removido e espaço em branco de editor. **As sete telas** (`/`, as cinco abas do Analytics, a ficha do
 > lead) abertas nos dois temas a 1440 px — zero erro de console novo (os 2
 > avisos de React Router e, na ficha do lead, 2 avisos Radix de
 > acessibilidade — "Missing `Description` for `{DialogContent}`" —, todos
@@ -124,9 +129,10 @@
 >   border-*/20` (pré-existente, já token, só fora do desenho canônico
 >   `--tint-*`).
 > - `CampaignTimeAnalysis.tsx:142` — ícone `Target` em `h-5 w-5`, não `h-4`.
-> - **`ChallengesAIInsights.tsx:388-391`** — hover do botão "Respostas
->   Destaque" não muda mais de tom (base e hover = `--tint-warning`);
->   sugerido `hover:bg-warning/20`. Marcado "corrigir na onda final".
+> - ~~`ChallengesAIInsights.tsx:388-391`~~ — **corrigido na onda final de
+>   24/09** (item 4): hover do botão "Respostas Destaque" virou
+>   `hover:bg-warning/20` (era `hover:bg-[--tint-warning]`, igual à base,
+>   sem mudar de tom).
 > - `ThemeQualityHeatmap.tsx` — legenda numa rampa de `primary`, dissociada
 >   das colunas `success/warning/danger` (pré-existente).
 > - `ChallengeThemesChart.tsx:94` — destructure de `color` morto
@@ -141,6 +147,62 @@
 > - `src/hooks/useLeadStatuses.ts:6` — `FALLBACK_COLOR = '#888780'` (hex
 >   fora de token), único ponto do guarda em `src/hooks`; fora do escopo de
 >   telas do G1.
+> - **O guarda não enxerga gradiente/brilho escrito com token** (`bg-gradient-*`,
+>   `from-card`, `drop-shadow(0 0`) — foi assim que o `LeadsListSheet`
+>   escapou até a revisão final. Proposta para o G2: contar isso no guarda
+>   ou no portão do grupo.
+> - **Chip clicável não tem padrão único** (`Badge` sem estado de hover) —
+>   decidir antes do G2.
+> - **`TopResponsesCard`: tema "Estratégia" em `destructive` (vermelho) por
+>   matiz** — lê como alerta.
+>
+> ### Onda de conserto — revisão final da branch, 24/09/2026
+>
+> A revisão da branch inteira (`e9398f3..0d186d0`, 10 commits, 47 arquivos
+> de `frontend/`) achou nove defeitos pequenos — só classe/token, nenhuma
+> lógica — que as sete revisões por tarefa não viram. Todos corrigidos na
+> própria branch:
+>
+> - `insights/TemporalHeatmap.tsx`: a faixa 30–39 saía mais clara que a
+>   40–49 (`warning/70` < `warning/80`), invertendo a rampa — virou
+>   crescente com a piora: 50–59 `bg-warning/60`, 40–49 `bg-warning/80`,
+>   30–39 `bg-warning` cheio.
+> - `LeadsListSheet.tsx`: gradiente (`from-card via-card to-primary/5
+>   border-border/50`) e badge com cor solta (`bg-primary/10 text-primary`)
+>   saíram — `SheetContent` ficou só com classe de layout e o badge virou
+>   `variant="default"`, mesmo tratamento do `DialogContent` do
+>   `LeadDetailModal`.
+> - `GlobalFilters.tsx`: os chips de filtro ativo perderam o hover ao virar
+>   `Badge` por variante — cada um ganhou o hover do seu par
+>   (`hover:bg-info/20`, `hover:bg-success/20`, `hover:bg-warning/20`,
+>   `hover:bg-primary/20`); o chip de Qualificação (mistura Hot/Warm/Raw,
+>   sem significado único) virou `secondary` + `hover:bg-surface-elevated`.
+> - `ChallengesAIInsights.tsx`: hover do botão "Respostas Destaque" virou
+>   `hover:bg-warning/20` (era igual à base, não mudava de tom); o item de
+>   histórico selecionado voltou a ter `border-primary` cheio, não `/30`.
+> - `ChannelInsights.tsx`, `ChannelKPICards.tsx`, `HourlyConversionChart.tsx`:
+>   ramos que ficaram fora do desenho canônico (`bg-x/10 border-x/20`)
+>   normalizados para `bg-[--tint-x] border-x/30` (regra 9 do controlador).
+> - Caixas de ícone de título em `bg-primary/20`/`bg-info/20` (8 arquivos
+>   de `profile/`, `tactical/`, `operational/`) viraram
+>   `bg-[--tint-primary]`/`bg-[--tint-info]`; os tooltips de gráfico (8
+>   `CustomTooltip` de recharts em `challenges/`, `operational/` e
+>   `profile/`) unificados num desenho só — `bg-popover border
+>   border-border shadow-lg`, sem `/95` nem `bg-background` — mantendo
+>   padding, raio e tipografia de cada um.
+> - `PriorityLeadsTable.tsx`: o ícone `Flame` de hotlead estava em
+>   `text-warning` — virou `text-success` (Hot = success em todo o app).
+> - Texto branco sobre preenchimento claro (contraste abaixo de 3:1):
+>   `SalesReadinessFunnel.tsx` (barras `warning-500`/`slate-400`, novo
+>   campo `textClass` por estágio), `TopResponsesCard.tsx` (número do
+>   ranking sobre `bg-warning`) e o ícone do KPI "Leads na Semana"
+>   (`overview/KPICards.tsx`) trocaram `text-primary-foreground` por
+>   `text-[--color-slate-900]` — contraste medido subiu de 2,15:1
+>   (branco/warning) e 2,56:1 (branco/slate-400) para 8,31:1 e 6,96:1,
+>   igual nos dois temas porque os dois tons são fixos por design.
+> - `overview/QualificationGauge.tsx`, `SourceBarChart.tsx`,
+>   `DistributionPieChart.tsx`: `drop-shadow(0 0 …)` de brilho decorativo
+>   saiu dos arcos/barras/fatias.
 >
 > ### Decisões que esperam o Erick
 >
