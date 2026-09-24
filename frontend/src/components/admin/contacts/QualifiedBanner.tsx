@@ -41,15 +41,15 @@ export function QualifiedBanner({ status, leadId, jaNoGrowthHS = false, onSent }
   };
 
   return (
-    <div className="mx-6 mt-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-between gap-3">
-      <p className="text-sm text-blue-400 font-medium">
+    <div className="mx-6 mt-2 p-3 rounded-lg bg-[--tint-info] border border-info/30 flex items-center justify-between gap-3">
+      <p className="text-sm text-[--on-tint-info] font-medium">
         Este lead está pronto para o comercial
       </p>
       {isAdmin && !jaNoGrowthHS && (
         <Button
           size="sm"
           variant="outline"
-          className="h-7 text-xs gap-1 border-blue-500/30 text-blue-400"
+          className="h-7 text-xs gap-1 border-info/30 text-[--on-tint-info]"
           disabled={enviando}
           onClick={handleEnviar}
         >

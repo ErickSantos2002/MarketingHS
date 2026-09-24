@@ -146,9 +146,9 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
   return (
     <div
       className="rounded-lg p-2.5 px-4 flex items-center justify-between gap-3 animate-in slide-in-from-top-2 duration-200"
-      style={{ backgroundColor: '#534AB7' }}
+      style={{ backgroundColor: 'var(--color-primary-600)' }}
     >
-      <span className="text-sm font-medium text-white whitespace-nowrap">
+      <span className="text-sm font-medium text-primary-foreground whitespace-nowrap">
         {selectedLeads.length} contato{selectedLeads.length > 1 ? 's' : ''} selecionado{selectedLeads.length > 1 ? 's' : ''}
       </span>
 
@@ -156,7 +156,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
         {/* Status */}
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" disabled={updatingStatus} className="text-white border border-white/30 hover:bg-white/10 hover:text-white gap-1 h-8 text-xs">
+            <Button variant="ghost" size="sm" disabled={updatingStatus} className="text-primary-foreground border border-primary-foreground/30 hover:bg-primary-foreground/10 hover:text-primary-foreground gap-1 h-8 text-xs">
               Alterar status <ChevronDown className="h-3 w-3" />
             </Button>
           </PopoverTrigger>
@@ -178,7 +178,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
         {allTags.length > 0 && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" disabled={addingTag} className="text-white border border-white/30 hover:bg-white/10 hover:text-white gap-1 h-8 text-xs">
+              <Button variant="ghost" size="sm" disabled={addingTag} className="text-primary-foreground border border-primary-foreground/30 hover:bg-primary-foreground/10 hover:text-primary-foreground gap-1 h-8 text-xs">
                 <Tag className="h-3 w-3" /> Adicionar tag
               </Button>
             </PopoverTrigger>
@@ -201,7 +201,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
         {staticSegments.length > 0 && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-white border border-white/30 hover:bg-white/10 hover:text-white gap-1 h-8 text-xs">
+              <Button variant="ghost" size="sm" className="text-primary-foreground border border-primary-foreground/30 hover:bg-primary-foreground/10 hover:text-primary-foreground gap-1 h-8 text-xs">
                 <Users className="h-3 w-3" /> Segmento
               </Button>
             </PopoverTrigger>
@@ -228,7 +228,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
         )}
 
         {/* Export */}
-        <Button variant="ghost" size="sm" onClick={handleExport} className="text-white border border-white/30 hover:bg-white/10 hover:text-white gap-1 h-8 text-xs">
+        <Button variant="ghost" size="sm" onClick={handleExport} className="text-primary-foreground border border-primary-foreground/30 hover:bg-primary-foreground/10 hover:text-primary-foreground gap-1 h-8 text-xs">
           <Download className="h-3 w-3" /> Exportar
         </Button>
 
@@ -237,7 +237,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
           variant="ghost" size="sm"
           onClick={() => setShowDeleteDialog(true)}
           disabled={bulkDeleting}
-          className="text-red-300 border border-red-400/40 hover:bg-red-500/20 hover:text-red-200 gap-1 h-8 text-xs"
+          className="text-danger border border-danger/40 hover:bg-danger/20 hover:text-danger gap-1 h-8 text-xs"
         >
           <Trash2 className="h-3 w-3" /> Apagar
         </Button>
@@ -251,7 +251,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
                   variant="ghost" size="sm"
                   disabled={selectAll || selectedLeads.length !== 2 || merging}
                   onClick={handleMerge}
-                  className="text-white border border-white/30 hover:bg-white/10 hover:text-white gap-1 h-8 text-xs disabled:opacity-40"
+                  className="text-primary-foreground border border-primary-foreground/30 hover:bg-primary-foreground/10 hover:text-primary-foreground gap-1 h-8 text-xs disabled:opacity-40"
                 >
                   <GitMerge className="h-3 w-3" /> Mesclar
                 </Button>
@@ -264,7 +264,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
         </TooltipProvider>
 
         {/* Close */}
-        <Button variant="ghost" size="sm" onClick={onClear} className="text-white hover:bg-white/10 hover:text-white h-8 w-8 p-0">
+        <Button variant="ghost" size="sm" onClick={onClear} className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground h-8 w-8 p-0">
           <X className="h-4 w-4" />
         </Button>
       </div>

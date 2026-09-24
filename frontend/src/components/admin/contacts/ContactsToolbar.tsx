@@ -57,14 +57,14 @@ export function ContactsToolbar({
         size="sm"
         className="h-9 gap-1.5 shrink-0"
         onClick={onToggleFilters}
-        style={filtersOpen ? { backgroundColor: '#534AB7' } : undefined}
+        style={filtersOpen ? { backgroundColor: 'var(--color-primary-600)' } : undefined}
       >
         <SlidersHorizontal className="h-4 w-4" />
         Filtros
         {activeFilterCount > 0 && (
           <span
-            className="inline-flex items-center justify-center h-5 min-w-[20px] rounded-full text-[10px] font-bold px-1.5"
-            style={{ backgroundColor: '#534AB7', color: '#fff' }}
+            className="inline-flex items-center justify-center min-w-[20px] rounded-full text-xs font-bold px-1.5 py-0.5"
+            style={{ backgroundColor: 'var(--color-primary-600)', color: 'var(--text-on-primary)' }}
           >
             {activeFilterCount}
           </span>

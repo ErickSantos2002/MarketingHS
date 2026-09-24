@@ -103,15 +103,14 @@ export default function Contacts() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">Contatos</h1>
-        {deletedView !== 'active' && (
+      {deletedView !== 'active' && (
+        <div className="flex items-center justify-end gap-3">
           <span className="text-xs text-destructive flex items-center gap-1">
             <Trash2 className="h-3.5 w-3.5" />
             {deletedView === 'deleted' ? 'Exibindo apenas apagados' : 'Incluindo apagados'}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <ContactsToolbar

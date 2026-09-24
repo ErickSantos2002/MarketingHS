@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { GitMerge, AlertTriangle, RefreshCw } from 'lucide-react';
+import { GitMerge, AlertTriangle, RefreshCw, Check } from 'lucide-react';
 
 interface DuplicateCluster {
   field: 'email' | 'phone';
@@ -114,14 +114,14 @@ export function DuplicatesPanel() {
       </CardHeader>
       <CardContent>
         {!duplicates || duplicates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma duplicata encontrada ✓</p>
+          <p className="text-sm text-muted-foreground"><Check className="inline h-3.5 w-3.5" /> Nenhuma duplicata encontrada</p>
         ) : (
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
             {duplicates.map((cluster, idx) => (
               <div key={idx} className="border rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <AlertTriangle className="h-4 w-4 text-warning" />
                     <span className="text-sm font-medium">
                       {cluster.field === 'email' ? 'Email' : 'Telefone'}: {cluster.value}
                     </span>
@@ -139,8 +139,8 @@ export function DuplicatesPanel() {
                 <div className="grid gap-1">
                   {cluster.identities.map((identity, i) => (
                     <div key={identity.dnia_id} className="text-xs text-muted-foreground flex items-center gap-2">
-                      {i === 0 && <Badge variant="secondary" className="text-[10px]">Manter</Badge>}
-                      {i > 0 && <Badge variant="outline" className="text-[10px]">Descartar</Badge>}
+                      {i === 0 && <Badge variant="secondary" className="text-xs">Manter</Badge>}
+                      {i > 0 && <Badge variant="outline" className="text-xs">Descartar</Badge>}
                       <span className="font-mono truncate">{identity.dnia_id.slice(0, 8)}...</span>
                       <span>{identity.nome || '—'}</span>
                       <span className="text-muted-foreground/60">{identity.stage}</span>

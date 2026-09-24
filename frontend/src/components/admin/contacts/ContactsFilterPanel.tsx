@@ -96,7 +96,7 @@ export function ContactsFilterPanel({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Última conversão */}
         <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Última conversão</Label>
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Última conversão</Label>
           <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -113,7 +113,7 @@ export function ContactsFilterPanel({
                   </span>
                 </span>
                 {dashboardFilters.datePreset !== 'all' && (
-                  <Badge className="ml-1 bg-primary/20 text-primary text-[10px] px-1.5 h-4">1</Badge>
+                  <Badge className="ml-1 bg-primary/20 text-primary text-xs px-1.5">1</Badge>
                 )}
               </Button>
             </PopoverTrigger>
@@ -157,7 +157,7 @@ export function ContactsFilterPanel({
 
         {/* Data de cadastro */}
         <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Data de cadastro</Label>
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Data de cadastro</Label>
           <Popover open={createdDatePopoverOpen} onOpenChange={setCreatedDatePopoverOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -174,7 +174,7 @@ export function ContactsFilterPanel({
                   </span>
                 </span>
                 {dashboardFilters.createdDatePreset !== 'all' && (
-                  <Badge className="ml-1 bg-primary/20 text-primary text-[10px] px-1.5 h-4">1</Badge>
+                  <Badge className="ml-1 bg-primary/20 text-primary text-xs px-1.5">1</Badge>
                 )}
               </Button>
             </PopoverTrigger>
@@ -304,7 +304,7 @@ export function ContactsFilterPanel({
         />
 
         <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Opções</Label>
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Opções</Label>
           <div className="flex flex-col gap-2 pt-1">
             <div className="flex items-center gap-2">
               <Checkbox
@@ -338,7 +338,7 @@ export function ContactsFilterPanel({
         <Button variant="ghost" size="sm" onClick={onClose}>
           Cancelar
         </Button>
-        <Button size="sm" onClick={handleApply} style={{ backgroundColor: '#534AB7' }} className="text-white">
+        <Button size="sm" onClick={handleApply} style={{ backgroundColor: 'var(--color-primary-600)' }} className="text-primary-foreground">
           Aplicar filtros →
         </Button>
       </div>
@@ -357,7 +357,7 @@ function FilterSelect({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger className="h-9">
           <SelectValue />
@@ -387,7 +387,7 @@ function MultiSelectField({
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className={cn("h-9 w-full justify-between", selected.length > 0 && "border-primary/50 bg-primary/5")}>
@@ -395,7 +395,7 @@ function MultiSelectField({
               {selected.length > 0 ? `${selected.length} selecionado${selected.length > 1 ? 's' : ''}` : 'Todos'}
             </span>
             {selected.length > 0 && (
-              <Badge className="ml-1 bg-primary/20 text-primary text-[10px] px-1.5 h-4">{selected.length}</Badge>
+              <Badge className="ml-1 bg-primary/20 text-primary text-xs px-1.5">{selected.length}</Badge>
             )}
           </Button>
         </PopoverTrigger>
@@ -434,7 +434,7 @@ function MultiSelectIdField({
   };
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className={cn("h-9 w-full justify-between", selected.length > 0 && "border-primary/50 bg-primary/5")}>
@@ -442,7 +442,7 @@ function MultiSelectIdField({
               {selected.length > 0 ? `${selected.length} selecionado${selected.length > 1 ? 's' : ''}` : 'Todas'}
             </span>
             {selected.length > 0 && (
-              <Badge className="ml-1 bg-primary/20 text-primary text-[10px] px-1.5 h-4">{selected.length}</Badge>
+              <Badge className="ml-1 bg-primary/20 text-primary text-xs px-1.5">{selected.length}</Badge>
             )}
           </Button>
         </PopoverTrigger>
@@ -493,7 +493,7 @@ function QualificationField({
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className={cn("h-9 w-full justify-between", activeCount > 0 && "border-primary/50 bg-primary/5")}>
@@ -519,7 +519,7 @@ function QualificationField({
                 onClick={() => onScheduledChange(!hasScheduled)}
                 className={cn(
                   "w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-2",
-                  hasScheduled ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "hover:bg-muted"
+                  hasScheduled ? "bg-[--tint-success] text-[--on-tint-success]" : "hover:bg-muted"
                 )}
               >
                 <CalendarCheck className="h-3.5 w-3.5" />
@@ -608,7 +608,7 @@ export function ActiveFilterChips({
         <span
           key={i}
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium cursor-default"
-          style={{ backgroundColor: '#EEEDFE', color: '#3C3489' }}
+          style={{ backgroundColor: 'var(--tint-primary)', color: 'var(--on-tint-primary)' }}
         >
           {chip.label}
           <button onClick={chip.onRemove} className="hover:opacity-70 transition-opacity">

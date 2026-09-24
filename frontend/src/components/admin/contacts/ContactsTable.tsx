@@ -24,6 +24,8 @@ import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import { toast } from 'sonner';
 import { excluirContato } from '@/lib/contatos';
 import { ErroApi } from '@/lib/api';
+import { STATUS_COLORS } from './StatusBadge';
+import { COR_DE_DADO_PADRAO } from '@/lib/corDeDado';
 
 interface ContactsTableProps {
   leads: (Lead | EnrichedLead)[];
@@ -54,21 +56,6 @@ function asEnriched(lead: Lead | EnrichedLead): EnrichedLead {
     tags: (lead as any).tags ?? [],
   };
 }
-
-const STATUS_DOT_COLORS: Record<string, string> = {
-  'Lead': '#888780',
-  'Lead Qualificado': '#185FA5',
-  'MQL - Reunião agendada': '#534AB7',
-  'SQL - Em negociação': '#B7861F',
-  'Venda realizada': '#3B6D11',
-  'Em contrato': '#0E7C66',
-  'Iniciado': '#5A2E91',
-};
-
-const ETIQUETA_STYLES: Record<string, { bg: string; color: string }> = {
-  hotlead: { bg: '#FCEBEB', color: '#A32D2D' },
-  warm: { bg: '#FAEEDA', color: '#854F0B' },
-};
 
 const isReconversion = (lead: Lead) => {
   if (!lead.last_conversion_date || !lead.created_at) return false;
@@ -316,7 +303,7 @@ export function ContactsTable({
                     <TableRow
                       key={lead.id}
                       className="cursor-pointer transition-colors group"
-                      style={{ backgroundColor: isSelected ? 'hsl(243 40% 30% / 0.3)' : undefined }}
+                      style={{ backgroundColor: isSelected ? 'var(--tint-primary)' : undefined }}
                       onMouseEnter={() => setHoveredRow(lead.id)}
                       onMouseLeave={() => setHoveredRow(null)}
                       onClick={() => { setSelectedLead(lead); setModalOpen(true); }}
@@ -398,7 +385,7 @@ export function ContactsTable({
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
               <p className="text-xs text-muted-foreground">
-                Página {currentPage} de {totalPages}
+                Mostrando {startIndex + 1} a {startIndex + paginatedLeads.length} de {leads.length} contatos
               </p>
               <div className="flex items-center gap-1">
                 <Button
@@ -418,7 +405,7 @@ export function ContactsTable({
                       variant={page === currentPage ? 'default' : 'ghost'}
                       size="sm"
                       className="h-7 w-7 p-0 text-xs"
-                      style={page === currentPage ? { backgroundColor: '#534AB7' } : undefined}
+                      style={page === currentPage ? { backgroundColor: 'var(--color-primary-600)' } : undefined}
                       onClick={() => setCurrentPage(page as number)}
                     >
                       {page}
@@ -506,7 +493,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
               {lead.etiqueta === 'hotlead' && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Flame className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+                    <Flame className="h-3.5 w-3.5 text-success flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>Hot Lead (ICP + Decisor)</TooltipContent>
                 </Tooltip>
@@ -514,7 +501,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
               {lead.dnia_id && lead.ecosystem?.hasScheduledMeeting && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <CalendarCheck className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                    <CalendarCheck className="h-3.5 w-3.5 text-success flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>Reunião/Demo agendada (em aberto)</TooltipContent>
                 </Tooltip>
@@ -523,14 +510,14 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
               {isReconversion(lead) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <RefreshCw className="h-3.5 w-3.5 text-cyan-500 flex-shrink-0" />
+                    <RefreshCw className="h-3.5 w-3.5 text-info flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>Lead Reconvertido</TooltipContent>
                 </Tooltip>
               )}
               <span className="font-medium text-sm truncate">{lead.nome || '-'}</span>
             </div>
-            <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+            <div className="text-xs text-muted-foreground truncate mt-0.5">
               {[lead.cargo, lead.email].filter(Boolean).join(' · ') || '-'}
             </div>
           </div>
@@ -542,11 +529,11 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         <Tooltip>
           <TooltipTrigger asChild>
             <span
-              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
-              style={{
-                backgroundColor: ETIQUETA_STYLES[lead.etiqueta]?.bg || 'var(--secondary)',
-                color: ETIQUETA_STYLES[lead.etiqueta]?.color || 'var(--secondary-foreground)',
-              }}
+              className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${
+                lead.etiqueta === 'hotlead'
+                  ? 'bg-[--tint-success] text-[--on-tint-success] border-success/30'
+                  : 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30'
+              }`}
             >
               {lead.etiqueta}
             </span>
@@ -577,7 +564,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         <div className="flex items-center gap-2">
           <div
             className="w-[7px] h-[7px] rounded-full flex-shrink-0"
-            style={{ backgroundColor: STATUS_DOT_COLORS[lead.status || 'Lead'] || '#888780' }}
+            style={{ backgroundColor: STATUS_COLORS[lead.status || 'Lead'] || COR_DE_DADO_PADRAO }}
           />
           <span className="text-xs">{lead.status || 'Lead'}</span>
         </div>
@@ -589,10 +576,9 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
           <TooltipTrigger asChild>
             <div className="flex items-center gap-2 min-w-[80px]">
               <span
-                className="text-xs font-semibold w-6 text-right"
-                style={{
-                  color: score >= 70 ? '#A32D2D' : score >= 40 ? '#854F0B' : '#888780',
-                }}
+                className={`text-xs font-semibold w-6 text-right ${
+                  score >= 70 ? 'text-[--on-tint-success]' : score >= 40 ? 'text-[--on-tint-warning]' : 'text-conteudo-muted'
+                }`}
               >
                 {score}
               </span>
@@ -601,7 +587,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${Math.min(score, 100)}%`,
-                    backgroundColor: score >= 70 ? '#A32D2D' : score >= 40 ? '#854F0B' : '#888780',
+                    backgroundColor: score >= 70 ? 'var(--color-success-500)' : score >= 40 ? 'var(--color-warning-500)' : 'var(--color-slate-400)',
                   }}
                 />
               </div>
@@ -621,7 +607,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         <div className="flex flex-wrap gap-1">
           {(lead.tags || []).length > 0
             ? lead.tags!.map(t => (
-                <Badge key={t.id} variant="secondary" className="text-[10px] px-1.5 py-0">
+                <Badge key={t.id} variant="secondary" className="text-xs px-1.5 py-0">
                   {t.name}
                 </Badge>
               ))
@@ -637,7 +623,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
       return (
         <div className="leading-tight">
           <div className="text-xs">{d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
-          <div className="text-[10px] text-muted-foreground">{d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div className="text-xs text-muted-foreground">{d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
         </div>
       );
     }
@@ -649,7 +635,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
       return (
         <div className="leading-tight">
           <div className="text-xs">{d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
-          <div className="text-[10px] text-muted-foreground">{d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div className="text-xs text-muted-foreground">{d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
         </div>
       );
     }
@@ -693,8 +679,8 @@ function SortableHead({
 /* ── Ecosystem badges ── */
 function EcosystemBadges({ lead }: { lead: EnrichedLead }) {
   const pills = [
-    { label: 'M', active: true, activeBg: '#EEEDFE', activeColor: '#3C3489', tooltip: 'Presente no MarketingHS' },
-    { label: 'G', active: !!lead.ecosystem?.growthhs_card_id, activeBg: '#DCFCE7', activeColor: '#15803D', tooltip: lead.ecosystem?.growthhs_card_id ? 'Presente no GrowthHS' : 'Não está no GrowthHS' },
+    { label: 'M', active: true, activeBg: 'var(--tint-primary)', activeColor: 'var(--on-tint-primary)', tooltip: 'Presente no MarketingHS' },
+    { label: 'G', active: !!lead.ecosystem?.growthhs_card_id, activeBg: 'var(--tint-success)', activeColor: 'var(--on-tint-success)', tooltip: lead.ecosystem?.growthhs_card_id ? 'Presente no GrowthHS' : 'Não está no GrowthHS' },
   ];
 
   return (

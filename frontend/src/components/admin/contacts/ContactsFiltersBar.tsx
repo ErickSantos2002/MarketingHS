@@ -46,7 +46,7 @@ export function ContactsFiltersBar({ filters, onChange, allTags }: ContactsFilte
             <Filter className="h-3 w-3" />
             Status
             {filters.statuses.length > 0 && (
-              <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+              <Badge variant="secondary" className="px-1 text-xs">
                 {filters.statuses.length}
               </Badge>
             )}
@@ -76,7 +76,7 @@ export function ContactsFiltersBar({ filters, onChange, allTags }: ContactsFilte
               <Filter className="h-3 w-3" />
               Tags
               {filters.tagIds.length > 0 && (
-                <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                <Badge variant="secondary" className="px-1 text-xs">
                   {filters.tagIds.length}
                 </Badge>
               )}
