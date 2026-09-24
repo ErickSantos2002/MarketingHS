@@ -39,7 +39,7 @@ export function ChannelKPICards({ sourcePerformance, campaignPerformance }: Chan
       subtitle: 'canais de aquisição',
       icon: Megaphone,
       iconColor: 'text-primary',
-      bgColor: 'bg-primary/10',
+      bgColor: 'bg-[--tint-primary]',
     },
     {
       title: 'Top Source',
@@ -55,7 +55,7 @@ export function ChannelKPICards({ sourcePerformance, campaignPerformance }: Chan
       subtitle: bestHotRateSource?.source || 'sem dados',
       icon: Target,
       iconColor: 'text-info',
-      bgColor: 'bg-info/10',
+      bgColor: 'bg-[--tint-info]',
     },
     {
       title: 'Top Campanha',
@@ -63,7 +63,7 @@ export function ChannelKPICards({ sourcePerformance, campaignPerformance }: Chan
       subtitle: topCampaign ? `${topCampaign.hotRate.toFixed(0)}% hot rate` : 'sem dados',
       icon: Zap,
       iconColor: 'text-primary',
-      bgColor: 'bg-primary/10',
+      bgColor: 'bg-[--tint-primary]',
     },
   ];
 

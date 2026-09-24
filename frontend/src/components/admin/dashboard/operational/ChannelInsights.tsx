@@ -112,8 +112,8 @@ export function ChannelInsights({ sourcePerformance, mediumPerformance, totalLea
     switch (type) {
       case 'success': return 'bg-[--tint-success] border-success/30';
       case 'warning': return 'bg-[--tint-warning] border-warning/30';
-      case 'info': return 'bg-primary/10 border-primary/20';
-      case 'alert': return 'bg-info/10 border-info/20';
+      case 'info': return 'bg-[--tint-primary] border-primary/30';
+      case 'alert': return 'bg-[--tint-info] border-info/30';
     }
   };
 
