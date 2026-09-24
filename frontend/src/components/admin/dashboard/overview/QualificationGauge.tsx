@@ -53,7 +53,6 @@ export function QualificationGauge({ rate }: QualificationGaugeProps) {
               strokeLinecap="round"
               strokeDasharray={`${(clampedRate / 100) * 251.2} 251.2`}
               style={{
-                filter: `drop-shadow(0 0 10px ${getColor()})`,
                 transition: 'stroke-dasharray 0.5s ease-out',
               }}
             />

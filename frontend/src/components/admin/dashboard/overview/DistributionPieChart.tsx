@@ -49,9 +49,6 @@ export function DistributionPieChart({ data, title = "Distribuição por Modal" 
                 <Cell
                   key={`cell-${index}`}
                   fill={serie(index)}
-                  style={{
-                    filter: `drop-shadow(0 0 8px color-mix(in srgb, ${serie(index)} 30%, transparent))`,
-                  }}
                 />
               ))}
             </Pie>

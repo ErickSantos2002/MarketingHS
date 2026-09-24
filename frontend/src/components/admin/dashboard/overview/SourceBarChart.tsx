@@ -63,12 +63,7 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
               maxBarSize={30}
             >
               {chartData.map((_, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  style={{
-                    filter: `drop-shadow(0 0 6px ${serie(0)})`,
-                  }}
-                />
+                <Cell key={`cell-${index}`} />
               ))}
             </Bar>
           </BarChart>
