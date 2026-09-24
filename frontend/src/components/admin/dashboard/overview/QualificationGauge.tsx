@@ -91,8 +91,8 @@ export function QualificationGauge({ rate }: QualificationGaugeProps) {
           <span
             className="px-3 py-1 rounded-full text-sm font-medium"
             style={{
-              backgroundColor: `${getColor()}20`,
-              color: getColor(),
+              backgroundColor: `color-mix(in srgb, ${getColor()} 15%, transparent)`,
+              color: 'var(--text-heading)',
             }}
           >
             {getLabel()}

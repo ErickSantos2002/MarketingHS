@@ -39,6 +39,13 @@ const LITERAL =
 // o mesmo defeito do hex, só que escrito por função em vez de literal.
 const NUMERICA = /\b(?:hsla?|rgba?)\(\s*\d/g;
 
+// Efeito proibido escrito com token (bg-gradient-to-br from-card to-primary/5,
+// drop-shadow de halo, blur de enfeite): a cor é token, então HEX/LITERAL não
+// o viam — foi assim que o gradiente do LeadsListSheet passou pelo G1.
+// `backdrop-blur-[4px]` (fundo de modal, permitido) não casa: exige
+// tamanho nomeado e não aceita o prefixo `backdrop-`.
+const EFEITO = /\bbg-gradient-|drop-shadow\(0 0|(?<!backdrop-)\bblur-(?:sm|md|lg|xl|2xl|3xl)\b/g;
+
 function* arquivos(dir) {
   for (const nome of readdirSync(dir)) {
     const caminho = join(dir, nome);
@@ -78,7 +85,8 @@ for (const { caminho, r } of todos) {
   const n =
     (texto.match(HEX)?.length ?? 0) +
     (texto.match(LITERAL)?.length ?? 0) +
-    (texto.match(NUMERICA)?.length ?? 0);
+    (texto.match(NUMERICA)?.length ?? 0) +
+    (texto.match(EFEITO)?.length ?? 0);
   if (n === 0) continue;
   const pasta = r.split('/').slice(0, -1).join('/');
   porPasta.set(pasta, (porPasta.get(pasta) ?? 0) + n);
