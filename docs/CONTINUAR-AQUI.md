@@ -1,5 +1,67 @@
 # Continuar aqui
 
+> ## 🌅 Comece por aqui — 25/09/2026
+>
+> **Onde tudo está:** branch **`visual-fase-1`** em `43d0b65`, com **45
+> commits à frente da `main`** (`2e39aae`, igual ao `origin/main`) e **30 à
+> frente do `origin/visual-fase-1`** — nada disso foi enviado. Ela carrega a
+> Fase 1, a preparação da Fase 2, o G1 e o G2, todos com revisão por tarefa e
+> revisão final. As branches `visual-fase-2` e `visual-fase-2-g2` foram
+> mergeadas nela (avanço direto) e apagadas. **Push e merge na `main` são
+> decisão do Erick.**
+>
+> **O que fazer hoje:** escrever o plano do **G3 — Campanhas e Templates**
+> (`components/admin/campaigns/`, **65** no guarda; o conteúdo de e-mail fica
+> de fora, Decisão 6 do spec) no molde de
+> `docs/superpowers/plans/2026-09-24-marketinghs-visual-fase-2-g2-contatos.md`,
+> numa branch nova a partir de `visual-fase-1`. Execução como nos dois grupos
+> anteriores: `superpowers:subagent-driven-development`, um subagente e uma
+> revisão por tarefa, revisão final da branch no modelo mais capaz.
+>
+> **Placar do guarda (24/09, fim do dia) — 338:** `settings` 122 ·
+> `pages/admin` 68 · `campaigns` 65 · `automations` 45 · `admin/pages` 26 ·
+> `segments` 10 · `ui` 2. Zerados: `dashboard`, `contacts`, raiz de
+> `admin`, `hooks`, `lib`.
+>
+> **Levar para o plano do G3:**
+> - apertar a regex `EFEITO` do guarda: `shadow-\[0_0_` casa o anel de 1px de
+>   `ui/sidebar.tsx:421` (falso positivo; arquivo sem importador) — trocar por
+>   `shadow-\[0_0_[1-9]`; os 2 de `ui` somem;
+> - as regras aprendidas no G1/G2, que o plano precisa repetir: tradução por
+>   **significado**, nunca pelo matiz; **nunca `` `${cor}NN` ``** (use
+>   `color-mix`); cor que vem do banco passa por `src/lib/corDeDado.ts`; chip
+>   clicável mantém hover (`hover:bg-x/20`); o brief autoriza "o que mais for
+>   preciso para zerar o guarda nos arquivos da tarefa";
+> - `segments` subiu de 6 para 10 porque o guarda passou a ver os brilhos do
+>   `SegmentFormModal.tsx` (G4).
+>
+> **Decisões que esperam o Erick** (detalhe nos blocos abaixo):
+> 1. **Push e merge** da `visual-fase-1` na `main`.
+> 2. **Trocar a senha da conta admin do Claude** (`claude.dev@example.com`) —
+>    ela apareceu na saída de uma ferramenta de subagente em 24/09 (não foi
+>    para arquivo nem commit).
+> 3. **Paleta de gráfico própria** no Design System oficial — hoje 6 cores,
+>    3 delas semânticas; dela dependem P2×P3 com a mesma cor e os períodos do
+>    dia repetindo cor (G1).
+> 4. **Status com duas cores** — a lista, a barra de filtros e a barra em
+>    massa usam `STATUS_COLORS` fixo; a ficha usa a cor do banco; 3 status
+>    divergem (G2). Unificar é mudar a fonte do dado.
+> 5. **Cores nomeadas de etiqueta** — das 6 do seletor, só 4 se distinguem
+>    (roxo = azul, verde ≈ verde-azulado) (G2).
+> 6. As da Fase 1 (altura botão × campo) e as seis de 23/09 (fluxo em
+>    rascunho, recálculo disparando automação, peso 0 no A/B, conta Unlayer,
+>    colunas de funil, cor do botão das landings).
+>
+> **Regra de processo nova (24/09):** subagente **não abre** o arquivo de
+> credencial — reaproveita a sessão já logada do navegador do Playwright; se
+> não houver sessão, para e pede. E ação negada pelo controle de permissão
+> não se repete com outra descrição: relata.
+>
+> **Servidores:** o backend (8100) foi desligado; suba com
+> `cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100`
+> (o worker de fila não sobe junto — seguro para conferência). O Vite (8080)
+> estava no ar.
+
 > ## ✅ Visual — Fase 2, G2 (Contatos, ficha, Importação), 24/09/2026
 >
 > **O G2 fechou.** Mesma branch `visual-fase-2-g2` (a partir de
