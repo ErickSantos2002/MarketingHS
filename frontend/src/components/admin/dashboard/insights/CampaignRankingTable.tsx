@@ -21,7 +21,7 @@ const gradeColors = {
   A: 'bg-[--tint-success] text-[--on-tint-success] border-success/30',
   B: 'bg-[--tint-info] text-[--on-tint-info] border-info/30',
   C: 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30',
-  D: 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30',
+  D: 'bg-[--tint-danger] text-[--on-tint-danger] border-danger/30',
   F: 'bg-[--tint-danger] text-[--on-tint-danger] border-danger/30'
 };
 
@@ -92,7 +92,7 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
               <span>40-59 Regular</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[--tint-warning] text-[--on-tint-warning] font-medium">D</span>
+              <span className="px-2 py-0.5 rounded bg-[--tint-danger] text-[--on-tint-danger] font-medium">D</span>
               <span>20-39 Ruim</span>
             </div>
             <div className="flex items-center gap-2">
