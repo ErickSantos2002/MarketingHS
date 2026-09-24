@@ -162,7 +162,7 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-1.5 max-w-[150px]">
                       {lead.etiqueta === 'hotlead' && (
-                        <Flame className="h-4 w-4 text-warning flex-shrink-0" />
+                        <Flame className="h-4 w-4 text-success flex-shrink-0" />
                       )}
                       {lead.origem_campanha === 'reconversao_070226' && (
                         <RefreshCw className="h-4 w-4 text-info flex-shrink-0" />
