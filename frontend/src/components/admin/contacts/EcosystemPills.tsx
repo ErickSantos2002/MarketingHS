@@ -9,8 +9,8 @@ interface EcosystemPillsProps {
 // as pílulas eram do ecossistema dn.ia. Ficam só o próprio sistema e o CRM
 // (GrowthHS), que é uma pílula à parte.
 const PILLS = [
-  { label: 'M', app: 'MarketingHS', color: '#534AB7', alwaysActive: true },
-  { label: 'G', app: 'GrowthHS', color: '#15803D', key: 'hasGrowthHS' as const },
+  { label: 'M', app: 'MarketingHS', color: 'var(--color-primary-600)', alwaysActive: true },
+  { label: 'G', app: 'GrowthHS', color: 'var(--color-success-700)', key: 'hasGrowthHS' as const },
 ];
 
 export function EcosystemPills({ hasGrowthHS, size = 14 }: EcosystemPillsProps) {
@@ -34,7 +34,7 @@ export function EcosystemPills({ hasGrowthHS, size = 14 }: EcosystemPillsProps) 
                     fontSize: size * 0.65,
                     lineHeight: 1,
                     backgroundColor: pill.color,
-                    color: '#fff',
+                    color: 'var(--text-on-primary)',
                     opacity: isActive ? 1 : 0.3,
                   }}
                 >

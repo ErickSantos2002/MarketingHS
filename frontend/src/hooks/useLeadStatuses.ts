@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { listarStatusDeLead, type StatusDeLead } from '@/lib/contatos';
+import { COR_DE_DADO_PADRAO } from '@/lib/corDeDado';
 
 export type LeadStatus = StatusDeLead;
 
-const FALLBACK_COLOR = '#888780';
+const FALLBACK_COLOR = COR_DE_DADO_PADRAO;
 
 export function useLeadStatuses() {
   const query = useQuery({

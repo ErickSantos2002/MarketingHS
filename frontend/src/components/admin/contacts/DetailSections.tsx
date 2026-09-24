@@ -17,6 +17,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { StatusBadge } from './StatusBadge';
 import { getTagColor } from './TagsCell';
+import { estiloDeCorDeDado } from '@/lib/corDeDado';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 
 // ─── Tag Colors ───
@@ -182,12 +183,8 @@ export function StatusTagsSection({
             <Badge
               key={tag.id}
               variant="outline"
-              className="text-xs gap-1 pr-1"
-              style={{
-                borderColor: getTagColor(tag.color),
-                color: getTagColor(tag.color),
-                backgroundColor: `${getTagColor(tag.color)}15`,
-              }}
+              className="text-xs gap-1 pr-1 text-conteudo-heading"
+              style={estiloDeCorDeDado(tag.color)}
             >
               {tag.name}
               <button

@@ -4,6 +4,7 @@ import { mudarStatus } from '@/lib/leitura';
 import { toast } from 'sonner';
 import { TrendingUp } from 'lucide-react';
 import { useLeadStatuses } from '@/hooks/useLeadStatuses';
+import { estiloDeCorDeDado } from '@/lib/corDeDado';
 
 interface StatusDropdownProps {
   leadId: string;
@@ -38,9 +39,9 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
     if (newStatus === 'Lead Qualificado') {
       toast('Lead qualificado!', {
         description: 'Notifique o time comercial para iniciar a abordagem',
-        icon: <TrendingUp className="h-4 w-4 text-emerald-500" />,
+        icon: <TrendingUp className="h-4 w-4 text-success" />,
         duration: 5000,
-        style: { borderLeft: '4px solid #3B6D11' },
+        style: { borderLeft: '4px solid var(--color-success-600)' },
       });
     } else {
       toast.success(`Status atualizado para "${newStatus}"`);
@@ -66,8 +67,8 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
   return (
     <Select value={value} onValueChange={handleChange}>
       <SelectTrigger
-        className={`${size === 'sm' ? 'h-7 text-xs px-2 w-[140px]' : 'h-9 text-sm'} border`}
-        style={{ borderColor: `${color}60`, color }}
+        className={`${size === 'sm' ? 'h-7 text-xs px-2 w-[140px]' : 'h-9 text-sm'} border text-conteudo-heading`}
+        style={estiloDeCorDeDado(color)}
         onClick={(e) => e.stopPropagation()}
       >
         <SelectValue />

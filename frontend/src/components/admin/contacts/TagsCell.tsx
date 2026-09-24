@@ -1,18 +1,10 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import type { TagInfo } from '@/hooks/useContactsEnriched';
-
-const TAG_COLORS: Record<string, string> = {
-  purple: '#534AB7',
-  blue: '#185FA5',
-  green: '#3B6D11',
-  amber: '#BA7517',
-  red: '#A32D2D',
-  teal: '#0F6E56',
-};
+import { resolverCorDeDado, estiloDeCorDeDado } from '@/lib/corDeDado';
 
 export function getTagColor(color: string): string {
-  return TAG_COLORS[color] || color;
+  return resolverCorDeDado(color);
 }
 
 export function TagsCell({ tags }: { tags: TagInfo[] }) {
@@ -28,12 +20,8 @@ export function TagsCell({ tags }: { tags: TagInfo[] }) {
           <Badge
             key={tag.id}
             variant="outline"
-            className="text-[10px] px-1.5 py-0 h-5 font-medium whitespace-nowrap"
-            style={{
-              borderColor: getTagColor(tag.color),
-              color: getTagColor(tag.color),
-              backgroundColor: `${getTagColor(tag.color)}15`,
-            }}
+            className="text-xs px-1.5 py-0 h-5 font-medium whitespace-nowrap text-conteudo-heading"
+            style={estiloDeCorDeDado(tag.color)}
           >
             {tag.name}
           </Badge>
@@ -41,7 +29,7 @@ export function TagsCell({ tags }: { tags: TagInfo[] }) {
         {remaining > 0 && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-5">
+              <Badge variant="secondary" className="text-xs px-1 py-0 h-5">
                 +{remaining}
               </Badge>
             </TooltipTrigger>
