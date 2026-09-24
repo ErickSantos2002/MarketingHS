@@ -1,5 +1,6 @@
-import { Pause, TrendingUp, Clock, Star, Search } from "lucide-react";
+import { Pause, TrendingUp, Clock, Star, Search, BarChart3 } from "lucide-react";
 import { Recommendation } from "@/hooks/useInsightsAnalytics";
+import { Badge } from "@/components/ui/badge";
 
 interface RecommendationsSectionProps {
   recommendations: Recommendation[];
@@ -14,18 +15,18 @@ const typeIcons = {
 };
 
 const typeColors = {
-  pause: 'bg-red-500/10 border-red-500/30 text-red-400',
-  invest: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-  avoid: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-  prioritize: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
-  review: 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+  pause: 'bg-[--tint-danger] border-danger/30 text-[--on-tint-danger]',
+  invest: 'bg-[--tint-success] border-success/30 text-[--on-tint-success]',
+  avoid: 'bg-[--tint-warning] border-warning/30 text-[--on-tint-warning]',
+  prioritize: 'bg-[--tint-info] border-info/30 text-[--on-tint-info]',
+  review: 'bg-[--tint-primary] border-primary/30 text-[--on-tint-primary]'
 };
 
-const impactBadges = {
-  high: 'bg-red-500/20 text-red-400',
-  medium: 'bg-amber-500/20 text-amber-400',
-  low: 'bg-blue-500/20 text-blue-400'
-};
+const impactBadgeVariants = {
+  high: 'destructive',
+  medium: 'warning',
+  low: 'info'
+} as const;
 
 export function RecommendationsSection({ recommendations }: RecommendationsSectionProps) {
   return (
@@ -39,23 +40,23 @@ export function RecommendationsSection({ recommendations }: RecommendationsSecti
         <p className="font-medium text-foreground mb-2">Tipos de recomendação:</p>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500/50" />
+            <span className="w-3 h-3 rounded-full bg-danger/50" />
             <span><strong>Pausar:</strong> Problemas graves</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500/50" />
+            <span className="w-3 h-3 rounded-full bg-success/50" />
             <span><strong>Investir:</strong> Ótima performance</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-500/50" />
+            <span className="w-3 h-3 rounded-full bg-warning/50" />
             <span><strong>Evitar:</strong> Horário ruim</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500/50" />
+            <span className="w-3 h-3 rounded-full bg-info/50" />
             <span><strong>Priorizar:</strong> Horário bom</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-purple-500/50" />
+            <span className="w-3 h-3 rounded-full bg-primary/50" />
             <span><strong>Revisar:</strong> Ajustar segmentação</span>
           </div>
         </div>
@@ -84,16 +85,17 @@ export function RecommendationsSection({ recommendations }: RecommendationsSecti
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-sm">{rec.title}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${impactBadges[rec.impact]}`}>
+                    <Badge variant={impactBadgeVariants[rec.impact]}>
                       {rec.impact === 'high' ? 'Alto' : rec.impact === 'medium' ? 'Médio' : 'Baixo'}
-                    </span>
+                    </Badge>
                   </div>
                   <p className="text-xs opacity-80 leading-relaxed">
                     {rec.description}
                   </p>
                   {rec.metric && (
-                    <div className="mt-2 text-xs font-medium opacity-60">
-                      📊 {rec.metric}
+                    <div className="mt-2 text-xs font-medium opacity-60 flex items-center gap-1">
+                      <BarChart3 className="inline h-3.5 w-3.5" />
+                      {rec.metric}
                     </div>
                   )}
                 </div>

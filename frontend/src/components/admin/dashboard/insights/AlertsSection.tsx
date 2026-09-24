@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock, Users, TrendingDown } from "lucide-react";
+import { AlertTriangle, Clock, Users, TrendingDown, Check } from "lucide-react";
 import { Alert } from "@/hooks/useInsightsAnalytics";
 
 interface AlertsSectionProps {
@@ -13,22 +13,22 @@ const alertIcons = {
 };
 
 const severityColors = {
-  critical: 'bg-red-500/10 border-red-500/30 text-red-400',
-  warning: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-  info: 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+  critical: 'bg-[--tint-danger] border-danger/30 text-[--on-tint-danger]',
+  warning: 'bg-[--tint-warning] border-warning/30 text-[--on-tint-warning]',
+  info: 'bg-[--tint-info] border-info/30 text-[--on-tint-info]'
 };
 
 const severityIconColors = {
-  critical: 'text-red-500',
-  warning: 'text-amber-500',
-  info: 'text-blue-500'
+  critical: 'text-danger',
+  warning: 'text-warning',
+  info: 'text-info'
 };
 
 export function AlertsSection({ alerts }: AlertsSectionProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg border border-border/50">
-        <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+        <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
         <div className="text-xs text-muted-foreground space-y-1">
           <p className="font-medium text-foreground">Como interpretar os alertas:</p>
           <ul className="list-disc list-inside space-y-0.5">
@@ -41,9 +41,9 @@ export function AlertsSection({ alerts }: AlertsSectionProps) {
       </div>
 
       {alerts.length === 0 ? (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 text-center">
-          <div className="flex items-center justify-center gap-2 text-emerald-400">
-            <span className="text-lg">✓</span>
+        <div className="bg-[--tint-success] border border-success/30 rounded-lg p-4 text-center">
+          <div className="flex items-center justify-center gap-2 text-[--on-tint-success]">
+            <Check className="inline h-3.5 w-3.5" />
             <span className="font-medium">Nenhum alerta crítico no momento</span>
           </div>
         </div>

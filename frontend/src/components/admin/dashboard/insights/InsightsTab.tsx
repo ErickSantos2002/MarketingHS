@@ -98,7 +98,7 @@ export function InsightsTab({ leads }: InsightsTabProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <div className={`text-2xl font-bold ${summaryStats.responseRate >= 70 ? 'text-emerald-400' : summaryStats.responseRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+            <div className={`text-2xl font-bold ${summaryStats.responseRate >= 70 ? 'text-[--on-tint-success]' : summaryStats.responseRate >= 50 ? 'text-[--on-tint-warning]' : 'text-[--on-tint-danger]'}`}>
               {summaryStats.responseRate.toFixed(1)}%
             </div>
           </div>
@@ -116,7 +116,7 @@ export function InsightsTab({ leads }: InsightsTabProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <div className={`text-2xl font-bold ${summaryStats.hotRate >= 25 ? 'text-emerald-400' : summaryStats.hotRate >= 15 ? 'text-amber-400' : 'text-red-400'}`}>
+            <div className={`text-2xl font-bold ${summaryStats.hotRate >= 25 ? 'text-[--on-tint-success]' : summaryStats.hotRate >= 15 ? 'text-[--on-tint-warning]' : 'text-[--on-tint-danger]'}`}>
               {summaryStats.hotRate.toFixed(1)}%
             </div>
           </div>
@@ -134,7 +134,7 @@ export function InsightsTab({ leads }: InsightsTabProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <div className="text-2xl font-bold text-blue-400">
+            <div className="text-2xl font-bold text-[--on-tint-info]">
               {summaryStats.gradedACampaigns}
             </div>
           </div>
@@ -152,7 +152,7 @@ export function InsightsTab({ leads }: InsightsTabProps) {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <div className={`text-2xl font-bold ${summaryStats.criticalAlerts > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+            <div className={`text-2xl font-bold ${summaryStats.criticalAlerts > 0 ? 'text-[--on-tint-danger]' : 'text-[--on-tint-success]'}`}>
               {summaryStats.criticalAlerts}
             </div>
           </div>

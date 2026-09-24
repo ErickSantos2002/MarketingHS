@@ -9,13 +9,13 @@ const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function getColorClass(rate: number, total: number): string {
   if (total === 0) return 'bg-muted/30';
-  if (rate >= 80) return 'bg-emerald-500';
-  if (rate >= 70) return 'bg-emerald-500/80';
-  if (rate >= 60) return 'bg-emerald-500/60';
-  if (rate >= 50) return 'bg-amber-500/60';
-  if (rate >= 40) return 'bg-amber-500/80';
-  if (rate >= 30) return 'bg-orange-500/70';
-  return 'bg-red-500/70';
+  if (rate >= 80) return 'bg-success';
+  if (rate >= 70) return 'bg-success/80';
+  if (rate >= 60) return 'bg-success/60';
+  if (rate >= 50) return 'bg-warning/60';
+  if (rate >= 40) return 'bg-warning/80';
+  if (rate >= 30) return 'bg-warning/70';
+  return 'bg-danger/70';
 }
 
 export function TemporalHeatmap({ matrix }: TemporalHeatmapProps) {
@@ -66,9 +66,9 @@ export function TemporalHeatmap({ matrix }: TemporalHeatmapProps) {
           <div>
             <p className="font-medium text-foreground/80">Interpretação das cores:</p>
             <ul className="list-disc list-inside mt-1 space-y-0.5">
-              <li><span className="text-emerald-400">Verde</span> = Alta taxa neste horário (bom!)</li>
-              <li><span className="text-amber-400">Amarelo</span> = Taxa moderada</li>
-              <li><span className="text-red-400">Vermelho</span> = Baixa taxa (leads abandonam)</li>
+              <li><span className="text-[--on-tint-success]">Verde</span> = Alta taxa neste horário (bom!)</li>
+              <li><span className="text-[--on-tint-warning]">Amarelo</span> = Taxa moderada</li>
+              <li><span className="text-[--on-tint-danger]">Vermelho</span> = Baixa taxa (leads abandonam)</li>
               <li><span className="text-muted-foreground">Cinza</span> = Poucos dados para análise</li>
             </ul>
           </div>
@@ -94,7 +94,7 @@ export function TemporalHeatmap({ matrix }: TemporalHeatmapProps) {
                 className="flex-1 min-w-[16px] text-center"
               >
                 {hourLabels.includes(i) && (
-                  <span className="text-[10px] text-muted-foreground">{i}h</span>
+                  <span className="text-xs text-muted-foreground">{i}h</span>
                 )}
               </div>
             ))}
@@ -133,15 +133,15 @@ export function TemporalHeatmap({ matrix }: TemporalHeatmapProps) {
         {/* Legend */}
         <div className="mt-4 flex items-center justify-center gap-4">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-red-500/70" />
+            <div className="w-3 h-3 rounded-sm bg-danger/70" />
             <span className="text-xs text-muted-foreground">Baixo</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-amber-500/70" />
+            <div className="w-3 h-3 rounded-sm bg-warning/70" />
             <span className="text-xs text-muted-foreground">Médio</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-emerald-500" />
+            <div className="w-3 h-3 rounded-sm bg-success" />
             <span className="text-xs text-muted-foreground">Alto</span>
           </div>
           <div className="flex items-center gap-1.5">

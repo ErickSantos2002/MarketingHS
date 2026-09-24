@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Info, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { CampaignScore } from "@/hooks/useInsightsAnalytics";
 import {
   Table,
@@ -18,11 +18,11 @@ interface CampaignRankingTableProps {
 type SortKey = 'campaign' | 'totalLeads' | 'responseRate' | 'hotRate' | 'score';
 
 const gradeColors = {
-  A: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  B: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  C: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  D: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  F: 'bg-red-500/20 text-red-400 border-red-500/30'
+  A: 'bg-[--tint-success] text-[--on-tint-success] border-success/30',
+  B: 'bg-[--tint-info] text-[--on-tint-info] border-info/30',
+  C: 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30',
+  D: 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30',
+  F: 'bg-[--tint-danger] text-[--on-tint-danger] border-danger/30'
 };
 
 export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
@@ -80,29 +80,29 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
           <p><strong className="text-foreground">Score</strong> = (Taxa Resposta × 0.4) + (Hot Rate × 1.5) + Bônus de Volume</p>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">A</span>
+              <span className="px-2 py-0.5 rounded bg-[--tint-success] text-[--on-tint-success] font-medium">A</span>
               <span>80+ Excelente</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">B</span>
+              <span className="px-2 py-0.5 rounded bg-[--tint-info] text-[--on-tint-info] font-medium">B</span>
               <span>60-79 Bom</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">C</span>
+              <span className="px-2 py-0.5 rounded bg-[--tint-warning] text-[--on-tint-warning] font-medium">C</span>
               <span>40-59 Regular</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">D</span>
+              <span className="px-2 py-0.5 rounded bg-[--tint-warning] text-[--on-tint-warning] font-medium">D</span>
               <span>20-39 Ruim</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">F</span>
+              <span className="px-2 py-0.5 rounded bg-[--tint-danger] text-[--on-tint-danger] font-medium">F</span>
               <span>&lt;20 Crítico</span>
             </div>
           </div>
           <div className="pt-2 border-t border-border/50 mt-2 space-y-1">
-            <p><span className="text-red-400">⚠️ Vermelho na Resposta:</span> &lt;50% — leads não estão completando o formulário</p>
-            <p><span className="text-amber-400">⚠️ Amarelo no Hot Rate:</span> &lt;15% — leads fora do perfil ideal (ICP)</p>
+            <p><span className="text-[--on-tint-danger]"><AlertTriangle className="inline h-3.5 w-3.5" /> Vermelho na Resposta:</span> &lt;50% — leads não estão completando o formulário</p>
+            <p><span className="text-[--on-tint-warning]"><AlertTriangle className="inline h-3.5 w-3.5" /> Amarelo no Hot Rate:</span> &lt;15% — leads fora do perfil ideal (ICP)</p>
           </div>
           <div className="pt-2 border-t border-border/50 mt-2">
             <p><strong className="text-foreground">O que fazer:</strong></p>
@@ -184,12 +184,12 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
                     {campaign.totalLeads}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    <span className={campaign.responseRate < 50 ? 'text-red-400' : campaign.responseRate > 70 ? 'text-emerald-400' : ''}>
+                    <span className={campaign.responseRate < 50 ? 'text-[--on-tint-danger]' : campaign.responseRate > 70 ? 'text-[--on-tint-success]' : ''}>
                       {campaign.responseRate.toFixed(1)}%
                     </span>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    <span className={campaign.hotRate < 15 ? 'text-amber-400' : campaign.hotRate > 25 ? 'text-emerald-400' : ''}>
+                    <span className={campaign.hotRate < 15 ? 'text-[--on-tint-warning]' : campaign.hotRate > 25 ? 'text-[--on-tint-success]' : ''}>
                       {campaign.hotRate.toFixed(1)}%
                     </span>
                   </TableCell>
