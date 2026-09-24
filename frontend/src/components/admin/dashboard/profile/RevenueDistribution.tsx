@@ -12,7 +12,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-background/95 border border-border/50 rounded-xl px-4 py-3 shadow-xl">
+      <div className="bg-popover border border-border rounded-xl px-4 py-3 shadow-lg">
         <p className="text-sm font-medium text-foreground">{data.faturamento}</p>
         <p className="text-sm text-muted-foreground mt-1">
           <span className="font-semibold" style={{ color: data.color }}>{data.count}</span> leads ({data.percentage.toFixed(1)}%)
@@ -44,7 +44,7 @@ export function RevenueDistribution({ data }: RevenueDistributionProps) {
     <Card className="bg-card border-border/50 overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <div className="p-2 rounded-lg bg-primary/20">
+          <div className="p-2 rounded-lg bg-[--tint-primary]">
             <DollarSign className="h-5 w-5 text-primary" />
           </div>
           Distribuição por Faturamento

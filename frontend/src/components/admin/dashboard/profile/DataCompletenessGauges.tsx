@@ -86,7 +86,7 @@ export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-lg">
-            <div className="p-2 rounded-lg bg-primary/20">
+            <div className="p-2 rounded-lg bg-[--tint-primary]">
               <Database className="h-5 w-5 text-primary" />
             </div>
             Completude dos Dados

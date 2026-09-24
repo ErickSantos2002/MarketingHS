@@ -42,7 +42,7 @@ export function TacticalTab({ leads }: TacticalTabProps) {
           
           <div className="bg-card border border-border rounded-lg p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/20">
+              <div className="p-2 rounded-lg bg-[--tint-primary]">
                 <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
