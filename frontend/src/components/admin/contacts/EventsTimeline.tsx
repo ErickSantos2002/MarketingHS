@@ -48,17 +48,23 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
 
 // `dnmarketing` é o valor herdado (antes da troca de nome) e `marketinghs` é
 // o atual — os dois são o mesmo sistema e casam sob o mesmo rótulo/filtro.
+//
+// As cores de origem eram um roxo (MarketingHS) e um rosa (Website) em
+// hexadecimal — o Design System não tem nenhum dos dois. Pela mesma decisão
+// do G1 para roxo (vira destaque), as duas plataformas passam a dividir
+// --color-primary-600; a letra (M/W) do avatar segue diferenciando qual é
+// qual.
 const APP_COLORS: Record<string, { label: string; color: string; name: string }> = {
-  dnmarketing: { label: 'M', color: '#534AB7', name: 'MarketingHS' },
-  marketinghs: { label: 'M', color: '#534AB7', name: 'MarketingHS' },
-  website: { label: 'W', color: '#A8557C', name: 'Website' },
+  dnmarketing: { label: 'M', color: 'var(--color-primary-600)', name: 'MarketingHS' },
+  marketinghs: { label: 'M', color: 'var(--color-primary-600)', name: 'MarketingHS' },
+  website: { label: 'W', color: 'var(--color-primary-600)', name: 'Website' },
 };
 
 // Origem sem marca própria na tela (ex.: os eventos legados do Nexus) cai no
 // genérico abaixo — mostra o valor cru de `source_app`, sem inventar marca.
 const UNKNOWN_APP = (sourceApp: string) => ({
   label: sourceApp.charAt(0).toUpperCase(),
-  color: '#6B7280',
+  color: 'var(--color-slate-500)',
   name: sourceApp,
 });
 
@@ -103,13 +109,13 @@ function MetadataExpander({ metadata }: { metadata: any }) {
     <div className="mt-1">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
       >
         {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         {open ? 'ocultar' : 'ver detalhes'}
       </button>
       {open && (
-        <div className="mt-1.5 p-2 rounded bg-muted/30 border border-border/20 text-[11px] space-y-0.5">
+        <div className="mt-1.5 p-2 rounded bg-muted/30 border border-border/20 text-xs space-y-0.5">
           {entries.map(([k, v]) => (
             <div key={k} className="flex gap-2">
               <span className="text-muted-foreground font-medium">{k}:</span>
@@ -228,14 +234,14 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
               <Filter className="h-3.5 w-3.5" />
-              Tipo{selectedTypes.length > 0 && <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{selectedTypes.length}</Badge>}
+              Tipo{selectedTypes.length > 0 && <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">{selectedTypes.length}</Badge>}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-2">
             <div className="flex items-center justify-between mb-2 px-1">
               <span className="text-xs font-medium">Tipos de evento</span>
               {selectedTypes.length > 0 && (
-                <button onClick={() => setSelectedTypes([])} className="text-[10px] text-muted-foreground hover:text-foreground">Limpar</button>
+                <button onClick={() => setSelectedTypes([])} className="text-xs text-muted-foreground hover:text-foreground">Limpar</button>
               )}
             </div>
             <div className="max-h-64 overflow-y-auto space-y-1">
@@ -264,7 +270,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
           <button
             key={opt.key}
             onClick={() => setFilter(opt.key)}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors border ${
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
               filter === opt.key
                 ? 'bg-primary/10 border-primary/30 text-primary'
                 : 'bg-muted/30 border-border/30 text-muted-foreground hover:bg-muted/50'
@@ -283,7 +289,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
             {/* Date separator */}
             <div className="flex items-center gap-2 mb-2">
               <div className="h-px flex-1 bg-border/40" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                 {dateLabel}
               </span>
               <div className="h-px flex-1 bg-border/40" />
@@ -307,7 +313,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
                     {/* Platform avatar + line */}
                     <div className="flex flex-col items-center">
                       <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold"
+                        className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-primary-foreground font-bold"
                         style={{ backgroundColor: app.color, fontSize: 10 }}
                       >
                         {app.label}
@@ -326,7 +332,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
                       {description && (
                         <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
                       )}
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(evt.occurred_at), { addSuffix: true, locale: ptBR })}
                       </span>
                       <MetadataExpander metadata={evt.metadata} />

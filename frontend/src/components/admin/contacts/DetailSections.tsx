@@ -17,18 +17,13 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { StatusBadge } from './StatusBadge';
 import { getTagColor } from './TagsCell';
-import { estiloDeCorDeDado } from '@/lib/corDeDado';
+import { estiloDeCorDeDado, resolverCorDeDado } from '@/lib/corDeDado';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 
 // ─── Tag Colors ───
-const TAG_COLOR_OPTIONS = [
-  { name: 'purple', hex: '#534AB7' },
-  { name: 'blue', hex: '#185FA5' },
-  { name: 'green', hex: '#3B6D11' },
-  { name: 'amber', hex: '#BA7517' },
-  { name: 'red', hex: '#A32D2D' },
-  { name: 'teal', hex: '#0F6E56' },
-];
+// Os nomes são os mesmos que `corDeDado.PALETA_NOMEADA` resolve — a cor do
+// swatch vem de lá, não de hex fixo aqui.
+const TAG_COLOR_OPTIONS = ['purple', 'blue', 'green', 'amber', 'red', 'teal'] as const;
 
 interface Note {
   id: string;
@@ -53,7 +48,7 @@ export function DniaIdChip({ dniaId }: { dniaId: string | null }) {
         <TooltipTrigger asChild>
           <Badge
             variant="secondary"
-            className="text-[10px] cursor-pointer gap-1 h-5 px-1.5"
+            className="text-xs cursor-pointer gap-1 h-5 px-1.5"
             onClick={handleCopy}
           >
             <Copy className="h-2.5 w-2.5" />
@@ -79,8 +74,7 @@ export function GrowthHSLink({ growthhsCardUrl }: { growthhsCardUrl: string | nu
     <Button
       variant="outline"
       size="sm"
-      className="h-6 text-[10px] gap-1 px-2"
-      style={{ color: '#15803D', borderColor: '#15803D30' }}
+      className="h-6 text-xs gap-1 px-2 text-[--on-tint-success] border-success/30"
       onClick={(e) => {
         e.stopPropagation();
         window.open(growthhsCardUrl, '_blank');
@@ -247,14 +241,14 @@ export function StatusTagsSection({
               className="h-8 text-sm"
             />
             <div className="flex gap-1.5">
-              {TAG_COLOR_OPTIONS.map(c => (
+              {TAG_COLOR_OPTIONS.map(name => (
                 <button
-                  key={c.name}
+                  key={name}
                   className={`w-6 h-6 rounded-full border-2 transition-all ${
-                    newTagColor === c.name ? 'ring-2 ring-offset-1 ring-primary scale-110' : 'border-transparent'
+                    newTagColor === name ? 'ring-2 ring-offset-1 ring-primary scale-110' : 'border-transparent'
                   }`}
-                  style={{ backgroundColor: c.hex }}
-                  onClick={() => setNewTagColor(c.name)}
+                  style={{ backgroundColor: resolverCorDeDado(name) }}
+                  onClick={() => setNewTagColor(name)}
                 />
               ))}
             </div>
@@ -349,13 +343,13 @@ export function NotesSection({ leadId }: { leadId: string }) {
               <div className="flex justify-between items-start gap-2">
                 <p className="text-sm text-foreground whitespace-pre-wrap flex-1">{note.content}</p>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {formatDistanceToNow(new Date(note.created_at), { addSuffix: true, locale: ptBR })}
                   </span>
                   {confirmDeleteId === note.id ? (
-                    <div className="flex items-center gap-1 text-[10px]">
+                    <div className="flex items-center gap-1 text-xs">
                       <span className="text-muted-foreground">Tem certeza?</span>
-                      <button onClick={() => handleDelete(note.id)} className="text-red-500 font-medium">Sim</button>
+                      <button onClick={() => handleDelete(note.id)} className="text-[--on-tint-danger] font-medium">Sim</button>
                       <button onClick={() => setConfirmDeleteId(null)} className="text-muted-foreground">Não</button>
                     </div>
                   ) : (
@@ -363,7 +357,7 @@ export function NotesSection({ leadId }: { leadId: string }) {
                       onClick={() => setConfirmDeleteId(note.id)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500 transition-colors" />
+                      <Trash2 className="h-3 w-3 text-muted-foreground hover:text-danger transition-colors" />
                     </button>
                   )}
                 </div>

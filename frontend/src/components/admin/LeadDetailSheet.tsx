@@ -193,7 +193,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0 bg-gradient-to-br from-card via-card to-primary/5 border-border/50">
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0">
         {/* Header */}
         <DialogHeader className="p-6 pb-4 border-b border-border/50">
           <div className="flex items-start justify-between gap-4">
@@ -226,7 +226,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-6 px-2 text-[10px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                    className="h-6 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
                     disabled={enviandoAoComercial}
                     onClick={async () => {
                       setEnviandoAoComercial(true);
@@ -273,9 +273,9 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                           reivindica mais o total. */}
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 cursor-default ${
                         lead.etiqueta === 'hotlead'
-                          ? 'border-red-500 text-red-500 bg-red-500/10'
+                          ? 'border-success/30 text-[--on-tint-success] bg-[--tint-success]'
                           : lead.etiqueta === 'warm'
-                          ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10'
+                          ? 'border-warning/30 text-[--on-tint-warning] bg-[--tint-warning]'
                           : 'border-muted-foreground/40 text-muted-foreground bg-muted/30'
                       }`}>
                         {lead.lead_score ?? 0}
@@ -286,7 +286,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                         {(scoreBreakdown?.details ?? []).map((d, i) => (
                           <div key={i} className="flex justify-between gap-4">
                             <span className={d.met ? 'text-foreground' : 'text-muted-foreground line-through'}>{d.label}</span>
-                            <span className={d.met ? 'text-emerald-400 font-medium' : 'text-muted-foreground'}>
+                            <span className={d.met ? 'text-success font-medium' : 'text-muted-foreground'}>
                               {d.met ? `+${d.points}pts` : `${d.points}pts`}
                             </span>
                           </div>
@@ -304,10 +304,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                 </TooltipProvider>
               )}
               {isReconverted && (
-                <Badge
-                  variant="secondary"
-                  className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20 gap-1"
-                >
+                <Badge variant="info" className="gap-1">
                   <RefreshCw className="h-3 w-3" />
                   Reconverteu {timelineEvents.length}x
                 </Badge>
@@ -569,7 +566,7 @@ function CopyableField({
         onClick={() => onCopy(value, field)}
       >
         {copiedField === field ? (
-          <Check className="h-3.5 w-3.5 text-emerald-400" />
+          <Check className="h-3.5 w-3.5 text-success" />
         ) : (
           <Copy className="h-3.5 w-3.5" />
         )}
@@ -591,14 +588,17 @@ function MetricCard({
   color: 'emerald' | 'blue' | 'purple';
   small?: boolean;
 }) {
-  const colorMap = {
-    emerald: 'from-emerald-500/10 border-emerald-500/20 text-emerald-400',
-    blue: 'from-blue-500/10 border-blue-500/20 text-blue-400',
-    purple: 'from-purple-500/10 border-purple-500/20 text-purple-400',
+  // Sem gradiente: cartão de tinta lisa (Decisão 4 do G1 — a cor carrega o
+  // tipo da métrica). Ícone (~20px) fica na cor cheia, dentro do que a
+  // Decisão 1 permite para ícone.
+  const colorMap: Record<'emerald' | 'blue' | 'purple', { card: string; icon: string }> = {
+    emerald: { card: 'bg-[--tint-success] border-success/30', icon: 'text-success' },
+    blue: { card: 'bg-[--tint-info] border-info/30', icon: 'text-info' },
+    purple: { card: 'bg-[--tint-primary] border-primary/30', icon: 'text-primary' },
   };
   return (
-    <div className={`p-4 rounded-lg bg-gradient-to-br ${colorMap[color]} to-transparent border text-center`}>
-      <Icon className={`h-5 w-5 ${colorMap[color].split(' ').pop()} mx-auto mb-1`} />
+    <div className={`p-4 rounded-lg border text-center ${colorMap[color].card}`}>
+      <Icon className={`h-5 w-5 ${colorMap[color].icon} mx-auto mb-1`} />
       <div className={`${small ? 'text-sm' : 'text-2xl'} font-bold text-foreground ${small ? 'truncate' : ''}`}>
         {value}
       </div>
