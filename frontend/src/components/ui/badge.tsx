@@ -12,6 +12,9 @@ const badgeVariants = cva(
         secondary: "bg-[--tint-neutral] text-[--on-tint-neutral] border-border",
         destructive: "bg-[--tint-danger] text-[--on-tint-danger] border-danger/30",
         outline: "bg-transparent text-conteudo border-border",
+        success: "bg-[--tint-success] text-[--on-tint-success] border-success/30",
+        warning: "bg-[--tint-warning] text-[--on-tint-warning] border-warning/30",
+        info: "bg-[--tint-info] text-[--on-tint-info] border-info/30",
       },
     },
     defaultVariants: {
