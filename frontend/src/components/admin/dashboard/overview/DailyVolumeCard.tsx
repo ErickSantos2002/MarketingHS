@@ -34,28 +34,28 @@ export function DailyVolumeCard({
   const isCritical = dailyNeeded > currentAverage * 2;
 
   const getStatusColor = () => {
-    if (leadsNeeded === 0) return 'text-green-500';
-    if (isOnTrack) return 'text-green-500';
-    if (isAlmostThere) return 'text-yellow-500';
-    return 'text-red-500';
+    if (leadsNeeded === 0) return 'text-[--on-tint-success]';
+    if (isOnTrack) return 'text-[--on-tint-success]';
+    if (isAlmostThere) return 'text-[--on-tint-warning]';
+    return 'text-[--on-tint-danger]';
   };
 
   const getStatusBg = () => {
-    if (leadsNeeded === 0) return 'bg-green-500/10 border-green-500/20';
-    if (isOnTrack) return 'bg-green-500/10 border-green-500/20';
-    if (isAlmostThere) return 'bg-yellow-500/10 border-yellow-500/20';
-    return 'bg-red-500/10 border-red-500/20';
+    if (leadsNeeded === 0) return 'bg-[--tint-success] border-success/30';
+    if (isOnTrack) return 'bg-[--tint-success] border-success/30';
+    if (isAlmostThere) return 'bg-[--tint-warning] border-warning/30';
+    return 'bg-[--tint-danger] border-danger/30';
   };
 
   const getIcon = () => {
-    if (leadsNeeded === 0) return <Zap className="h-4 w-4 text-green-500" />;
-    if (isOnTrack) return <TrendingUp className="h-4 w-4 text-green-500" />;
-    if (isCritical) return <AlertTriangle className="h-4 w-4 text-red-500" />;
-    return <TrendingDown className="h-4 w-4 text-yellow-500" />;
+    if (leadsNeeded === 0) return <Zap className="h-4 w-4 text-[--on-tint-success]" />;
+    if (isOnTrack) return <TrendingUp className="h-4 w-4 text-[--on-tint-success]" />;
+    if (isCritical) return <AlertTriangle className="h-4 w-4 text-[--on-tint-danger]" />;
+    return <TrendingDown className="h-4 w-4 text-[--on-tint-warning]" />;
   };
 
   const getMessage = () => {
-    if (leadsNeeded === 0) return 'Meta batida! 🎉';
+    if (leadsNeeded === 0) return 'Meta batida!';
     if (remainingDays === 0) return 'Último dia!';
     if (isOnTrack) return 'Ritmo adequado';
     if (isCritical) return 'Ação urgente!';
@@ -69,7 +69,7 @@ export function DailyVolumeCard({
   };
 
   return (
-    <Card className={cn('border shadow-lg transition-all', getStatusBg())}>
+    <Card className={cn('border transition-all', getStatusBg())}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           {getIcon()}
@@ -100,8 +100,8 @@ export function DailyVolumeCard({
             <div className="font-semibold text-foreground">{currentAverage.toFixed(1)}</div>
             <div className="text-muted-foreground">Atual/dia</div>
           </div>
-          <div className={cn('rounded-md p-2', isOnTrack ? 'bg-green-500/20' : 'bg-red-500/20')}>
-            <div className={cn('font-semibold', isOnTrack ? 'text-green-500' : 'text-red-500')}>
+          <div className={cn('rounded-md p-2', isOnTrack ? 'bg-[--tint-success]' : 'bg-[--tint-danger]')}>
+            <div className={cn('font-semibold', isOnTrack ? 'text-[--on-tint-success]' : 'text-[--on-tint-danger]')}>
               {getDiff()}
             </div>
             <div className="text-muted-foreground">Diferença</div>
@@ -110,7 +110,7 @@ export function DailyVolumeCard({
 
         {/* Alert for Critical */}
         {isCritical && remainingDays > 0 && (
-          <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded-md flex items-center gap-2 text-xs text-red-500">
+          <div className="mt-3 p-2 bg-[--tint-danger] border border-danger/30 rounded-md flex items-center gap-2 text-xs text-[--on-tint-danger]">
             <AlertTriangle className="h-3 w-3 flex-shrink-0" />
             <span>Necessário {((dailyNeeded / currentAverage) - 1) * 100 | 0}% mais leads/dia</span>
           </div>

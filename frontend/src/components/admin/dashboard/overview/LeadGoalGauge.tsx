@@ -87,7 +87,7 @@ export function LeadGoalGauge({
   };
 
   return (
-    <Card className="bg-gradient-to-br from-card to-card/80 border-primary/10 shadow-lg">
+    <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -167,7 +167,7 @@ export function LeadGoalGauge({
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8 text-chart-2 hover:text-chart-2/80"
+              className="h-8 w-8 text-success hover:text-success/80"
               onClick={handleSave}
               disabled={isSaving}
             >

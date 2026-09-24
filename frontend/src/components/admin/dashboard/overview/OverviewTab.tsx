@@ -16,7 +16,7 @@ import { useLeadAnalytics, BRASILIA_TIMEZONE } from '@/hooks/useLeadAnalytics';
 import { useGoalSettings } from '@/hooks/useGoalSettings';
 import { useAgendamentos, useAgendamentosByDay, countAgendamentos, getAgendamentoLeadIds, useMqlReuniaoAgendadaToday } from '@/hooks/useAgendamentos';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { parseISO, format, startOfWeek, endOfWeek, startOfDay, endOfDay, isWithinInterval, addDays, subDays } from 'date-fns';
 import { formatInTimeZone, toZonedTime, format as formatTz } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
@@ -446,8 +446,8 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
   return (
     <div className="space-y-6 animate-fade-in">
       {agendamentosTruncado && (
-        <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-          ⚠️ Os agendamentos abaixo foram calculados sobre os {agendamentosTeto.toLocaleString('pt-BR')} eventos
+        <div className="mb-4 rounded-md border border-warning/30 bg-[--tint-warning] px-3 py-2 text-xs text-[--on-tint-warning]">
+          <AlertTriangle className="inline h-3.5 w-3.5" /> Os agendamentos abaixo foram calculados sobre os {agendamentosTeto.toLocaleString('pt-BR')} eventos
           mais recentes, não sobre a base inteira. O painel calcula no navegador e
           esse é o teto que ele aguenta.
         </div>

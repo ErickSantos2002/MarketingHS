@@ -13,9 +13,9 @@ export function QualificationGauge({ rate }: QualificationGaugeProps) {
   
   // Determine color based on rate
   const getColor = () => {
-    if (clampedRate >= 70) return 'hsl(142, 76%, 36%)'; // Green
-    if (clampedRate >= 40) return 'hsl(47, 100%, 50%)'; // Yellow
-    return 'hsl(0, 84%, 60%)'; // Red
+    if (clampedRate >= 70) return 'var(--color-success-500)';
+    if (clampedRate >= 40) return 'var(--color-warning-500)';
+    return 'var(--color-danger-500)';
   };
 
   const getLabel = () => {
@@ -39,7 +39,7 @@ export function QualificationGauge({ rate }: QualificationGaugeProps) {
             <path
               d="M 20 100 A 80 80 0 0 1 180 100"
               fill="none"
-              stroke="hsl(0, 0%, 20%)"
+              stroke="var(--border-strong)"
               strokeWidth="16"
               strokeLinecap="round"
             />
@@ -68,11 +68,11 @@ export function QualificationGauge({ rate }: QualificationGaugeProps) {
                 y1="100"
                 x2="100"
                 y2="40"
-                stroke="hsl(0, 0%, 100%)"
+                stroke="var(--surface)"
                 strokeWidth="3"
                 strokeLinecap="round"
               />
-              <circle cx="100" cy="100" r="8" fill="hsl(0, 0%, 100%)" />
+              <circle cx="100" cy="100" r="8" fill="var(--surface)" />
             </g>
           </svg>
           

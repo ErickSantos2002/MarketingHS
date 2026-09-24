@@ -43,21 +43,21 @@ export function ForecastCard({
   const forecastPercentage = (forecast / goal) * 100;
 
   const getStatusColor = () => {
-    if (forecastPercentage >= 100) return 'text-green-500';
-    if (forecastPercentage >= 80) return 'text-yellow-500';
-    return 'text-red-500';
+    if (forecastPercentage >= 100) return 'text-[--on-tint-success]';
+    if (forecastPercentage >= 80) return 'text-[--on-tint-warning]';
+    return 'text-[--on-tint-danger]';
   };
 
   const getStatusBg = () => {
-    if (forecastPercentage >= 100) return 'bg-green-500/10 border-green-500/20';
-    if (forecastPercentage >= 80) return 'bg-yellow-500/10 border-yellow-500/20';
-    return 'bg-red-500/10 border-red-500/20';
+    if (forecastPercentage >= 100) return 'bg-[--tint-success] border-success/30';
+    if (forecastPercentage >= 80) return 'bg-[--tint-warning] border-warning/30';
+    return 'bg-[--tint-danger] border-danger/30';
   };
 
   const getStatusText = () => {
-    if (forecastPercentage >= 100) return 'No ritmo! 🎯';
-    if (forecastPercentage >= 80) return 'Quase lá ⚡';
-    return 'Acelerar! 🚀';
+    if (forecastPercentage >= 100) return 'No ritmo!';
+    if (forecastPercentage >= 80) return 'Quase lá';
+    return 'Acelerar!';
   };
 
   const handleSaveDates = async () => {
@@ -69,7 +69,7 @@ export function ForecastCard({
   };
 
   return (
-    <Card className={cn('border shadow-lg transition-all', getStatusBg())}>
+    <Card className={cn('border transition-all', getStatusBg())}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -167,8 +167,8 @@ export function ForecastCard({
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
-                forecastPercentage >= 100 ? 'bg-green-500' :
-                forecastPercentage >= 80 ? 'bg-yellow-500' : 'bg-red-500'
+                forecastPercentage >= 100 ? 'bg-success' :
+                forecastPercentage >= 80 ? 'bg-warning' : 'bg-danger'
               )}
               style={{ width: `${Math.min((elapsedDays / totalDays) * 100, 100)}%` }}
             />

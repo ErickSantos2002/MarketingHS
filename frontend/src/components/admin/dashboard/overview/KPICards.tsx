@@ -63,15 +63,6 @@ function KPICard({ title, value, icon, gradient, glowColor, delay = '0ms', onCli
       )}
       style={{ animationDelay: delay }}
     >
-      {/* Background glow */}
-      <div
-        className={cn(
-          "absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 blur-2xl transition-opacity duration-300",
-          "group-hover:opacity-40",
-          gradient
-        )}
-      />
-
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-muted-foreground font-medium">{title}</span>
@@ -141,15 +132,6 @@ function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, de
       )}
       style={{ animationDelay: delay }}
     >
-      {/* Background glow - WhatsApp green */}
-      <div
-        className={cn(
-          "absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 blur-2xl transition-opacity duration-300",
-          "group-hover:opacity-40",
-          "bg-gradient-to-br from-[#25D366] to-[#128C7E]"
-        )}
-      />
-
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-muted-foreground font-medium">Grupo WhatsApp</span>
@@ -164,8 +146,8 @@ function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, de
                 <Pencil className="h-3 w-3" />
               </Button>
             )}
-            <div className="p-2 rounded-lg bg-gradient-to-br from-[#25D366] to-[#128C7E]">
-              <MessageCircle className="h-5 w-5 text-white" />
+            <div className="p-2 rounded-lg bg-[--tint-success]">
+              <MessageCircle className="h-5 w-5 text-[--on-tint-success]" />
             </div>
           </div>
         </div>
@@ -185,7 +167,7 @@ function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, de
             <Button
               size="icon"
               variant="ghost"
-              className="h-10 w-10 text-chart-2 hover:text-chart-2/80"
+              className="h-10 w-10 text-success hover:text-success/80"
               onClick={handleSave}
               disabled={isSaving}
             >
@@ -207,7 +189,7 @@ function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, de
               <span className="text-4xl font-bold text-foreground tracking-tight">
                 {value.toLocaleString('pt-BR')}
               </span>
-              <span className="text-xs text-[#25D366] font-medium mt-1">
+              <span className="text-xs text-[--on-tint-success] font-medium mt-1">
                 {percentage}% dos leads
               </span>
             </div>
@@ -286,8 +268,8 @@ export function KPICards({
           <KPICard
             title={totalLeadsTitle}
             value={hasDateFilter ? periodConversions : totalLeads.length}
-            icon={<Users className="h-5 w-5 text-white" />}
-            gradient="bg-gradient-to-br from-info to-primary"
+            icon={<Users className="h-5 w-5 text-primary-foreground" />}
+            gradient="bg-info"
             glowColor="primary"
             delay="0ms"
             onClick={() => onCardClick('total', totalLeads, totalLeadsTitle)}
@@ -331,12 +313,12 @@ export function KPICards({
           <KPICard
             title={conversionCardTitle}
             value={conversionsToday.length}
-            icon={<RefreshCw className="h-5 w-5 text-white" />}
-            gradient="bg-gradient-to-br from-emerald-500 to-emerald-700"
+            icon={<RefreshCw className="h-5 w-5 text-primary-foreground" />}
+            gradient="bg-success"
             glowColor="emerald"
             delay="100ms"
             subtitle={reconversionsCount > 0 ? `(${reconversionsCount} reconversões)` : undefined}
-            subtitleColor="text-emerald-500"
+            subtitleColor="text-[--on-tint-success]"
             onClick={() => onCardClick('conversions', conversionsToday, conversionCardTitle)}
           />
           )}
@@ -344,8 +326,8 @@ export function KPICards({
           <KPICard
             title="Leads Novos Hoje"
             value={leadsToday.length}
-            icon={<Calendar className="h-5 w-5 text-white" />}
-            gradient="bg-gradient-to-br from-primary to-primary/70"
+            icon={<Calendar className="h-5 w-5 text-primary-foreground" />}
+            gradient="bg-primary"
             glowColor="blue"
             delay="150ms"
             onClick={() => onCardClick('today', leadsToday, 'Leads Novos Hoje')}
@@ -355,8 +337,8 @@ export function KPICards({
           <KPICard
             title="Leads na Semana"
             value={leadsThisWeek.length}
-            icon={<UserCheck className="h-5 w-5 text-white" />}
-            gradient="bg-gradient-to-br from-amber-500 to-amber-700"
+            icon={<UserCheck className="h-5 w-5 text-primary-foreground" />}
+            gradient="bg-warning"
             glowColor="amber"
             delay="200ms"
             onClick={() => onCardClick('week', leadsThisWeek, 'Leads na Semana')}
@@ -367,12 +349,12 @@ export function KPICards({
         <KPICard
           title={conversionCardTitle}
           value={conversionsToday.length}
-          icon={<RefreshCw className="h-5 w-5 text-white" />}
-          gradient="bg-gradient-to-br from-emerald-500 to-emerald-700"
+          icon={<RefreshCw className="h-5 w-5 text-primary-foreground" />}
+          gradient="bg-success"
           glowColor="emerald"
           delay="100ms"
           subtitle={reconversionsCount > 0 ? `(${reconversionsCount} reconversões)` : undefined}
-          subtitleColor="text-emerald-500"
+          subtitleColor="text-[--on-tint-success]"
           onClick={() => onCardClick('conversions', conversionsToday, conversionCardTitle)}
         />
       ) : null}
@@ -381,12 +363,12 @@ export function KPICards({
       <KPICard
         title={agendamentosTitle}
         value={agendamentosValue}
-        icon={<CalendarCheck className="h-5 w-5 text-white" />}
-        gradient="bg-gradient-to-br from-violet-500 to-violet-700"
+        icon={<CalendarCheck className="h-5 w-5 text-primary-foreground" />}
+        gradient="bg-primary"
         glowColor="violet"
         delay={showTemporalKPIs ? "250ms" : "100ms"}
         subtitle="Reuniões marcadas"
-        subtitleColor="text-violet-400"
+        subtitleColor="text-[--on-tint-primary]"
         onClick={() => onCardClick('agendamentos', hasDateFilter ? agendamentosLeads : agendamentosTodayLeads, agendamentosTitle)}
       />
       )}

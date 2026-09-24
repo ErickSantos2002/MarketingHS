@@ -437,8 +437,8 @@ export function GlobalFilters({
           {filters.campaigns.map(campaign => (
             <Badge
               key={`campaign-${campaign}`}
-              variant="secondary"
-              className="bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 cursor-pointer"
+              variant="info"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ campaigns: filters.campaigns.filter(c => c !== campaign) })}
             >
               {campaign}
@@ -448,8 +448,8 @@ export function GlobalFilters({
           {filters.qualifications.map(qual => (
             <Badge
               key={`qual-${qual}`}
-              variant="secondary"
-              className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+              variant="success"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ qualifications: filters.qualifications.filter(q => q !== qual) })}
             >
               {qual === 'hot' ? 'Hot' : qual === 'warm' ? 'Warm' : 'Raw'}
@@ -459,8 +459,8 @@ export function GlobalFilters({
           {filters.faturamentos.map(fat => (
             <Badge
               key={`fat-${fat}`}
-              variant="secondary"
-              className="bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 cursor-pointer"
+              variant="warning"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ faturamentos: filters.faturamentos.filter(f => f !== fat) })}
             >
               {fat}
@@ -470,8 +470,8 @@ export function GlobalFilters({
           {filters.cargos.map(cargo => (
             <Badge
               key={`cargo-${cargo}`}
-              variant="secondary"
-              className="bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 cursor-pointer"
+              variant="default"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ cargos: filters.cargos.filter(c => c !== cargo) })}
             >
               {cargo}
@@ -481,8 +481,8 @@ export function GlobalFilters({
           {filters.challengeThemes.map(theme => (
             <Badge
               key={`theme-${theme}`}
-              variant="secondary"
-              className="bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 cursor-pointer"
+              variant="info"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ challengeThemes: filters.challengeThemes.filter(t => t !== theme) })}
             >
               {theme}
@@ -492,8 +492,8 @@ export function GlobalFilters({
           {(filters.sources || []).map(source => (
             <Badge
               key={`source-${source}`}
-              variant="secondary"
-              className="bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 cursor-pointer"
+              variant="warning"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ sources: (filters.sources || []).filter(s => s !== source) })}
             >
               {source}
@@ -503,8 +503,8 @@ export function GlobalFilters({
           {(filters.presencas || []).map(presenca => (
             <Badge
               key={`presenca-${presenca}`}
-              variant="secondary"
-              className="bg-green-500/10 text-green-400 hover:bg-green-500/20 cursor-pointer"
+              variant="success"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ presencas: (filters.presencas || []).filter(p => p !== presenca) })}
             >
               {presenca}
@@ -513,12 +513,12 @@ export function GlobalFilters({
           ))}
           {filters.interesseEcossistema && (
             <Badge
-              variant="secondary"
-              className="bg-pink-500/10 text-pink-400 hover:bg-pink-500/20 cursor-pointer"
+              variant="default"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ interesseEcossistema: null })}
             >
-              {filters.interesseEcossistema === 'mtia_e_formacao' 
-                ? 'MTIA + Formação' 
+              {filters.interesseEcossistema === 'mtia_e_formacao'
+                ? 'MTIA + Formação'
                 : filters.interesseEcossistema === 'apenas_mtia'
                   ? 'Apenas MTIA'
                   : 'Apenas Formação'}
@@ -527,8 +527,8 @@ export function GlobalFilters({
           )}
           {filters.onlyReconversions && (
             <Badge
-              variant="secondary"
-              className="bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 cursor-pointer"
+              variant="info"
+              className="cursor-pointer"
               onClick={() => onUpdateFilters({ onlyReconversions: false })}
             >
               Só reconversões
