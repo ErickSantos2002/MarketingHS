@@ -14,7 +14,7 @@ function getColorClass(rate: number, total: number): string {
   if (rate >= 60) return 'bg-success/60';
   if (rate >= 50) return 'bg-warning/60';
   if (rate >= 40) return 'bg-warning/80';
-  if (rate >= 30) return 'bg-warning/70';
+  if (rate >= 30) return 'bg-warning';
   return 'bg-danger/70';
 }
 
