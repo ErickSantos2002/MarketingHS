@@ -2,11 +2,11 @@
 
 > ## 🌅 Comece por aqui — 30/09/2026
 >
-> **Onde tudo está:** branch **`visual-fase-1`** em `a43e2c5`, **sem push** —
-> a `visual-fase-2-g3` foi mergeada nela (avanço direto) e apagada em 30/09.
-> Está **55 commits à frente da `main`** e 40 à frente do
-> `origin/visual-fase-1`. Ela carrega a Fase 1, a preparação da Fase 2, o G1,
-> o G2 e agora o **G3 (Campanhas e Templates)**. G1 e G2 têm revisão por
+> **Onde tudo está:** tudo na **`main`** (`0320584`, com push) — em 30/09 o
+> Erick pediu o merge: a `visual-fase-2-g3` entrou na `visual-fase-1`, e a
+> `visual-fase-1` entrou na `main` (avanço direto); as duas estão no GitHub.
+> A `main` agora carrega a Fase 1, a preparação da Fase 2, o G1, o G2 e o
+> **G3 (Campanhas e Templates)**; o G4 nasce numa branch a partir dela. G1 e G2 têm revisão por
 > tarefa e revisão final; o G3 **também tem revisão final** (30/09), com uma
 > onda de conserto de 3 pontos de apresentação (ver o bloco do G3).
 > **Push e merge na `main` são decisão do Erick.**
@@ -15,7 +15,7 @@
 > Segmentos** (`components/admin/automations/`, **45** no guarda;
 > `components/admin/segments/`, **10**) no molde de
 > `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g3-campanhas.md`,
-> numa branch nova a partir da `visual-fase-1`. Execução como nos três
+> numa branch nova a partir da `main`. Execução como nos três
 > grupos anteriores: `superpowers:subagent-driven-development`, um subagente e
 > uma revisão por tarefa, revisão final da branch no modelo mais capaz.
 >
@@ -40,7 +40,7 @@
 > - `segments` tem 10 por causa dos brilhos do `SegmentFormModal.tsx`.
 >
 > **Decisões que esperam o Erick** (detalhe nos blocos abaixo):
-> 1. **Push e merge** da `visual-fase-1` na `main`.
+> 1. ~~Push e merge da `visual-fase-1` na `main`.~~ **Feito em 30/09.**
 > 2. ~~Trocar a senha da conta admin do Claude.~~ **Resolvida:** senha trocada
 >    em 30/09, em `~/.config/marketinghs/claude-admin.env`. A conta
 >    (`claude.dev@example.com`) continua a ser apagada no fim do trabalho.
