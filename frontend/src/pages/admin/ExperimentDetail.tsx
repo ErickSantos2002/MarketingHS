@@ -191,7 +191,7 @@ export default function ExperimentDetail() {
             {test.status === "completed" && test.winner_variant && ` · vencedora ${test.winner_variant}`}
           </p>
           {eventosDoTeste?.truncado && (
-            <p className="text-xs text-amber-600 mt-1">
+            <p className="text-xs text-[--on-tint-warning] mt-1">
               Mostrando os {eventosDoTeste.teto.toLocaleString("pt-BR")} eventos mais recentes — o
               relatório está parcial.
             </p>
@@ -201,8 +201,8 @@ export default function ExperimentDetail() {
       </div>
 
       {preliminary && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4" /> Resultado <strong>PRELIMINAR</strong> — amostra alvo ainda não atingida. Não declare vencedor cedo.
+        <div className="rounded-lg border border-warning/30 bg-[--tint-warning] px-4 py-2 text-sm text-[--on-tint-warning] flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-warning" /> Resultado <strong>PRELIMINAR</strong> — amostra alvo ainda não atingida. Não declare vencedor cedo.
         </div>
       )}
 
@@ -219,7 +219,7 @@ export default function ExperimentDetail() {
           ) : (
             <>
               {winner && !preliminary && (
-                <div className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm flex items-center gap-2">
+                <div className="rounded-lg border border-primary/30 bg-[--tint-primary] px-4 py-3 text-sm flex items-center gap-2">
                   <Trophy className="h-4 w-4 text-primary" />
                   Variante <strong>{winner.key}</strong> tem <strong>{pct(winner.probBest)}</strong> de probabilidade de ser a melhor
                   em <strong>{test.primary_metric}</strong> (bayesiano).
@@ -251,7 +251,7 @@ export default function ExperimentDetail() {
                       return (
                         <TableRow key={k}>
                           <TableCell className="font-medium">
-                            {k} {isControl && <Badge variant="outline" className="ml-1 text-[10px]">controle</Badge>}
+                            {k} {isControl && <Badge variant="outline" className="ml-1 text-xs">controle</Badge>}
                           </TableCell>
                           <TableCell>{exp.toLocaleString("pt-BR")}</TableCell>
                           <TableCell>{v?.conversions ?? 0}</TableCell>
@@ -262,7 +262,7 @@ export default function ExperimentDetail() {
                           <TableCell>{v ? pct(v.probBest) : "—"}</TableCell>
                           <TableCell>{v?.upliftVsControl != null ? (v.upliftVsControl >= 0 ? "+" : "") + pct(v.upliftVsControl) : "—"}</TableCell>
                           {test.guardrail_metric && (
-                            <TableCell className={guardWorse ? "text-red-600 font-semibold" : ""}>
+                            <TableCell className={guardWorse ? "text-[--on-tint-danger] font-semibold" : ""}>
                               {pct(guardRate)} {guardWorse && <AlertTriangle className="h-3 w-3 inline ml-1" />}
                             </TableCell>
                           )}
@@ -350,8 +350,8 @@ export default function ExperimentDetail() {
               <Button variant="outline" size="sm" onClick={exportCsv}><Download className="h-4 w-4 mr-2" /> Exportar CSV</Button>
             </div>
             {filtersActive && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 flex items-center gap-2">
-                <AlertTriangle className="h-3 w-3" /> Leitura exploratória — filtros reduzem a amostra e geram hipótese, não veredito.
+              <div className="rounded-lg border border-warning/30 bg-[--tint-warning] px-3 py-2 text-xs text-[--on-tint-warning] flex items-center gap-2">
+                <AlertTriangle className="h-3 w-3 text-warning" /> Leitura exploratória — filtros reduzem a amostra e geram hipótese, não veredito.
               </div>
             )}
           </Card>
