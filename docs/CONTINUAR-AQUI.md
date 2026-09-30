@@ -7,11 +7,12 @@
 > está na branch **`visual-fase-2-g5`** (a partir da `main`, base `e707b5a`),
 > **sem merge e sem push**. Tem **revisão por tarefa feita (as quatro de tela,
 > todas limpas; a Tarefa 4 depois de uma rodada de conserto)** e o portão da
-> Tarefa 5 conferido; a **revisão final da branch está PENDENTE** — ainda não
-> aconteceu.
+> Tarefa 5 conferido; a **revisão final da branch (30/09) já foi feita:
+> "sim com ressalvas", sem Critical nem Important, com onda de conserto de 2
+> itens (commit `ad6321b`)**.
 >
-> **O que fazer a seguir:** a revisão final do G5 (que também tria os resíduos
-> listados no bloco do G5) e, depois, o plano do **G6 — Configurações
+> **O que fazer a seguir:** decidir o que fazer com os resíduos e pendências
+> listados no bloco do G5 e, depois, o plano do **G6 — Configurações
 > (`settings/`, o último grupo)**, que leva também o `SettingsPage.tsx`
 > (`pages/admin`, 2 no guarda) e o "Remover" azul do `SuppressionList.tsx:~261`.
 > Plano no molde de
@@ -62,7 +63,7 @@
 >    `sending` sem `sent_at`, com 1 envio cada e 0 pendentes — há 4 semanas em
 >    "Enviando...". Resolver é mexer em dado/motor de fila, fora do visual.
 >    Reconferido em 30/09, fim do G4: continuam 2 em `sending`.
-> 8. **Contrastes do DS oficial abaixo de 4,5:1** (o G5 acrescentou os badges `secondary` 4,34, `success` 4,33 e `warning` 4,13 no claro, e o botão de ação padrão no escuro, 2,69, medido no real). Os dois primeiros: (a)
+> 8. **Contrastes do DS oficial abaixo de 4,5:1** (o G5 acrescentou os badges `secondary` 4,34, `success` 4,33 e `warning` 4,13 no claro, e o botão de ação padrão no escuro, 2,69, medido no real). Os dois já anotados antes do G5 são: (a)
 >    `--on-tint-warning` sobre `--tint-warning` no tema claro: 4,32:1 sobre o
 >    fundo da página (4,50 sobre branco), para texto de 12px — atinge o estado
 >    "Pausado", "Aguardando" e o aviso âmbar; (b) texto branco sobre `danger-500`
@@ -91,7 +92,8 @@
 > fechados sem salvar. Um token errado nessas telas só apareceria no dia da
 > primeira página.
 >
-> **O G5 fechou as tarefas; a revisão final da branch está PENDENTE.** Branch
+> **O G5 fechou as tarefas e a revisão final da branch (30/09, "sim com
+> ressalvas", sem Critical nem Important) já foi feita, com onda de conserto.** Branch
 > `visual-fase-2-g5` (a partir da `main`, base `e707b5a`), **sem merge e sem
 > push**. As quatro tarefas de tela tiveram revisão por tarefa (todas limpas; a
 > 4 depois de uma rodada). Plano:
@@ -108,6 +110,7 @@
 > | `1d3d78b` | Editor de página sai do guarda — "Salvo" e "PREVIEW" viram variante, cor inicial do CTA mora em `src/landing/` |
 > | `3a07cc9` | Teste A/B (`Experiments`, `ExperimentsSetup`) sai do guarda — sem `<h1>` duplicado, avisos legíveis |
 > | `ecbc209` | `ExperimentDetail` sai do guarda — **ficou fora do `3a07cc9`** por um glob de `git add` que não o pegou; commit separado, mesmo trabalho da Tarefa 4 |
+> | `ad6321b` | Onda final (revisão final): `ml-1` no span do aviso "Muito longo" de `Experiments` (dentro de `inline-flex` o espaço inicial não renderiza) e `text-warning` no ícone `ShieldAlert` do aviso do redirecionador de `ExperimentsSetup` |
 >
 > **Placar do guarda: 170 → 124** (app inteiro; −46 = 26 + 20). Por pasta:
 > `src/components/admin/pages` **26 → 0** (Tarefa 2: 18; Tarefa 3, o editor: 8);
@@ -124,8 +127,8 @@
 > `AlertDialogAction` com `bg-destructive` — **zero linhas**; os **7 hashes**
 > do Design System batendo com o `ORIGEM.md` (a seção de defeitos ganhou
 > medições; os hashes não mudam). Capacidade por capacidade
-> (`git diff e707b5a --stat -- frontend`: 14 arquivos, 65 inserções / 602
-> deleções; os quatro órfãos apagados — `PagesTable`, `PageStatusBadge`,
+> (`git diff e707b5a --shortstat -- frontend`, medido depois da onda final: 15
+> arquivos, 77 inserções / 604 deleções, **incluindo o `ORIGEM.md`**; os quatro órfãos apagados — `PagesTable`, `PageStatusBadge`,
 > `PageTypeIcon`, `PageFormDialog`, 552 linhas — são o grosso das deleções):
 > fora de `className`/`variant`/import, o diff só sobra nas exceções nomeadas —
 > `COR_CTA_PADRAO` (import + 2 linhas de `cta_color`), o `<span>` e a remoção do
@@ -139,7 +142,9 @@
 > (diálogo "Novo teste" aberto e fechado), `/experiments/setup`, `/` e
 > `/analytics`, claro e escuro a 1440 px; **390 px, só no claro:** `/pages`
 > não rola na horizontal (`scrollWidth` 384 < 390) e **`/experiments` rola**
-> (`scrollWidth` 424 > 390) — anotado, não consertado nem investigado. Console: 0 erros; os
+> (`scrollWidth` 424 > 390) — **pré-existente**: quem estoura é a linha de botões
+> do cabeçalho ("Configuração & Instruções" + "Novo teste", `flex gap-2` sem
+> quebra), que o G5 não tocou; **pendência de responsivo**, não consertada. Console: 0 erros; os
 > 2 avisos de sempre (flags do React Router) e, ao abrir "Nova página", o aviso
 > do Radix de `Description` ausente no `DialogContent` (não é deste grupo).
 > "Presets de UTM" **não foi aberto**: só abre pelo menu "Gerar link" de uma
@@ -169,7 +174,7 @@
 > real — já estava registrado (~2,7), agora com o número do real.
 >
 > **Resíduos conhecidos** (minors adiados; triados na revisão final):
-> - `PagesManagement.tsx:~483` — "Melhor Página" com `text-2xl` + `text-base`
+> - `PagesManagement.tsx:~124` — "Melhor Página" com `text-2xl` + `text-base`
 >   (preexistente);
 > - indentação do texto dentro do `<span>` nos dois avisos de truncamento
 >   (`Overview.tsx`, `Analytics.tsx`), sem efeito na tela;
@@ -178,6 +183,21 @@
 > - o aviso "Muito longo" de `/experiments` já aparece com os valores padrão do
 >   diálogo "Novo teste" (comportamento herdado, não visual);
 > - `Presets de UTM` e o detalhe de teste nunca vistos com dado.
+>
+> **Pendências novas da revisão final** (não consertadas):
+> - texto destrutivo em `text-destructive` nos menus ("Excluir" de
+>   `PagesManagement.tsx:~225`, `Campaigns.tsx:~199`, `Templates.tsx:~81`) dá
+>   ~3,76:1 — decidir a regra do texto destrutivo no app inteiro;
+> - a docstring de `backend/app/routers/landing.py:~52-57` cita
+>   `PageFormDialog.tsx` (apagado no G5) como "o caminho mais usado" — atualizar
+>   no próximo toque no backend (fora do visual).
+>
+> **Revisão final do G5 e onda de conserto (30/09).** Veredito: "sim com
+> ressalvas", sem Critical nem Important. Conserto (commit `ad6321b`, só
+> classes): `ml-1` no span do "Muito longo" (`Experiments.tsx:~469`) e
+> `text-warning` no `ShieldAlert` do aviso do redirecionador
+> (`ExperimentsSetup.tsx:~222`). Guarda 0 nos dois arquivos, 124 no total, `tsc`
+> 4 erros pré-existentes, `vite build` ok.
 >
 > ### Decisões tomadas nesta fase, reversíveis
 >
