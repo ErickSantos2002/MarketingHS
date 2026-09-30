@@ -5,7 +5,7 @@
 > **Onde tudo está:** a `main` local tem a Fase 1, a preparação da Fase 2, o
 > G1, o G2, o G3 e o G4, tudo com push (30/09). O **G5 (Páginas e Teste A/B)**
 > também está na `main` — a `visual-fase-2-g5` foi mergeada (avanço direto) e
-> apagada em 30/09; **o G5 ainda não tem push** (decisão do Erick). Tem **revisão por tarefa feita (as quatro de tela,
+> apagada em 30/09; tudo com push (30/09). Tem **revisão por tarefa feita (as quatro de tela,
 > todas limpas; a Tarefa 4 depois de uma rodada de conserto)** e o portão da
 > Tarefa 5 conferido; a **revisão final da branch (30/09) já foi feita:
 > "sim com ressalvas", sem Critical nem Important, com onda de conserto de 2
@@ -95,7 +95,7 @@
 > **O G5 fechou as tarefas e a revisão final da branch (30/09, "sim com
 > ressalvas", sem Critical nem Important) já foi feita, com onda de conserto.** Branch
 > `visual-fase-2-g5` (a partir da `main`, base `e707b5a`), mergeada na `main`
-> (avanço direto) em 30/09 e apagada; sem push. As quatro tarefas de tela tiveram revisão por tarefa (todas limpas; a
+> (avanço direto) em 30/09 e apagada; com push. As quatro tarefas de tela tiveram revisão por tarefa (todas limpas; a
 > 4 depois de uma rodada). Plano:
 > `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g5-paginas-ab.md`.
 > O HTML público das landings (`src/landing/`) ficou de fora, Decisão 6 do
