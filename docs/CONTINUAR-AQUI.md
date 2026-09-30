@@ -4,11 +4,12 @@
 >
 > **Onde tudo está:** branch **`visual-fase-2-g3`**, criada a partir da
 > `visual-fase-1` (`ced78af`), **não mergeada e sem push** — decisão do Erick.
-> Está **52 commits à frente da `main`** e 37 à frente do
+> Está **55 commits à frente da `main`** e 40 à frente do
 > `origin/visual-fase-1`. Ela carrega a Fase 1, a preparação da Fase 2, o G1,
 > o G2 e agora o **G3 (Campanhas e Templates)**. G1 e G2 têm revisão por
-> tarefa e revisão final; o G3 tem revisão por tarefa, e a **revisão final
-> do G3 ainda está pendente**. **Push e merge na `main` são decisão do Erick.**
+> tarefa e revisão final; o G3 **também tem revisão final** (30/09), com uma
+> onda de conserto de 3 pontos de apresentação (ver o bloco do G3).
+> **Push e merge na `main` são decisão do Erick.**
 >
 > **O que fazer a seguir:** escrever o plano do **G4 — Automações, Jornadas e
 > Segmentos** (`components/admin/automations/`, **45** no guarda;
@@ -34,7 +35,8 @@
 >   mais for preciso para zerar o guarda nos arquivos da tarefa";
 > - **regex do guarda:** `shadow-\[0_0_[1-9]` não pega desfoque fracionário
 >   (`0.5rem`, `.5rem`); não ocorre hoje em `src/`, mas vale apertar se o G4
->   encontrar algum;
+>   encontrar algum; a mesma regex também não pega `shadow-[0_0_var(--x)…]`
+>   nem `theme(...)` (não ocorre hoje);
 > - `segments` tem 10 por causa dos brilhos do `SegmentFormModal.tsx`.
 >
 > **Decisões que esperam o Erick** (detalhe nos blocos abaixo):
@@ -87,6 +89,7 @@
 > | `bcb6161` | Listas de campanhas e templates saem do guarda — mapa de status num módulo só (`statusDeCampanha.ts`), sem `<h1>` duplicado |
 > | `3a651a7` | Detalhe da campanha sai do guarda — status de envio por significado |
 > | `1e2b08a` | Assistente de campanha sai do guarda — envio é ação, moldura do e-mail fica branca |
+> | `dfb79f1` | Onda final da revisão do G3 — tinta do passo e do resumo do assistente, "Excluir" sem azul |
 >
 > **Placar do guarda: 338 → 247** (app inteiro; −91). Por pasta:
 > `src/components/admin/campaigns` **65 → 0** (Tarefa 2 cria o módulo
@@ -107,12 +110,13 @@
 > hashes** do Design System conferindo com o `ORIGEM.md` — nenhum arquivo de
 > `design-system/` tocado. Capacidade por capacidade (`git diff ced78af --
 > frontend`, 7 arquivos, 68 inserções / 73 deleções): do filtro de diff
-> sobram 19 linhas e nenhuma mexe em lógica — o import e o uso de
+> sobram 19 linhas e nenhuma mexe em lógica — imports e usos de
 > `STATUS_DE_CAMPANHA` nos três arquivos (a mudança dos mapas de status para
 > um módulo, exceção nomeada), os `};` dos mapas removidos, as 4 linhas de
 > ternário de classe dos seletores do assistente (só a string de classes
-> muda), as 2 tags `<Button onClick=…>` sem `className` (o primitivo já é
-> `--action`) e a remoção do `<h1>` duplicado (exceção nomeada). O
+> muda) e as 2 tags `<Button onClick=…>` que perderam o `className` (o
+> primitivo já é `--action`). A remoção do `<h1>` duplicado **não** está entre
+> as que sobram: a linha do `<h1>` tem `className` e é filtrada. O
 > `e.preventDefault()` do `AlertDialogAction` de "Confirmar envio" e o
 > `disabled={sending}` **não aparecem no diff** — só a linha `className`
 > saiu. **Telas** abertas nos dois temas a 1440 px, em produção, sem clicar
@@ -152,12 +156,33 @@
 > que o esconde não mudou); `AlertDialogAction className="bg-destructive"`
 > de `Templates.tsx` lido no código.
 >
-> **Resíduo conhecido (minor da Tarefa 4, não resolvido):** o
-> `CampaignWizard.tsx` ainda tem `bg-primary/5` no resumo (~:737),
-> `bg-primary/20` no passo concluído (~:348) e `hover:bg-primary/10` no chip
-> de variável (~:624). O guarda não os vê (não são cor literal), mas a regra 3
-> pede tinta do DS (`bg-[--tint-primary]`). Ficam para a revisão final do
-> G3; se ela não resolver, viram pendência do visual.
+> **Revisão final do G3 (30/09) e onda de conserto (`dfb79f1`).** Achou 3
+> pontos de apresentação, todos consertados só em classes (nenhum `onClick`,
+> condição ou `disabled` no diff): (1) o passo concluído do assistente
+> (`bg-primary/20 text-primary`, ~4,0:1 no claro) virou
+> `bg-[--tint-primary] text-[--on-tint-primary]`; (2) o resumo do assistente
+> (`bg-primary/5 border-primary/20`) virou `bg-[--tint-primary]
+> border-primary/30`, com os `text-primary` de texto em
+> `text-[--on-tint-primary]` (contraste medido 6,0 a 6,3:1 no claro e 6,7 a
+> 7,8:1 no escuro, tinta composta sobre o fundo); (3) os dois "Excluir"
+> (`Campaigns.tsx`, `Templates.tsx`) usavam `AlertDialogAction
+> className="bg-destructive"`, e o primitivo aplica `buttonVariants()` padrão,
+> deixando borda `border-action` e hover `hover:bg-action-hover` — botão
+> destrutivo com borda azul e azul no hover. Agora levam as classes da
+> variante `destructive` do `button.tsx` (`bg-danger text-destructive-foreground
+> border border-danger hover:bg-danger/90`); o primitivo não foi tocado. Isso
+> era **defeito anterior ao G3, vindo do primitivo**. Ficam, por decisão:
+> `hover:bg-primary/10` do chip de variável (~:624, regra 5, chip clicável
+> mantém hover) e os `bg-muted/N` (precedente do G1/G2).
+>
+> **Pendência para os próximos grupos:** o padrão `AlertDialogAction
+> className="bg-destructive …"` existe fora do G3 e tem o mesmo defeito
+> (borda/hover azuis): `components/admin/contacts/ContactsBulkBar.tsx`,
+> `components/admin/contacts/ContactsTable.tsx`,
+> `components/admin/dashboard/challenges/ChallengesAIInsights.tsx`,
+> `components/admin/automations/JourneysTab.tsx`, `pages/admin/Automations.tsx:278`
+> e `pages/admin/JourneyBuilder.tsx:665`. As três primeiras são de grupos já
+> fechados (G1/G2) e ficam como retoque; as demais caem no G4.
 >
 > ### Decisões tomadas nesta fase, reversíveis
 >
