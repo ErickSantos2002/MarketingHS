@@ -107,7 +107,6 @@ export default function Automations() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold">Automações</h1>
         <p className="text-sm text-muted-foreground">Regras de handoff para o GrowthHS e fluxos de email</p>
       </div>
 
@@ -127,18 +126,18 @@ export default function Automations() {
           {/* Desde o lote 8D as regras disparam de verdade, via gatilho no
               banco. Este aviso deixou de ser "nada dispara" e passou a
               explicar o que acontece agora. */}
-      <Card className="border-amber-500/30 bg-amber-500/5">
+      <Card className="border-warning/30 bg-[--tint-warning]">
         <CardContent className="py-3 flex items-start gap-3">
-          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
             {/* I6 (revisão final do 8D): sem o GrowthHS ligado a regra
                 enfileira e o contato espera — o aviso vem primeiro. */}
             {crmConfigurado === false && (
-              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              <p className="text-xs font-medium text-[--on-tint-warning]">
                 {GROWTHHS_NAO_CONFIGURADO}
               </p>
             )}
-            <p className="text-xs text-amber-700 dark:text-amber-400">
+            <p className="text-xs text-[--on-tint-warning]">
               {AUTOMACAO_COMO_FUNCIONA}
             </p>
           </div>
@@ -169,7 +168,7 @@ export default function Automations() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-semibold">{rule.name}</span>
-                    <Badge variant="secondary" className="text-[10px]">P{rule.priority}</Badge>
+                    <Badge variant="secondary" className="text-xs">P{rule.priority}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     <span className="font-medium text-foreground/70">SE</span>{' '}
@@ -185,7 +184,7 @@ export default function Automations() {
                       const separator = (rule.condition_logic || 'and') === 'and' ? ' E ' : ' OU ';
                       return conds.map((c, i) => (
                         <span key={i}>
-                          {i > 0 && <span className="text-primary/60 font-semibold">{separator}</span>}
+                          {i > 0 && <span className="text-[--on-tint-primary] font-semibold">{separator}</span>}
                           {CONDITION_LABELS[c.type] || c.type}{' '}
                           {OPERATOR_LABELS[c.operator] || c.operator}{' '}
                           <span className="font-medium text-foreground">{c.value}</span>
@@ -251,9 +250,9 @@ export default function Automations() {
           </DialogHeader>
 
           {!previaCarregando && previaTotal > 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-              <p className="text-xs text-amber-900 dark:text-amber-200">
+            <div className="flex items-start gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+              <p>
                 Eles não são enviados retroativamente. {AUTOMACAO_COMO_FUNCIONA}
               </p>
             </div>
@@ -275,7 +274,7 @@ export default function Automations() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction onClick={handleDelete} className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, Zap, GitBranch, Play, Plus, Trash2 } from 'lucide-react';
+import { Loader2, AlertTriangle, AlertCircle, Zap, GitBranch, Play, Plus, Trash2 } from 'lucide-react';
 import { listarTags } from '@/lib/contatos';
 import { AUTOMACAO_NAO_LIGADA } from '@/lib/automacoes';
 import type { AutomationRule, AutomationCondition } from '@/lib/automacoes';
@@ -277,18 +277,18 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
             <Input type="number" min={1} max={10} value={priority} onChange={(e) => setPriority(Math.min(10, Math.max(1, Number(e.target.value))))} />
           </div>
           <div className="flex items-end pb-1">
-            <p className="text-[11px] text-muted-foreground/70 leading-tight">Regras com maior prioridade são avaliadas primeiro.</p>
+            <p className="text-xs text-muted-foreground leading-tight">Regras com maior prioridade são avaliadas primeiro.</p>
           </div>
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06]" />
+      <div className="h-px bg-border" />
 
       {/* Conditions */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-primary/10">
+            <div className="p-1.5 rounded-lg bg-[--tint-primary]">
               <GitBranch className="h-3.5 w-3.5 text-primary" />
             </div>
             <Label className="text-sm font-semibold">Condições — SE...</Label>
@@ -298,7 +298,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
               <button
                 type="button"
                 onClick={() => setConditionLogic('and')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-colors ${
+                className={`px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${
                   conditionLogic === 'and' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -307,7 +307,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
               <button
                 type="button"
                 onClick={() => setConditionLogic('or')}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-colors ${
+                className={`px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${
                   conditionLogic === 'or' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -322,7 +322,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
             <div key={i}>
               {i > 0 && (
                 <div className="flex items-center justify-center py-1">
-                  <Badge variant="outline" className="text-[9px] px-2 py-0 border-primary/30 text-primary/70">
+                  <Badge variant="outline" className="text-xs px-2 py-0 border-primary/30 text-[--on-tint-primary]">
                     {conditionLogic === 'and' ? 'E' : 'OU'}
                   </Badge>
                 </div>
@@ -344,7 +344,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
         </Button>
       </div>
 
-      <div className="h-px bg-white/[0.06]" />
+      <div className="h-px bg-border" />
 
       {/* Action */}
       <div className="space-y-3">
@@ -357,7 +357,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
 
         <div className="space-y-3 pl-1">
           <div className="space-y-1.5">
-            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Tipo de ação</Label>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Tipo de ação</Label>
             <Select value={actionType} onValueChange={(v) => { setActionType(v); setActionValue(''); setActionMetadata({}); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -365,7 +365,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
                   <SelectItem key={at.value} value={at.value} disabled={!!at.indisponivel}>
                     <span className="block">{at.label}</span>
                     {at.indisponivel && (
-                      <span className="block text-[10px] text-muted-foreground leading-snug max-w-xs whitespace-normal">
+                      <span className="block text-xs text-muted-foreground leading-snug max-w-xs whitespace-normal">
                         {at.indisponivel}
                       </span>
                     )}
@@ -376,33 +376,34 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
           </div>
 
           {actionType === 'block_growthhs' && (
-            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               Bloqueia o envio ao GrowthHS mesmo que outras regras se apliquem.
             </p>
           )}
 
           {actionType === 'create_in_growthhs' && (
-            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               O card entra na etapa de entrada do funil configurado em
               Configurações → GrowthHS.
             </p>
           )}
 
           {actionType === 'move_stage_growthhs' && (
-            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-              {AUTOMACAO_NAO_LIGADA}
-            </p>
+            <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5 leading-relaxed">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+              <p>{AUTOMACAO_NAO_LIGADA}</p>
+            </div>
           )}
 
           {needsStageSelect && (
             <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Estágio do pipeline</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Estágio do pipeline</Label>
               <Input
                 placeholder="ID da etapa no GrowthHS"
                 value={actionValue}
                 onChange={(e) => { setActionValue(e.target.value); setActionMetadata({ stage_id: e.target.value, stage_name: e.target.value }); }}
               />
-              <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 O contrato ainda não tem rota para mover card de etapa — ver o
                 aviso acima.
               </p>
@@ -411,21 +412,21 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06]" />
+      <div className="h-px bg-border" />
 
       {/* Active toggle */}
       <div className="flex items-center gap-3 py-1">
         <Switch checked={isActive} onCheckedChange={setIsActive} />
         <div>
           <Label className="text-sm">Ativa esta regra imediatamente</Label>
-          <p className="text-[10px] text-muted-foreground/60">Regra ativa dispara na primeira mudança de etiqueta, status ou pontuação que casar com ela.</p>
+          <p className="text-xs text-muted-foreground">Regra ativa dispara na primeira mudança de etiqueta, status ou pontuação que casar com ela.</p>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="flex justify-end gap-3 pt-3 border-t border-white/[0.06]">
+      <div className="flex justify-end gap-3 pt-3 border-t border-border">
         <Button variant="ghost" size="sm" onClick={onCancel} className="px-4">Cancelar</Button>
-        <Button size="sm" onClick={handleSubmit} disabled={saving || !name.trim() || !allConditionsValid} className="px-5 bg-primary hover:bg-primary/90">
+        <Button size="sm" onClick={handleSubmit} disabled={saving || !name.trim() || !allConditionsValid} className="px-5">
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
           <Zap className="h-3.5 w-3.5 mr-1.5" />
           Salvar regra
