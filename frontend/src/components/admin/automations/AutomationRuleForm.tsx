@@ -390,7 +390,7 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
 
           {actionType === 'move_stage_growthhs' && (
             <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5 leading-relaxed">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
               <p>{AUTOMACAO_NAO_LIGADA}</p>
             </div>
           )}

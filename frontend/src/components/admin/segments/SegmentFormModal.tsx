@@ -701,7 +701,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                     <p className="text-xs text-muted-foreground mb-2">{selectedLeads.length} contatos selecionados</p>
                     <div className="flex flex-wrap gap-1.5">
                       {selectedLeads.map(lead => (
-                        <Badge key={lead.id} variant="secondary" className="gap-1 pr-1 bg-primary/10 border-primary/20 text-foreground">
+                        <Badge key={lead.id} variant="secondary" className="gap-1 pr-1 bg-[--tint-primary] border-primary/30 text-[--on-tint-primary]">
                           {lead.nome || lead.email || 'Lead'}
                           <button onClick={() => toggleLead(lead)} className="hover:bg-destructive/20 rounded-full p-0.5 transition-colors">
                             <X className="h-3 w-3" />

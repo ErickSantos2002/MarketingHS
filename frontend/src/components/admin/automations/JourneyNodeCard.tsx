@@ -32,7 +32,7 @@ export function JourneyNodeCard({ node, summary, metrics, onPreview, onEdit, onD
     <Card className="border-border/40 w-full max-w-md">
       <CardContent className="py-3 px-4">
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-[--tint-primary] flex items-center justify-center shrink-0">
             <Icon className="h-4 w-4 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
@@ -63,7 +63,7 @@ export function JourneyNodeCard({ node, summary, metrics, onPreview, onEdit, onD
               <span>
                 {metrics.emails.sent} enviado{metrics.emails.sent === 1 ? '' : 's'} · {metrics.emails.opened} aberto{metrics.emails.opened === 1 ? '' : 's'} ·{' '}
                 {metrics.emails.clicked} clique{metrics.emails.clicked === 1 ? '' : 's'}
-                {metrics.emails.failed > 0 && <span className="text-destructive"> · {metrics.emails.failed} falha{metrics.emails.failed === 1 ? '' : 's'}</span>}
+                {metrics.emails.failed > 0 && <span className="text-[--on-tint-danger]"> · {metrics.emails.failed} falha{metrics.emails.failed === 1 ? '' : 's'}</span>}
               </span>
             )}
           </div>

@@ -110,7 +110,7 @@ export function JourneysTab() {
                   <p className="text-xs text-muted-foreground">
                     {j.nodes?.length ?? 0} passo(s) · {j.runs?.active ?? 0} ativo(s) ·{' '}
                     {j.runs?.waiting ?? 0} aguardando · {j.runs?.done ?? 0} concluído(s)
-                    {(j.runs?.failed ?? 0) > 0 && <span className="text-destructive"> · {j.runs?.failed} com erro</span>}
+                    {(j.runs?.failed ?? 0) > 0 && <span className="text-[--on-tint-danger]"> · {j.runs?.failed} com erro</span>}
                   </p>
                 </div>
 
