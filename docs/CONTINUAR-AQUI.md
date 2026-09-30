@@ -2,10 +2,10 @@
 
 > ## 🌅 Comece por aqui — 30/09/2026
 >
-> **Onde tudo está:** a `main` (`20574d6`, com push) tem a Fase 1, a preparação
-> da Fase 2, o G1, o G2 e o G3. O **G4 (Automações, Jornadas e Segmentos)** está
-> na branch **`visual-fase-2-g4`**, criada a partir da `main`, **sem merge e sem
-> push** — os dois são decisão do Erick. O G4 tem **revisão por tarefa feita
+> **Onde tudo está:** a `main` local tem a Fase 1, a preparação da Fase 2, o
+> G1, o G2, o G3 e o **G4 (Automações, Jornadas e Segmentos)** — a
+> `visual-fase-2-g4` foi mergeada nela (avanço direto) e apagada em 30/09.
+> **O G4 ainda não tem push** (o `origin/main` está em `20574d6`) — decisão do Erick. O G4 tem **revisão por tarefa feita
 > (as cinco, todas limpas) e revisão final da branch feita (30/09), com onda de
 > conserto**: veredito "sim com ressalvas", sem Critical/Important; as
 > pendências de acabamento estão no bloco do G4 abaixo.
@@ -79,8 +79,8 @@
 > ## ✅ Visual — Fase 2, G4 (Automações, Jornadas e Segmentos), 30/09/2026
 >
 > **O G4 fechou as tarefas e a revisão final da branch (30/09) já foi feita, com onda de conserto.** Branch
-> `visual-fase-2-g4` (a partir da `main`, base `20574d6`), **não mergeada e sem
-> push**. As seis tarefas do plano
+> `visual-fase-2-g4` (a partir da `main`, base `20574d6`), mergeada na `main`
+> (avanço direto) em 30/09 e apagada; sem push. As seis tarefas do plano
 > `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g4-automacoes.md`
 > saíram; as cinco tiveram revisão por tarefa (todas limpas). O spec que
 > governa continua sendo
