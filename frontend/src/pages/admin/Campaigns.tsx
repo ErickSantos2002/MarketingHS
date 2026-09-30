@@ -275,7 +275,7 @@ export default function Campaigns() {
             <AlertDialogAction
               disabled={deleteSendsLoading}
               onClick={() => { if (deleteTarget) { deleteCampaign(deleteTarget.id); setDeleteTarget(null); } }}
-              className="bg-destructive"
+              className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90"
             >
               Excluir permanentemente
             </AlertDialogAction>

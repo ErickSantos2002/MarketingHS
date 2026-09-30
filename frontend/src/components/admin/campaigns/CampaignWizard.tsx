@@ -345,7 +345,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
               <div className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                 i === step ? 'bg-primary text-primary-foreground' :
-                i < step ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                i < step ? 'bg-[--tint-primary] text-[--on-tint-primary]' : 'bg-muted text-muted-foreground'
               )}>
                 {i < step ? <Check className="h-3 w-3" /> : <span>{i + 1}</span>}
                 <span className="hidden sm:inline">{s}</span>
@@ -734,18 +734,18 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
               </div>
             )}
 
-            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+            <div className="p-4 rounded-lg bg-[--tint-primary] border border-primary/30 text-sm">
               {isReadOnly ? (
                 <p className="font-medium">
-                  Esta campanha foi enviada para <span className="text-primary">{audienceCount} contatos</span>
-                  {sentAtInstant && <> em <span className="text-primary">{sentAtLabel}</span></>}
+                  Esta campanha foi enviada para <span className="text-[--on-tint-primary]">{audienceCount} contatos</span>
+                  {sentAtInstant && <> em <span className="text-[--on-tint-primary]">{sentAtLabel}</span></>}
                 </p>
               ) : (
                 <>
                   <p className="font-medium">
-                    Esta campanha será enviada para <span className="text-primary">{contactCount} contatos</span>
+                    Esta campanha será enviada para <span className="text-[--on-tint-primary]">{contactCount} contatos</span>
                     {isScheduled && scheduledAt && (
-                      <> em <span className="text-primary">{formatScheduleInput(scheduledAt)}</span></>
+                      <> em <span className="text-[--on-tint-primary]">{formatScheduleInput(scheduledAt)}</span></>
                     )}
                   </p>
                   {channel === 'email' && contactCount > 0 && (

@@ -102,7 +102,7 @@ export default function Templates() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (deleteTarget) { deleteTemplate(deleteTarget.id); setDeleteTarget(null); } }} className="bg-destructive">
+            <AlertDialogAction onClick={() => { if (deleteTarget) { deleteTemplate(deleteTarget.id); setDeleteTarget(null); } }} className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
