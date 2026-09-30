@@ -1,45 +1,47 @@
 # Continuar aqui
 
-> ## 🌅 Comece por aqui — 25/09/2026
+> ## 🌅 Comece por aqui — 30/09/2026
 >
-> **Onde tudo está:** branch **`visual-fase-1`** em `43d0b65`, com **45
-> commits à frente da `main`** (`2e39aae`, igual ao `origin/main`) e **30 à
-> frente do `origin/visual-fase-1`** — nada disso foi enviado. Ela carrega a
-> Fase 1, a preparação da Fase 2, o G1 e o G2, todos com revisão por tarefa e
-> revisão final. As branches `visual-fase-2` e `visual-fase-2-g2` foram
-> mergeadas nela (avanço direto) e apagadas. **Push e merge na `main` são
-> decisão do Erick.**
+> **Onde tudo está:** branch **`visual-fase-2-g3`**, criada a partir da
+> `visual-fase-1` (`ced78af`), **não mergeada e sem push** — decisão do Erick.
+> Está **52 commits à frente da `main`** e 37 à frente do
+> `origin/visual-fase-1`. Ela carrega a Fase 1, a preparação da Fase 2, o G1,
+> o G2 e agora o **G3 (Campanhas e Templates)**, todos com revisão por tarefa
+> e revisão final. **Push e merge na `main` são decisão do Erick.**
 >
-> **O que fazer hoje:** escrever o plano do **G3 — Campanhas e Templates**
-> (`components/admin/campaigns/`, **65** no guarda; o conteúdo de e-mail fica
-> de fora, Decisão 6 do spec) no molde de
-> `docs/superpowers/plans/2026-09-24-marketinghs-visual-fase-2-g2-contatos.md`,
-> numa branch nova a partir de `visual-fase-1`. Execução como nos dois grupos
-> anteriores: `superpowers:subagent-driven-development`, um subagente e uma
-> revisão por tarefa, revisão final da branch no modelo mais capaz.
+> **O que fazer a seguir:** escrever o plano do **G4 — Automações, Jornadas e
+> Segmentos** (`components/admin/automations/`, **45** no guarda;
+> `components/admin/segments/`, **10**) no molde de
+> `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g3-campanhas.md`,
+> numa branch nova a partir da `visual-fase-2-g3`. Execução como nos três
+> grupos anteriores: `superpowers:subagent-driven-development`, um subagente e
+> uma revisão por tarefa, revisão final da branch no modelo mais capaz.
 >
-> **Placar do guarda (24/09, fim do dia) — 338:** `settings` 122 ·
-> `pages/admin` 68 · `campaigns` 65 · `automations` 45 · `admin/pages` 26 ·
-> `segments` 10 · `ui` 2. Zerados: `dashboard`, `contacts`, raiz de
-> `admin`, `hooks`, `lib`.
+> **Placar do guarda (30/09, fim do dia) — 247:** `settings` 122 ·
+> `pages/admin` 44 · `automations` 45 · `admin/pages` 26 · `segments` 10.
+> Zerados: `campaigns`, `ui`, `dashboard`, `contacts`, raiz de `admin`,
+> `hooks`, `lib`. (338 no começo do G3; 336 depois da Tarefa 1.)
 >
-> **Levar para o plano do G3:**
-> - apertar a regex `EFEITO` do guarda: `shadow-\[0_0_` casa o anel de 1px de
->   `ui/sidebar.tsx:421` (falso positivo; arquivo sem importador) — trocar por
->   `shadow-\[0_0_[1-9]`; os 2 de `ui` somem;
-> - as regras aprendidas no G1/G2, que o plano precisa repetir: tradução por
->   **significado**, nunca pelo matiz; **nunca `` `${cor}NN` ``** (use
->   `color-mix`); cor que vem do banco passa por `src/lib/corDeDado.ts`; chip
->   clicável mantém hover (`hover:bg-x/20`); o brief autoriza "o que mais for
->   preciso para zerar o guarda nos arquivos da tarefa";
-> - `segments` subiu de 6 para 10 porque o guarda passou a ver os brilhos do
->   `SegmentFormModal.tsx` (G4).
+> **Levar para o G4:**
+> - as regras aprendidas no G1/G2/G3, que o plano precisa repetir: tradução
+>   por **significado**, nunca pelo matiz (exceto categoria sem significado,
+>   como canal e tipo, em que se traduz pelo matiz e o relatório lista quem
+>   passou a dividir cor); **nunca `` `${cor}NN` ``** (use `color-mix`); cor
+>   que vem do banco passa por `src/lib/corDeDado.ts`; chip clicável mantém
+>   hover; moldura de e-mail é `bg-[--color-white]`; botão não ganha cor por
+>   `className` quando o primitivo já tem a variante; o brief autoriza "o que
+>   mais for preciso para zerar o guarda nos arquivos da tarefa";
+> - **regex do guarda:** `shadow-\[0_0_[1-9]` não pega desfoque fracionário
+>   (`0.5rem`, `.5rem`); não ocorre hoje em `src/`, mas vale apertar se o G4
+>   encontrar algum;
+> - `segments` tem 10 por causa dos brilhos do `SegmentFormModal.tsx`.
 >
 > **Decisões que esperam o Erick** (detalhe nos blocos abaixo):
-> 1. **Push e merge** da `visual-fase-1` na `main`.
-> 2. **Trocar a senha da conta admin do Claude** (`claude.dev@example.com`) —
->    ela apareceu na saída de uma ferramenta de subagente em 24/09 (não foi
->    para arquivo nem commit).
+> 1. **Push e merge** da `visual-fase-1` e das branches de grupo (`visual-fase-2-g3`)
+>    na `main`.
+> 2. ~~Trocar a senha da conta admin do Claude.~~ **Resolvida:** senha trocada
+>    em 30/09, em `~/.config/marketinghs/claude-admin.env`. A conta
+>    (`claude.dev@example.com`) continua a ser apagada no fim do trabalho.
 > 3. **Paleta de gráfico própria** no Design System oficial — hoje 6 cores,
 >    3 delas semânticas; dela dependem P2×P3 com a mesma cor e os períodos do
 >    dia repetindo cor (G1).
@@ -51,16 +53,130 @@
 > 6. As da Fase 1 (altura botão × campo) e as seis de 23/09 (fluxo em
 >    rascunho, recálculo disparando automação, peso 0 no A/B, conta Unlayer,
 >    colunas de funil, cor do botão das landings).
+> 7. **NOVA (dado, não visual): campanhas presas em "Enviando...".** As 2
+>    únicas campanhas em produção, ambas "teste de webhook" de 02/09, estão em
+>    status `sending` sem `sent_at`, com 1 envio cada e 0 pendentes — há 4
+>    semanas em "Enviando...". Resolver é mexer em dado/motor de fila, fora do
+>    visual.
 >
-> **Regra de processo nova (24/09):** subagente **não abre** o arquivo de
+> **Regra de processo (24/09):** subagente **não abre** o arquivo de
 > credencial — reaproveita a sessão já logada do navegador do Playwright; se
 > não houver sessão, para e pede. E ação negada pelo controle de permissão
 > não se repete com outra descrição: relata.
 >
-> **Servidores:** o backend (8100) foi desligado; suba com
-> `cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100`
-> (o worker de fila não sobe junto — seguro para conferência). O Vite (8080)
-> estava no ar.
+> **Servidores:** backend (8100) e Vite (8080) estavam no ar em 30/09. Para
+> subir: `cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100`
+> (o worker de fila não sobe junto — seguro para conferência) e
+> `cd frontend && npx vite --port 8080`.
+
+> ## ✅ Visual — Fase 2, G3 (Campanhas e Templates), 30/09/2026
+>
+> **O G3 fechou.** Branch `visual-fase-2-g3` (a partir de `visual-fase-1`,
+> base `ced78af`), **não mergeada**. As cinco tarefas do plano
+> `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g3-campanhas.md`
+> saíram; o spec que governa continua sendo
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
+> O HTML do e-mail (`emailEditorConfig.ts`) ficou de fora, Decisão 6 do spec —
+> `git diff ced78af --stat` sobre ele: vazio.
+>
+> | Commit | O que entrou |
+> |---|---|
+> | `32d381c` | Plano do G3 |
+> | `7b48850` | O guarda deixa de contar o anel de 1px (`shadow-[0_0_0_1px_…]`) como brilho: `shadow-\[0_0_` → `shadow-\[0_0_[1-9]`; somem os 2 falsos positivos de `ui` |
+> | `bcb6161` | Listas de campanhas e templates saem do guarda — mapa de status num módulo só (`statusDeCampanha.ts`), sem `<h1>` duplicado |
+> | `3a651a7` | Detalhe da campanha sai do guarda — status de envio por significado |
+> | `1e2b08a` | Assistente de campanha sai do guarda — envio é ação, moldura do e-mail fica branca |
+>
+> **Placar do guarda: 338 → 247** (app inteiro; −91). Por pasta:
+> `src/components/admin/campaigns` **65 → 0** (Tarefa 2 cria o módulo
+> `statusDeCampanha.ts` já em 0; Tarefa 3 zera `CampaignDetail.tsx`, 48;
+> Tarefa 4 zera `CampaignWizard.tsx` 16 e `EmailTemplateFrame.tsx` 1);
+> `src/pages/admin` **68 → 44** (`Campaigns.tsx` 23 e `Templates.tsx` 1,
+> ambos a 0); `src/components/ui` **2 → 0** (Tarefa 1: os 2 eram falsos
+> positivos — o anel de 1px do `sidebar.tsx`, arquivo sem importador, não
+> era brilho). `dashboard`, `contacts`, `hooks` e `lib` continuam em **0**
+> — sem regressão do G1/G2. Sobra: `settings` 122, `automations` 45,
+> `pages/admin` 44, `admin/pages` 26, `segments` 10 = **247**.
+>
+> **Portão (Tarefa 5), conferido em 30/09:** `tsc --noEmit -p
+> tsconfig.app.json` com os mesmos **4** erros pré-existentes
+> (`LeadScoringSettings` ×1, `useJourneys` ×3), nenhum novo; `vite build` e
+> `build:landing` passando; grep de alfa concatenada
+> (`\$\{[^}]+\}[0-9]{2}\b`) em `src/**/*.tsx` — **zero linhas**; os **7
+> hashes** do Design System conferindo com o `ORIGEM.md` — nenhum arquivo de
+> `design-system/` tocado. Capacidade por capacidade (`git diff ced78af --
+> frontend`, 7 arquivos, 68 inserções / 73 deleções): do filtro de diff
+> sobram 19 linhas e nenhuma mexe em lógica — o import e o uso de
+> `STATUS_DE_CAMPANHA` nos três arquivos (a mudança dos mapas de status para
+> um módulo, exceção nomeada), os `};` dos mapas removidos, as 4 linhas de
+> ternário de classe dos seletores do assistente (só a string de classes
+> muda), as 2 tags `<Button onClick=…>` sem `className` (o primitivo já é
+> `--action`) e a remoção do `<h1>` duplicado (exceção nomeada). O
+> `e.preventDefault()` do `AlertDialogAction` de "Confirmar envio" e o
+> `disabled={sending}` **não aparecem no diff** — só a linha `className`
+> saiu. **Telas** abertas nos dois temas a 1440 px, em produção, sem clicar
+> em ação: `/campaigns` (lista, menu ⋯ aberto, detalhe da campanha,
+> assistente em consulta nos três passos, assistente novo com WhatsApp),
+> `/templates` e `/templates/new` — zero erro de console. A 390 px
+> `/campaigns` **não rola na horizontal** (`scrollWidth` 390 = 390).
+>
+> **O que o banco de produção deixou de mostrar** (conferido por elemento
+> sintético com as classes reais, `getComputedStyle`, nos dois temas): não há
+> **nenhum template** (`/templates` é o estado vazio "Nenhum template
+> criado"; a visualização de template não tem o que abrir e a miniatura só
+> se conferiu por sintético); só existem **2 campanhas**, ambas de e-mail em
+> `sending` — não há campanha de WhatsApp, agendada, enviada, pausada ou
+> falha; a campanha em `sending` **tem** "Ver campanha" (consulta, passos
+> 1-3), mas o passo 3 dela não traz pré-visualização de e-mail (sem HTML).
+> Screenshot: a ferramenta de captura foi negada pelo controle de
+> permissão nesta sessão, então a Tarefa 5 conferiu só por computado
+> (as Tarefas 2-4 têm screenshots próprios).
+>
+> **O que cada Review Focus achou:** (1) moldura de e-mail — a de
+> `EmailTemplateFrame`, a do passo 3 e a miniatura de `/templates` usam
+> `bg-[--color-white]`; `getComputedStyle` dá `rgb(255, 255, 255)` nos dois
+> temas (por sintético, já que não há instância ao vivo); (2) status — os 6
+> de campanha (Rascunho neutro, Agendada primária, Enviando info, Enviada
+> sucesso, Pausada atenção, Falhou perigo) resolvem fundo e texto distintos
+> e reais nos dois temas; "Suprimido" (neutro, `rgb(26, 47, 74)` no escuro)
+> segue diferente de "Falhou"/"Bounce" (perigo); o "Enviando..." real é
+> `rgba(59, 130, 246, 0.15)` / `rgb(96, 165, 250)` no escuro e
+> `rgb(29, 78, 216)` no claro; (3) botão de envio — "Enviar campanha" e
+> "Agendar campanha" ficam em `--action` cheio, texto branco, e "Agendar"
+> sem data desabilitado a 50%, na cor de ação; o `preventDefault` segue no
+> código; (4) card "Enviando pela fila" — apareceu **ao vivo** na campanha
+> `sending` (1 envio), fundo `rgba(59, 130, 246, 0.15)`, nunca transparente,
+> nos dois temas; (5) "Excluir" — `text-destructive` resolve vermelho nos
+> dois temas por sintético (o menu real não o oferece em `sending`; o código
+> que o esconde não mudou); `AlertDialogAction className="bg-destructive"`
+> de `Templates.tsx` lido no código.
+>
+> **Resíduo conhecido (minor da Tarefa 4, não resolvido):** o
+> `CampaignWizard.tsx` ainda tem `bg-primary/5` no resumo (~:737),
+> `bg-primary/20` no passo concluído (~:348) e `hover:bg-primary/10` no chip
+> de variável (~:624). O guarda não os vê (não são cor literal), mas a regra 3
+> pede tinta do DS (`bg-[--tint-primary]`). Ficam para a revisão final do
+> G3; se ela não resolver, viram pendência do visual.
+>
+> ### Decisões tomadas nesta fase, reversíveis
+>
+> 1. **Moldura de e-mail (preview, miniatura, maquete do WhatsApp) usa
+>    `--color-white`:** papel branco fixo nos dois temas — o e-mail cujo HTML
+>    não pinta o próprio fundo não vira preto sobre preto no tema escuro.
+> 2. **Status da campanha num módulo só** (`statusDeCampanha.ts`), por
+>    significado: agendada = primária, enviando = info.
+> 3. **"Enviar/Agendar campanha" e "Confirmar envio" viraram o botão de ação
+>    padrão** (`--action`), não verde. Também "Envio imediato"/"Agendar" do
+>    passo 1 seguem a tinta primária do seletor de canal.
+> 4. **WhatsApp = sucesso** (canal é categoria, leitura pelo matiz), no badge
+>    e no seletor.
+> 5. **Categorias que passaram a dividir cor:** "Entregue" e "Aberto"
+>    (sucesso); "Bounce" e "Falhou" (perigo, já dividiam); "Marcou spam" e
+>    "Descadastrado" (atenção, já dividiam); o canal WhatsApp e o status
+>    "Enviada" (sucesso); o cartão de contatos e o status "Enviando" (info);
+>    ícones dos cartões de número pelo matiz.
+> 6. **Fim do `<h1>` duplicado** em `/campaigns` e `/templates` — a topbar já
+>    escreve o título; o botão de ação passa a `justify-end`.
 
 > ## ✅ Visual — Fase 2, G2 (Contatos, ficha, Importação), 24/09/2026
 >
