@@ -6,8 +6,9 @@
 > `visual-fase-1` (`ced78af`), **não mergeada e sem push** — decisão do Erick.
 > Está **52 commits à frente da `main`** e 37 à frente do
 > `origin/visual-fase-1`. Ela carrega a Fase 1, a preparação da Fase 2, o G1,
-> o G2 e agora o **G3 (Campanhas e Templates)**, todos com revisão por tarefa
-> e revisão final. **Push e merge na `main` são decisão do Erick.**
+> o G2 e agora o **G3 (Campanhas e Templates)**. G1 e G2 têm revisão por
+> tarefa e revisão final; o G3 tem revisão por tarefa, e a **revisão final
+> do G3 ainda está pendente**. **Push e merge na `main` são decisão do Erick.**
 >
 > **O que fazer a seguir:** escrever o plano do **G4 — Automações, Jornadas e
 > Segmentos** (`components/admin/automations/`, **45** no guarda;
