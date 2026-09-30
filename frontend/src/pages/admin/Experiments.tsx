@@ -466,7 +466,7 @@ export default function Experiments() {
             <div className="rounded-lg bg-muted/40 p-3 text-sm">
               Amostra necessária: <strong>{sample.perVariant.toLocaleString("pt-BR")}</strong> por variante ·
               duração estimada: <strong>{sample.days}</strong> dias.
-              {sample.days > 60 && <span className="inline-flex items-center gap-1 text-[--on-tint-warning]"> <AlertTriangle className="h-3.5 w-3.5 text-warning" /> Muito longo — teste diferenças maiores.</span>}
+              {sample.days > 60 && <span className="inline-flex items-center gap-1 ml-1 text-[--on-tint-warning]"> <AlertTriangle className="h-3.5 w-3.5 text-warning" /> Muito longo — teste diferenças maiores.</span>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

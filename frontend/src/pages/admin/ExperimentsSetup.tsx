@@ -219,7 +219,7 @@ export default function ExperimentsSetup() {
         </div>
         {showRedirectorWarning && (
           <p className="text-xs text-[--on-tint-warning] flex items-start gap-1.5">
-            <ShieldAlert className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <ShieldAlert className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-warning" />
             <span>
               Fora do domínio de produção (<code>{prodNormalized}</code>). O redirecionador precisa ser
               esse domínio ou um subdomínio dele — salvar está bloqueado até ajustar aqui ou o domínio
