@@ -1,37 +1,37 @@
 # Continuar aqui
 
-> ## 🌅 Comece por aqui — 30/09/2026
+> ## 🌅 Comece por aqui — 30/09/2026 (fim do G5)
 >
 > **Onde tudo está:** a `main` local tem a Fase 1, a preparação da Fase 2, o
-> G1, o G2, o G3 e o **G4 (Automações, Jornadas e Segmentos)** — a
-> `visual-fase-2-g4` foi mergeada nela (avanço direto) e apagada em 30/09.
-> Tudo com push (30/09). O G4 tem **revisão por tarefa feita
-> (as cinco, todas limpas) e revisão final da branch feita (30/09), com onda de
-> conserto**: veredito "sim com ressalvas", sem Critical/Important; as
-> pendências de acabamento estão no bloco do G4 abaixo.
+> G1, o G2, o G3 e o G4, tudo com push (30/09). O **G5 (Páginas e Teste A/B)**
+> está na branch **`visual-fase-2-g5`** (a partir da `main`, base `e707b5a`),
+> **sem merge e sem push**. Tem **revisão por tarefa feita (as quatro de tela,
+> todas limpas; a Tarefa 4 depois de uma rodada de conserto)** e o portão da
+> Tarefa 5 conferido; a **revisão final da branch está PENDENTE** — ainda não
+> aconteceu.
 >
-> **O que fazer a seguir:** escrever o plano do **G5 — Páginas e Teste A/B**
-> (`components/admin/pages/`, `pages/admin/` menos o preview, e `Experiments*`),
-> no molde de `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g4-automacoes.md`.
-> Execução como nos grupos anteriores: `superpowers:subagent-driven-development`,
-> um subagente e uma revisão por tarefa.
+> **O que fazer a seguir:** a revisão final do G5 (que também tria os resíduos
+> listados no bloco do G5) e, depois, o plano do **G6 — Configurações
+> (`settings/`, o último grupo)**, que leva também o `SettingsPage.tsx`
+> (`pages/admin`, 2 no guarda) e o "Remover" azul do `SuppressionList.tsx:~261`.
+> Plano no molde de
+> `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g5-paginas-ab.md`;
+> execução com `superpowers:subagent-driven-development`.
 >
-> **Placar do guarda (30/09, fim do G4) — 170:** `settings` 122 ·
-> `admin/pages` 26 · `pages/admin` 22. Zerados: `automations` (era 45),
-> `segments` (era 10), `campaigns`, `ui`, `dashboard`, `contacts`, raiz de
-> `admin`, `hooks`, `lib`. (247 no começo do G4.) Em `pages/admin` sobram
-> `Automations.tsx`, `JourneyBuilder.tsx` e `Segments.tsx` em **0**; os 22
-> restantes são das telas do G5.
+> **Placar do guarda (30/09, fim do G5) — 124:** `settings` 122 ·
+> `pages/admin` 2 (`SettingsPage.tsx`). Zerados: `admin/pages` (era 26),
+> `automations`, `segments`, `campaigns`, `ui`, `dashboard`, `contacts`, raiz de
+> `admin`, `hooks`, `lib`, e todas as telas de `pages/admin` menos a de
+> Configurações. (170 no começo do G5.)
 >
-> **Levar para o G5:** as regras dos grupos anteriores (tradução por
+> **Levar para o G6:** as regras dos grupos anteriores (tradução por
 > **significado**, nunca `` `${cor}NN` ``, `focus-visible`, chip clicável mantém
-> hover, botão não ganha cor por `className`, "Excluir" de confirmação com a
-> string inteira da variante `destructive`) mais as do G4: aviso âmbar de forma
-> única (tinta de atenção, texto `--on-tint`, ícone cheio); texto pequeno não
-> fica mais claro que o muted; nenhum `<h1>` duplicado da topbar. Mais:
-> - `PagesTable.tsx:~149` ("Excluir página") e `SuppressionList.tsx:~261`
->   ("Remover", este é do G6/settings) usam `AlertDialogAction` sem classe — azul
->   de ação numa ação destrutiva; aplicar a string
+> hover, botão não ganha cor por `className`, **badge com significado usa a
+> variante do `Badge`**, "Excluir" de confirmação com a string inteira da
+> variante `destructive`, aviso âmbar de forma única, texto pequeno não fica
+> mais claro que o muted, nenhum `<h1>` duplicado da topbar). Mais:
+> - `SuppressionList.tsx:~261` ("Remover") usa `AlertDialogAction` sem classe —
+>   azul de ação numa ação destrutiva; aplicar
 >   `bg-danger text-destructive-foreground border border-danger hover:bg-danger/90`;
 > - pontos cegos antigos da regex do guarda (não ocorrem hoje):
 >   `shadow-[0px_0px_…]`, `shadow-[0_0_calc(…)]`, `shadow-[inset_0_0_…]`,
@@ -51,13 +51,18 @@
 >    (roxo = azul, verde ≈ verde-azulado) (G2).
 > 6. As da Fase 1 (altura botão × campo) e as seis de 23/09 (fluxo em
 >    rascunho, recálculo disparando automação, peso 0 no A/B, conta Unlayer,
->    colunas de funil, cor do botão das landings).
+>    colunas de funil, cor do botão das landings). **A cor do botão das landings
+>    ganhou uma divergência nova no G5:** o seletor do editor de página abre em
+>    `#E41A11` (agora `COR_CTA_PADRAO`, em `src/landing/padroes.ts`), mas a
+>    landing usa `#1e3a5f` quando a página não tem cor — o editor mostra uma cor
+>    que a landing não usa. Decidir junto com a pendência antiga: qual é a cor
+>    padrão do botão e se o editor e a landing passam a ler a mesma constante.
 > 7. **Dado, não visual: campanhas presas em "Enviando...".** As 2 únicas
 >    campanhas em produção, ambas "teste de webhook" de 02/09, estão em status
 >    `sending` sem `sent_at`, com 1 envio cada e 0 pendentes — há 4 semanas em
 >    "Enviando...". Resolver é mexer em dado/motor de fila, fora do visual.
 >    Reconferido em 30/09, fim do G4: continuam 2 em `sending`.
-> 8. **NOVA — dois contrastes do DS oficial abaixo de 4,5:1.** (a)
+> 8. **Contrastes do DS oficial abaixo de 4,5:1** (o G5 acrescentou os badges `secondary` 4,34, `success` 4,33 e `warning` 4,13 no claro, e o botão de ação padrão no escuro, 2,69, medido no real). Os dois primeiros: (a)
 >    `--on-tint-warning` sobre `--tint-warning` no tema claro: 4,32:1 sobre o
 >    fundo da página (4,50 sobre branco), para texto de 12px — atinge o estado
 >    "Pausado", "Aguardando" e o aviso âmbar; (b) texto branco sobre `danger-500`
@@ -75,6 +80,122 @@
 > subir: `cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100`
 > (o worker de fila não sobe junto — seguro para conferência) e
 > `cd frontend && npx vite --port 8080`.
+
+> ## ✅ Visual — Fase 2, G5 (Páginas e Teste A/B), 30/09/2026
+>
+> **⚠️ Quase tudo aqui foi conferido só por código e elemento sintético.**
+> Produção **não tem página nem teste A/B** (`pages`, `ab_tests` e `ab_config`
+> com 0 linhas, no começo e no fim do portão): a lista de páginas, os cartões
+> de número, o editor e o detalhe do teste nunca renderizaram dado real. Ao
+> vivo só se viu o vazio, o "não encontrada" do editor e os diálogos abertos e
+> fechados sem salvar. Um token errado nessas telas só apareceria no dia da
+> primeira página.
+>
+> **O G5 fechou as tarefas; a revisão final da branch está PENDENTE.** Branch
+> `visual-fase-2-g5` (a partir da `main`, base `e707b5a`), **sem merge e sem
+> push**. As quatro tarefas de tela tiveram revisão por tarefa (todas limpas; a
+> 4 depois de uma rodada). Plano:
+> `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g5-paginas-ab.md`.
+> O HTML público das landings (`src/landing/`) ficou de fora, Decisão 6 do
+> spec: `git diff e707b5a --stat -- frontend/src/landing` mostra só
+> `padroes.ts` (+8, arquivo novo da Tarefa 3).
+>
+> | Commit | O que entrou |
+> |---|---|
+> | `a0babb5` | Plano do G5 |
+> | `5a73fab` | Avisos de truncamento do G1 (`Overview`, `Analytics`) saem do guarda — ícone `AlertTriangle` no lugar do emoji |
+> | `9443959` | `/pages` sai do guarda — status é variante do `Badge`, cartões pelo matiz, quatro órfãos saem, "Confirmar" destrutivo só ao excluir |
+> | `1d3d78b` | Editor de página sai do guarda — "Salvo" e "PREVIEW" viram variante, cor inicial do CTA mora em `src/landing/` |
+> | `3a07cc9` | Teste A/B (`Experiments`, `ExperimentsSetup`) sai do guarda — sem `<h1>` duplicado, avisos legíveis |
+> | `ecbc209` | `ExperimentDetail` sai do guarda — **ficou fora do `3a07cc9`** por um glob de `git add` que não o pegou; commit separado, mesmo trabalho da Tarefa 4 |
+>
+> **Placar do guarda: 170 → 124** (app inteiro; −46 = 26 + 20). Por pasta:
+> `src/components/admin/pages` **26 → 0** (Tarefa 2: 18; Tarefa 3, o editor: 8);
+> `src/pages/admin` **22 → 2** (−20: `Overview` 4, `Analytics` 4,
+> `Experiments` 2, `ExperimentsSetup` 2, `ExperimentDetail` 8; sobram os 2 do
+> `SettingsPage.tsx`, do G6). `automations`, `segments`, `campaigns`,
+> `dashboard`, `contacts`, `ui`, `hooks` e `lib` continuam em **0** — sem
+> regressão. Sobra: `settings` 122 + `pages/admin` 2 = **124**.
+>
+> **Portão (Tarefa 5), conferido em 30/09:** `tsc --noEmit -p
+> tsconfig.app.json` com os mesmos **4** erros pré-existentes
+> (`LeadScoringSettings` ×1, `useJourneys` ×3); `vite build` e `build:landing`
+> passando; grep de alfa concatenada (`\$\{[^}]+\}[0-9]{2}\b`) — **zero linhas**;
+> `AlertDialogAction` com `bg-destructive` — **zero linhas**; os **7 hashes**
+> do Design System batendo com o `ORIGEM.md` (a seção de defeitos ganhou
+> medições; os hashes não mudam). Capacidade por capacidade
+> (`git diff e707b5a --stat -- frontend`: 14 arquivos, 65 inserções / 602
+> deleções; os quatro órfãos apagados — `PagesTable`, `PageStatusBadge`,
+> `PageTypeIcon`, `PageFormDialog`, 552 linhas — são o grosso das deleções):
+> fora de `className`/`variant`/import, o diff só sobra nas exceções nomeadas —
+> `COR_CTA_PADRAO` (import + 2 linhas de `cta_color`), o `<span>` e a remoção do
+> `⚠️` nos dois avisos de truncamento, a reformatação do `AlertDialogAction`
+> de `PagesManagement`, `AlertTriangle` no import de `Experiments`, e os dois
+> `</h1>` removidos. Nas linhas de `onClick`/`disabled`/`status ===` só o
+> `className` ou o `variant` mudou (`handleConfirm` e `applyQuickPreset`
+> intactos, condição `page.status === 'active'` igual).
+> **Telas** (produção, sem clicar ação; screenshots no scratchpad): `/pages`
+> ("Nova página" aberto e fechado), `/pages/nao-existe/edit`, `/experiments`
+> (diálogo "Novo teste" aberto e fechado), `/experiments/setup`, `/` e
+> `/analytics`, claro e escuro a 1440 px; **390 px, só no claro:** `/pages`
+> não rola na horizontal (`scrollWidth` 384 < 390) e **`/experiments` rola**
+> (`scrollWidth` 424 > 390) — anotado, não consertado nem investigado. Console: 0 erros; os
+> 2 avisos de sempre (flags do React Router) e, ao abrir "Nova página", o aviso
+> do Radix de `Description` ausente no `DialogContent` (não é deste grupo).
+> "Presets de UTM" **não foi aberto**: só abre pelo menu "Gerar link" de uma
+> linha de página, e produção não tem página. **Produção intocada** (consulta
+> só leitura): `pages` 0, `ab_tests` 0, `ab_config` 0, igual ao começo.
+>
+> **O que cada Review Focus achou:** (1) tela sem dado — badge, número, aviso e
+> cartão só por elemento sintético com as classes finais, nos dois temas,
+> contraste medido (a tabela de defeitos do DS está no fim do bloco);
+> (2) órfão que não era órfão — `grep` de importador antes de apagar: `PagesTable`
+> e `PageFormDialog` sem importador; `PageStatusBadge` e `PageTypeIcon` só
+> importados por `PagesTable`; depois, `tsc` igual, `vite build` ok e `/pages`
+> abre sem erro; (3) cor do CTA — `#E41A11` saiu do editor e aparece igual em
+> `src/landing/padroes.ts`; o valor não mudou, a divergência com o `#1e3a5f`
+> da landing virou pergunta ao Erick (item 6 do "Comece por aqui");
+> (4) "Confirmar" de desativar/excluir — `className` condicional só para
+> `action === 'delete'`, as duas strings conferidas por sintético; o
+> `AlertDialog` real exige clicar; (5) aviso de truncamento — a frase e o teto
+> ficam, só sai o `⚠️`; sintético nos dois temas (claro 4,30:1 pelo defeito do
+> DS, escuro 8,15:1).
+>
+> **Defeitos novos do Design System oficial** (acrescentados ao `ORIGEM.md`,
+> seção "Defeitos conhecidos do oficial"; pergunta 8 do "Comece por aqui"), tema
+> claro, tinta composta sobre `--bg-base`: badge `secondary` **4,34:1**, `success`
+> **4,33:1**, `warning` **4,13:1** (o pior par medido). Botão de ação padrão no
+> escuro (branco sobre `--action`): **2,69:1**, medido no botão "Criar página"
+> real — já estava registrado (~2,7), agora com o número do real.
+>
+> **Resíduos conhecidos** (minors adiados; triados na revisão final):
+> - `PagesManagement.tsx:~483` — "Melhor Página" com `text-2xl` + `text-base`
+>   (preexistente);
+> - indentação do texto dentro do `<span>` nos dois avisos de truncamento
+>   (`Overview.tsx`, `Analytics.tsx`), sem efeito na tela;
+> - `PageConfigEditor.tsx:~354` — `text-muted-foreground/40` em ícone decorativo
+>   (permitido) e o "Confirmar" de publicar sem cor por `className`;
+> - o aviso "Muito longo" de `/experiments` já aparece com os valores padrão do
+>   diálogo "Novo teste" (comportamento herdado, não visual);
+> - `Presets de UTM` e o detalhe de teste nunca vistos com dado.
+>
+> ### Decisões tomadas nesta fase, reversíveis
+>
+> 1. **Quatro componentes órfãos de `components/admin/pages` saíram**
+>    (`PagesTable`, `PageStatusBadge`, `PageTypeIcon`, `PageFormDialog`) — estão
+>    no histórico do git.
+> 2. **A cor inicial do seletor de CTA (`#E41A11`) mora em
+>    `src/landing/padroes.ts`**; o valor não mudou e a divergência com o
+>    `#1e3a5f` da landing continua pergunta ao Erick.
+> 3. **Status de página usa `variant="success"`** (não pinta por classe); "Salvo"
+>    e "PREVIEW" também viraram variante.
+> 4. **Cartões de número de `/pages` pelo matiz** (ativas = sucesso, leads =
+>    info, melhor página = primária); `Flame` de hot = sucesso.
+> 5. **"Confirmar" de `PagesManagement` é destrutivo só quando a ação é
+>    excluir.**
+> 6. **Fim do `<h1>` duplicado** em `/experiments` e `/experiments/setup`; o do
+>    detalhe fica (é o nome do teste).
+> 7. **Os avisos de truncamento do G1 ganharam ícone no lugar do emoji.**
 
 > ## ✅ Visual — Fase 2, G4 (Automações, Jornadas e Segmentos), 30/09/2026
 >
