@@ -22,6 +22,7 @@ import {
 import { usePages } from '@/hooks/usePages';
 import { caminhoDaLanding } from '@/lib/landing';
 import { toast } from 'sonner';
+import { COR_CTA_PADRAO } from '@/landing/padroes';
 
 const FORM_FIELDS = [
   { key: 'nome', label: 'Nome', required: false },
@@ -164,7 +165,7 @@ export default function PageConfigEditor() {
         </div>
         <div className="flex items-center gap-2">
           {saveState === 'saved' && (
-            <Badge variant="secondary" className="gap-1 text-green-600">
+            <Badge variant="success" className="gap-1">
               <CheckCircle className="h-3 w-3" /> Salvo
             </Badge>
           )}
@@ -206,12 +207,12 @@ export default function PageConfigEditor() {
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  value={config.cta_color || '#E41A11'}
+                  value={config.cta_color || COR_CTA_PADRAO}
                   onChange={(e) => updateField('cta_color', e.target.value)}
                   className="h-9 w-12 rounded border cursor-pointer"
                 />
                 <Input
-                  value={config.cta_color || '#E41A11'}
+                  value={config.cta_color || COR_CTA_PADRAO}
                   onChange={(e) => updateField('cta_color', e.target.value)}
                   className="w-28 font-mono text-sm"
                 />
@@ -236,7 +237,7 @@ export default function PageConfigEditor() {
                     }}
                   />
                   {f.label}
-                  {f.required && <span className="text-[10px] text-muted-foreground">(obrigatório)</span>}
+                  {f.required && <span className="text-xs text-muted-foreground">(obrigatório)</span>}
                 </label>
               ))}
             </div>
@@ -257,7 +258,7 @@ export default function PageConfigEditor() {
                   <Badge
                     key={chip.label}
                     variant="outline"
-                    className="cursor-pointer hover:bg-primary/10 text-xs"
+                    className="cursor-pointer hover:bg-surface-elevated text-xs"
                     onClick={() => updateField('redirect_url', chip.value)}
                   >
                     {chip.label}
@@ -311,12 +312,12 @@ export default function PageConfigEditor() {
                 className="font-mono text-xs"
               />
               {!clarityIdValid && (clarity.project_id || '').length > 0 && (
-                <p className="text-[11px] text-destructive">
+                <p className="text-xs text-[--on-tint-danger]">
                   Código inválido. Use entre 6 e 20 caracteres alfanuméricos.
                 </p>
               )}
               {!clarityIdValid && !(clarity.project_id || '').length && (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Informe um código válido para poder ativar a integração.
                 </p>
               )}
@@ -340,7 +341,7 @@ export default function PageConfigEditor() {
         {/* Right - Preview */}
         <div className="space-y-3 lg:sticky lg:top-4">
           <div className="relative border rounded-lg overflow-hidden bg-muted/20">
-            <Badge className="absolute top-2 left-2 z-10 bg-yellow-500 text-black hover:bg-yellow-600">PREVIEW</Badge>
+            <Badge variant="warning" className="absolute top-2 left-2 z-10">PREVIEW</Badge>
             {hasRoute ? (
               <iframe
                 ref={iframeRef}
@@ -368,7 +369,6 @@ export default function PageConfigEditor() {
               variant={page.status === 'active' ? 'destructive' : 'default'}
               size="sm"
               onClick={handlePublishToggle}
-              className={page.status !== 'active' ? 'bg-green-600 hover:bg-green-700' : ''}
             >
               {page.status === 'active' ? 'Despublicar' : 'Publicar'}
             </Button>
