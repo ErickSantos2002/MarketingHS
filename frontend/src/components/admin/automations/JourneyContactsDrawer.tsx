@@ -20,10 +20,10 @@ type StateKey = JourneyRun['state'];
 // Rótulos e cores por estado. Mesmo vocabulário visual do STATUS_VARIANT do
 // JourneysTab, mas para o estado do RUN (não do fluxo).
 const STATE_META: Record<StateKey, { label: string; badge: string }> = {
-  active: { label: 'Ativo', badge: 'bg-blue-500/15 text-blue-600 dark:text-blue-400' },
-  waiting: { label: 'Aguardando', badge: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
-  done: { label: 'Concluído', badge: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
-  failed: { label: 'Falhou', badge: 'bg-destructive/15 text-destructive' },
+  active: { label: 'Ativo', badge: 'bg-[--tint-info] text-[--on-tint-info]' },
+  waiting: { label: 'Aguardando', badge: 'bg-[--tint-warning] text-[--on-tint-warning]' },
+  done: { label: 'Concluído', badge: 'bg-[--tint-success] text-[--on-tint-success]' },
+  failed: { label: 'Falhou', badge: 'bg-[--tint-danger] text-[--on-tint-danger]' },
   exited: { label: 'Saiu', badge: 'bg-muted text-muted-foreground' },
 };
 
@@ -96,10 +96,10 @@ export function JourneyContactsDrawer({ journey, open, onOpenChange }: Props) {
                 <button
                   key={f.key}
                   onClick={() => setFilter(f.key)}
-                  className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                     filter === f.key
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border/60 text-muted-foreground hover:border-border'
+                      ? 'border-primary bg-[--tint-primary] text-[--on-tint-primary]'
+                      : 'border-border/60 text-muted-foreground hover:border-border hover:bg-surface-elevated'
                   }`}
                 >
                   {f.label} ({count})
@@ -124,13 +124,13 @@ export function JourneyContactsDrawer({ journey, open, onOpenChange }: Props) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{run.leads?.nome || run.leads?.email || 'Contato sem nome'}</p>
                     {run.leads?.nome && run.leads?.email && (
-                      <p className="text-[11px] text-muted-foreground truncate">{run.leads.email}</p>
+                      <p className="text-xs text-muted-foreground truncate">{run.leads.email}</p>
                     )}
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       {stepLabel(run)} · {whenLabel(run)}
                     </p>
                   </div>
-                  <Badge className={`text-[10px] shrink-0 ${STATE_META[run.state].badge}`}>
+                  <Badge className={`text-xs shrink-0 ${STATE_META[run.state].badge}`}>
                     {STATE_META[run.state].label}
                   </Badge>
                 </li>

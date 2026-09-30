@@ -14,8 +14,8 @@ import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 
 const STATUS_VARIANT: Record<string, string> = {
   draft: 'bg-muted text-muted-foreground',
-  active: 'bg-emerald-500/15 text-emerald-600',
-  paused: 'bg-amber-500/15 text-amber-600',
+  active: 'bg-[--tint-success] text-[--on-tint-success]',
+  paused: 'bg-[--tint-warning] text-[--on-tint-warning]',
   archived: 'bg-muted text-muted-foreground line-through',
 };
 
@@ -102,8 +102,8 @@ export function JourneysTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-semibold">{j.name}</span>
-                    <Badge className={`text-[10px] ${STATUS_VARIANT[j.status]}`}>{STATUS_LABELS[j.status]}</Badge>
-                    <Badge variant="secondary" className="text-[10px]">
+                    <Badge className={`text-xs ${STATUS_VARIANT[j.status]}`}>{STATUS_LABELS[j.status]}</Badge>
+                    <Badge variant="secondary" className="text-xs">
                       {j.entry_type === 'segment' ? 'Entrada: segmento' : 'Entrada: evento'}
                     </Badge>
                   </div>
@@ -119,12 +119,12 @@ export function JourneysTab() {
                     <Users className="h-3.5 w-3.5" /> Ver contatos
                   </Button>
                   {j.status !== 'active' && j.status !== 'archived' && (
-                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-emerald-600" onClick={() => handleActivateClick(j)}>
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-[--on-tint-success]" onClick={() => handleActivateClick(j)}>
                       <Play className="h-3.5 w-3.5" /> Ativar
                     </Button>
                   )}
                   {j.status === 'active' && (
-                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-amber-600" onClick={() => setStatus(j, 'paused')}>
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-[--on-tint-warning]" onClick={() => setStatus(j, 'paused')}>
                       <Pause className="h-3.5 w-3.5" /> Pausar
                     </Button>
                   )}
@@ -198,7 +198,6 @@ export function JourneysTab() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={activating}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
               disabled={activating}
               onClick={handleConfirmActivate}
             >
@@ -219,7 +218,7 @@ export function JourneysTab() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground"
+              className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90"
               onClick={async () => { if (deleteId) await deleteJourney(deleteId); setDeleteId(null); }}
             >
               Excluir

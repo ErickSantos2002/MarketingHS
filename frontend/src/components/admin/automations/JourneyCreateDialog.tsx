@@ -87,7 +87,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
                   disabledIds={segmentIds}
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Entram <strong>todos que já estão em algum dos segmentos agora</strong> e{' '}
                 <strong>todos que entrarem depois</strong>, menos quem estiver em algum
                 segmento de exclusão. Os segmentos são reavaliados a cada minuto; quem
@@ -129,7 +129,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
                 />
                 <span className="text-sm text-muted-foreground">dia(s)</span>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Depois que o contato terminar o fluxo, ele só pode entrar de novo depois desse tempo — mesmo que
                 continue no critério de entrada. Sem esse intervalo, o mesmo contato reentraria a cada verificação
                 (até a cada 1 minuto) e receberia os mesmos emails repetidamente.
@@ -138,8 +138,8 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
           )}
 
           {showReentryWarning && (
-            <div className="flex gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md p-2.5">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
               <p>
                 Este fluxo entra por <strong>segmento</strong> e permite <strong>reentrada</strong>. Se o segmento for
                 permanente (ex.: "etiqueta = hotlead"), contatos que continuam atendendo à regra voltarão a entrar no
