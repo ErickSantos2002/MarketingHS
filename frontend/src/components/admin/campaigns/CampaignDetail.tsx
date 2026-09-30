@@ -10,6 +10,7 @@ import { Mail, MessageCircle, Send, Eye, MousePointerClick, AlertCircle, Loader2
 import type { Campaign, CampaignSend, CampaignLiveStats } from '@/hooks/useCampaigns';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { lerCampanha } from '@/lib/campanhas';
+import { STATUS_DE_CAMPANHA } from './statusDeCampanha';
 
 interface CampaignDetailProps {
   campaign: Campaign;
@@ -17,28 +18,19 @@ interface CampaignDetailProps {
   onClose: () => void;
 }
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  draft: { label: 'Rascunho', className: 'bg-muted text-muted-foreground' },
-  scheduled: { label: 'Agendada', className: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
-  sending: { label: 'Enviando...', className: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
-  sent: { label: 'Enviada', className: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  paused: { label: 'Pausada', className: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-  failed: { label: 'Falhou', className: 'bg-red-500/15 text-red-400 border-red-500/30' },
-};
-
 const sendStatusBadge: Record<string, { label: string; className: string }> = {
   pending: { label: 'Pendente', className: 'bg-muted text-muted-foreground' },
-  sent: { label: 'Enviado', className: 'bg-blue-500/15 text-blue-400' },
-  delivered: { label: 'Entregue', className: 'bg-green-500/15 text-green-400' },
-  opened: { label: 'Aberto', className: 'bg-emerald-500/15 text-emerald-400' },
-  clicked: { label: 'Clicado', className: 'bg-primary/15 text-primary' },
-  bounced: { label: 'Bounce', className: 'bg-red-500/15 text-red-400' },
-  complained: { label: 'Marcou spam', className: 'bg-orange-500/15 text-orange-400' },
-  failed: { label: 'Falhou', className: 'bg-red-500/15 text-red-400' },
-  unsubscribed: { label: 'Descadastrado', className: 'bg-orange-500/15 text-orange-400' },
+  sent: { label: 'Enviado', className: 'bg-[--tint-info] text-[--on-tint-info]' },
+  delivered: { label: 'Entregue', className: 'bg-[--tint-success] text-[--on-tint-success]' },
+  opened: { label: 'Aberto', className: 'bg-[--tint-success] text-[--on-tint-success]' },
+  clicked: { label: 'Clicado', className: 'bg-[--tint-primary] text-[--on-tint-primary]' },
+  bounced: { label: 'Bounce', className: 'bg-[--tint-danger] text-[--on-tint-danger]' },
+  complained: { label: 'Marcou spam', className: 'bg-[--tint-warning] text-[--on-tint-warning]' },
+  failed: { label: 'Falhou', className: 'bg-[--tint-danger] text-[--on-tint-danger]' },
+  unsubscribed: { label: 'Descadastrado', className: 'bg-[--tint-warning] text-[--on-tint-warning]' },
   // Neutro/cinza de propósito: supressão não é um erro de envio, é um envio
   // deliberadamente pulado (descadastro/bounce/complaint anterior).
-  suppressed: { label: 'Suprimido', className: 'bg-slate-500/15 text-slate-400' },
+  suppressed: { label: 'Suprimido', className: 'bg-[--tint-neutral] text-conteudo-muted' },
 };
 
 function formatDate(d: string | null) {
@@ -144,7 +136,7 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, campaign.id, liveStatus]);
 
-  const sc = statusConfig[liveStatus] || statusConfig.draft;
+  const sc = STATUS_DE_CAMPANHA[liveStatus] || STATUS_DE_CAMPANHA.draft;
   // Prefere as stats ao vivo (campaign_sends); cai no JSONB legado enquanto carrega
   const stats: CampaignLiveStats = liveStats ?? {
     total: 0, pending: 0, bounced: 0, complained: 0, unsubscribed: 0, suppressed: 0, ...campaign.stats,
@@ -176,10 +168,10 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
         </SheetHeader>
 
         {liveStatus === 'sending' && stats.total > 0 && (
-          <Card className="border-blue-500/30 bg-blue-500/5 mt-4">
+          <Card className="border-info/30 bg-[--tint-info] mt-4">
             <CardContent className="py-4 px-5 space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 font-medium text-blue-400">
+                <span className="flex items-center gap-2 font-medium text-[--on-tint-info]">
                   <Loader2 className="h-4 w-4 animate-spin" /> Enviando pela fila...
                 </span>
                 <span className="text-muted-foreground">
@@ -200,43 +192,43 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
             <>
             <div className="flex items-center gap-2 overflow-x-auto pb-2">
               <Card className="flex-1 min-w-[100px]"><CardContent className="py-3 px-4 text-center">
-                <Send className="h-4 w-4 mx-auto text-blue-400 mb-1" />
+                <Send className="h-4 w-4 mx-auto text-info mb-1" />
                 <p className="text-lg font-bold">{stats.sent}</p>
-                <p className="text-[10px] text-muted-foreground">Enviados</p>
+                <p className="text-xs text-muted-foreground">Enviados</p>
               </CardContent></Card>
               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
               <Card className="flex-1 min-w-[100px]"><CardContent className="py-3 px-4 text-center">
-                <Mail className="h-4 w-4 mx-auto text-green-400 mb-1" />
+                <Mail className="h-4 w-4 mx-auto text-success mb-1" />
                 <p className="text-lg font-bold">{stats.delivered}</p>
-                <p className="text-[10px] text-muted-foreground">Entregues ({deliveredPct}%)</p>
+                <p className="text-xs text-muted-foreground">Entregues ({deliveredPct}%)</p>
               </CardContent></Card>
               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
               <Card className="flex-1 min-w-[100px]"><CardContent className="py-3 px-4 text-center">
-                <Eye className="h-4 w-4 mx-auto text-emerald-400 mb-1" />
+                <Eye className="h-4 w-4 mx-auto text-success mb-1" />
                 <p className="text-lg font-bold">{stats.opened}</p>
-                <p className="text-[10px] text-muted-foreground">Abertos ({openedPct}%)</p>
+                <p className="text-xs text-muted-foreground">Abertos ({openedPct}%)</p>
               </CardContent></Card>
               <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
               <Card className="flex-1 min-w-[100px]"><CardContent className="py-3 px-4 text-center">
                 <MousePointerClick className="h-4 w-4 mx-auto text-primary mb-1" />
                 <p className="text-lg font-bold">{stats.clicked}</p>
-                <p className="text-[10px] text-muted-foreground">Clicados ({clickedPct}%)</p>
+                <p className="text-xs text-muted-foreground">Clicados ({clickedPct}%)</p>
               </CardContent></Card>
             </div>
             {(stats.bounced > 0 || stats.complained > 0 || stats.suppressed > 0) && (
               <div className="flex items-center gap-2 flex-wrap">
                 {stats.bounced > 0 && (
-                  <Badge variant="outline" className="bg-red-500/15 text-red-400 border-red-500/30">
+                  <Badge variant="outline" className="bg-[--tint-danger] text-[--on-tint-danger] border-danger/30">
                     Bounce: {stats.bounced}
                   </Badge>
                 )}
                 {stats.complained > 0 && (
-                  <Badge variant="outline" className="bg-orange-500/15 text-orange-400 border-orange-500/30">
+                  <Badge variant="outline" className="bg-[--tint-warning] text-[--on-tint-warning] border-warning/30">
                     Marcou spam: {stats.complained}
                   </Badge>
                 )}
                 {stats.suppressed > 0 && (
-                  <Badge variant="outline" className="bg-slate-500/15 text-slate-400 border-slate-500/30">
+                  <Badge variant="outline" className="bg-[--tint-neutral] text-conteudo-muted border-borda">
                     Suprimidos: {stats.suppressed}
                   </Badge>
                 )}
@@ -246,14 +238,14 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
           ) : (
             <div className="flex gap-4">
               <Card className="flex-1"><CardContent className="py-3 px-4 text-center">
-                <Send className="h-4 w-4 mx-auto text-green-400 mb-1" />
+                <Send className="h-4 w-4 mx-auto text-success mb-1" />
                 <p className="text-lg font-bold">{stats.sent}</p>
-                <p className="text-[10px] text-muted-foreground">Enviados</p>
+                <p className="text-xs text-muted-foreground">Enviados</p>
               </CardContent></Card>
               <Card className="flex-1"><CardContent className="py-3 px-4 text-center">
-                <AlertCircle className="h-4 w-4 mx-auto text-red-400 mb-1" />
+                <AlertCircle className="h-4 w-4 mx-auto text-danger mb-1" />
                 <p className="text-lg font-bold">{stats.failed}</p>
-                <p className="text-[10px] text-muted-foreground">Falhos</p>
+                <p className="text-xs text-muted-foreground">Falhos</p>
               </CardContent></Card>
             </div>
           )}
