@@ -57,7 +57,7 @@ export function JourneyNodeCard({ node, summary, metrics, onPreview, onEdit, onD
         </div>
 
         {metrics && (metrics.entered > 0 || metrics.emails.enqueued > 0) && (
-          <div className="mt-2.5 pt-2.5 border-t border-border/30 text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+          <div className="mt-2.5 pt-2.5 border-t border-border/30 text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
             <span>{metrics.entered} contato{metrics.entered === 1 ? '' : 's'} passou{metrics.entered === 1 ? '' : 'ram'} por aqui</span>
             {node.type === 'send_email' && metrics.emails.enqueued > 0 && (
               <span>

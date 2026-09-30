@@ -303,8 +303,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                 <Label>Assunto</Label>
                 <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Assunto do email" />
               </div>
-              <div className="flex gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md p-2.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
                 <p>O template é lido no momento do envio — editar o template depois muda os emails ainda não enviados deste fluxo.</p>
               </div>
             </>
@@ -348,7 +348,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                       {sendEmailNodes.map((n) => <SelectItem key={n.id} value={n.id}>{n.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">Sem escolher, o passo casa com a abertura/clique de qualquer email deste fluxo.</p>
+                  <p className="text-xs text-muted-foreground">Sem escolher, o passo casa com a abertura/clique de qualquer email deste fluxo.</p>
                 </div>
               )}
               <div className="space-y-1.5">
@@ -366,8 +366,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                 </div>
               </div>
               {(eventType === 'email_opened') && (
-                <div className="flex gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md p-2.5">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
                   <p>Aberturas de email são infladas por proteção de privacidade (Apple Mail pré-carrega o pixel). Para decisões críticas, prefira ramificar por <strong>clique</strong>.</p>
                 </div>
               )}
@@ -380,8 +380,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                 <Label>Condições</Label>
                 {rules.length > 1 && (
                   <div className="flex gap-0.5 p-0.5 bg-muted/40 rounded-md">
-                    <button type="button" onClick={() => setLogic('and')} className={`px-2 py-0.5 rounded text-[10px] font-bold ${logic === 'and' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>E (AND)</button>
-                    <button type="button" onClick={() => setLogic('or')} className={`px-2 py-0.5 rounded text-[10px] font-bold ${logic === 'or' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>OU (OR)</button>
+                    <button type="button" onClick={() => setLogic('and')} className={`px-2 py-0.5 rounded text-xs font-bold ${logic === 'and' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>E (AND)</button>
+                    <button type="button" onClick={() => setLogic('or')} className={`px-2 py-0.5 rounded text-xs font-bold ${logic === 'or' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>OU (OR)</button>
                   </div>
                 )}
               </div>
@@ -449,16 +449,16 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                   </SelectContent>
                 </Select>
                 {sendEmailNodes.length === 0 && (
-                  <p className="text-[11px] text-muted-foreground">Adicione um nó "Enviar email" antes desta condição.</p>
+                  <p className="text-xs text-muted-foreground">Adicione um nó "Enviar email" antes desta condição.</p>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   A condição checa o estado AGORA e segue por Sim/Não. Ponha uma "espera" antes se
                   quiser dar tempo do contato receber/abrir/clicar.
                 </p>
               </div>
               {emailCheck === 'opened' && (
-                <div className="flex gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md p-2.5">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
                   <p>Aberturas são infladas por proteção de privacidade (Apple Mail pré-carrega o pixel). Para decisões críticas, prefira ramificar por <strong>clique</strong>.</p>
                 </div>
               )}
@@ -470,7 +470,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
               <Label>Nome da tag</Label>
               <Input value={tagName} onChange={(e) => setTagName(e.target.value)} placeholder="ex: frio" />
               {normalizedTag && normalizedTag !== tagName && (
-                <p className="text-[11px] text-muted-foreground">Será salva como "{normalizedTag}"</p>
+                <p className="text-xs text-muted-foreground">Será salva como "{normalizedTag}"</p>
               )}
             </div>
           )}
@@ -489,9 +489,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
           {/* I6 (revisão final do 8D): sem o GrowthHS ligado, o passo
               enfileira e o contato ESPERA — a tela não pode sugerir envio. */}
           {type === 'handoff_growthhs' && crmConfigurado === false && (
-            <div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+            <div className="flex gap-2 rounded-md border border-warning/30 bg-[--tint-warning] p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+              <p className="text-xs text-[--on-tint-warning]">
                 {GROWTHHS_NAO_CONFIGURADO}
               </p>
             </div>

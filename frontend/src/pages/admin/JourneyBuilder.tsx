@@ -372,7 +372,7 @@ export default function JourneyBuilder() {
             >
               {item.label}
               {naoLigado && (
-                <span className="ml-2 text-[10px] text-muted-foreground">não ligado</span>
+                <span className="ml-2 text-xs text-muted-foreground">não ligado</span>
               )}
             </DropdownMenuItem>
           );
@@ -395,7 +395,7 @@ export default function JourneyBuilder() {
       if (renderedIds.has(currentId)) {
         const n = byId.get(currentId);
         items.push(
-          <div key={`ref-${currentId}`} className="text-[11px] text-muted-foreground italic border border-dashed border-border/50 rounded-md px-3 py-1.5">
+          <div key={`ref-${currentId}`} className="text-xs text-muted-foreground italic border border-dashed border-border/50 rounded-md px-3 py-1.5">
             → continua em "{n ? NODE_LABELS[n.type] : currentId}"
           </div>,
         );
@@ -421,11 +421,11 @@ export default function JourneyBuilder() {
         items.push(
           <div key={`branches-${node.id}`} className="flex gap-8 items-start justify-center w-full">
             <div className="flex-1 flex flex-col items-center min-w-0">
-              <Badge variant="secondary" className="text-[10px] mb-1">Sim</Badge>
+              <Badge variant="secondary" className="text-xs mb-1">Sim</Badge>
               {renderChain(node.next ?? null, renderedIds, node.id, 'next')}
             </div>
             <div className="flex-1 flex flex-col items-center min-w-0">
-              <Badge variant="secondary" className="text-[10px] mb-1">Não</Badge>
+              <Badge variant="secondary" className="text-xs mb-1">Não</Badge>
               {renderChain(node.next_false ?? null, renderedIds, node.id, 'next_false')}
             </div>
           </div>,
@@ -435,11 +435,11 @@ export default function JourneyBuilder() {
         items.push(
           <div key={`branches-${node.id}`} className="flex gap-8 items-start justify-center w-full">
             <div className="flex-1 flex flex-col items-center min-w-0">
-              <Badge variant="secondary" className="text-[10px] mb-1">Aconteceu</Badge>
+              <Badge variant="secondary" className="text-xs mb-1">Aconteceu</Badge>
               {renderChain(node.next ?? null, renderedIds, node.id, 'next')}
             </div>
             <div className="flex-1 flex flex-col items-center min-w-0">
-              <Badge variant="secondary" className="text-[10px] mb-1">Tempo esgotado</Badge>
+              <Badge variant="secondary" className="text-xs mb-1">Tempo esgotado</Badge>
               {renderChain(node.next_timeout ?? null, renderedIds, node.id, 'next_timeout')}
             </div>
           </div>,
@@ -483,7 +483,7 @@ export default function JourneyBuilder() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">{journey.name}</h1>
-              <Badge className="text-[10px]">{STATUS_LABELS[journey.status]}</Badge>
+              <Badge className="text-xs">{STATUS_LABELS[journey.status]}</Badge>
             </div>
             {journey.description && <p className="text-sm text-muted-foreground">{journey.description}</p>}
           </div>
@@ -494,12 +494,12 @@ export default function JourneyBuilder() {
             <Save className="h-3.5 w-3.5" /> Salvar
           </Button>
           {journey.status !== 'active' && journey.status !== 'archived' && (
-            <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-600/90" onClick={handleActivateClick}>
+            <Button size="sm" className="gap-1.5" onClick={handleActivateClick}>
               <Play className="h-3.5 w-3.5" /> Ativar
             </Button>
           )}
           {journey.status === 'active' && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-amber-600" onClick={() => setStatus('paused')}>
+            <Button size="sm" variant="outline" className="gap-1.5 text-[--on-tint-warning]" onClick={() => setStatus('paused')}>
               <Pause className="h-3.5 w-3.5" /> Pausar
             </Button>
           )}
@@ -515,13 +515,13 @@ export default function JourneyBuilder() {
       <Card className="max-w-md mx-auto border-primary/30 bg-primary/[0.03]">
         <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Entrada</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Entrada</p>
             <p className="text-sm font-medium truncate">
               {entryType === 'segment'
                 ? `Segmentos: ${entrySegmentIds.length === 0 ? '(selecione)' : entrySegmentIds.length}${entryExcludedSegmentIds.length > 0 ? ` — exceto ${entryExcludedSegmentIds.length}` : ''}`
                 : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}`}
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Reentrada: {reentry === 'once' ? 'uma vez por contato' : `pode entrar de novo (mín. ${reentryCooldownDays}d)`}
             </p>
           </div>
@@ -623,7 +623,7 @@ export default function JourneyBuilder() {
                   />
                   <span className="text-sm text-muted-foreground">dia(s)</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Depois que o contato terminar o fluxo, ele só entra de novo depois desse tempo — mesmo continuando
                   no critério de entrada. Sem esse intervalo, o mesmo contato reentraria a cada verificação (até a
                   cada 1 minuto) e receberia os mesmos emails repetidamente.
@@ -632,8 +632,8 @@ export default function JourneyBuilder() {
             )}
 
             {entryType === 'segment' && reentry === 'allowed' && (
-              <div className="flex gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md p-2.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
                 <p>
                   Este fluxo entra por <strong>segmento</strong> e permite <strong>reentrada</strong>. Se o segmento
                   for permanente (ex.: "etiqueta = hotlead"), contatos que continuam atendendo à regra voltarão a
@@ -662,7 +662,7 @@ export default function JourneyBuilder() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground" onClick={confirmDeleteApply}>
+            <AlertDialogAction className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90" onClick={confirmDeleteApply}>
               Excluir mesmo assim
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -713,7 +713,6 @@ export default function JourneyBuilder() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
               onClick={() => { setConfirmActivate(false); setStatus('active'); }}
             >
               Ativar e inscrever {activateSegmentCount}
