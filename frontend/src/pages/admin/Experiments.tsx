@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  FlaskConical, Plus, Copy, Play, Pause, Trash2, BarChart3, Loader2, Settings2, Flag,
+  Plus, Copy, Play, Pause, Trash2, BarChart3, Loader2, Settings2, Flag, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -262,10 +262,7 @@ export default function Experiments() {
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FlaskConical className="h-6 w-6 text-primary" /> Testes A/B
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-muted-foreground text-sm">
             Split-URL por redirecionamento — mede qual página gera leads e agendamentos de maior valor.
           </p>
         </div>
@@ -382,7 +379,7 @@ export default function Experiments() {
                 Este é o link que vai no anúncio. Pode ser reutilizado em testes futuros — só um teste fica ativo por slug de cada vez.
               </p>
               {slugInUseBy && (
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="text-xs text-[--on-tint-warning] mt-1">
                   Esta slug tem o teste "{slugInUseBy.name}" ativo. O novo nasce como rascunho; ao ativá-lo você poderá finalizar o atual.
                 </p>
               )}
@@ -469,7 +466,7 @@ export default function Experiments() {
             <div className="rounded-lg bg-muted/40 p-3 text-sm">
               Amostra necessária: <strong>{sample.perVariant.toLocaleString("pt-BR")}</strong> por variante ·
               duração estimada: <strong>{sample.days}</strong> dias.
-              {sample.days > 60 && <span className="text-amber-600"> ⚠ Muito longo — teste diferenças maiores.</span>}
+              {sample.days > 60 && <span className="inline-flex items-center gap-1 text-[--on-tint-warning]"> <AlertTriangle className="h-3.5 w-3.5 text-warning" /> Muito longo — teste diferenças maiores.</span>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Save, Settings2, Cloud, Globe, ShieldAlert, ShieldCheck, Code2, Zap } from "lucide-react";
+import { ArrowLeft, Copy, Save, Cloud, Globe, ShieldAlert, ShieldCheck, Code2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -80,7 +80,7 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/15 text-primary text-xs font-semibold flex items-center justify-center">
+      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[--tint-primary] text-[--on-tint-primary] text-xs font-semibold flex items-center justify-center">
         {n}
       </span>
       <div className="flex-1 pt-0.5 text-sm">{children}</div>
@@ -153,10 +153,7 @@ export default function ExperimentsSetup() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-primary" /> Configuração & Instruções — Teste A/B
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground">
             Como a infraestrutura do A/B está montada e como configurá-la.
           </p>
         </div>
@@ -221,7 +218,7 @@ export default function ExperimentsSetup() {
           </Button>
         </div>
         {showRedirectorWarning && (
-          <p className="text-xs text-amber-600 flex items-start gap-1.5">
+          <p className="text-xs text-[--on-tint-warning] flex items-start gap-1.5">
             <ShieldAlert className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
             <span>
               Fora do domínio de produção (<code>{prodNormalized}</code>). O redirecionador precisa ser
@@ -246,7 +243,7 @@ export default function ExperimentsSetup() {
       {/* Por que um subdomínio dedicado */}
       <Card className="p-5 space-y-3">
         <div className="flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-amber-600" />
+          <ShieldAlert className="h-4 w-4 text-warning" />
           <h2 className="font-semibold">Por que um subdomínio dedicado ({exemploRedirecionador})</h2>
         </div>
         <p className="text-sm text-muted-foreground">
