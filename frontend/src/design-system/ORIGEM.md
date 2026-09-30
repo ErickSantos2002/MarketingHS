@@ -71,8 +71,8 @@ Registrados para o Erick decidir no projeto oficial — **não** se corrigem aqu
   par oficial do DS (branco sobre o botão primário); não se corrige aqui.
   Achado na revisão final da Fase 0 (item M4, 22/09/2026).
 - `--on-tint-warning` sobre `--tint-warning` no tema claro dá **4,32:1**
-  sobre o fundo da página (`--background`) e 4,50:1 sobre branco — no limite
-  ou abaixo do AA de 4,5:1 para texto de 12px. No escuro dá 7,5 a 8,1:1.
+  sobre o fundo da página (`--background`) e 4,47:1 sobre branco — também
+  abaixo do AA de 4,5:1 para texto de 12px. No escuro dá 7,5 a 8,1:1.
   Medido nas Tarefas 3 e 4 do G4 (30/09/2026) no estado "Pausado" da lista de
   fluxos, no estado "Aguardando" da gaveta de contatos e no aviso âmbar
   (elemento sintético com as classes reais). Afeta todo texto de atenção

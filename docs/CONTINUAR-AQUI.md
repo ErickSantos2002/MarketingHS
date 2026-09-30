@@ -6,11 +6,11 @@
 > da Fase 2, o G1, o G2 e o G3. O **G4 (Automações, Jornadas e Segmentos)** está
 > na branch **`visual-fase-2-g4`**, criada a partir da `main`, **sem merge e sem
 > push** — os dois são decisão do Erick. O G4 tem **revisão por tarefa feita
-> (as cinco, todas limpas) e a revisão final da branch ainda PENDENTE**: ela
-> ainda vai triar os "resíduos conhecidos" do bloco do G4 abaixo.
+> (as cinco, todas limpas) e revisão final da branch feita (30/09), com onda de
+> conserto**: veredito "sim com ressalvas", sem Critical/Important; as
+> pendências de acabamento estão no bloco do G4 abaixo.
 >
-> **O que fazer a seguir:** fazer a revisão final do G4 (no modelo mais capaz)
-> e, depois dela, escrever o plano do **G5 — Páginas e Teste A/B**
+> **O que fazer a seguir:** escrever o plano do **G5 — Páginas e Teste A/B**
 > (`components/admin/pages/`, `pages/admin/` menos o preview, e `Experiments*`),
 > no molde de `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g4-automacoes.md`.
 > Execução como nos grupos anteriores: `superpowers:subagent-driven-development`,
@@ -28,7 +28,14 @@
 > hover, botão não ganha cor por `className`, "Excluir" de confirmação com a
 > string inteira da variante `destructive`) mais as do G4: aviso âmbar de forma
 > única (tinta de atenção, texto `--on-tint`, ícone cheio); texto pequeno não
-> fica mais claro que o muted; nenhum `<h1>` duplicado da topbar.
+> fica mais claro que o muted; nenhum `<h1>` duplicado da topbar. Mais:
+> - `PagesTable.tsx:~149` ("Excluir página") e `SuppressionList.tsx:~261`
+>   ("Remover", este é do G6/settings) usam `AlertDialogAction` sem classe — azul
+>   de ação numa ação destrutiva; aplicar a string
+>   `bg-danger text-destructive-foreground border border-danger hover:bg-danger/90`;
+> - pontos cegos antigos da regex do guarda (não ocorrem hoje):
+>   `shadow-[0px_0px_…]`, `shadow-[0_0_calc(…)]`, `shadow-[inset_0_0_…]`,
+>   `shadow-[--x]` e `boxShadow` inline.
 >
 > **Decisões que esperam o Erick** (detalhe nos blocos abaixo):
 > 1. ~~Push e merge da `visual-fase-1` na `main`.~~ **Feito em 30/09.**
@@ -71,11 +78,11 @@
 
 > ## ✅ Visual — Fase 2, G4 (Automações, Jornadas e Segmentos), 30/09/2026
 >
-> **O G4 fechou as tarefas; a revisão final da branch está PENDENTE.** Branch
+> **O G4 fechou as tarefas e a revisão final da branch (30/09) já foi feita, com onda de conserto.** Branch
 > `visual-fase-2-g4` (a partir da `main`, base `20574d6`), **não mergeada e sem
 > push**. As seis tarefas do plano
 > `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g4-automacoes.md`
-> saíram; as cinco de tela tiveram revisão por tarefa (todas limpas). O spec que
+> saíram; as cinco tiveram revisão por tarefa (todas limpas). O spec que
 > governa continua sendo
 > `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
 >
@@ -87,11 +94,12 @@
 > | `48a3eb3` | Aba Fluxos (lista, gaveta de contatos, "Novo fluxo") sai do guarda — estado por significado, "Ativar" da confirmação é ação |
 > | `3e24e5a` | Construtor de fluxo e diálogo de nó saem do guarda — "Ativar" é ação, avisos legíveis |
 > | `d48f653` | Segmentos saem do guarda — sai a estética Aurora do modal, sem `<h1>` duplicado |
+> | `aee27ce` | Onda final do G4 — contagem de falha legível (`--on-tint-danger`), tintas de primária, ícone do aviso âmbar |
 >
 > **Placar do guarda: 247 → 170** (app inteiro; −77 = 17+12+10+10+9+9+6+4).
 > Por pasta: `src/components/admin/automations` **45 → 0**; `src/components/admin/segments`
-> **10 → 0**; `src/pages/admin` **44 → 22** (`Automations.tsx` 12, `JourneyBuilder.tsx`
-> 10 e `Segments.tsx` 0 a 0 — os 22 que sobram são de outras telas); `campaigns`,
+> **10 → 0**; `src/pages/admin` **44 → 22** (`Automations.tsx` 12→0 e `JourneyBuilder.tsx`
+> 10→0; `Segments.tsx` já estava em 0 — os 22 que sobram são de outras telas); `campaigns`,
 > `dashboard`, `contacts`, `ui`, `hooks` e `lib` continuam em **0** — sem
 > regressão do G1-G3. Sobra: `settings` 122, `admin/pages` 26, `pages/admin` 22
 > = **170**.
@@ -104,8 +112,10 @@
 > `AlertDialogAction` com `bg-destructive` — **zero linhas**; os **7 hashes** do
 > Design System conferindo com o `ORIGEM.md` — nenhum arquivo de tokens ou do
 > `styles.css` tocado (o `ORIGEM.md` só ganhou dois defeitos, ele não está entre
-> os hashes). Capacidade por capacidade (`git diff 20574d6 -- frontend`, 16
-> arquivos, 116 inserções / 124 deleções, incluindo `guarda-visual.mjs`): o filtro
+> os hashes). Capacidade por capacidade (`git diff 20574d6 -- frontend`, 17
+> arquivos, 133 inserções / 128 deleções, medido antes do commit de registro
+> da onda de conserto; 16 / 120 / 128 sem o `ORIGEM.md`; inclui
+> `guarda-visual.mjs`): o filtro
 > de diff sobra em linhas que não mexem em lógica — mapas de classe de estado
 > (`STATE_META`, `STATUS_VARIANT`), fechamento do `<div>` novo do aviso âmbar,
 > remoção dos `<h1>` duplicados e dos `<div>` decorativos do modal de segmento
@@ -118,8 +128,8 @@
 > nós aberto e fechado por Cancelar, `/segments` (lista, gaveta, "Novo segmento"
 > com regra "Criado nos últimos 90 dias" e prévia de 2083 contatos), nos dois
 > temas a 1440 px; o construtor e `/automations` a 390 px **não rolam na
-> horizontal** (`scrollWidth` 390 = 390). Console: zero erro novo (os 2 a 5
-> avisos são os do React Router, já existentes). **Produção intocada** (consulta
+> horizontal** (`scrollWidth` 390 = 390). Console: zero erro novo de console (a
+> única entrada foi um 404 de URL digitada errada, refeita com a rota certa). **Produção intocada** (consulta
 > só leitura): 1 fluxo `draft` (`d6bb2185…`, `updated_at` 22/09 16:30:38,
 > igual ao do começo), 1 segmento, 2 campanhas em `sending`, 0 regras.
 >
@@ -145,20 +155,44 @@
 >
 > **Defeitos novos do Design System oficial** (registrados no `ORIGEM.md`, seção
 > "Defeitos conhecidos do oficial"; pergunta 8 do "Comece por aqui"):
-> `--on-tint-warning` sobre `--tint-warning` no claro (4,32:1 sobre a página, 4,50
+> `--on-tint-warning` sobre `--tint-warning` no claro (4,32:1 sobre a página, 4,47
 > sobre branco) e branco sobre `danger-500` (~3,76:1 nos dois temas).
 >
-> **Resíduos conhecidos** (minors adiados; a revisão final ainda vai triá-los):
+> **Resíduos conhecidos** (minors adiados; triados na revisão final):
 > - `ContactsBulkBar.tsx:240` — `<Button variant="ghost">` "Apagar" com
 >   `bg-destructive`/`hover:bg-destructive/90` (não é `AlertDialogAction`; do G1/G2);
-> - aviso da prévia em `Automations.tsx` (~254) com `items-start`/`p-3` fora da
->   forma única, e a caixa nova (~392) sem `items-start` (o ícone centraliza em
->   texto longo) — padronizar o alinhamento;
-> - `JourneysTab.tsx` (~112) — "N com erro" em `text-destructive`, texto pequeno
->   fora do vocabulário `--on-tint-danger`;
 > - `SegmentFormModal.tsx:731` — `text-muted-foreground/50` no ícone `Users` do
 >   estado vazio (ícone, não texto; o grep do escopo casa); sobras neutras
 >   `bg-background/40`, `/30` e `border-border/70` aceitas.
+>
+> **Revisão final do G4 e onda de conserto (30/09).** Veredito: **"sim com
+> ressalvas"**, sem Critical nem Important. Consertado no commit `aee27ce`
+> (só classes; nenhum `onClick`, condição, handler, `disabled` ou texto de dado
+> no diff):
+> 1. `JourneysTab.tsx:113` ("N com erro") e `JourneyNodeCard.tsx:66` ("N falhas"):
+>    `text-destructive` → `text-[--on-tint-danger]` (no escuro dava 3,31:1);
+> 2. `JourneyNodeCard.tsx:35`: caixa do ícone `bg-primary/10` → `bg-[--tint-primary]`;
+> 3. `SegmentFormModal.tsx:704`: chip do contato selecionado
+>    `bg-primary/10 border-primary/20 text-foreground` →
+>    `bg-[--tint-primary] border-primary/30 text-[--on-tint-primary]`;
+> 4. `AutomationRuleForm.tsx:393`: ícone do aviso âmbar `h-4 w-4 shrink-0` →
+>    `h-3.5 w-3.5 shrink-0 mt-0.5`, igual aos demais avisos do grupo (a
+>    divergência era só o `mt-0.5`). Isso também resolve o resíduo do alinhamento
+>    do aviso.
+>
+> Contraste medido no navegador (elemento sintético, dois temas): "N falhas" em
+> `--on-tint-danger` sobre o card, 6,47:1 (claro) e 5,78:1 (escuro); chip de
+> contato, 6,29:1 (claro) e 6,66:1 (escuro).
+>
+> **Pendências de acabamento (não consertadas):**
+> - (a) o badge de estado no construtor (`JourneyBuilder.tsx:~486`) usa a
+>   variante padrão para todo estado, enquanto a lista pinta por estado —
+>   unificar extraindo o mapa;
+> - (b) badges de estado em `JourneysTab`/`JourneyContactsDrawer` (e
+>   `CampaignDetail` do G3) pintam só fundo/texto e ficam com a borda azul da
+>   variante padrão — usar `variant="success"|"warning"|"info"|"destructive"` de
+>   `badge.tsx`;
+> - (c) `bg-primary/[0.03]` do card "Entrada" do construtor (~515) ficou.
 >
 > ### Decisões tomadas nesta fase, reversíveis
 >
