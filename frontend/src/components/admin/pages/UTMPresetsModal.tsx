@@ -98,7 +98,7 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
               <div key={i} className="flex items-center gap-2 border rounded-md p-2">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">{preset.name}</div>
-                  <code className="text-[10px] text-muted-foreground truncate block">
+                  <code className="text-xs text-muted-foreground truncate block">
                     {buildUrl(preset.source, preset.medium, preset.campaign, preset.content)}
                   </code>
                 </div>
@@ -117,7 +117,7 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
           <Label className="text-xs text-muted-foreground">Presets rápidos</Label>
           <div className="flex flex-wrap gap-1">
             {Object.keys(QUICK_PRESETS).map((label) => (
-              <Badge key={label} variant="outline" className="cursor-pointer hover:bg-primary/10" onClick={() => applyQuickPreset(label)}>
+              <Badge key={label} variant="outline" className="cursor-pointer hover:bg-surface-elevated" onClick={() => applyQuickPreset(label)}>
                 {label}
               </Badge>
             ))}

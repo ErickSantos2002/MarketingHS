@@ -99,11 +99,11 @@ export function NewPageDialog({ open, onOpenChange, pages, onCreated }: NewPageD
               <span className="text-xs text-muted-foreground font-mono">/{slug}</span>
               {slug && (
                 slugExists ? (
-                  <Badge variant="destructive" className="text-[10px] gap-1">
+                  <Badge variant="destructive" className="text-xs gap-1">
                     <XCircle className="h-3 w-3" /> Já existe
                   </Badge>
                 ) : (
-                  <Badge className="bg-green-600 text-[10px] gap-1">
+                  <Badge variant="success" className="text-xs gap-1">
                     <CheckCircle className="h-3 w-3" /> Disponível
                   </Badge>
                 )

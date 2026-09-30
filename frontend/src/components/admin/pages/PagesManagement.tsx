@@ -111,17 +111,17 @@ export function PagesManagement() {
           <div className="text-sm text-muted-foreground">Total de Páginas</div>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <div className="text-2xl font-bold text-green-500">
+          <div className="text-2xl font-bold text-[--on-tint-success]">
             {pageStats.filter((p) => p.status === 'active').length}
           </div>
           <div className="text-sm text-muted-foreground">Páginas Ativas</div>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <div className="text-2xl font-bold text-blue-500">{totalLeads}</div>
+          <div className="text-2xl font-bold text-[--on-tint-info]">{totalLeads}</div>
           <div className="text-sm text-muted-foreground">Total de Leads</div>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <div className="text-2xl font-bold text-purple-500 truncate text-base">
+          <div className="text-2xl font-bold text-[--on-tint-primary] truncate text-base">
             {bestPage && (bestPage.total_leads || 0) > 0 ? `/${bestPage.slug}` : '—'}
           </div>
           <div className="text-sm text-muted-foreground">Melhor Página</div>
@@ -154,7 +154,7 @@ export function PagesManagement() {
             <div key={page.id} className="group border rounded-lg bg-card hover:border-primary/30 transition-colors">
               {/* Card Header */}
               <div className="flex items-center justify-between p-4 pb-2">
-                <Badge variant={page.status === 'active' ? 'default' : 'secondary'} className={page.status === 'active' ? 'bg-green-600 hover:bg-green-700' : ''}>
+                <Badge variant={page.status === 'active' ? 'success' : 'secondary'}>
                   {page.status === 'active' ? 'Ativa' : 'Rascunho'}
                 </Badge>
                 <Switch
@@ -168,7 +168,7 @@ export function PagesManagement() {
                 <h3 className="font-medium truncate">{page.name}</h3>
                 <code className="text-xs text-muted-foreground font-mono">/{page.slug}</code>
                 {page.config?.headline && (
-                  <p className="text-xs text-muted-foreground/70 truncate mt-1">{page.config.headline}</p>
+                  <p className="text-xs text-muted-foreground truncate mt-1">{page.config.headline}</p>
                 )}
               </div>
 
@@ -176,14 +176,14 @@ export function PagesManagement() {
               <div className="px-4 py-3 border-t grid grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="text-sm font-semibold">{page.total_leads || 0}</div>
-                  <div className="text-[10px] text-muted-foreground">leads</div>
+                  <div className="text-xs text-muted-foreground">leads</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold flex items-center justify-center gap-1">
                     {page.hot_leads || 0}
-                    {(page.hot_leads || 0) > 0 && <Flame className="h-3 w-3 text-orange-500" />}
+                    {(page.hot_leads || 0) > 0 && <Flame className="h-3 w-3 text-success" />}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">hot leads</div>
+                  <div className="text-xs text-muted-foreground">hot leads</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold truncate">
@@ -191,7 +191,7 @@ export function PagesManagement() {
                       ? formatDistanceToNow(new Date(page.last_lead_at), { addSuffix: false, locale: ptBR })
                       : '—'}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     {page.last_lead_at ? 'último' : 'sem leads'}
                   </div>
                 </div>
@@ -270,7 +270,12 @@ export function PagesManagement() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirm}>Confirmar</AlertDialogAction>
+            <AlertDialogAction
+              className={confirmDialog?.action === 'delete' ? 'bg-danger text-destructive-foreground border border-danger hover:bg-danger/90' : undefined}
+              onClick={handleConfirm}
+            >
+              Confirmar
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
