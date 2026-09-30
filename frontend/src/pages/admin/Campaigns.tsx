@@ -11,15 +11,7 @@ import { BRASILIA_TIMEZONE } from '@/hooks/useLeadAnalytics';
 import { CampaignWizard } from '@/components/admin/campaigns/CampaignWizard';
 import { CampaignDetail } from '@/components/admin/campaigns/CampaignDetail';
 import { formatInTimeZone } from 'date-fns-tz';
-
-const statusConfig: Record<string, { label: string; className: string }> = {
-  draft: { label: 'Rascunho', className: 'bg-muted text-muted-foreground' },
-  scheduled: { label: 'Agendada', className: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
-  sending: { label: 'Enviando...', className: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
-  sent: { label: 'Enviada', className: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  paused: { label: 'Pausada', className: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-  failed: { label: 'Falhou', className: 'bg-red-500/15 text-red-400 border-red-500/30' },
-};
+import { STATUS_DE_CAMPANHA } from '@/components/admin/campaigns/statusDeCampanha';
 
 // Exibe sempre em Brasília: o wizard agenda em horário de Brasília, então a lista
 // precisa falar a mesma língua — com toLocaleDateString o admin veria o horário
@@ -68,9 +60,8 @@ export default function Campaigns() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Campanhas</h1>
-        <Button onClick={() => setWizardOpen(true)} className="bg-primary hover:bg-primary/90">
+      <div className="flex items-center justify-end">
+        <Button onClick={() => setWizardOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nova campanha
         </Button>
@@ -80,7 +71,7 @@ export default function Campaigns() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card><CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10"><Send className="h-4 w-4 text-primary" /></div>
+            <div className="p-2 rounded-lg bg-[--tint-primary]"><Send className="h-4 w-4 text-primary" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Campanhas enviadas</p>
               <p className="text-xl font-bold">{stats.totalCampaigns}</p>
@@ -89,7 +80,7 @@ export default function Campaigns() {
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10"><Users className="h-4 w-4 text-blue-400" /></div>
+            <div className="p-2 rounded-lg bg-[--tint-info]"><Users className="h-4 w-4 text-info" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Contatos alcançados</p>
               <p className="text-xl font-bold">{stats.totalReached}</p>
@@ -98,7 +89,7 @@ export default function Campaigns() {
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10"><BarChart2 className="h-4 w-4 text-green-400" /></div>
+            <div className="p-2 rounded-lg bg-[--tint-success]"><BarChart2 className="h-4 w-4 text-success" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Taxa de abertura</p>
               <p className="text-xl font-bold">{stats.avgOpenRate}%</p>
@@ -107,7 +98,7 @@ export default function Campaigns() {
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-orange-500/10"><MousePointerClick className="h-4 w-4 text-orange-400" /></div>
+            <div className="p-2 rounded-lg bg-[--tint-warning]"><MousePointerClick className="h-4 w-4 text-warning" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Taxa de clique</p>
               <p className="text-xl font-bold">{stats.avgClickRate}%</p>
@@ -147,7 +138,7 @@ export default function Campaigns() {
             </TableHeader>
             <TableBody>
               {campaigns.map(c => {
-                const sc = statusConfig[c.status] || statusConfig.draft;
+                const sc = STATUS_DE_CAMPANHA[c.status] || STATUS_DE_CAMPANHA.draft;
                 const openRate = c.channel === 'email' && c.stats.sent > 0
                   ? Math.round((c.stats.opened / c.stats.sent) * 1000) / 10
                   : null;
@@ -162,7 +153,7 @@ export default function Campaigns() {
                       {c.channel === 'email' ? (
                         <Badge variant="outline" className="gap-1"><Mail className="h-3 w-3" /> Email</Badge>
                       ) : (
-                        <Badge variant="outline" className="gap-1 border-green-500/30 text-green-400"><MessageCircle className="h-3 w-3" /> WhatsApp</Badge>
+                        <Badge variant="outline" className="gap-1 bg-[--tint-success] border-success/30 text-[--on-tint-success]"><MessageCircle className="h-3 w-3" /> WhatsApp</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.segment_name}</TableCell>

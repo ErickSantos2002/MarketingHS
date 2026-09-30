@@ -15,9 +15,8 @@ export default function Templates() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Templates de email</h1>
-        <Button onClick={() => navigate('/templates/new')} className="bg-primary hover:bg-primary/90">
+      <div className="flex items-center justify-end">
+        <Button onClick={() => navigate('/templates/new')}>
           <Plus className="h-4 w-4 mr-2" />
           Novo template
         </Button>
@@ -43,7 +42,7 @@ export default function Templates() {
               className="overflow-hidden cursor-pointer hover:border-primary/40 transition-colors"
               onClick={() => navigate(`/templates/${t.id}/edit`)}
             >
-              <div className="h-48 bg-white overflow-hidden border-b relative">
+              <div className="h-48 bg-[--color-white] overflow-hidden border-b relative">
                 {t.html ? (
                   <iframe
                     srcDoc={t.html}
