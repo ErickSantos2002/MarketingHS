@@ -2,47 +2,37 @@
 
 > ## 🌅 Comece por aqui — 30/09/2026
 >
-> **Onde tudo está:** tudo na **`main`** (`0320584`, com push) — em 30/09 o
-> Erick pediu o merge: a `visual-fase-2-g3` entrou na `visual-fase-1`, e a
-> `visual-fase-1` entrou na `main` (avanço direto); as duas estão no GitHub.
-> A `main` agora carrega a Fase 1, a preparação da Fase 2, o G1, o G2 e o
-> **G3 (Campanhas e Templates)**; o G4 nasce numa branch a partir dela. G1 e G2 têm revisão por
-> tarefa e revisão final; o G3 **também tem revisão final** (30/09), com uma
-> onda de conserto de 3 pontos de apresentação (ver o bloco do G3).
-> **Push e merge na `main` são decisão do Erick.**
+> **Onde tudo está:** a `main` (`20574d6`, com push) tem a Fase 1, a preparação
+> da Fase 2, o G1, o G2 e o G3. O **G4 (Automações, Jornadas e Segmentos)** está
+> na branch **`visual-fase-2-g4`**, criada a partir da `main`, **sem merge e sem
+> push** — os dois são decisão do Erick. O G4 tem **revisão por tarefa feita
+> (as cinco, todas limpas) e a revisão final da branch ainda PENDENTE**: ela
+> ainda vai triar os "resíduos conhecidos" do bloco do G4 abaixo.
 >
-> **O que fazer a seguir:** escrever o plano do **G4 — Automações, Jornadas e
-> Segmentos** (`components/admin/automations/`, **45** no guarda;
-> `components/admin/segments/`, **10**) no molde de
-> `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g3-campanhas.md`,
-> numa branch nova a partir da `main`. Execução como nos três
-> grupos anteriores: `superpowers:subagent-driven-development`, um subagente e
-> uma revisão por tarefa, revisão final da branch no modelo mais capaz.
+> **O que fazer a seguir:** fazer a revisão final do G4 (no modelo mais capaz)
+> e, depois dela, escrever o plano do **G5 — Páginas e Teste A/B**
+> (`components/admin/pages/`, `pages/admin/` menos o preview, e `Experiments*`),
+> no molde de `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g4-automacoes.md`.
+> Execução como nos grupos anteriores: `superpowers:subagent-driven-development`,
+> um subagente e uma revisão por tarefa.
 >
-> **Placar do guarda (30/09, fim do dia) — 247:** `settings` 122 ·
-> `pages/admin` 44 · `automations` 45 · `admin/pages` 26 · `segments` 10.
-> Zerados: `campaigns`, `ui`, `dashboard`, `contacts`, raiz de `admin`,
-> `hooks`, `lib`. (338 no começo do G3; 336 depois da Tarefa 1.)
+> **Placar do guarda (30/09, fim do G4) — 170:** `settings` 122 ·
+> `admin/pages` 26 · `pages/admin` 22. Zerados: `automations` (era 45),
+> `segments` (era 10), `campaigns`, `ui`, `dashboard`, `contacts`, raiz de
+> `admin`, `hooks`, `lib`. (247 no começo do G4.) Em `pages/admin` sobram
+> `Automations.tsx`, `JourneyBuilder.tsx` e `Segments.tsx` em **0**; os 22
+> restantes são das telas do G5.
 >
-> **Levar para o G4:**
-> - as regras aprendidas no G1/G2/G3, que o plano precisa repetir: tradução
->   por **significado**, nunca pelo matiz (exceto categoria sem significado,
->   como canal e tipo, em que se traduz pelo matiz e o relatório lista quem
->   passou a dividir cor); **nunca `` `${cor}NN` ``** (use `color-mix`); cor
->   que vem do banco passa por `src/lib/corDeDado.ts`; chip clicável mantém
->   hover; moldura de e-mail é `bg-[--color-white]`; botão não ganha cor por
->   `className` quando o primitivo já tem a variante; o brief autoriza "o que
->   mais for preciso para zerar o guarda nos arquivos da tarefa";
-> - **regex do guarda:** `shadow-\[0_0_[1-9]` não pega desfoque fracionário
->   (`0.5rem`, `.5rem`); não ocorre hoje em `src/`, mas vale apertar se o G4
->   encontrar algum; a mesma regex também não pega `shadow-[0_0_var(--x)…]`
->   nem `theme(...)` (não ocorre hoje);
-> - `segments` tem 10 por causa dos brilhos do `SegmentFormModal.tsx`.
+> **Levar para o G5:** as regras dos grupos anteriores (tradução por
+> **significado**, nunca `` `${cor}NN` ``, `focus-visible`, chip clicável mantém
+> hover, botão não ganha cor por `className`, "Excluir" de confirmação com a
+> string inteira da variante `destructive`) mais as do G4: aviso âmbar de forma
+> única (tinta de atenção, texto `--on-tint`, ícone cheio); texto pequeno não
+> fica mais claro que o muted; nenhum `<h1>` duplicado da topbar.
 >
 > **Decisões que esperam o Erick** (detalhe nos blocos abaixo):
 > 1. ~~Push e merge da `visual-fase-1` na `main`.~~ **Feito em 30/09.**
-> 2. ~~Trocar a senha da conta admin do Claude.~~ **Resolvida:** senha trocada
->    em 30/09, em `~/.config/marketinghs/claude-admin.env`. A conta
+> 2. ~~Trocar a senha da conta admin do Claude.~~ **Resolvida** em 30/09. A conta
 >    (`claude.dev@example.com`) continua a ser apagada no fim do trabalho.
 > 3. **Paleta de gráfico própria** no Design System oficial — hoje 6 cores,
 >    3 delas semânticas; dela dependem P2×P3 com a mesma cor e os períodos do
@@ -55,11 +45,19 @@
 > 6. As da Fase 1 (altura botão × campo) e as seis de 23/09 (fluxo em
 >    rascunho, recálculo disparando automação, peso 0 no A/B, conta Unlayer,
 >    colunas de funil, cor do botão das landings).
-> 7. **NOVA (dado, não visual): campanhas presas em "Enviando...".** As 2
->    únicas campanhas em produção, ambas "teste de webhook" de 02/09, estão em
->    status `sending` sem `sent_at`, com 1 envio cada e 0 pendentes — há 4
->    semanas em "Enviando...". Resolver é mexer em dado/motor de fila, fora do
->    visual.
+> 7. **Dado, não visual: campanhas presas em "Enviando...".** As 2 únicas
+>    campanhas em produção, ambas "teste de webhook" de 02/09, estão em status
+>    `sending` sem `sent_at`, com 1 envio cada e 0 pendentes — há 4 semanas em
+>    "Enviando...". Resolver é mexer em dado/motor de fila, fora do visual.
+>    Reconferido em 30/09, fim do G4: continuam 2 em `sending`.
+> 8. **NOVA — dois contrastes do DS oficial abaixo de 4,5:1.** (a)
+>    `--on-tint-warning` sobre `--tint-warning` no tema claro: 4,32:1 sobre o
+>    fundo da página (4,50 sobre branco), para texto de 12px — atinge o estado
+>    "Pausado", "Aguardando" e o aviso âmbar; (b) texto branco sobre `danger-500`
+>    (a variante destrutiva do botão do DS): ~3,76:1 nos dois temas. É o Erick
+>    quem decide pedir o ajuste ao Design System oficial; o código daqui não
+>    edita token. Os dois estão em `frontend/src/design-system/ORIGEM.md`,
+>    seção "Defeitos conhecidos do oficial".
 >
 > **Regra de processo (24/09):** subagente **não abre** o arquivo de
 > credencial — reaproveita a sessão já logada do navegador do Playwright; se
@@ -70,6 +68,115 @@
 > subir: `cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100`
 > (o worker de fila não sobe junto — seguro para conferência) e
 > `cd frontend && npx vite --port 8080`.
+
+> ## ✅ Visual — Fase 2, G4 (Automações, Jornadas e Segmentos), 30/09/2026
+>
+> **O G4 fechou as tarefas; a revisão final da branch está PENDENTE.** Branch
+> `visual-fase-2-g4` (a partir da `main`, base `20574d6`), **não mergeada e sem
+> push**. As seis tarefas do plano
+> `docs/superpowers/plans/2026-09-30-marketinghs-visual-fase-2-g4-automacoes.md`
+> saíram; as cinco de tela tiveram revisão por tarefa (todas limpas). O spec que
+> governa continua sendo
+> `docs/superpowers/specs/2026-09-22-marketinghs-visual-design-system-design.md`.
+>
+> | Commit | O que entrou |
+> |---|---|
+> | `e04a57c` | Plano do G4 |
+> | `7f7d6bd` | O guarda enxerga brilho fracionário e por variável (`shadow-[0_0_0.5rem…]`, `var(`, `theme(`); os 3 "Excluir" do G1/G2 (`ContactsBulkBar`, `ContactsTable`, `ChallengesAIInsights`) ganham a variante destrutiva inteira |
+> | `9a00ad9` | `/automations` e a aba Regras saem do guarda — sem `<h1>` duplicado, aviso âmbar de forma única, divisores por token |
+> | `48a3eb3` | Aba Fluxos (lista, gaveta de contatos, "Novo fluxo") sai do guarda — estado por significado, "Ativar" da confirmação é ação |
+> | `3e24e5a` | Construtor de fluxo e diálogo de nó saem do guarda — "Ativar" é ação, avisos legíveis |
+> | `d48f653` | Segmentos saem do guarda — sai a estética Aurora do modal, sem `<h1>` duplicado |
+>
+> **Placar do guarda: 247 → 170** (app inteiro; −77 = 17+12+10+10+9+9+6+4).
+> Por pasta: `src/components/admin/automations` **45 → 0**; `src/components/admin/segments`
+> **10 → 0**; `src/pages/admin` **44 → 22** (`Automations.tsx` 12, `JourneyBuilder.tsx`
+> 10 e `Segments.tsx` 0 a 0 — os 22 que sobram são de outras telas); `campaigns`,
+> `dashboard`, `contacts`, `ui`, `hooks` e `lib` continuam em **0** — sem
+> regressão do G1-G3. Sobra: `settings` 122, `admin/pages` 26, `pages/admin` 22
+> = **170**.
+>
+> **Portão (Tarefa 6), conferido em 30/09:** `tsc --noEmit -p
+> tsconfig.app.json` com os mesmos **4** erros pré-existentes
+> (`LeadScoringSettings` ×1, `useJourneys` ×3 — os três de `useJourneys` são
+> deste grupo e são lógica, ficam); `vite build` e `build:landing` passando; grep
+> de alfa concatenada (`\$\{[^}]+\}[0-9]{2}\b`) em `src/**/*.tsx` — **zero linhas**;
+> `AlertDialogAction` com `bg-destructive` — **zero linhas**; os **7 hashes** do
+> Design System conferindo com o `ORIGEM.md` — nenhum arquivo de tokens ou do
+> `styles.css` tocado (o `ORIGEM.md` só ganhou dois defeitos, ele não está entre
+> os hashes). Capacidade por capacidade (`git diff 20574d6 -- frontend`, 16
+> arquivos, 116 inserções / 124 deleções, incluindo `guarda-visual.mjs`): o filtro
+> de diff sobra em linhas que não mexem em lógica — mapas de classe de estado
+> (`STATE_META`, `STATUS_VARIANT`), fechamento do `<div>` novo do aviso âmbar,
+> remoção dos `<h1>` duplicados e dos `<div>` decorativos do modal de segmento
+> (as exceções nomeadas), comentários renomeados, e as linhas de `onClick`/
+> `disabled` em que só o `className` mudou (`handleActivateClick`, `setStatus`,
+> `setLogic`, `handleDelete`, `confirmDeleteApply`, `handleSubmit` intactos).
+> **Telas** (produção, sem clicar ação; screenshots no scratchpad): `/automations`
+> (Regras, Fluxos, gaveta de contatos, "Novo fluxo" e "Nova regra" abertos e
+> fechados por Cancelar), o construtor do fluxo em rascunho com o diálogo de dois
+> nós aberto e fechado por Cancelar, `/segments` (lista, gaveta, "Novo segmento"
+> com regra "Criado nos últimos 90 dias" e prévia de 2083 contatos), nos dois
+> temas a 1440 px; o construtor e `/automations` a 390 px **não rolam na
+> horizontal** (`scrollWidth` 390 = 390). Console: zero erro novo (os 2 a 5
+> avisos são os do React Router, já existentes). **Produção intocada** (consulta
+> só leitura): 1 fluxo `draft` (`d6bb2185…`, `updated_at` 22/09 16:30:38,
+> igual ao do começo), 1 segmento, 2 campanhas em `sending`, 0 regras.
+>
+> **O que cada Review Focus achou:** (1) "Ativar" — o do construtor e o da
+> confirmação saem do verde para `--action`, cheios e com texto branco nos dois
+> temas; olhado sem clicar no fluxo em rascunho, o diff não toca `onClick`,
+> `handleActivateClick` nem a condição de `status`; a confirmação real só por
+> elemento sintético (exige clicar "Ativar"); (2) estado de fluxo e de contato —
+> na lista o real é só "Rascunho"; a gaveta tem só "Concluído" real; Ativo,
+> Pausado, Aguardando e Falhou conferidos **só por elemento sintético**, nos dois
+> temas, distinguíveis por matiz; (3) aviso âmbar — ao vivo apareceu o do card de
+> `/automations` e o "Pode entrar de novo" do "Novo fluxo"; os demais (regra só
+> dispara na primeira mudança, "não ligado", os do diálogo de nó) **só por
+> sintético**, porque o fluxo real não tem nó de e-mail/condição e "Mover etapa"
+> está desabilitado; o contraste do claro é o defeito novo do DS (decisão 8 do
+> "Comece por aqui"); (4) modal de segmento — o número da prévia é texto na cor
+> primária, visível (`color(srgb 0.10 0.44 0.66)` no claro, `0.28 0.65 0.88` no
+> escuro, 36px), e as iniciais dos contatos leem nos dois temas — conferido **ao
+> vivo**; (5) "Excluir" — os seis com a string inteira da variante; conferido
+> por sintético com a string final e pela regra `:hover` no stylesheet (o
+> `AlertDialog` real exige clicar ação), e por grep (nenhum `AlertDialogAction`
+> com `bg-destructive`).
+>
+> **Defeitos novos do Design System oficial** (registrados no `ORIGEM.md`, seção
+> "Defeitos conhecidos do oficial"; pergunta 8 do "Comece por aqui"):
+> `--on-tint-warning` sobre `--tint-warning` no claro (4,32:1 sobre a página, 4,50
+> sobre branco) e branco sobre `danger-500` (~3,76:1 nos dois temas).
+>
+> **Resíduos conhecidos** (minors adiados; a revisão final ainda vai triá-los):
+> - `ContactsBulkBar.tsx:240` — `<Button variant="ghost">` "Apagar" com
+>   `bg-destructive`/`hover:bg-destructive/90` (não é `AlertDialogAction`; do G1/G2);
+> - aviso da prévia em `Automations.tsx` (~254) com `items-start`/`p-3` fora da
+>   forma única, e a caixa nova (~392) sem `items-start` (o ícone centraliza em
+>   texto longo) — padronizar o alinhamento;
+> - `JourneysTab.tsx` (~112) — "N com erro" em `text-destructive`, texto pequeno
+>   fora do vocabulário `--on-tint-danger`;
+> - `SegmentFormModal.tsx:731` — `text-muted-foreground/50` no ícone `Users` do
+>   estado vazio (ícone, não texto; o grep do escopo casa); sobras neutras
+>   `bg-background/40`, `/30` e `border-border/70` aceitas.
+>
+> ### Decisões tomadas nesta fase, reversíveis
+>
+> 1. **"Ativar" fluxo é o botão de ação padrão** (`--action`), como "Enviar
+>    campanha" no G3; "Ativar"/"Pausar" da linha da lista mantêm sucesso/atenção
+>    no texto.
+> 2. **Estado do fluxo:** Ativo = sucesso, Pausado = atenção, Rascunho/Arquivado
+>    neutros (Arquivado riscado). **Estado do contato no fluxo:** Ativo = info,
+>    Aguardando = atenção, Concluído = sucesso (e Falhou = perigo).
+> 3. **O aviso âmbar tem uma forma única** (tinta de atenção, texto `--on-tint`,
+>    ícone cheio), sem `dark:`.
+> 4. **O modal de segmento perdeu a estética "Aurora"** (brilhos, gradiente,
+>    `backdrop-blur`); o número da prévia virou texto na cor primária.
+> 5. **Texto pequeno deixou de ser mais claro que o muted** (`/60`, `/70` saem).
+> 6. **Fim do `<h1>` duplicado** em `/automations` e `/segments`; o do construtor
+>    fica (é o nome do fluxo).
+> 7. **Os três "Excluir" azuis do G1/G2 e os três do G4** ganharam a variante
+>    destrutiva inteira; não sobra `AlertDialogAction` com `bg-destructive`.
 
 > ## ✅ Visual — Fase 2, G3 (Campanhas e Templates), 30/09/2026
 >
