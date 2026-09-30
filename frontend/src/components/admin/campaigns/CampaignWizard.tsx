@@ -376,7 +376,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                   disabled={isReadOnly}
                   className={cn(
                     'flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors disabled:cursor-not-allowed',
-                    channel === 'email' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                    channel === 'email' ? 'border-primary bg-[--tint-primary] text-[--on-tint-primary]' : 'border-border text-muted-foreground',
                     !isReadOnly && channel !== 'email' && 'hover:border-muted-foreground/50',
                     isReadOnly && channel !== 'email' && 'opacity-50'
                   )}
@@ -388,7 +388,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                   disabled={isReadOnly}
                   className={cn(
                     'flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors disabled:cursor-not-allowed',
-                    channel === 'whatsapp' ? 'border-green-500 bg-green-500/10 text-green-400' : 'border-border text-muted-foreground',
+                    channel === 'whatsapp' ? 'border-success bg-[--tint-success] text-[--on-tint-success]' : 'border-border text-muted-foreground',
                     !isReadOnly && channel !== 'whatsapp' && 'hover:border-muted-foreground/50',
                     isReadOnly && channel !== 'whatsapp' && 'opacity-50'
                   )}
@@ -471,7 +471,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                   disabled={isReadOnly}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm disabled:cursor-not-allowed',
-                    scheduleType === 'now' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                    scheduleType === 'now' ? 'border-primary bg-[--tint-primary] text-[--on-tint-primary]' : 'border-border text-muted-foreground',
                     isReadOnly && scheduleType !== 'now' && 'opacity-50'
                   )}
                 >
@@ -482,7 +482,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                   disabled={isReadOnly}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm disabled:cursor-not-allowed',
-                    scheduleType === 'later' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground',
+                    scheduleType === 'later' ? 'border-primary bg-[--tint-primary] text-[--on-tint-primary]' : 'border-border text-muted-foreground',
                     isReadOnly && scheduleType !== 'later' && 'opacity-50'
                   )}
                 >
@@ -636,20 +636,20 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                     readOnly={isReadOnly}
                   />
                   {!isReadOnly && (
-                    <div className="mt-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-300 flex gap-2">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="mt-3 p-3 rounded-lg bg-[--tint-warning] border border-warning/30 text-sm text-[--on-tint-warning] flex gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warning" />
                       <span>Envie apenas para contatos que optaram por receber mensagens via WhatsApp. Mensagens não solicitadas podem resultar no bloqueio do número.</span>
                     </div>
                   )}
                 </div>
                 <div>
                   <Label>Preview</Label>
-                  <div className="mt-1.5 rounded-xl p-4" style={{ backgroundColor: '#075E54' }}>
-                    <div className="bg-white rounded-lg p-3 max-w-[80%] ml-auto relative">
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{previewWaText(waBody) || 'Mensagem...'}</p>
+                  <div className="mt-1.5 rounded-xl p-4 bg-[--color-success-700]">
+                    <div className="bg-[--color-white] rounded-lg p-3 max-w-[80%] ml-auto relative">
+                      <p className="text-sm text-[--color-slate-900] whitespace-pre-wrap">{previewWaText(waBody) || 'Mensagem...'}</p>
                       <div className="flex items-center justify-end gap-1 mt-1">
-                        <span className="text-[10px] text-gray-400">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <svg className="h-3 w-3 text-blue-500" viewBox="0 0 16 15" fill="currentColor">
+                        <span className="text-xs text-[--color-slate-500]">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <svg className="h-3 w-3 text-info" viewBox="0 0 16 15" fill="currentColor">
                           <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88 5.8 6.683a.365.365 0 0 0-.526-.033l-.423.39a.364.364 0 0 0-.034.526l3.533 3.886a.365.365 0 0 0 .543-.006l6.082-7.603a.364.364 0 0 0-.063-.51z" />
                           <path d="M12.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L5.666 9.88 2.8 6.683a.365.365 0 0 0-.526-.033l-.423.39a.364.364 0 0 0-.034.526l3.533 3.886a.365.365 0 0 0 .543-.006l6.082-7.603a.364.364 0 0 0-.063-.51z" />
                         </svg>
@@ -715,7 +715,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                     </Button>
                   )}
                 </div>
-                <div className="rounded-lg border bg-white overflow-hidden">
+                <div className="rounded-lg border bg-[--color-white] overflow-hidden">
                   <iframe
                     srcDoc={emailHtml}
                     title="Email Preview"
@@ -758,7 +758,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
             {!isReadOnly && (
               <Button
                 size="lg"
-                className="w-full bg-green-600 hover:bg-green-700 text-white"
+                className="w-full"
                 onClick={() => setConfirmOpen(true)}
                 disabled={isScheduled && !scheduledAt}
               >
@@ -829,7 +829,6 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
               <AlertDialogAction
                 onClick={(e) => { e.preventDefault(); handleSend(); }}
                 disabled={sending}
-                className="bg-green-600"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : (isScheduled ? <Clock className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />)}
                 {sending

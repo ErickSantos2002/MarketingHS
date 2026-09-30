@@ -53,7 +53,7 @@ export function EmailTemplateFrame({
 
   return (
     <div
-      className="w-full h-full bg-white rounded-lg border overflow-hidden shadow-sm transition-[max-width] duration-200"
+      className="w-full h-full bg-[--color-white] rounded-lg border overflow-hidden transition-[max-width] duration-200"
       style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
     >
       {/* Altura 100% do container: o proprio iframe rola por dentro, sem
