@@ -45,9 +45,11 @@ const NUMERICA = /\b(?:hsla?|rgba?)\(\s*\d/g;
 // `backdrop-blur-[4px]` (fundo de modal, permitido) não casa: exige
 // tamanho nomeado e não aceita o prefixo `backdrop-`.
 // `shadow-[0_0_0_1px_…]` (anel de 1px, usado como borda no sidebar) não
-// casa: brilho tem desfoque ≥ 1 no terceiro valor; anel tem 0.
+// casa: brilho tem desfoque > 0 no terceiro valor — inteiro (`12px`),
+// fracionário (`0.5rem`, `.5rem`) ou vindo de variável/tema (`var(--x)`,
+// `theme(…)`); anel tem `0`.
 const EFEITO =
-  /\bbg-gradient-|drop-shadow\(0 0|(?<!backdrop-)\bblur-(?:sm|md|lg|xl|2xl|3xl)\b|shadow-\[0_0_[1-9]|(?<!backdrop-)\bblur-\[|drop-shadow-\[|(?:linear|radial)-gradient/g;
+  /\bbg-gradient-|drop-shadow\(0 0|(?<!backdrop-)\bblur-(?:sm|md|lg|xl|2xl|3xl)\b|shadow-\[0_0_(?:[1-9]|0?\.\d*[1-9]|var\(|theme\()|(?<!backdrop-)\bblur-\[|drop-shadow-\[|(?:linear|radial)-gradient/g;
 
 function* arquivos(dir) {
   for (const nome of readdirSync(dir)) {

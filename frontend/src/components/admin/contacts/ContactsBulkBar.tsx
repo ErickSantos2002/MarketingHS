@@ -282,7 +282,7 @@ export function ContactsBulkBar({ selectedLeads, allTags, onClear, onComplete, s
             <AlertDialogCancel disabled={bulkDeleting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               disabled={bulkDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90"
               onClick={async (e) => {
                 e.preventDefault();
                 setBulkDeleting(true);

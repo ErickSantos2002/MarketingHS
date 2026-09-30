@@ -446,7 +446,7 @@ export function ContactsTable({
               <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 disabled={deleting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90"
                 onClick={async (e) => {
                   e.preventDefault();
                   if (!deleteTarget) return;
