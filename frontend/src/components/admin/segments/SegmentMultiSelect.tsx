@@ -77,7 +77,7 @@ export function SegmentMultiSelect({
             }}
             className={cn(
               'flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm',
-              'ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+              'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-muted-foreground/50',
             )}
           >
@@ -90,7 +90,7 @@ export function SegmentMultiSelect({
                   <Badge key={id} variant="secondary" className="gap-1.5 pr-1 font-normal">
                     <span className="truncate max-w-[200px]">{nameOf(id)}</span>
                     {count && (
-                      <span className="text-muted-foreground tabular-nums text-[11px]">{count}</span>
+                      <span className="text-muted-foreground tabular-nums text-xs">{count}</span>
                     )}
                     {!disabled && (
                       <button

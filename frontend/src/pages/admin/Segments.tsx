@@ -40,8 +40,7 @@ export default function Segments() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Segmentos</h1>
+      <div className="flex items-center justify-end">
         <Button onClick={handleNew} className="gap-2">
           <Plus className="h-4 w-4" /> Novo segmento
         </Button>
@@ -72,7 +71,7 @@ export default function Segments() {
                       <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{seg.description}</p>
                     )}
                   </div>
-                  <Badge variant={seg.type === 'dynamic' ? 'default' : 'secondary'} className="shrink-0 text-[10px]">
+                  <Badge variant={seg.type === 'dynamic' ? 'default' : 'secondary'} className="shrink-0 text-xs">
                     {seg.type === 'dynamic' ? 'Dinâmico' : 'Estático'}
                   </Badge>
                 </div>

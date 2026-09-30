@@ -65,7 +65,7 @@ export function SegmentContactsDrawer({ segment, onClose }: Props) {
         <SheetHeader className="p-6 pb-4 border-b">
           <div className="flex items-center gap-2">
             <SheetTitle className="flex-1">{segment?.name}</SheetTitle>
-            <Badge variant={segment?.type === 'dynamic' ? 'default' : 'secondary'} className="text-[10px]">
+            <Badge variant={segment?.type === 'dynamic' ? 'default' : 'secondary'} className="text-xs">
               {segment?.type === 'dynamic' ? 'Dinâmico' : 'Estático'}
             </Badge>
             <span className="text-sm text-muted-foreground">{filtered.length} contatos</span>
@@ -105,7 +105,7 @@ export function SegmentContactsDrawer({ segment, onClose }: Props) {
                     <TableCell className="font-medium">{c.nome || c.email || '—'}</TableCell>
                     <TableCell className="text-sm">{c.cargo || '—'}</TableCell>
                     <TableCell>
-                      {c.etiqueta && <Badge variant="secondary" className="text-[10px]">{c.etiqueta}</Badge>}
+                      {c.etiqueta && <Badge variant="secondary" className="text-xs">{c.etiqueta}</Badge>}
                     </TableCell>
                     <TableCell><StatusBadge status={c.status || 'Lead'} /></TableCell>
                   </TableRow>

@@ -498,14 +498,10 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1140px] max-h-[88vh] overflow-hidden p-0 border-border bg-card backdrop-blur-2xl shadow-[0_0_80px_-20px_color-mix(in_srgb,var(--primary)_15%,transparent)]">
-        {/* Aurora glow effects */}
-        <div className="pointer-events-none absolute -top-40 -right-40 w-80 h-80 rounded-full bg-primary/5 blur-[100px]" />
-        <div className="pointer-events-none absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-info/5 blur-[100px]" />
-
+      <DialogContent className="max-w-[1140px] max-h-[88vh] overflow-hidden p-0">
         <DialogHeader className="relative p-6 pb-4">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-info/20 border border-border/70 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-[--tint-primary] border border-primary/30 flex items-center justify-center">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <div>
@@ -540,13 +536,13 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
               />
             </div>
 
-            {/* Type toggle — glass pills */}
-            <div className="flex gap-1 p-1 bg-background/60 border border-border/70 rounded-lg w-fit">
+            {/* Seletor de tipo */}
+            <div className="flex gap-1 p-1 bg-surface-elevated border border-border/70 rounded-lg w-fit">
               <button
                 onClick={() => setType('dynamic')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                   type === 'dynamic'
-                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                    ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -556,7 +552,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                 onClick={() => setType('static')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                   type === 'static'
-                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                    ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -569,10 +565,10 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                 {/* Operador — só faz sentido a partir da 2ª regra */}
                 {rules.length >= 2 && (
                   <div className="flex items-center gap-2">
-                    <div className="flex gap-0.5 p-0.5 bg-background/60 border border-border/70 rounded-md">
+                    <div className="flex gap-0.5 p-0.5 bg-surface-elevated border border-border/70 rounded-md">
                       <button
                         onClick={() => setLogicOperator('and')}
-                        className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-all ${
+                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
                           logicOperator === 'and'
                             ? 'bg-primary text-primary-foreground'
                             : 'text-muted-foreground hover:text-foreground'
@@ -582,7 +578,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                       </button>
                       <button
                         onClick={() => setLogicOperator('or')}
-                        className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-all ${
+                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
                           logicOperator === 'or'
                             ? 'bg-primary text-primary-foreground'
                             : 'text-muted-foreground hover:text-foreground'
@@ -591,7 +587,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                         OU
                       </button>
                     </div>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {logicOperator === 'and'
                         ? 'o contato precisa atender a todas as regras'
                         : 'basta atender a qualquer uma das regras'}
@@ -663,7 +659,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                 </button>
 
                 {rules.length === 0 && (
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
                     Um segmento dinâmico se atualiza sozinho: quem passar a atender às
                     regras entra, quem deixar de atender sai. Combine atributos do
                     contato (etiqueta, cargo, origem) com eventos de email (abriu ou
@@ -683,7 +679,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                   />
                 </div>
 
-                {searching && <p className="text-xs text-muted-foreground animate-pulse">Buscando...</p>}
+                {searching && <p className="text-xs text-muted-foreground">Buscando...</p>}
 
                 {searchResults.length > 0 && (
                   <div className="border border-border/70 rounded-lg max-h-40 overflow-y-auto divide-y divide-border/70 bg-background/30">
@@ -693,7 +689,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                         <label key={lead.id} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 cursor-pointer text-sm transition-colors">
                           <Checkbox checked={isSelected} onCheckedChange={() => toggleLead(lead)} />
                           <span className="truncate">{lead.nome || lead.email || 'Sem nome'}</span>
-                          {lead.etiqueta && <Badge variant="secondary" className="text-[10px] shrink-0">{lead.etiqueta}</Badge>}
+                          {lead.etiqueta && <Badge variant="secondary" className="text-xs shrink-0">{lead.etiqueta}</Badge>}
                         </label>
                       );
                     })}
@@ -719,12 +715,10 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
             )}
           </div>
 
-          {/* Right column — Preview with aurora glow */}
+          {/* Coluna da direita — prévia */}
           <div className="relative p-6 overflow-hidden">
-            {/* Subtle radial glow behind count */}
-            <div className="pointer-events-none absolute top-10 right-10 w-40 h-40 rounded-full bg-primary/5 blur-[60px]" />
 
-            <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-4 font-semibold">Preview</h4>
+            <h4 className="text-xs uppercase tracking-widest text-muted-foreground mb-4 font-semibold">Preview</h4>
 
             {type === 'dynamic' ? (
               previewing ? (
@@ -742,7 +736,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                 <div className="space-y-4">
                   {/* Big count */}
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
+                    <span className="text-4xl font-bold text-primary">
                       {previewCount}
                     </span>
                     <span className="text-xs text-muted-foreground">contatos correspondem</span>
@@ -753,12 +747,12 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                     <div className="space-y-1 border-t border-border/70 pt-3">
                       {previewLeads.map(l => (
                         <div key={l.id} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded-md hover:bg-muted/20 transition-colors">
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-[--tint-primary] flex items-center justify-center text-xs font-bold text-[--on-tint-primary] shrink-0">
                             {(l.nome || '?')[0]?.toUpperCase()}
                           </div>
                           <span className="truncate flex-1">{l.nome || 'Sem nome'}</span>
                           {l.etiqueta && (
-                            <Badge variant="secondary" className="text-[9px] bg-primary/10 border-primary/20">{l.etiqueta}</Badge>
+                            <Badge variant="secondary" className="text-xs">{l.etiqueta}</Badge>
                           )}
                         </div>
                       ))}
@@ -775,7 +769,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
             ) : (
               <div className="space-y-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
+                  <span className="text-4xl font-bold text-primary">
                     {selectedLeads.length}
                   </span>
                   <span className="text-xs text-muted-foreground">contatos selecionados</span>
@@ -784,7 +778,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                   <div className="space-y-1 border-t border-border/70 pt-3">
                     {selectedLeads.slice(0, 5).map(l => (
                       <div key={l.id} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded-md">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/20 to-info/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-[--tint-primary] flex items-center justify-center text-xs font-bold text-[--on-tint-primary] shrink-0">
                           {(l.nome || l.email || '?')[0]?.toUpperCase()}
                         </div>
                         <span className="truncate">{l.nome || l.email || 'Lead'}</span>
@@ -806,7 +800,6 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
           <Button
             onClick={handleSave}
             disabled={!name.trim() || saving}
-            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/10"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Salvar segmento
