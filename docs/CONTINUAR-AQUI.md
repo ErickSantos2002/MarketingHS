@@ -21,8 +21,23 @@
 > frente, login com a conta admin do Claude sem imprimir credencial, PNG por
 > tema e largura + `resumo.json`.
 >
-> **Em andamento:** a frente `backend` (campanhas presas em "Enviando...",
-> docstring do `landing.py`, `service_role` → `authenticated`).
+> **Frente `backend` também na `main` (`c019839`).** As 2 campanhas presas em
+> "Enviando..." eram resíduo de pytest morto em 02/09, não do worker; mas o
+> worker tinha um buraco real (campanha drenada nunca fechava se ele morresse
+> antes do finalize) — consertado com `fila.fechar_campanhas_drenadas`.
+> 7 routers em `authenticated` + `admin_atual` (templates, chaves, automações,
+> segmentos, campanhas, jornadas, leitura de contatos), 25 testes que provam
+> que nada zerou; prévia de automação com data deixou de dar 500; vazamento de
+> pool que travava a suíte consertado em `app/database.py`. Suíte: 360 → 387.
+> ⚠️ **Nunca duas rodadas de pytest ao mesmo tempo** (fixtures com e-mail
+> fixo se derrubam). A suíte leva ~28 min.
+>
+> **O Erick roda no Konsole** (comando no cabeçalho de cada arquivo):
+> 1. `backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql` — apaga
+>    as 2 campanhas de teste. **Antes** de o worker com este código subir em
+>    produção; senão a varredura as fecha como enviadas.
+> 2. Se aprovar a pergunta 20: `backend/migrations/021_leads_escrita_admin.sql`,
+>    duas vezes. Depois disso, uma frente converte `escrita_contatos.py` e `contatos.py`.
 
 > ## 🌅 Comece por aqui — 30/09/2026 (fim do G5)
 >

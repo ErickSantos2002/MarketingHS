@@ -51,3 +51,17 @@ delas.
     sozinha é âmbar — o acesso mais amplo parece o mais "seguro". **Mantido**
     como veio da origem (pelo matiz). Alternativa: escala própria para
     permissão (ex.: neutro para Leitura, âmbar para qualquer escrita).
+
+### Backend (01/10)
+
+20. **Migration 021** (política de INSERT/UPDATE em `leads` para o admin) —
+    pronta, não aplicada. Sem ela, `escrita_contatos.py` e `contatos.py` não
+    vão para `authenticated` (o UPDATE afetaria 0 linhas, calado).
+    **Assumido:** os dois ficam em `service_role` + `admin_atual` até o Erick
+    aplicar. Se aprovar, o Erick roda o arquivo duas vezes no Konsole.
+21. **`usuario_atual` → `admin_atual`** nas 7 rotas convertidas. Hoje os 2
+    usuários são admin; um futuro não-admin leva 403 em vez de tela vazia.
+    **Assumido:** `admin_atual` (regra do `CLAUDE.md`).
+22. **Fixture `envio` deixa campanha para trás quando o pytest morre.**
+    **Assumido:** só acrescentar a campanha à pré-limpeza depois que o script
+    de limpeza das 2 de produção rodar.
