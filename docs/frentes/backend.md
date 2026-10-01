@@ -108,6 +108,48 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   peso 0 em `frontend/src/pages/admin/Experiments.tsx:116` — agora isso quer
   dizer "sem tráfego até alguém pôr peso". Antes recebia como peso 1.
 
+- [x] **#23+24 Fusão leva todo o histórico.** `fundir_contatos` (caso 1)
+  virou `fundir_leads(conn, manter, descartar)` e `_TABELAS_FILHAS` cresceu de
+  6 para 15: + `journey_runs`, `journey_step_log`, `crm_handoffs`,
+  `email_events`, `email_suppressions`, `email_send_queue` (o link de
+  descadastro sai do `lead_id` dela), `email_send_dead`, `ab_events`,
+  `ab_identities`. **Regra das colisões — o mantido ganha** (`_preparar_unicos`):
+  - `uniq_journey_runs_open`: run ABERTO do descartado num fluxo em que o
+    mantido também está aberto é **encerrado** (`exited`, contexto
+    `encerrado_por: fusao`, lease limpo) e depois reatribuído. Nada se apaga;
+    o contato não anda duas vezes no mesmo fluxo nem recebe o e-mail do mesmo
+    nó duas vezes; o run do mantido segue intacto.
+  - `uniq_crm_handoffs_pendente`: o PENDENTE do descartado sai quando o
+    mantido já tem pendente da mesma ação (é o mesmo pedido; o gatilho faz o
+    mesmo com ON CONFLICT DO NOTHING). Entregue/falhou vão inteiros.
+  - **Defeito achado e consertado:** `uniq_campaign_sends_email_campaign_lead`
+    (intocável) derrubava a fusão com **500** quando os dois tinham recebido a
+    mesma campanha — o caso comum de cadastro duplicado. Agora o envio do
+    descartado nessa campanha não é movido e fica com `lead_id` NULL pelo
+    ON DELETE SET NULL; o resto vai.
+  - Fora, de propósito: `journey_events` (fila de trânsito, consumida a cada
+    tick, sem GRANT a `authenticated`).
+  Testes: `tests/test_fusao_historico.py` (2, em transação revertida, chamando
+  o mesmo `fundir_leads`). Com a lista antiga de 6 tabelas o teste fica
+  vermelho (conferido). Resposta da rota: `movidos` continua; ganhou
+  `resolvidos` (o frontend só lê `caso`).
+
+  **Migration 022 — `backend/migrations/022_fusao_de_contatos_admin.sql`,
+  NÃO aplicada** (a coordenadora mostra ao Erick). Não é só
+  `lead_conversions`: com o histórico inteiro, a fusão sob `authenticated`
+  precisa de política de UPDATE admin em `lead_conversions`, `journey_runs`,
+  `journey_step_log`, `email_events` (RLS sem política de UPDATE = 0 linhas
+  calado) e, nas três tabelas de máquina sem GRANT nenhum a `authenticated`
+  (`crm_handoffs`, `email_send_queue`, `email_send_dead`), **RLS ligado +
+  política admin + GRANT** (SELECT/UPDATE; DELETE só em `crm_handoffs`). O RLS
+  vem antes do GRANT para não abrir a tabela a qualquer logado. Não afeta
+  `service_role` nem `leitura` (BYPASSRLS) nem os gatilhos (SECURITY DEFINER
+  de dono superusuário). Reaplicável.
+  **A conversão da fusão para `authenticated` NÃO foi feita** — espera a 022
+  aplicada. O sentinela `test_fusao_continua_service_role_enquanto_nao_houver_a_022`
+  quebra quando ela estiver: aí troca o papel na rota e roda
+  `test_fusao_historico.py` sob `authenticated`.
+
 **01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
 Testes: 396 passed + 1 failed antes (rodada 2) → **397 passed** depois (29 min 27 s, sozinha; o I5 verde). Fim: 0 usuários, 0 leads e 0 campanhas de teste no banco (leitura).
 **Pronto para merge** (a branch inteira; só `backend/tests/` muda).

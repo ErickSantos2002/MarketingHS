@@ -686,12 +686,13 @@ async def test_escrita_tags_em_lote_edicao_e_exclusao_afetam_o_lead(
     assert (await cliente.delete(f"/contatos/{b}", headers=h)).status_code == 404
 
 
-async def test_escrita_fusao_continua_service_role_porque_conversoes_nao_tem_update():
-    """A fusão reatribui `lead_conversions` e depois apaga o descartado (ON
-    DELETE CASCADE). Sem política de UPDATE nela, sob `authenticated` as
-    conversões sumiriam caladas — por isso `fundir_contatos` ficou em
-    `service_role`. Este teste quebra no dia em que a política existir: é o
-    aviso de que a fusão pode ser convertida."""
+async def test_fusao_continua_service_role_enquanto_nao_houver_a_022():
+    """A fusão reatribui todo o histórico e depois apaga o descartado. Sem as
+    políticas e GRANTs da migration 022, sob `authenticated` parte da
+    reatribuição afetaria 0 linhas calada (e o CASCADE levaria o resto) — por
+    isso `fundir_contatos` fica em `service_role`. Este teste quebra no dia
+    em que a 022 estiver aplicada: é o aviso de que a fusão pode (e deve) ir
+    para `authenticated`."""
     await db.init_db()
     n = await _contar("SELECT count(*) FROM pg_policies WHERE schemaname = 'public' "
                       "AND tablename = 'lead_conversions' AND cmd IN ('UPDATE', 'ALL')")

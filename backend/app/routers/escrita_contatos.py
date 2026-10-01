@@ -52,8 +52,25 @@ _CAMPOS_EDITAVEIS = ("nome", "email", "whatsapp", "empresa", "cargo",
                      "faturamento", "funcionarios", "desafios")
 
 # As tabelas que apontam para `leads` e precisam ser reatribuídas na fusão.
+#
+# ⚠️ Decisão 23+24 do Erick (01/10/2026): a fusão leva TODO o histórico. Até
+# então só as seis primeiras iam; as outras ficavam para trás e o DELETE do
+# descartado as levava pelo CASCADE (`journey_runs`, `crm_handoffs`) ou as
+# deixava com `lead_id` NULL (`email_events`, `email_suppressions`,
+# `journey_step_log`), ou apontando para um id que não existe mais (as sem FK:
+# `email_send_queue` — de onde sai o link de descadastro —, `email_send_dead`,
+# `ab_events`, `ab_identities`).
+#
+# Três delas têm índice único que envolve `lead_id` e pedem regra antes do
+# UPDATE — ver `_preparar_unicos`. Fora da lista, de propósito:
+# `journey_events` (fila de trânsito, consumida a cada tick; sem GRANT para
+# `authenticated`, ver a migration 022).
 _TABELAS_FILHAS = ("lead_tags", "segment_contacts", "campaign_sends",
-                   "lead_notes", "contact_events", "lead_conversions")
+                   "lead_notes", "contact_events", "lead_conversions",
+                   "journey_runs", "journey_step_log", "crm_handoffs",
+                   "email_events", "email_suppressions",
+                   "email_send_queue", "email_send_dead",
+                   "ab_events", "ab_identities")
 
 # Campos que o mantido herda do descartado QUANDO estiver vazio.
 #
@@ -275,7 +292,7 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
     aparece uma segunda tela.
 
       1. Mesma identidade, ou nenhum dos dois tem — funde os LEADS de verdade:
-         reatribui as seis tabelas filhas e apaga o descartado.
+         reatribui TODO o histórico (`_TABELAS_FILHAS`) e apaga o descartado.
       2. Identidades diferentes — não são o mesmo lead ainda; funde as
          IDENTIDADES pela RPC `merge_identities`, que é transacional e já
          existia.
@@ -290,11 +307,14 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
         raise HTTPException(http.HTTP_400_BAD_REQUEST, "Os dois contatos são o mesmo.")
 
     # ⚠️ Fica `service_role` (a rota autoriza sozinha, `admin_atual`). Única do
-    # router que NÃO foi para `authenticated` em 01/10: `lead_conversions` não
-    # tem política de UPDATE, então a reatribuição dela afetaria 0 linhas
-    # calada — e o DELETE do descartado logo abaixo levaria as conversões
-    # junto pelo ON DELETE CASCADE. Perda de dado reportada como sucesso.
-    # Converter exige antes uma política de UPDATE admin em `lead_conversions`.
+    # router que NÃO foi para `authenticated` em 01/10: sob `authenticated`,
+    # a reatribuição afetaria 0 linhas calada onde não há política de UPDATE
+    # (`lead_conversions`, `journey_runs`, `journey_step_log`,
+    # `email_events`) ou levaria "permission denied" onde não há GRANT
+    # (`crm_handoffs`, `email_send_queue`, `email_send_dead`) — e o DELETE do
+    # descartado levaria o que não foi movido pelo CASCADE. Perda de dado
+    # reportada como sucesso. Converter exige a migration 022 aplicada; o
+    # teste `test_fusao_*_022` quebra no dia em que ela estiver.
     async with sessao(role="service_role") as conn:
         manter = await conn.fetchrow(
             "SELECT id::text, dnia_id::text FROM leads WHERE id = $1::uuid", dados.manter)
@@ -324,48 +344,116 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
             return {"caso": "vinculo", "identidade": identidade}
 
         # --- Caso 1: mesma identidade ou nenhuma. Funde os leads.
-        await conn.execute(
-            """DELETE FROM lead_tags d WHERE d.lead_id = $2::uuid
-                 AND EXISTS (SELECT 1 FROM lead_tags m
-                              WHERE m.lead_id = $1::uuid AND m.tag_id = d.tag_id)""",
-            dados.manter, dados.descartar)
-        await conn.execute(
-            """DELETE FROM segment_contacts d WHERE d.lead_id = $2::uuid
-                 AND EXISTS (SELECT 1 FROM segment_contacts m
-                              WHERE m.lead_id = $1::uuid AND m.segment_id = d.segment_id)""",
-            dados.manter, dados.descartar)
+        resultado = await fundir_leads(conn, dados.manter, dados.descartar)
 
-        movidos = {}
-        for tabela in _TABELAS_FILHAS:
-            r = await conn.execute(
-                f"UPDATE {tabela} SET lead_id = $1::uuid WHERE lead_id = $2::uuid",
-                dados.manter, dados.descartar)
-            movidos[tabela] = int(r.rsplit(" ", 1)[-1])
+    return {"caso": "leads", "mantido": dados.manter, **resultado}
 
-        # ⚠️ A ORDEM AQUI IMPORTA, e a origem aprendeu isso na prática — o
-        # comentário dela documenta o defeito. `leads` tem `leads_email_unique`
-        # UNIQUE (email): copiar o e-mail do descartado para o mantido ENQUANTO
-        # o descartado ainda existe viola a constraint. Na tela antiga o erro
-        # não era checado, o preenchimento falhava em silêncio, e o e-mail era
-        # destruído junto com o descartado no delete seguinte.
-        #
-        # Apaga primeiro (liberando o e-mail), preenche depois. Seguro nesta
-        # ordem porque tudo que o CASCADE levaria junto já foi reatribuído.
-        #
-        # A cópia dos campos é feita numa variável ANTES do delete, porque
-        # depois dele a linha do descartado não existe mais para ser lida.
-        origem = await conn.fetchrow(
-            f"SELECT {', '.join(_CAMPOS_HERDAVEIS)} FROM leads WHERE id = $1::uuid",
-            dados.descartar)
-        await conn.execute("DELETE FROM leads WHERE id = $1::uuid", dados.descartar)
 
-        atribuicoes = ", ".join(
-            f"{c} = COALESCE({c}, ${i + 2})" for i, c in enumerate(_CAMPOS_HERDAVEIS))
-        await conn.execute(
-            f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
-            dados.manter, *[origem[c] for c in _CAMPOS_HERDAVEIS])
+async def _preparar_unicos(conn, manter: str, descartar: str) -> dict:
+    """O que impediria o UPDATE de `lead_id` de passar pelos índices únicos.
 
-    return {"caso": "leads", "mantido": dados.manter, "movidos": movidos}
+    Regra geral: **o mantido ganha** — é ele que fica, e o que ele já tem não
+    se mexe. Do descartado, o que colidiria é resolvido assim:
+
+    - `lead_tags`, `segment_contacts`: o vínculo repetido sai (é o mesmo
+      vínculo; como sempre foi).
+    - `journey_runs` (`uniq_journey_runs_open`: um run ABERTO por fluxo e
+      contato): o run aberto do descartado num fluxo em que o mantido também
+      está aberto é ENCERRADO (`exited`) e depois reatribuído — o histórico
+      fica, mas o contato não anda duas vezes no mesmo fluxo nem recebe o
+      e-mail do mesmo nó duas vezes. Encerrar é o mais seguro: não apaga
+      nada, e o run do mantido (que já está andando) segue intacto.
+    - `crm_handoffs` (`uniq_crm_handoffs_pendente`: um pedido PENDENTE por
+      contato e ação): o pendente do descartado sai quando o mantido já tem um
+      pendente da mesma ação — é o mesmo pedido duas vezes, e o gatilho de
+      automação já faz isso (ON CONFLICT DO NOTHING). Entregue ou falhou não
+      colide e vai inteiro.
+    - `campaign_sends` (`uniq_campaign_sends_email_campaign_lead`, intocável:
+      um e-mail por campanha e contato): o envio do descartado numa campanha
+      que o mantido também recebeu NÃO é movido — fica com `lead_id` NULL pelo
+      ON DELETE SET NULL, como ficava antes de existir a fusão. Até 01/10 essa
+      colisão derrubava a fusão inteira com 500 (dois cadastros da mesma
+      pessoa costumam receber a mesma campanha).
+    """
+    feito = {}
+    for tabela, chave in (("lead_tags", "tag_id"), ("segment_contacts", "segment_id")):
+        r = await conn.execute(
+            f"""DELETE FROM {tabela} d WHERE d.lead_id = $2::uuid
+                  AND EXISTS (SELECT 1 FROM {tabela} m
+                               WHERE m.lead_id = $1::uuid AND m.{chave} = d.{chave})""",
+            manter, descartar)
+        feito[f"{tabela}_repetidos"] = int(r.rsplit(" ", 1)[-1])
+
+    r = await conn.execute(
+        """UPDATE journey_runs d
+              SET state = 'exited', lock_token = NULL, locked_until = NULL,
+                  context = d.context || jsonb_build_object(
+                      'encerrado_por', 'fusao', 'fundido_em', $1::text),
+                  updated_at = now()
+            WHERE d.lead_id = $2::uuid AND d.state IN ('active', 'waiting')
+              AND EXISTS (SELECT 1 FROM journey_runs m
+                           WHERE m.lead_id = $1::uuid AND m.journey_id = d.journey_id
+                             AND m.state IN ('active', 'waiting'))""",
+        manter, descartar)
+    feito["runs_encerrados"] = int(r.rsplit(" ", 1)[-1])
+
+    r = await conn.execute(
+        """DELETE FROM crm_handoffs d
+            WHERE d.lead_id = $2::uuid AND d.status = 'pendente'
+              AND EXISTS (SELECT 1 FROM crm_handoffs m
+                           WHERE m.lead_id = $1::uuid AND m.acao = d.acao
+                             AND m.status = 'pendente')""",
+        manter, descartar)
+    feito["pedidos_repetidos"] = int(r.rsplit(" ", 1)[-1])
+    return feito
+
+
+# O predicado de `uniq_campaign_sends_email_campaign_lead`, do lado do
+# descartado: o envio que colidiria com um do mantido fica onde está.
+_ENVIO_COLIDE = """d.channel = 'email' AND d.campaign_id IS NOT NULL
+    AND EXISTS (SELECT 1 FROM campaign_sends m
+                 WHERE m.lead_id = $1::uuid AND m.campaign_id = d.campaign_id
+                   AND m.channel = 'email')"""
+
+
+async def fundir_leads(conn, manter: str, descartar: str) -> dict:
+    """Caso 1 da fusão, dentro da transação de quem chama: reatribui todo o
+    histórico do descartado ao mantido, apaga o descartado e preenche os
+    campos vazios do mantido com os dele. Separado da rota para o teste rodar
+    numa transação revertida."""
+    resolvidos = await _preparar_unicos(conn, manter, descartar)
+
+    movidos = {}
+    for tabela in _TABELAS_FILHAS:
+        filtro = f" AND NOT ({_ENVIO_COLIDE})" if tabela == "campaign_sends" else ""
+        r = await conn.execute(
+            f"UPDATE {tabela} d SET lead_id = $1::uuid WHERE d.lead_id = $2::uuid{filtro}",
+            manter, descartar)
+        movidos[tabela] = int(r.rsplit(" ", 1)[-1])
+
+    # ⚠️ A ORDEM AQUI IMPORTA, e a origem aprendeu isso na prática — o
+    # comentário dela documenta o defeito. `leads` tem `leads_email_unique`
+    # UNIQUE (email): copiar o e-mail do descartado para o mantido ENQUANTO
+    # o descartado ainda existe viola a constraint. Na tela antiga o erro
+    # não era checado, o preenchimento falhava em silêncio, e o e-mail era
+    # destruído junto com o descartado no delete seguinte.
+    #
+    # Apaga primeiro (liberando o e-mail), preenche depois. Seguro nesta
+    # ordem porque tudo que o CASCADE levaria junto já foi reatribuído.
+    #
+    # A cópia dos campos é feita numa variável ANTES do delete, porque
+    # depois dele a linha do descartado não existe mais para ser lida.
+    origem = await conn.fetchrow(
+        f"SELECT {', '.join(_CAMPOS_HERDAVEIS)} FROM leads WHERE id = $1::uuid",
+        descartar)
+    await conn.execute("DELETE FROM leads WHERE id = $1::uuid", descartar)
+
+    atribuicoes = ", ".join(
+        f"{c} = COALESCE({c}, ${i + 2})" for i, c in enumerate(_CAMPOS_HERDAVEIS))
+    await conn.execute(
+        f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
+        manter, *[origem[c] for c in _CAMPOS_HERDAVEIS])
+    return {"movidos": movidos, "resolvidos": resolvidos}
 
 
 @router.patch("/{lead_id}")
