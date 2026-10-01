@@ -109,3 +109,37 @@ async def devolver(conn, fila_id: int, erro: str, max_tentativas: int) -> str:
             WHERE id = $1""",
         fila_id, erro)
     return "reagendada"
+
+
+async def fechar_campanhas_drenadas(conn) -> list[str]:
+    """Fecha toda campanha em 'sending' que não tem mais envio pendente.
+
+    ⚠️ O `_tick` só chama o finalize para as campanhas do lote que ele mesmo
+    processou. Se o worker morre entre o commit do último envio e esse
+    finalize, a fila daquela campanha já está vazia e nenhuma passada futura
+    volta a olhá-la — ela fica em 'sending' para sempre, e o
+    `guard_campaign_delete` não deixa nem apagá-la. Esta varredura é a rede.
+
+    Segura contra o enfileirador: ele faz o claim para 'sending' e insere
+    TODAS as linhas 'pending' na mesma transação, então não existe instante
+    visível de 'sending' com a audiência ainda não inserida. E o próprio
+    finalize recusa campanha com pendente.
+
+    Devolve os ids das campanhas fechadas.
+    """
+    candidatas = await conn.fetch(
+        """SELECT c.id::text AS id
+             FROM campaigns c
+            WHERE c.status = 'sending'
+              AND NOT EXISTS (SELECT 1 FROM campaign_sends cs
+                               WHERE cs.campaign_id = c.id AND cs.status = 'pending')
+              AND NOT EXISTS (SELECT 1 FROM email_send_queue q
+                               WHERE q.campaign_id = c.id)""")
+    fechadas = []
+    for c in candidatas:
+        if await conn.fetchval("SELECT finalize_campaign_if_drained($1::uuid)", c["id"]):
+            fechadas.append(c["id"])
+    if fechadas:
+        logger.warning("campanhas drenadas sem finalize, fechadas pela varredura: %s",
+                       fechadas)
+    return fechadas

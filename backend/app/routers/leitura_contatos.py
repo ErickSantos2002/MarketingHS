@@ -6,6 +6,12 @@ de todo o painel.
 ⚠️ Ordem de registro importa: rota literal (`/duplicatas`) tem de vir ANTES de
 rota paramétrica (`/{lead_id}`), ou o FastAPI casa "duplicatas" como se fosse um
 id e a rota literal nunca é alcançada.
+
+⚠️ `authenticated` + `admin_atual` desde 01/10/2026. Toda tabela lida aqui
+(`leads`, `lead_conversions`, `ecosystem_identities`, `contact_events`,
+`lead_tags`, `tags`, `lead_notes`) é admin-only no RLS; com `usuario_atual` o
+não-admin veria a base VAZIA, sem erro. Teste:
+`tests/test_conversao_authenticated.py`.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.crm import growthhs
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 router = APIRouter(prefix="/contatos", tags=["contatos-leitura"])
 
@@ -55,7 +61,7 @@ async def listar(
     pagina: int = Query(0, ge=0),
     tamanho: int = Query(1000, ge=1, le=TAMANHO_PAGINA_MAX),
     visao: str = Query("ativos", pattern="^(ativos|apagados|todos)$"),
-    _: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(admin_atual),
 ):
     """Uma página da tabela de leads.
 
@@ -72,7 +78,7 @@ async def listar(
         "apagados": "WHERE deleted_at IS NOT NULL",
         "todos": "",
     }[visao]
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"""SELECT {COLUNAS_LEAD} FROM leads {filtro}
                  ORDER BY updated_at DESC, id DESC
@@ -84,13 +90,13 @@ async def listar(
 
 
 @router.get("/conversoes-utm")
-async def conversoes_utm(_: Usuario = Depends(usuario_atual)):
+async def conversoes_utm(usuario: Usuario = Depends(admin_atual)):
     """Mapa lead_id -> utm_contents das conversões.
 
     O hook paginava lead_conversions de 1000 em 1000 e agrupava no navegador.
     Isso é agregação; o banco faz numa consulta.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT lead_id::text, array_agg(DISTINCT utm_content) AS utm_contents
                  FROM lead_conversions
@@ -100,13 +106,13 @@ async def conversoes_utm(_: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/duplicatas")
-async def duplicatas(_: Usuario = Depends(usuario_atual)):
+async def duplicatas(usuario: Usuario = Depends(admin_atual)):
     """Identidades que compartilham e-mail ou telefone.
 
     Só mostra. A fusão é do lote 1D — merge_identities mexe em várias tabelas e
     merece o seu próprio lote.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """
             WITH repetidos AS (
@@ -143,7 +149,7 @@ class FusaoIn(BaseModel):
 
 
 @router.post("/duplicatas/fundir")
-async def fundir_identidades(dados: FusaoIn, _: Usuario = Depends(usuario_atual)):
+async def fundir_identidades(dados: FusaoIn, usuario: Usuario = Depends(admin_atual)):
     """Funde duas identidades numa só.
 
     A RPC `merge_identities` é PL/pgSQL e sobreviveu à portagem do schema — ela
@@ -158,7 +164,7 @@ async def fundir_identidades(dados: FusaoIn, _: Usuario = Depends(usuario_atual)
     if dados.manter == dados.descartar:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "As duas identidades são a mesma.")
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         resultado = await conn.fetchval(
             "SELECT merge_identities(p_keep => $1::uuid, p_discard => $2::uuid)",
             dados.manter, dados.descartar)
@@ -166,7 +172,7 @@ async def fundir_identidades(dados: FusaoIn, _: Usuario = Depends(usuario_atual)
 
 
 @router.post("/enriquecimento")
-async def enriquecimento(dados: EnriquecimentoIn, _: Usuario = Depends(usuario_atual)):
+async def enriquecimento(dados: EnriquecimentoIn, usuario: Usuario = Depends(admin_atual)):
     """Marca, por identidade, presença nos outros sistemas e agendamento aberto.
 
     A regra do agendamento vem de useContactsEnriched e tem três partes:
@@ -184,7 +190,7 @@ async def enriquecimento(dados: EnriquecimentoIn, _: Usuario = Depends(usuario_a
     """
     ids = dados.dnia_ids
     cfg = await growthhs.ler_config()
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         identidades = await conn.fetch(
             """SELECT dnia_id::text, nexus_contact_id::text, mentoria_client_id::text,
                       growthhs_card_id
@@ -235,13 +241,13 @@ async def enriquecimento(dados: EnriquecimentoIn, _: Usuario = Depends(usuario_a
 
 
 @router.post("/tags-por-contato")
-async def tags_por_contato(dados: TagsDeContatosIn, _: Usuario = Depends(usuario_atual)):
+async def tags_por_contato(dados: TagsDeContatosIn, usuario: Usuario = Depends(admin_atual)):
     """Mapa lead_id -> tags, para a coluna de tags da tabela.
 
     POST pelo mesmo motivo do enriquecimento: a lista de ids não cabe em query
     string. O original varria em lotes de 200 e montava o mapa no navegador.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT lt.lead_id::text, t.id::text AS tag_id, t.name AS nome, t.color AS cor
                  FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id
@@ -259,7 +265,7 @@ async def tags_por_contato(dados: TagsDeContatosIn, _: Usuario = Depends(usuario
 async def busca(
     q: str = Query(min_length=2, max_length=100),
     limite: int = Query(20, ge=1, le=100),
-    _: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(admin_atual),
 ):
     """Busca por nome, e-mail ou WhatsApp — o campo de procurar contato do
     construtor de segmento estático.
@@ -272,7 +278,7 @@ async def busca(
     dos dois lados não usa índice, daí o limite obrigatório.
     """
     padrao = f"%{q}%"
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT id::text, nome, email, whatsapp, cargo, etiqueta
                  FROM leads
@@ -285,14 +291,14 @@ async def busca(
 
 
 @router.get("/{lead_id}")
-async def ficha(lead_id: str, _: Usuario = Depends(usuario_atual)):
+async def ficha(lead_id: str, usuario: Usuario = Depends(admin_atual)):
     """Lead, tags e notas numa volta só.
 
     A tela recarrega o lead depois de cada mudança para pegar `etiqueta` e
     `lead_score`. Quem recalcula é só o trigger do banco — o scoring do cliente
     foi removido neste lote.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         lead = await conn.fetchrow(
             f"SELECT {COLUNAS_LEAD} FROM leads WHERE id = $1::uuid", lead_id)
         if lead is None:
@@ -310,9 +316,9 @@ async def ficha(lead_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/{lead_id}/conversoes-lista")
-async def listar_conversoes(lead_id: str, _: Usuario = Depends(usuario_atual)):
+async def listar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual)):
     """As conversões do contato, para a linha do tempo da ficha."""
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT id::text, tipo, page_slug, session_id, source,
                       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
@@ -324,7 +330,7 @@ async def listar_conversoes(lead_id: str, _: Usuario = Depends(usuario_atual)):
 
 @router.get("/{lead_id}/eventos")
 async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
-                  _: Usuario = Depends(usuario_atual)):
+                  usuario: Usuario = Depends(admin_atual)):
     """Histórico do contato, incluindo o que veio de outros sistemas.
 
     ⚠️ Filtra por `lead_id` OU pelo `dnia_id` do contato. Evento vindo de outro
@@ -333,7 +339,7 @@ async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
     ficha existir. E a FK `contact_events.lead_id` é ON DELETE SET NULL: evento
     de contato apagado sobrevive correlacionado só pelo `dnia_id`.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT ce.id::text, ce.source_app, ce.event_type, ce.title,
                       ce.description, ce.metadata, ce.occurred_at::text
@@ -347,21 +353,21 @@ async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
 
 
 @router.get("/{lead_id}/conversoes")
-async def contar_conversoes(lead_id: str, _: Usuario = Depends(usuario_atual)):
+async def contar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual)):
     """Quantas vezes o contato converteu.
 
     Serve ao critério de reconversão no detalhamento de score da ficha. É
     contagem, não lista: a tela só precisa do número.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             "SELECT count(*) FROM lead_conversions WHERE lead_id = $1::uuid", lead_id)
     return {"total": total}
 
 
 @router.post("/{lead_id}/notas", status_code=status.HTTP_201_CREATED)
-async def criar_nota(lead_id: str, dados: NotaIn, _: Usuario = Depends(usuario_atual)):
-    async with sessao(role="service_role") as conn:
+async def criar_nota(lead_id: str, dados: NotaIn, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         existe = await conn.fetchval("SELECT 1 FROM leads WHERE id = $1::uuid", lead_id)
         if not existe:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
@@ -373,8 +379,8 @@ async def criar_nota(lead_id: str, dados: NotaIn, _: Usuario = Depends(usuario_a
 
 
 @router.delete("/{lead_id}/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remover_tag(lead_id: str, tag_id: str, _: Usuario = Depends(usuario_atual)):
-    async with sessao(role="service_role") as conn:
+async def remover_tag(lead_id: str, tag_id: str, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         await conn.execute(
             "DELETE FROM lead_tags WHERE lead_id = $1::uuid AND tag_id = $2::uuid",
             lead_id, tag_id)

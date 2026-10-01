@@ -3,6 +3,10 @@
 ⚠️ Este lote (3A) NÃO envia. O enfileirador, o worker e o Resend chegam no 3B;
 o agendamento, no 3C. Se você está escrevendo uma chamada ao Resend aqui, parou
 no lote errado.
+
+⚠️ `authenticated` + `admin_atual` desde 01/10/2026. `campaigns` e
+`campaign_sends` são admin-only no RLS; com `usuario_atual` o não-admin
+levaria lista vazia, sem erro. Teste: `tests/test_conversao_authenticated.py`.
 """
 
 import logging
@@ -13,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campanhas", tags=["campanhas"])
@@ -105,7 +109,7 @@ async def listar(
     canal: str | None = Query(None, alias="channel"),
     pagina: int = Query(1, alias="page", ge=1),
     limite: int = Query(20, alias="limit", ge=1, le=100),
-    _: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(admin_atual),
 ):
     """Lista paginada, com os NOMES dos segmentos já resolvidos.
 
@@ -114,7 +118,7 @@ async def listar(
     `select` em `segments` com todos os ids — já era melhor que N+1, mas ainda
     são duas viagens e uma junção montada no navegador.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             """SELECT count(*) FROM campaigns
                 WHERE ($1::text IS NULL OR status = $1)
@@ -136,7 +140,7 @@ async def listar(
 
 
 @router.get("/{campanha_id}")
-async def detalhe(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+async def detalhe(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
     """A campanha, os nomes dos segmentos e uma amostra dos envios.
 
     ⚠️ `stats` é lido da coluna, NÃO recalculado aqui. Quem calcula é
@@ -144,7 +148,7 @@ async def detalhe(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     contagem nesta rota divergiria da primeira no meio de um envio, e a tela
     mostraria um número que o banco não confirma.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"""SELECT {COLUNAS}, s.nomes AS segment_names, v.numeros AS stats_ao_vivo
                   FROM campaigns c {NOMES_DOS_SEGMENTOS} {ESTATISTICAS_AO_VIVO}
@@ -201,7 +205,7 @@ CASTS = {"design": "::jsonb", "segment_ids": "::uuid[]",
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def criar(dados: CampanhaIn, _: Usuario = Depends(usuario_atual)):
+async def criar(dados: CampanhaIn, usuario: Usuario = Depends(admin_atual)):
     """Nasce sempre em `draft`.
 
     ⚠️ O status NÃO vem do corpo. Deixar o cliente escolher permitiria criar uma
@@ -219,7 +223,7 @@ async def criar(dados: CampanhaIn, _: Usuario = Depends(usuario_atual)):
     """
     agendada = (dados.scheduled_at is not None
                 and dados.scheduled_at > datetime.now(timezone.utc))
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         novo_id = await conn.fetchval(
             """INSERT INTO campaigns (name, channel, status, subject, body,
                                       design, segment_ids, excluded_segment_ids,
@@ -235,7 +239,7 @@ async def criar(dados: CampanhaIn, _: Usuario = Depends(usuario_atual)):
 
 @router.patch("/{campanha_id}")
 async def editar(campanha_id: str, dados: CampanhaPatch,
-                 _: Usuario = Depends(usuario_atual)):
+                 usuario: Usuario = Depends(admin_atual)):
     """⚠️ PATCH de verdade (`exclude_unset`) e trava por status.
 
     Só `draft`, `scheduled`, `paused` e `failed` aceitam edição. `sending` e
@@ -251,7 +255,7 @@ async def editar(campanha_id: str, dados: CampanhaPatch,
         partes.append(f"{coluna} = ${i}{CASTS.get(coluna, '')}")
         valores.append(valor)
 
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         estado = await conn.fetchval(
             "SELECT status FROM campaigns WHERE id = $1::uuid", campanha_id)
         if estado is None:
@@ -269,13 +273,13 @@ async def editar(campanha_id: str, dados: CampanhaPatch,
 
 
 @router.post("/{campanha_id}/duplicar", status_code=status.HTTP_201_CREATED)
-async def duplicar(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+async def duplicar(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
     """A cópia nasce em `draft`, sem `scheduled_at`, sem `sent_at` e com `stats`
     no padrão da coluna — copiar o histórico de envio da original faria a cópia
     parecer já enviada. O sufixo é ' (cópia)', o mesmo que o lote 2 usou em
     segmentos.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         novo = await conn.fetchval(
             """INSERT INTO campaigns (name, channel, status, subject, body,
                                       design, segment_ids, excluded_segment_ids)
@@ -290,7 +294,7 @@ async def duplicar(campanha_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.delete("/{campanha_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def excluir(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+async def excluir(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
     """`guard_campaign_delete` é um trigger que recusa apagar campanha com envio
     em andamento, com mensagem escrita para quem usa. Devolvê-la como 409 é o
     mesmo tratamento que o lote 2 deu ao `guard_segment_delete`; deixar virar
@@ -302,7 +306,7 @@ async def excluir(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     Campanha `sent` e drenada apaga normalmente.
     """
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             r = await conn.execute(
                 "DELETE FROM campaigns WHERE id = $1::uuid", campanha_id)
     except asyncpg.exceptions.RaiseError as exc:
@@ -312,7 +316,7 @@ async def excluir(campanha_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/{campanha_id}/audiencia")
-async def audiencia(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+async def audiencia(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
     """Quantos contatos esta campanha atingiria hoje.
 
     ⚠️ Chama `count_segment_audience` e `resolve_segment_audience` — as MESMAS
@@ -324,7 +328,7 @@ async def audiencia(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     aplica um teto de 5.000 nesse caminho. `teto_aplicado` avisa a tela para que
     ela não prometa um número maior do que o envio entregaria.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             """SELECT segment_ids::text[] AS incluir,
                       excluded_segment_ids::text[] AS excluir
@@ -348,7 +352,7 @@ async def audiencia(campanha_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/{campanha_id}/envios")
-async def envios(campanha_id: str, _: Usuario = Depends(usuario_atual)):
+async def envios(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
     """Todos os envios da campanha, com o contato já junto.
 
     ⚠️ `NULLS LAST` não é enfeite. A partir da fila os envios nascem `pending`
@@ -358,7 +362,7 @@ async def envios(campanha_id: str, _: Usuario = Depends(usuario_atual)):
     ⚠️ O contato vem por JOIN. A tela buscava os envios e depois os leads em
     lotes de 200, montando o mapa no navegador.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         existe = await conn.fetchval(
             "SELECT 1 FROM campaigns WHERE id = $1::uuid", campanha_id)
         if existe is None:
@@ -381,7 +385,7 @@ async def envios(campanha_id: str, _: Usuario = Depends(usuario_atual)):
 
 @router.post("/{campanha_id}/cancelar-agendamento")
 async def cancelar_agendamento(campanha_id: str,
-                               _: Usuario = Depends(usuario_atual)):
+                               usuario: Usuario = Depends(admin_atual)):
     """Volta a campanha agendada para rascunho.
 
     ⚠️ O `AND status = 'scheduled'` é reavaliado NO BANCO, no instante do
@@ -394,7 +398,7 @@ async def cancelar_agendamento(campanha_id: str,
     este caminho existe para a tela não ficar sem ele — e já nasce com a trava
     certa para quando o agendador aparecer.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         r = await conn.execute(
             """UPDATE campaigns SET status = 'draft', scheduled_at = NULL,
                                     updated_at = now()
@@ -402,7 +406,7 @@ async def cancelar_agendamento(campanha_id: str,
             campanha_id)
     if r.endswith(" 0"):
         existe = None
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             existe = await conn.fetchval(
                 "SELECT status FROM campaigns WHERE id = $1::uuid", campanha_id)
         if existe is None:

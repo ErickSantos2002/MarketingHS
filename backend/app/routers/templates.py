@@ -3,6 +3,11 @@
 O `design` é o JSON do Unlayer e o `html` é o que ele exporta. Os dois andam
 juntos: gravar um sem o outro deixa um template que abre no editor e sai
 diferente no envio, ou que envia certo e não abre para editar.
+
+⚠️ `authenticated` + `admin_atual` desde 01/10/2026. A política de
+`email_templates` é admin-only: com `usuario_atual` o não-admin passaria pela
+rota e levaria ZERO templates do RLS, sem erro. O 403 é o que torna isso
+visível. Teste: `tests/test_conversao_authenticated.py`.
 """
 
 import logging
@@ -11,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/templates", tags=["templates"])
@@ -42,10 +47,10 @@ async def listar(
     categoria: str | None = Query(None, alias="category"),
     pagina: int = Query(1, alias="page", ge=1),
     limite: int = Query(20, alias="limit", ge=1, le=100),
-    _: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(admin_atual),
 ):
     """Lista paginada. O filtro vai por parâmetro, não concatenado na string."""
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             "SELECT count(*) FROM email_templates "
             "WHERE $1::text IS NULL OR category = $1", categoria)
@@ -63,8 +68,8 @@ async def listar(
 
 
 @router.get("/{template_id}")
-async def ler(template_id: str, _: Usuario = Depends(usuario_atual)):
-    async with sessao(role="service_role") as conn:
+async def ler(template_id: str, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"SELECT {COLUNAS} FROM email_templates WHERE id = $1::uuid",
             template_id)
@@ -74,8 +79,8 @@ async def ler(template_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def criar(dados: TemplateIn, _: Usuario = Depends(usuario_atual)):
-    async with sessao(role="service_role") as conn:
+async def criar(dados: TemplateIn, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"""INSERT INTO email_templates (name, description, category, design, html)
                 VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING {COLUNAS}""",
@@ -86,7 +91,7 @@ async def criar(dados: TemplateIn, _: Usuario = Depends(usuario_atual)):
 
 @router.patch("/{template_id}")
 async def editar(template_id: str, dados: TemplatePatch,
-                 _: Usuario = Depends(usuario_atual)):
+                 usuario: Usuario = Depends(admin_atual)):
     """⚠️ PATCH de verdade: campo ausente NÃO vira NULL.
 
     `exclude_unset` separa "não mandou" de "mandou null". Sem isso, salvar só o
@@ -105,7 +110,7 @@ async def editar(template_id: str, dados: TemplatePatch,
         partes.append(f"{coluna} = ${i}{cast}")
         valores.append(valor)
 
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"""UPDATE email_templates SET {', '.join(partes)}, updated_at = now()
                  WHERE id = $1::uuid RETURNING {COLUNAS}""",
@@ -116,8 +121,8 @@ async def editar(template_id: str, dados: TemplatePatch,
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def excluir(template_id: str, _: Usuario = Depends(usuario_atual)):
-    async with sessao(role="service_role") as conn:
+async def excluir(template_id: str, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         r = await conn.execute(
             "DELETE FROM email_templates WHERE id = $1::uuid", template_id)
     if r.endswith(" 0"):

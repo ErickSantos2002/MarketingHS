@@ -1,5 +1,8 @@
 """Administração das chaves de API. Toda rota exige admin: quem cria chave cria
-acesso à base inteira de contatos."""
+acesso à base inteira de contatos.
+
+`authenticated` desde 01/10/2026 (política admin-only de `api_keys`); teste em
+`tests/test_conversao_authenticated.py`."""
 
 from datetime import datetime
 
@@ -47,15 +50,15 @@ _COLUNAS = """id::text, name, description, key_prefix, permissions,
 
 
 @router.get("", response_model=list[ChaveOut])
-async def listar(_: Usuario = Depends(admin_atual)):
-    async with sessao(role="service_role") as conn:
+async def listar(usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"SELECT {_COLUNAS} FROM api_keys ORDER BY created_at DESC")
     return [ChaveOut(**dict(l)) for l in linhas]
 
 
 @router.post("", response_model=ChaveCriadaOut, status_code=status.HTTP_201_CREATED)
-async def criar_chave(dados: ChaveIn, _: Usuario = Depends(admin_atual)):
+async def criar_chave(dados: ChaveIn, usuario: Usuario = Depends(admin_atual)):
     """Cria uma chave. A chave crua volta AQUI e nunca mais.
 
     ⚠️ Quem gera é o servidor. A tela original gerava no navegador com
@@ -64,7 +67,7 @@ async def criar_chave(dados: ChaveIn, _: Usuario = Depends(admin_atual)):
     segredo que não gerou.
     """
     crua, digest, prefixo = gerar_chave()
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"""INSERT INTO api_keys (name, description, key_hash, key_prefix,
                                       permissions, expires_at)
@@ -77,8 +80,8 @@ async def criar_chave(dados: ChaveIn, _: Usuario = Depends(admin_atual)):
 
 @router.patch("/{chave_id}", response_model=ChaveOut)
 async def ativar_ou_desativar(chave_id: str, dados: AtivacaoIn,
-                              _: Usuario = Depends(admin_atual)):
-    async with sessao(role="service_role") as conn:
+                              usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"UPDATE api_keys SET is_active = $2 WHERE id = $1::uuid RETURNING {_COLUNAS}",
             chave_id, dados.ativa)
@@ -88,17 +91,17 @@ async def ativar_ou_desativar(chave_id: str, dados: AtivacaoIn,
 
 
 @router.delete("/{chave_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remover(chave_id: str, _: Usuario = Depends(admin_atual)):
+async def remover(chave_id: str, usuario: Usuario = Depends(admin_atual)):
     """Remove a chave de vez.
 
     Desativar (PATCH) é quase sempre melhor: preserva o histórico de uso. Mas a
     tela de origem oferecia a exclusão, e tirá-la seria decidir por quem usa.
     """
-    r = await _remover(chave_id)
+    r = await _remover(chave_id, usuario.id)
     if r.endswith(" 0"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Chave não encontrada.")
 
 
-async def _remover(chave_id: str) -> str:
-    async with sessao(role="service_role") as conn:
+async def _remover(chave_id: str, user_id: str) -> str:
+    async with sessao(role="authenticated", user_id=user_id) as conn:
         return await conn.execute("DELETE FROM api_keys WHERE id = $1::uuid", chave_id)

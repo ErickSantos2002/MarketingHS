@@ -116,3 +116,43 @@ async def test_concluir_tira_a_mensagem_da_fila(conexao, semear):
     assert await conexao.fetchval(
         "SELECT count(*) FROM email_send_queue WHERE campaign_id = $1::uuid",
         mensagens[0]["campaign_id"]) == 0
+
+
+# ── Campanha presa em 'sending' (pergunta 7 do CONTINUAR-AQUI, 01/10) ─────────
+# O fechamento da campanha só acontecia no fim do `_tick` que processou a
+# ÚLTIMA mensagem dela. Se o worker morre entre o commit do envio e o
+# `finalize_campaign_if_drained` (deploy, OOM, Ctrl-C), a fila já está vazia
+# para aquela campanha e nenhuma passada futura volta a olhá-la: ela fica em
+# 'sending' para sempre — e o `guard_campaign_delete` nem deixa apagá-la.
+
+
+async def test_campanha_drenada_sem_finalize_e_fechada_pela_varredura(conexao, semear):
+    [msg] = await semear(quantidade=1)
+    campanha = msg["campaign_id"]
+    [m] = [x for x in await fila.reivindicar(conexao, limite=50, visibilidade=120)
+           if x.send_id == msg["send_id"]]
+    # O envio saiu e a mensagem foi concluída — e o worker morreu antes do
+    # finalize. É exatamente o estado que nenhuma passada revisita.
+    await conexao.execute(
+        "UPDATE campaign_sends SET status = 'sent', sent_at = now() WHERE id = $1::uuid",
+        msg["send_id"])
+    await fila.concluir(conexao, m.fila_id)
+
+    fechadas = await fila.fechar_campanhas_drenadas(conexao)
+
+    assert campanha in fechadas
+    linha = await conexao.fetchrow(
+        "SELECT status, sent_at FROM campaigns WHERE id = $1::uuid", campanha)
+    assert linha["status"] == "sent"
+    assert linha["sent_at"] is not None
+
+
+async def test_varredura_nao_fecha_campanha_com_envio_pendente(conexao, semear):
+    """O contrário tem de valer: pendente segura a campanha aberta. Fechar
+    cedo faria o worker recusar o resto ('campanha não está em envio')."""
+    [msg] = await semear(quantidade=1)
+    fechadas = await fila.fechar_campanhas_drenadas(conexao)
+    assert msg["campaign_id"] not in fechadas
+    assert await conexao.fetchval(
+        "SELECT status FROM campaigns WHERE id = $1::uuid",
+        msg["campaign_id"]) == "sending"

@@ -18,14 +18,14 @@ Supabase.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/automacoes", tags=["automacoes"])
@@ -87,9 +87,13 @@ def _linha(l) -> dict:
 
 
 @router.get("")
-async def listar(_: Usuario = Depends(usuario_atual)):
-    """Prioridade decrescente: a primeira que bate é a que vale."""
-    async with sessao(role="service_role") as conn:
+async def listar(usuario: Usuario = Depends(admin_atual)):
+    """Prioridade decrescente: a primeira que bate é a que vale.
+
+    ⚠️ `admin_atual` desde 01/10/2026: a política de `automation_rules` é
+    admin-only, e com `usuario_atual` o não-admin levaria lista vazia, sem erro.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"SELECT {COLUNAS} FROM automation_rules ORDER BY priority DESC, created_at")
     return [_linha(l) for l in linhas]
@@ -121,6 +125,23 @@ async def listar(_: Usuario = Depends(usuario_atual)):
 #
 # ⚠️ Valor SEMPRE em parâmetro, nunca concatenado. `build_segment_condition`, no
 # banco, monta SQL com quote_literal; aqui não há motivo para repetir isso.
+def _dia(valor: str | None) -> date | None:
+    try:
+        return date.fromisoformat((valor or "").strip()[:10])
+    except ValueError:
+        return None
+
+
+def _instante(valor: str | None) -> datetime | None:
+    """'2026-09-10' ou ISO completo. Sem fuso, vale UTC — o mesmo que o
+    `::timestamptz` do texto fazia no banco (timezone da sessão = UTC)."""
+    try:
+        d = datetime.fromisoformat((valor or "").strip())
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
 def _condicao_sql(c: Condicao, params: list) -> str | None:
     def p(valor) -> str:
         params.append(valor)
@@ -149,18 +170,27 @@ def _condicao_sql(c: Condicao, params: list) -> str | None:
                 else f"coalesce(l.lead_score, 0) < {alvo}")
 
     if tipo == "created_at":
+        # ⚠️ Data vai como date/datetime do Python, nunca como texto: o asyncpg
+        # infere o parâmetro de `$n::date` como date e RECUSA str — a prévia de
+        # regra por data de criação respondia 500 (achado em 01/10, no teste da
+        # conversão para `authenticated`).
         if op == "after":
-            return f"l.created_at >= {p(val)}::timestamptz"
+            inicio = _instante(val)
+            return None if inicio is None else f"l.created_at >= {p(inicio)}"
         if op == "before":
             # O dia inteiro conta: 'antes de 10/09' inclui 10/09 até 23:59:59,
             # como fazia a origem. Cortar à meia-noite perderia o dia todo.
-            return f"l.created_at < ({p(val)}::date + 1)"
+            dia = _dia(val)
+            return None if dia is None else f"l.created_at < ({p(dia)}::date + 1)"
         if op == "between":
             partes = (val or "").split("|")
             if len(partes) != 2:
                 return None
-            return (f"l.created_at >= {p(partes[0])}::timestamptz"
-                    f" AND l.created_at < ({p(partes[1])}::date + 1)")
+            inicio, dia = _instante(partes[0]), _dia(partes[1])
+            if inicio is None or dia is None:
+                return None
+            return (f"l.created_at >= {p(inicio)}"
+                    f" AND l.created_at < ({p(dia)}::date + 1)")
         if op == "last_n_days":
             try:
                 dias = int(val or 0)
@@ -183,7 +213,7 @@ class PreviaIn(BaseModel):
 
 
 @router.post("/previa")
-async def previa(dados: PreviaIn, _: Usuario = Depends(admin_atual)):
+async def previa(dados: PreviaIn, usuario: Usuario = Depends(admin_atual)):
     """Quantos contatos a regra pegaria, sem contar quem já está no GrowthHS.
 
     ⚠️ Só o TOTAL e uma amostra voltam. A origem trazia a lista inteira de leads
@@ -216,7 +246,7 @@ async def previa(dados: PreviaIn, _: Usuario = Depends(admin_atual)):
                AND ei.growthhs_card_id IS NOT NULL
         )"""
 
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             f"SELECT count(*) FROM leads l WHERE {onde} {fora_do_growthhs}", *params)
         amostra = await conn.fetch(
@@ -259,7 +289,15 @@ def _recusar_o_que_nao_dispara(condition_type: str | None,
         raise HTTPException(status.HTTP_400_BAD_REQUEST, MSG_MOVER)
 
 
-async def inserir_regra(dados: RegraIn) -> str:
+def _papel(user_id: str | None) -> dict:
+    """A escrita é compartilhada com `/publico` (chave de API, sem usuário).
+    Com usuário, a sessão é dele e o RLS vale; sem, é a máquina."""
+    if user_id:
+        return {"role": "authenticated", "user_id": user_id}
+    return {"role": "service_role"}
+
+
+async def inserir_regra(dados: RegraIn, user_id: str | None = None) -> str:
     _recusar_o_que_nao_dispara(dados.condition_type, dados.conditions, dados.action_type)
     campos = dados.model_dump()
     campos["conditions"] = [c.model_dump() for c in dados.conditions]
@@ -268,7 +306,7 @@ async def inserir_regra(dados: RegraIn) -> str:
     marcas = ", ".join(f"${i}{CASTS.get(c, '')}" for i, c in enumerate(colunas, 1))
     valores = [campos[c] for c in colunas]
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(**_papel(user_id)) as conn:
             novo = await conn.fetchval(
                 f"INSERT INTO automation_rules ({nomes}) VALUES ({marcas}) RETURNING id",
                 *valores)
@@ -278,7 +316,8 @@ async def inserir_regra(dados: RegraIn) -> str:
     return str(novo)
 
 
-async def atualizar_regra(regra_id: str, dados: RegraPatch) -> None:
+async def atualizar_regra(regra_id: str, dados: RegraPatch,
+                          user_id: str | None = None) -> None:
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada a atualizar.")
@@ -292,7 +331,7 @@ async def atualizar_regra(regra_id: str, dados: RegraPatch) -> None:
         valores.append(valor)
 
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(**_papel(user_id)) as conn:
             r = await conn.execute(
                 f"UPDATE automation_rules SET {', '.join(partes)} WHERE id = $1::uuid",
                 regra_id, *valores)
@@ -303,20 +342,20 @@ async def atualizar_regra(regra_id: str, dados: RegraPatch) -> None:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def criar(dados: RegraIn, _: Usuario = Depends(admin_atual)):
-    return {"id": await inserir_regra(dados)}
+async def criar(dados: RegraIn, usuario: Usuario = Depends(admin_atual)):
+    return {"id": await inserir_regra(dados, usuario.id)}
 
 
 @router.patch("/{regra_id}")
 async def editar(regra_id: str, dados: RegraPatch,
-                 _: Usuario = Depends(admin_atual)):
-    await atualizar_regra(regra_id, dados)
+                 usuario: Usuario = Depends(admin_atual)):
+    await atualizar_regra(regra_id, dados, usuario.id)
     return {"id": regra_id}
 
 
 @router.delete("/{regra_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def excluir(regra_id: str, _: Usuario = Depends(admin_atual)):
-    async with sessao(role="service_role") as conn:
+async def excluir(regra_id: str, usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         r = await conn.execute(
             "DELETE FROM automation_rules WHERE id = $1::uuid", regra_id)
     if r.endswith(" 0"):
