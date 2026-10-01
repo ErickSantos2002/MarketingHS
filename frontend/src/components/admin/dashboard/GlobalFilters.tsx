@@ -159,7 +159,7 @@ export function GlobalFilters({
             placeholder="Buscar por nome, email, telefone ou empresa..."
             value={filters.search || ''}
             onChange={(e) => onUpdateFilters({ search: e.target.value })}
-            className="pl-10 h-9 bg-card/50 border-border/50"
+            className="pl-10 bg-card/50 border-border/50"
           />
         </div>
       </div>
