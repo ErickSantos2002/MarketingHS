@@ -18,7 +18,7 @@ Supabase.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -125,6 +125,23 @@ async def listar(usuario: Usuario = Depends(admin_atual)):
 #
 # ⚠️ Valor SEMPRE em parâmetro, nunca concatenado. `build_segment_condition`, no
 # banco, monta SQL com quote_literal; aqui não há motivo para repetir isso.
+def _dia(valor: str | None) -> date | None:
+    try:
+        return date.fromisoformat((valor or "").strip()[:10])
+    except ValueError:
+        return None
+
+
+def _instante(valor: str | None) -> datetime | None:
+    """'2026-09-10' ou ISO completo. Sem fuso, vale UTC — o mesmo que o
+    `::timestamptz` do texto fazia no banco (timezone da sessão = UTC)."""
+    try:
+        d = datetime.fromisoformat((valor or "").strip())
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
 def _condicao_sql(c: Condicao, params: list) -> str | None:
     def p(valor) -> str:
         params.append(valor)
@@ -153,18 +170,27 @@ def _condicao_sql(c: Condicao, params: list) -> str | None:
                 else f"coalesce(l.lead_score, 0) < {alvo}")
 
     if tipo == "created_at":
+        # ⚠️ Data vai como date/datetime do Python, nunca como texto: o asyncpg
+        # infere o parâmetro de `$n::date` como date e RECUSA str — a prévia de
+        # regra por data de criação respondia 500 (achado em 01/10, no teste da
+        # conversão para `authenticated`).
         if op == "after":
-            return f"l.created_at >= {p(val)}::timestamptz"
+            inicio = _instante(val)
+            return None if inicio is None else f"l.created_at >= {p(inicio)}"
         if op == "before":
             # O dia inteiro conta: 'antes de 10/09' inclui 10/09 até 23:59:59,
             # como fazia a origem. Cortar à meia-noite perderia o dia todo.
-            return f"l.created_at < ({p(val)}::date + 1)"
+            dia = _dia(val)
+            return None if dia is None else f"l.created_at < ({p(dia)}::date + 1)"
         if op == "between":
             partes = (val or "").split("|")
             if len(partes) != 2:
                 return None
-            return (f"l.created_at >= {p(partes[0])}::timestamptz"
-                    f" AND l.created_at < ({p(partes[1])}::date + 1)")
+            inicio, dia = _instante(partes[0]), _dia(partes[1])
+            if inicio is None or dia is None:
+                return None
+            return (f"l.created_at >= {p(inicio)}"
+                    f" AND l.created_at < ({p(dia)}::date + 1)")
         if op == "last_n_days":
             try:
                 dias = int(val or 0)
