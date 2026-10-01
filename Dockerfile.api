@@ -1,0 +1,18 @@
+# API do MarketingHS com o bundle da landing pública junto.
+# Contexto = raiz do repositório: o backend serve /landing de
+# ../frontend/dist-landing (app/main.py), que só existe depois do build:landing.
+FROM node:22-alpine AS landing
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build:landing
+
+FROM python:3.13-slim
+WORKDIR /app/backend
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ ./
+COPY --from=landing /app/frontend/dist-landing /app/frontend/dist-landing
+# Só a API. O worker de fila (app/worker.py) é outro processo e NÃO sobe aqui.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
