@@ -107,6 +107,9 @@ def test_higienizar_aceita_numero_e_booleano():
 
 EMAIL_SONDA = "sonda-captura@exemplo.invalid"
 SLUG_SONDA = "sonda-captura"
+# O `whatsapp` que os testes mandam ("85999991234"), na forma que a
+# identidade grava. Número inventado.
+TELEFONE_SONDA = "+5585999991234"
 
 
 @pytest_asyncio.fixture
@@ -152,11 +155,35 @@ async def pagina_sonda(monkeypatch):
         pytest.skip("sem DATABASE_URL")
 
     async def limpar():
+        """Leva tudo o que a captura cria, não só o lead.
+
+        ⚠️ A captura também cria a IDENTIDADE (`ecosystem_identities`, pelo
+        telefone e pelo e-mail) e eventos na linha do tempo. Até a rodada 5
+        só o lead saía: a identidade ficava (havia uma de 21/09) e os
+        `contact_events` — ON DELETE SET NULL — ficavam órfãos, junto com a
+        cópia em `journey_events` (sem FK). Mesmo molde de
+        `_apagar_leads_de_escrita`. A identidade só casa pelo e-mail da sonda,
+        ou pelo telefone inventado sem e-mail de fora de `exemplo.invalid`."""
         async with db.sessao(role="service_role") as conn:
+            leads = [r["id"] for r in await conn.fetch(
+                "SELECT id FROM leads WHERE email = $1", EMAIL_SONDA)]
+            identidades = [r["dnia_id"] for r in await conn.fetch(
+                """SELECT dnia_id FROM ecosystem_identities
+                    WHERE email = $1
+                       OR (phone = $2 AND (email IS NULL
+                                           OR email LIKE '%@exemplo.invalid'))""",
+                EMAIL_SONDA, TELEFONE_SONDA)]
             await conn.execute(
-                "DELETE FROM lead_conversions WHERE lead_id IN "
-                "(SELECT id FROM leads WHERE email = $1)", EMAIL_SONDA)
-            await conn.execute("DELETE FROM leads WHERE email = $1", EMAIL_SONDA)
+                "DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", leads)
+            await conn.execute(
+                "DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[]) "
+                "OR dnia_id = ANY($2::uuid[])", leads, identidades)
+            await conn.execute(
+                "DELETE FROM lead_conversions WHERE lead_id = ANY($1::uuid[])", leads)
+            await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", leads)
+            await conn.execute(
+                "DELETE FROM ecosystem_identities WHERE dnia_id = ANY($1::uuid[])",
+                identidades)
             await conn.execute("DELETE FROM pages WHERE slug = $1", SLUG_SONDA)
             await conn.execute("DELETE FROM tags WHERE name = $1", SLUG_SONDA)
 

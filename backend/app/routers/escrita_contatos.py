@@ -284,7 +284,7 @@ async def tags_em_lote(dados: TagEmLoteIn, admin: Usuario = Depends(admin_atual)
 
 
 @router.post("/fundir")
-async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atual)):
+async def fundir_contatos(dados: FusaoContatosIn, admin: Usuario = Depends(admin_atual)):
     """Funde dois contatos. São TRÊS casos, e quem decide qual é o servidor.
 
     A tela original ramificava sozinha, comparando os `dnia_id` no navegador.
@@ -306,16 +306,15 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
     if dados.manter == dados.descartar:
         raise HTTPException(http.HTTP_400_BAD_REQUEST, "Os dois contatos são o mesmo.")
 
-    # ⚠️ Fica `service_role` (a rota autoriza sozinha, `admin_atual`). Única do
-    # router que NÃO foi para `authenticated` em 01/10: sob `authenticated`,
-    # a reatribuição afetaria 0 linhas calada onde não há política de UPDATE
-    # (`lead_conversions`, `journey_runs`, `journey_step_log`,
-    # `email_events`) ou levaria "permission denied" onde não há GRANT
-    # (`crm_handoffs`, `email_send_queue`, `email_send_dead`) — e o DELETE do
-    # descartado levaria o que não foi movido pelo CASCADE. Perda de dado
-    # reportada como sucesso. Converter exige a migration 022 aplicada; o
-    # teste `test_fusao_*_022` quebra no dia em que ela estiver.
-    async with sessao(role="service_role") as conn:
+    # `authenticated` desde a rodada 5 (01/10/2026), com a migration 022
+    # aplicada: ela deu ao admin a política de UPDATE que faltava em
+    # `lead_conversions`, `journey_runs`, `journey_step_log` e `email_events`,
+    # e RLS + política + GRANT em `crm_handoffs`, `email_send_queue` e
+    # `email_send_dead`. ⚠️ Sem isso a reatribuição afetaria 0 linhas CALADA e
+    # o DELETE do descartado levaria pelo CASCADE o que não foi movido — perda
+    # de histórico reportada como sucesso. `test_fusao_historico.py` roda a
+    # fusão inteira sob este papel e exige que as 15 tabelas movam linha.
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         manter = await conn.fetchrow(
             "SELECT id::text, dnia_id::text FROM leads WHERE id = $1::uuid", dados.manter)
         descartar = await conn.fetchrow(

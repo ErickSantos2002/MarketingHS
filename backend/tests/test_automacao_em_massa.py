@@ -9,9 +9,12 @@ Decisão 6 do Erick (01/10/2026). Os dois lados:
   continuam criando o pedido e a linha da fila de jornada.
 
 ⚠️ O lado "em massa" depende da migration 023 (as funções de gatilho leem a
-marca). Até o Erick aplicá-la, esses testes são PULADOS com o motivo — e o
-`test_marca_*` e o `test_so_as_operacoes_em_massa_marcam` provam que a
-aplicação já põe a marca, e só onde deve. Tudo aqui roda na
+marca). Ela foi aplicada em 01/10/2026: desde a rodada 5 a falta dela é
+VERMELHO, não pulo — um banco recriado sem a 023 (ou uma função de gatilho
+reescrita por cima) voltaria a disparar automação no recálculo, e um teste
+pulado não avisaria ninguém. O `test_marca_*` e o
+`test_so_as_operacoes_em_massa_marcam` provam que a aplicação põe a marca, e
+só onde deve. Tudo aqui roda na
 fixture `conexao` (transação revertida): a regra de automação ativa que os
 testes criam nunca é vista por outra sessão.
 """
@@ -36,8 +39,9 @@ async def _com_023(conexao) -> bool:
 
 
 async def _exigir_023(conexao):
-    if not await _com_023(conexao):
-        pytest.skip("migration 023 não aplicada — o lado 'em massa' só vale depois")
+    assert await _com_023(conexao), (
+        "as funções de gatilho não leem a marca: a migration 023 "
+        "(023_operacao_em_massa_nao_dispara_automacao.sql) não está no banco")
 
 
 async def _regra_para_quem_nasce_agora(conexao, acao="create_in_growthhs") -> str:
