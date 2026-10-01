@@ -708,3 +708,94 @@ async def test_escrita_contatos_exige_admin(cliente, token_usuario):
     ]:
         r = await cliente.request(metodo, caminho, json=corpo, headers=h)
         assert r.status_code == 403, (metodo, caminho, r.text)
+
+
+# ── contatos.py (importação, recálculo, tag avulsa) ──────────────────────────
+
+async def test_importacao_cria_e_atualiza_sob_authenticated(cliente, token_admin, leads_escrita):
+    h = _auth(token_admin)
+    a, _ = leads_escrita
+    novo = EMAILS_ESCRITA[2]
+    r = await cliente.post("/contatos/importar", headers=h, json={
+        "modo": "enriquecer", "linhas": [
+            {"email": EMAILS_ESCRITA[0].upper(), "cargo": "Gerente"},
+            {"email": novo, "nome": "Importado", "tipo": "teste"}]})
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert (corpo["criados"], corpo["atualizados"], corpo["erros"]) == (1, 1, []), corpo
+    assert await _contar("SELECT cargo FROM leads WHERE id = $1::uuid", a) == "Gerente"
+    assert await _contar("SELECT count(*) FROM leads WHERE email = $1", novo) == 1
+    # A identidade (SECURITY DEFINER) também foi amarrada sob authenticated.
+    assert await _contar("SELECT dnia_id IS NOT NULL FROM leads WHERE email = $1", novo)
+
+
+async def test_importacao_linha_ruim_nao_derruba_as_outras(cliente, token_admin, leads_escrita):
+    """⚠️ Antes do SAVEPOINT por linha, a linha que o BANCO recusa abortava a
+    transação inteira: as seguintes caíam em "current transaction is aborted"
+    e o COMMIT virava ROLLBACK calado. Um NUL no texto é recusado pelo
+    Postgres (não pelo pydantic) — é a falha de banco mais simples de forjar."""
+    h = _auth(token_admin)
+    ruim, boa = EMAILS_ESCRITA[2], EMAILS_ESCRITA[3]
+    r = await cliente.post("/contatos/importar", headers=h, json={
+        "modo": "enriquecer", "linhas": [
+            {"email": ruim, "nome": "a\u0000b", "tipo": "teste"},
+            {"email": boa, "nome": "Boa", "tipo": "teste"}]})
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert corpo["criados"] == 1 and len(corpo["erros"]) == 1, corpo
+    assert corpo["erros"][0].startswith(ruim), corpo
+    assert [c["email"] for c in corpo["contatos"]] == [boa]
+    assert await _contar("SELECT count(*) FROM leads WHERE email = $1", boa) == 1
+    assert await _contar("SELECT count(*) FROM leads WHERE email = $1", ruim) == 0
+
+
+async def test_tag_avulsa_sob_authenticated(cliente, token_admin, leads_escrita):
+    h = _auth(token_admin)
+    a, _ = leads_escrita
+    r = await cliente.post(f"/contatos/{a}/tags", headers=h, json={"tag": TAG_ESCRITA})
+    assert r.status_code == 204, r.text
+    assert await _contar(
+        "SELECT count(*) FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id "
+        "WHERE lt.lead_id = $1::uuid AND t.name = $2", a, TAG_ESCRITA) == 1
+    falso = "00000000-0000-0000-0000-000000000000"
+    r = await cliente.post(f"/contatos/{falso}/tags", headers=h, json={"tag": TAG_ESCRITA})
+    assert r.status_code == 404, r.text
+
+
+class _Reverter(Exception):
+    pass
+
+
+async def test_recalculo_afeta_a_base_inteira_sob_authenticated(token_admin):
+    """A rota reescreve TODOS os leads (e o gatilho de automação reavalia cada
+    um): rodá-la de verdade no teste seria escrita em produção. O teste
+    executa o MESMO comando (`SQL_RECALCULO`) sob `authenticated`, como o
+    admin, numa transação revertida, e compara com o total que `service_role`
+    vê na mesma transação."""
+    from app.routers.contatos import SQL_RECALCULO
+
+    uid = await _uid_admin()
+    medido = {}
+    try:
+        async with db.sessao(role="authenticated", user_id=uid) as conn:
+            r = await conn.execute(SQL_RECALCULO)
+            medido["afetadas"] = int(r.rsplit(" ", 1)[-1])
+            await conn.execute("SET LOCAL ROLE service_role")
+            medido["total"] = await conn.fetchval("SELECT count(*) FROM leads")
+            raise _Reverter
+    except _Reverter:
+        pass
+    assert medido["total"] > 1000
+    assert medido["afetadas"] == medido["total"]
+
+
+async def test_contatos_importacao_recalculo_e_tag_exigem_admin(cliente, token_usuario):
+    h = _auth(token_usuario)
+    falso = "00000000-0000-0000-0000-000000000000"
+    for metodo, caminho, corpo in [
+        ("POST", "/contatos/importar", {"linhas": [{"email": "x@exemplo.invalid"}]}),
+        ("POST", "/contatos/recalcular-scores", None),
+        ("POST", f"/contatos/{falso}/tags", {"tag": "x"}),
+    ]:
+        r = await cliente.request(metodo, caminho, json=corpo, headers=h)
+        assert r.status_code == 403, (metodo, caminho, r.text)
