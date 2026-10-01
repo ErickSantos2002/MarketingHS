@@ -13,7 +13,7 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
-**Estado em 01/10:** `g6-integracoes`, `g6-cartoes` e `residuos-visuais` ✅ mergeadas (Fase 2 do visual fechada, guarda 0, `tsc` 0). `backend` rodada 1 ✅ mergeada (`c019839`); a rodada 2 (`escrita_contatos`, `contatos`) espera a migration 021.
+**Estado em 01/10:** `g6-integracoes`, `g6-cartoes` e `residuos-visuais` ✅ mergeadas (Fase 2 do visual fechada, guarda 0, `tsc` 0). `backend` rodadas 1 e 2 ✅ mergeadas; rodada 3 e `ui-primitivos` em andamento (01/10). Antes: rodada 1 ✅ mergeada (`c019839`); a rodada 2 (`escrita_contatos`, `contatos`) espera a migration 021.
 
 | Frente | n | Vite | Backend | Território (escreve só aqui + `docs/frentes/<frente>.md`) | Quando abrir |
 |---|---|---|---|---|---|
@@ -22,6 +22,7 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 | `g6-cartoes` | 2 | 8082 | usa a 8100 | `settings/GrowthHSCard.tsx` (13), `SuppressionList.tsx` (12), `ResendConfigCard.tsx` (9), `LeadScoringSettings.tsx` (6), `IACard.tsx` (5), `MetaCard.tsx` (5), `SocialLinksSettings.tsx` (3), `UserManagement.tsx` (0, só conferir), `pages/admin/SettingsPage.tsx` (2) | já |
 | `backend` | 4 | 8084 | **8104** | `backend/**` inteiro (é a única dona de migration, `config.py`, routers e testes) | já |
 | `residuos-visuais` | 3 | 8083 | usa a 8100 | os arquivos listados no backlog dela, todos fora de `settings/` | quando uma das duas do G6 fechar |
+| `ui-primitivos` | 5 | 8085 | usa a 8100 | `components/ui/` (dona única nesta rodada), os usos de `DialogContent` sem descrição, `layouts/AdminLayout.tsx` | 01/10, rodada 3 |
 
 Os números entre parênteses são o guarda de 01/10 (`npm run guarda:visual -- <arquivo>`).
 `settings/` = `frontend/src/components/admin/settings/`.

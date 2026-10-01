@@ -31,6 +31,10 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 - [ ] **Rodada 3:** `test_cancelar_depois_do_2xx_ainda_grava_entregue` troca o
   `sleep` fixo por espera com prazo (falhou 1 vez com a suíte inteira, 5/5 sozinho).
 
+- [ ] **Rodada 3:** fixtures com e-mail fixo (`token_admin`, `token_usuario`)
+  passam a usar e-mail único por rodada, para duas suítes poderem rodar ao
+  mesmo tempo sem se derrubar — limpando o que criam, inclusive se a rodada morrer.
+
 ## Estado
 
 **01/10/2026 — rodada 2.** Branch `worktree-agent-abdba54f9f6c6f44f`.
