@@ -138,10 +138,10 @@ export default function GrowthHSCard() {
     }
   };
 
-  const badgeMap: Record<ConnectionStatus, { label: string; variant: 'secondary' | 'destructive' | 'default'; className?: string }> = {
+  const badgeMap: Record<ConnectionStatus, { label: string; variant: 'secondary' | 'destructive' | 'success' }> = {
     idle: { label: 'Não testado', variant: 'secondary' },
     testing: { label: 'Testando...', variant: 'secondary' },
-    connected: { label: 'Conectado', variant: 'default', className: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20' },
+    connected: { label: 'Conectado', variant: 'success' },
     error: { label: 'Erro de conexão', variant: 'destructive' },
     unconfigured: { label: 'Não configurado', variant: 'secondary' },
   };
@@ -162,10 +162,7 @@ export default function GrowthHSCard() {
     <Card className="border-border/40">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm"
-            style={{ backgroundColor: '#185FA5' }}
-          >
+          <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[--color-info-700] text-[--color-white] font-bold text-sm">
             G
           </div>
           <div>
@@ -173,7 +170,7 @@ export default function GrowthHSCard() {
             <CardDescription className="text-xs">CRM de vendas</CardDescription>
           </div>
         </div>
-        <Badge variant={badge.variant} className={`text-[10px] ${badge.className || ''}`}>
+        <Badge variant={badge.variant}>
           {badge.label}
         </Badge>
       </CardHeader>
@@ -255,7 +252,7 @@ export default function GrowthHSCard() {
                 </button>
               </div>
               {config?.api_key.configurado && !apiKeyInput && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Uma chave já está salva. Deixe em branco para mantê-la.
                 </p>
               )}
@@ -264,7 +261,7 @@ export default function GrowthHSCard() {
         )}
 
         {status === 'connected' && (
-          <div className="flex items-center gap-2 text-xs text-emerald-500">
+          <div className="flex items-center gap-2 text-xs text-[--on-tint-success]">
             <CheckCircle2 className="h-3.5 w-3.5" />
             A API do GrowthHS respondeu.
           </div>
@@ -278,12 +275,12 @@ export default function GrowthHSCard() {
         )}
 
         {enderecoMudou && baseUrlInput.trim() && (
-          <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed">
+          <p className="text-xs text-[--on-tint-warning] leading-relaxed">
             O endereço digitado é diferente do salvo — salve antes de testar.
           </p>
         )}
 
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           Testar conexão confere que a API do GrowthHS responde; não confere a chave — isso só se
           vê na primeira entrega.
         </p>
@@ -317,9 +314,9 @@ export default function GrowthHSCard() {
         {!loading && config && (
           <div className="pt-2 border-t border-border/30 space-y-2">
             {config.fila.pausada && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
-                <PauseCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-amber-500" />
-                <div className="text-[10px] leading-relaxed text-amber-700 dark:text-amber-400">
+              <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-[--tint-warning] p-2">
+                <PauseCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-warning" />
+                <div className="text-xs leading-relaxed text-[--on-tint-warning]">
                   <p className="font-medium">
                     Fila pausada desde {new Date(config.fila.pausada.desde).toLocaleString('pt-BR')}
                   </p>
@@ -335,7 +332,7 @@ export default function GrowthHSCard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1.5 h-6 text-[10px]"
+                  className="gap-1.5 h-6 text-xs"
                   onClick={handleReenfileirar}
                   disabled={reenfileirando}
                 >
@@ -351,7 +348,7 @@ export default function GrowthHSCard() {
             {config.fila.ultimas_falhas.length > 0 && (
               <ul className="space-y-1">
                 {config.fila.ultimas_falhas.map((f) => (
-                  <li key={f.lead_id} className="text-[10px] text-destructive leading-relaxed">
+                  <li key={f.lead_id} className="text-xs text-[--on-tint-danger] leading-relaxed">
                     Contato {f.lead_id.slice(0, 8)} — {f.erro}
                   </li>
                 ))}
