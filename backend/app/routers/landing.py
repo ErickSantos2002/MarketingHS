@@ -49,15 +49,17 @@ async def _config_da_pagina(slug: str) -> dict | None:
     """Devolve a config da página, ou `None` se ela não existe ou não está
     `active`.
 
-    ⚠️ **`pages` tem DUAS superfícies de edição para o mesmo SEO.** O diálogo
-    de página (`PageFormDialog.tsx`, via `paginas.py`) grava `meta_title` e
-    `meta_description` nas COLUNAS de mesmo nome — é o caminho mais usado. O
-    editor de config do construtor (`PageConfigEditor.tsx`) grava as mesmas
-    duas chaves dentro de `config`. `config` vence quando as duas existem; a
-    coluna é o fallback; o nome da página é o último recurso. Sem o fallback,
-    toda página criada pelo diálogo (a maioria) cai no `<title>` genérico e
-    serve `description`/`og:description` vazias — exatamente o preview
-    genérico que esta rota existe para eliminar.
+    ⚠️ **`pages` guarda o mesmo SEO em DOIS lugares.** As COLUNAS
+    `meta_title` e `meta_description` são as que `paginas.py` grava quando o
+    corpo do POST/PATCH as traz — foi o caminho do antigo diálogo de página
+    (`PageFormDialog.tsx`, órfão apagado no G5, 30/09) e continua aberto para
+    quem chama a API; as páginas criadas por ele seguem com o SEO só na
+    coluna. O editor de config do construtor (`PageConfigEditor.tsx`), hoje a
+    única tela que edita SEO, grava as mesmas duas chaves dentro de `config`.
+    `config` vence quando as duas existem; a coluna é o fallback; o nome da
+    página é o último recurso. Sem o fallback, toda página cujo SEO está só
+    na coluna cai no `<title>` genérico e serve `description`/`og:description`
+    vazias — exatamente o preview genérico que esta rota existe para eliminar.
 
     ⚠️ **Cache negativo de 10s, deliberadamente mais curto que o positivo
     (60s).** `/p/{slug}` é o único caminho público, anônimo e sem limite de
