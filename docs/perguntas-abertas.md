@@ -54,7 +54,7 @@ delas.
 
 ### Backend (01/10)
 
-20. **Migration 021** (política de INSERT/UPDATE em `leads` para o admin) —
+20. ✅ **Respondida 01/10: aplicar.** Aplicada pela coordenadora, duas vezes (reaplicação ok); `leads` tem as 4 políticas admin para `authenticated`. **Migration 021** (política de INSERT/UPDATE em `leads` para o admin) —
     pronta, não aplicada. Sem ela, `escrita_contatos.py` e `contatos.py` não
     vão para `authenticated` (o UPDATE afetaria 0 linhas, calado).
     **Assumido:** os dois ficam em `service_role` + `admin_atual` até o Erick

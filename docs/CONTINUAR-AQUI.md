@@ -36,8 +36,8 @@
 > 1. ~~`backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql`~~ —
 >    **rodado pelo Erick em 01/10: UPDATE 2, DELETE 2, 0 em `sending`.** **Antes** de o worker com este código subir em
 >    produção; senão a varredura as fecha como enviadas.
-> 2. Se aprovar a pergunta 20: `backend/migrations/021_leads_escrita_admin.sql`,
->    duas vezes. Depois disso, uma frente converte `escrita_contatos.py` e `contatos.py`.
+> 2. ~~Migration 021~~ — **aprovada e aplicada em 01/10** (duas vezes; 4
+>    políticas admin em `leads`). Depois disso, uma frente converte `escrita_contatos.py` e `contatos.py`.
 
 > ## 🌅 Comece por aqui — 30/09/2026 (fim do G5)
 >
