@@ -159,35 +159,73 @@ async def envio():
         await conn.execute("DELETE FROM leads WHERE id = $1", lead)
 
 
+# ── Usuários de teste ────────────────────────────────────────────────────────
+# ⚠️ Até 01/10 os dois usuários tinham e-mail FIXO e a fixture apagava o
+# usuário no setup: duas rodadas do pytest ao mesmo tempo (duas frentes, ou a
+# suíte e um arquivo solto) apagavam o usuário uma da outra no meio do teste,
+# e a outra levava 401 falso (4 vermelhos medidos em test_crm_caminhos.py).
+# Agora cada fixture cria um e-mail ÚNICO, `<prefixo>-<12 hex>@exemplo.invalid`,
+# e só apaga o seu. A pré-limpeza apaga o que uma rodada MORTA deixou: casa a
+# forma exata do e-mail (regex ancorada, domínio .invalid — nenhum usuário
+# real casa) E exige mais de 2 h de vida, para nunca levar o usuário de uma
+# rodada viva (a suíte inteira leva ~30 min). Os e-mails fixos antigos entram
+# na pré-limpeza pelo nome exato, para a última rodada morta da era antiga.
+PREFIXOS_USUARIO_TESTE = ("admin-teste-8a", "usuario-teste-8c")
+_RE_USUARIO_TESTE = (r"^(" + "|".join(PREFIXOS_USUARIO_TESTE)
+                     + r")-[0-9a-f]{12}@exemplo\.invalid$")
+_EMAILS_FIXOS_ANTIGOS = [f"{p}@exemplo.invalid" for p in PREFIXOS_USUARIO_TESTE]
+
+
+async def _limpar_usuarios_de_rodada_morta(conn):
+    await conn.execute(
+        """DELETE FROM auth.users
+            WHERE (email ~ $1 AND created_at < now() - interval '2 hours')
+               OR email = ANY($2::text[])""",
+        _RE_USUARIO_TESTE, _EMAILS_FIXOS_ANTIGOS)
+
+
+async def _criar_usuario_de_teste(prefixo: str, papel: str):
+    """Cria o usuário e devolve (uid, token). `user_roles` cai junto no
+    DELETE de `auth.users` (ON DELETE CASCADE)."""
+    import uuid
+    from app.auth.security import emitir_token, gerar_hash
+
+    assert prefixo in PREFIXOS_USUARIO_TESTE
+    email = f"{prefixo}-{uuid.uuid4().hex[:12]}@exemplo.invalid"
+    async with db.sessao(role="service_role") as conn:
+        await _limpar_usuarios_de_rodada_morta(conn)
+        uid = await conn.fetchval(
+            "INSERT INTO auth.users (email, password_hash) VALUES ($1, $2) "
+            "RETURNING id::text", email, gerar_hash("senha-de-teste-" + prefixo))
+        await conn.execute(
+            "INSERT INTO public.user_roles (user_id, role) VALUES ($1::uuid, $2)",
+            uid, papel)
+    token, _ = emitir_token(uid, papel, email)
+    return uid, token
+
+
+async def _apagar_usuario_de_teste(uid: str):
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM public.user_roles WHERE user_id = $1::uuid", uid)
+        await conn.execute("DELETE FROM auth.users WHERE id = $1::uuid", uid)
+
+
 @pytest_asyncio.fixture
 async def token_admin():
     """Um JWT de administrador de verdade, para as rotas com `admin_atual`.
 
-    ⚠️ Cria usuário em `auth.users` do banco real. Limpa antes (pytest morto no
-    meio deixa a linha e o e-mail único derruba a rodada seguinte) e depois.
+    ⚠️ Cria usuário em `auth.users` do banco real, com e-mail único (ver o
+    bloco acima) — quem precisar do id ou do e-mail lê do próprio token
+    (`ler_token(token)["sub"]`), nunca de um e-mail fixo.
     """
-    from app.auth.security import emitir_token, gerar_hash
-
     await db.init_db()
     if db._pool is None:
         pytest.skip("sem DATABASE_URL")
-    email = "admin-teste-8a@exemplo.invalid"
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute(
-            "DELETE FROM public.user_roles WHERE user_id IN "
-            "(SELECT id FROM auth.users WHERE email = $1)", email)
-        await conn.execute("DELETE FROM auth.users WHERE email = $1", email)
-        uid = await conn.fetchval(
-            "INSERT INTO auth.users (email, password_hash) VALUES ($1, $2) "
-            "RETURNING id::text", email, gerar_hash("senha-de-teste-8a"))
-        await conn.execute(
-            "INSERT INTO public.user_roles (user_id, role) VALUES ($1::uuid, 'admin')",
-            uid)
-    token, _ = emitir_token(uid, "admin", email)
-    yield token
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute("DELETE FROM public.user_roles WHERE user_id = $1::uuid", uid)
-        await conn.execute("DELETE FROM auth.users WHERE id = $1::uuid", uid)
+    uid, token = await _criar_usuario_de_teste("admin-teste-8a", "admin")
+    try:
+        yield token
+    finally:
+        await _apagar_usuario_de_teste(uid)
 
 
 SEGREDOS_DO_RESEND = ("RESEND_API_KEY", "EMAIL_FROM", "UNSUBSCRIBE_SECRET",
@@ -261,30 +299,14 @@ async def token_usuario():
     ⚠️ Sem esta prova, uma rota que esquecesse o `admin_atual` passaria: o
     usuário comum levaria zero linhas do RLS, não erro, e ninguém notaria.
     """
-    from app.auth.security import emitir_token, gerar_hash
-
     await db.init_db()
     if db._pool is None:
         pytest.skip("sem DATABASE_URL")
-    email = "usuario-teste-8c@exemplo.invalid"
-
-    async def limpar():
-        async with db.sessao(role="service_role") as conn:
-            await conn.execute(
-                "DELETE FROM public.user_roles WHERE user_id IN "
-                "(SELECT id FROM auth.users WHERE email = $1)", email)
-            await conn.execute("DELETE FROM auth.users WHERE email = $1", email)
-
-    await limpar()
-    async with db.sessao(role="service_role") as conn:
-        uid = await conn.fetchval(
-            "INSERT INTO auth.users (email, password_hash) VALUES ($1, $2) "
-            "RETURNING id::text", email, gerar_hash("senha-de-teste-8c"))
-        await conn.execute(
-            "INSERT INTO public.user_roles (user_id, role) VALUES ($1::uuid, 'user')", uid)
-    token, _ = emitir_token(uid, "user", email)
-    yield token
-    await limpar()
+    uid, token = await _criar_usuario_de_teste("usuario-teste-8c", "user")
+    try:
+        yield token
+    finally:
+        await _apagar_usuario_de_teste(uid)
 
 
 @pytest_asyncio.fixture

@@ -5,12 +5,23 @@ nunca dispara, e ninguém percebe, porque a tela de automações mostra a regra
 "ativa". E o inverso: uma regra mal preenchida derrubando a gravação do lead.
 """
 
+import re
+import uuid
+
 import pytest_asyncio
 
 import app.database as db
 from app.jornadas import executor
 
-EMAIL = "caminhos-8d@exemplo.invalid"
+# ⚠️ Único por processo do pytest: com o e-mail fixo, duas rodadas ao mesmo
+# tempo batiam em `leads_email_unique` (o `lead_real` de uma COMITA o lead e o
+# `_lead` da outra colide). A pré-limpeza do `lead_real` apaga o que uma rodada
+# MORTA deixou: a forma exata do e-mail e mais de 2 h de vida — nunca o lead de
+# uma rodada viva. O e-mail fixo antigo entra pelo nome exato.
+EMAIL_ANTIGO = "caminhos-8d@exemplo.invalid"
+EMAIL = f"caminhos-8d-{uuid.uuid4().hex[:12]}@exemplo.invalid"
+_RE_EMAIL = r"^caminhos-8d-[0-9a-f]{12}@exemplo\.invalid$"
+assert re.match(_RE_EMAIL, EMAIL)
 
 
 def _auth(token):
@@ -171,7 +182,10 @@ async def lead_real():
         # `fn_lead_insert_event` grava contact_event (e journey_event) sem FK.
         async with db.sessao(role="service_role") as conn:
             ids = [r["id"] for r in await conn.fetch(
-                "SELECT id FROM leads WHERE email = $1", EMAIL)]
+                """SELECT id FROM leads
+                    WHERE email = $1 OR email = $2
+                       OR (email ~ $3 AND created_at < now() - interval '2 hours')""",
+                EMAIL, EMAIL_ANTIGO, _RE_EMAIL)]
             await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
