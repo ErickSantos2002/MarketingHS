@@ -66,32 +66,35 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <Tabs defaultValue="integrations">
-        <TabsList className="h-9">
-          <TabsTrigger value="integrations" className="text-xs gap-1.5">
-            <Plug className="h-3.5 w-3.5" /> Integrações
-          </TabsTrigger>
-          <TabsTrigger value="docs" className="text-xs gap-1.5">
-            <BookOpen className="h-3.5 w-3.5" /> Documentação da API
-          </TabsTrigger>
-          <TabsTrigger value="scoring" className="text-xs gap-1.5">
-            <Target className="h-3.5 w-3.5" /> Lead Scoring
-          </TabsTrigger>
-          <TabsTrigger value="apikeys" className="text-xs gap-1.5">
-            <Key className="h-3.5 w-3.5" /> API Keys
-          </TabsTrigger>
-          <TabsTrigger value="users" className="text-xs gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Usuários
-          </TabsTrigger>
-          <TabsTrigger value="suppression" className="text-xs gap-1.5">
-            <MailX className="h-3.5 w-3.5" /> Supressão de Email
-          </TabsTrigger>
-          <TabsTrigger value="social" className="text-xs gap-1.5">
-            <Share2 className="h-3.5 w-3.5" /> Redes sociais
-          </TabsTrigger>
-        </TabsList>
+        {/* 7 abas não cabem a 390 px: a lista rola sozinha, a página não. */}
+        <div className="overflow-x-auto">
+          <TabsList className="h-9">
+            <TabsTrigger value="integrations" className="text-xs gap-1.5">
+              <Plug className="h-3.5 w-3.5" /> Integrações
+            </TabsTrigger>
+            <TabsTrigger value="docs" className="text-xs gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" /> Documentação da API
+            </TabsTrigger>
+            <TabsTrigger value="scoring" className="text-xs gap-1.5">
+              <Target className="h-3.5 w-3.5" /> Lead Scoring
+            </TabsTrigger>
+            <TabsTrigger value="apikeys" className="text-xs gap-1.5">
+              <Key className="h-3.5 w-3.5" /> API Keys
+            </TabsTrigger>
+            <TabsTrigger value="users" className="text-xs gap-1.5">
+              <Users className="h-3.5 w-3.5" /> Usuários
+            </TabsTrigger>
+            <TabsTrigger value="suppression" className="text-xs gap-1.5">
+              <MailX className="h-3.5 w-3.5" /> Supressão de Email
+            </TabsTrigger>
+            <TabsTrigger value="social" className="text-xs gap-1.5">
+              <Share2 className="h-3.5 w-3.5" /> Redes sociais
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="integrations" className="mt-4">
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {/* Webhook Card */}
             <Card className="border-border/40">
               <CardHeader>

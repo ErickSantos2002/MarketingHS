@@ -361,7 +361,7 @@ export default function ApiKeysManagement() {
               </p>
             </div>
             <div className="relative rounded-lg overflow-hidden bg-muted/50 border border-border">
-              <pre className="p-4 pr-20 text-xs font-mono break-all text-foreground">
+              <pre className="p-4 pr-20 text-xs font-mono whitespace-pre-wrap break-all text-foreground">
                 {revealedKey}
               </pre>
               <Button

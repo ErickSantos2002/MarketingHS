@@ -80,7 +80,7 @@ function ParamTable({ params }: { params: { name: string; type: string; required
             <tr key={p.name} className="border-b border-border/20">
               <td className="py-2 px-3 font-mono text-primary">{p.name}</td>
               <td className="py-2 px-3 text-muted-foreground">{p.type}</td>
-              <td className="py-2 px-3">{p.required === 'Sim' ? <Badge variant="destructive" className="text-xs h-4">Sim</Badge> : <span className="text-muted-foreground">{p.required}</span>}</td>
+              <td className="py-2 px-3">{p.required === 'Sim' ? <Badge variant="destructive">Sim</Badge> : <span className="text-muted-foreground">{p.required}</span>}</td>
               <td className="py-2 px-3 text-muted-foreground">{p.description}</td>
             </tr>
           ))}
@@ -953,7 +953,7 @@ export default function ApiDocumentation() {
               <div className="flex items-center gap-2 mb-2">
                 <KeyRound className="h-4 w-4 text-primary" />
                 <span className="text-xs font-semibold">1. WEBHOOK_SECRET</span>
-                <Badge variant="outline" className="text-xs h-4">Master</Badge>
+                <Badge variant="outline">Master</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
                 Chave master configurada no ambiente do backend. Use para integrações de sistema de alta confiança.
@@ -963,7 +963,7 @@ export default function ApiDocumentation() {
               <div className="flex items-center gap-2 mb-2">
                 <KeyRound className="h-4 w-4 text-success" />
                 <span className="text-xs font-semibold">2. API Keys</span>
-                <Badge variant="success" className="text-xs h-4">Recomendado</Badge>
+                <Badge variant="success">Recomendado</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
                 Chaves individuais criadas em Settings → API Keys. Recomendado para agentes e projetos específicos. Cada chave tem permissões granulares e pode ser revogada independentemente.

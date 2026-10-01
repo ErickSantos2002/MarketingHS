@@ -274,7 +274,7 @@ export default function ResendConfigCard() {
             </p>
           )}
           {teste && teste.valida === false && (
-            <p className="text-xs text-destructive">
+            <p className="text-xs text-[--on-tint-danger]">
               {teste.motivo === 'network' && 'Não foi possível falar com o Resend.'}
               {teste.motivo === 'invalid_api_key' && 'Chave inválida.'}
               {teste.motivo === 'unknown' && 'O Resend respondeu com um erro inesperado. Tente de novo.'}
@@ -338,7 +338,7 @@ export default function ResendConfigCard() {
             </Button>
           </div>
           {descadastro.length > 0 && descadastro.length < MINIMO_DESCADASTRO && (
-            <p className="text-xs text-destructive">Precisa de pelo menos {MINIMO_DESCADASTRO} caracteres.</p>
+            <p className="text-xs text-[--on-tint-danger]">Precisa de pelo menos {MINIMO_DESCADASTRO} caracteres.</p>
           )}
           {descadastroConfigurado && descadastro.length > 0 && (
             <Alert variant="destructive">
@@ -460,7 +460,7 @@ export default function ResendConfigCard() {
             <div className="text-xs space-y-1">
               {diagnostico.ok
                 ? <p className="text-[--on-tint-success]">Conectado. Remetente: {diagnostico.remetente}</p>
-                : <p className="text-destructive">
+                : <p className="text-[--on-tint-danger]">
                     {diagnostico.erro_api ?? `Faltando: ${diagnostico.faltando.join(', ')}`}
                   </p>}
               {diagnostico.segredo_descadastro_faltando && (
