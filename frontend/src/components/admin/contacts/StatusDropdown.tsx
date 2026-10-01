@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { TrendingUp } from 'lucide-react';
 import { useLeadStatuses } from '@/hooks/useLeadStatuses';
 import { estiloDeCorDeDado } from '@/lib/corDeDado';
+import { corDoStatus } from './StatusBadge';
 
 interface StatusDropdownProps {
   leadId: string;
@@ -18,7 +19,7 @@ interface StatusDropdownProps {
 
 export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = 'sm', leadEmail, leadWhatsapp, leadDniaId }: StatusDropdownProps) {
   const [value, setValue] = useState(currentStatus || 'Lead');
-  const { options, getColor } = useLeadStatuses();
+  const { options } = useLeadStatuses();
 
   const handleChange = async (newStatus: string) => {
     const previousStatus = value;
@@ -61,7 +62,7 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
     onStatusChange?.(newStatus);
   };
 
-  const color = getColor(value);
+  const color = corDoStatus(value);
   const items = options.length > 0 ? options : [value];
 
   return (
@@ -79,7 +80,7 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
             <div className="flex items-center gap-2">
               <div
                 className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: getColor(opt) }}
+                style={{ backgroundColor: corDoStatus(opt) }}
               />
               {opt}
             </div>

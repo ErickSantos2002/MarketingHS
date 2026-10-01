@@ -13,13 +13,7 @@ export function formatCell(lead: any, key: string): string {
   switch (key) {
     case 'last_conversion_date':
     case 'created_at':
-    case 'data_interesse':
       return v ? new Date(v).toLocaleString('pt-BR') : '';
-    case 'interesse_ecossistema':
-      return v === true ? 'Sim' : v === false ? 'Não' : '';
-    case 'interesse_mtia':
-    case 'interesse_formacao':
-      return v ? 'Sim' : '';
     case 'ecosystem': {
       const parts: string[] = [];
       parts.push('M');

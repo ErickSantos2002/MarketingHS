@@ -1,10 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { listarStatusDeLead, type StatusDeLead } from '@/lib/contatos';
-import { COR_DE_DADO_PADRAO } from '@/lib/corDeDado';
 
 export type LeadStatus = StatusDeLead;
-
-const FALLBACK_COLOR = COR_DE_DADO_PADRAO;
 
 export function useLeadStatuses() {
   const query = useQuery({
@@ -16,15 +13,8 @@ export function useLeadStatuses() {
 
   const statuses = query.data ?? [];
   const options = statuses.map((s) => s.name);
-  const colors: Record<string, string> = statuses.reduce((acc, s) => {
-    acc[s.name] = s.color || FALLBACK_COLOR;
-    return acc;
-  }, {} as Record<string, string>);
 
-  const getColor = (name: string | null | undefined) => {
-    if (!name) return FALLBACK_COLOR;
-    return colors[name] || FALLBACK_COLOR;
-  };
-
-  return { statuses, options, colors, getColor, isLoading: query.isLoading };
+  // A cor não sai daqui: `color` do banco é ignorada desde 01/10/2026 — a
+  // cor do status é o mapa fixo `corDoStatus` (contacts/StatusBadge.tsx).
+  return { statuses, options, isLoading: query.isLoading };
 }

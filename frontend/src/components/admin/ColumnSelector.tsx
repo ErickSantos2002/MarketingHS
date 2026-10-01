@@ -15,15 +15,18 @@ export interface ColumnConfig {
   defaultVisible: boolean;
 }
 
+// As sete colunas do funil de evento e mentoria da dn.ia (Participante,
+// Quem te indicou?, Presença, Interesse Ecossistema/MTIA/Formação, Data
+// Interesse) saíram da tela em 01/10/2026 (pergunta 9) — nenhum contato da
+// base as tinha preenchido. O dado continua no banco e na captura; uma
+// preferência salva que ainda as liste é filtrada ao carregar.
 export const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'last_conversion_date', label: 'Última Conversão', defaultVisible: true },
   { key: 'tipo', label: 'Tipo', defaultVisible: true },
   { key: 'status', label: 'Status', defaultVisible: true },
-  { key: 'tipo_participante', label: 'Participante', defaultVisible: true },
   { key: 'nome', label: 'Nome', defaultVisible: true },
   { key: 'email', label: 'Email', defaultVisible: true },
   { key: 'whatsapp', label: 'WhatsApp', defaultVisible: true },
-  { key: 'indicacao', label: 'Quem te indicou? *', defaultVisible: true },
   { key: 'empresa', label: 'Empresa', defaultVisible: true },
   { key: 'cargo', label: 'Cargo', defaultVisible: true },
   { key: 'faturamento', label: 'Faturamento', defaultVisible: true },
@@ -32,7 +35,6 @@ export const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'utm_source', label: 'UTM Source', defaultVisible: true },
   { key: 'utm_medium', label: 'UTM Medium', defaultVisible: true },
   { key: 'utm_campaign', label: 'UTM Campaign', defaultVisible: true },
-  { key: 'presenca', label: 'Presença', defaultVisible: true },
   { key: 'lead_score', label: 'Score', defaultVisible: true },
   { key: 'etiqueta', label: 'Etiqueta', defaultVisible: false },
   { key: 'origem_campanha', label: 'Origem Campanha', defaultVisible: false },
@@ -43,10 +45,6 @@ export const ALL_COLUMNS: ColumnConfig[] = [
   { key: 'utm_content', label: 'UTM Content', defaultVisible: true },
   { key: 'session_id', label: 'Session ID', defaultVisible: false },
   { key: 'created_at', label: 'Data de Criação', defaultVisible: false },
-  { key: 'interesse_ecossistema', label: 'Interesse Ecossistema', defaultVisible: false },
-  { key: 'interesse_mtia', label: 'Interesse MTIA', defaultVisible: false },
-  { key: 'interesse_formacao', label: 'Interesse Formação', defaultVisible: false },
-  { key: 'data_interesse', label: 'Data Interesse', defaultVisible: false },
 ];
 
 const getDefaultColumns = (): string[] =>

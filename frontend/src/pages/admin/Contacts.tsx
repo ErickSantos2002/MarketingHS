@@ -105,7 +105,7 @@ export default function Contacts() {
     <div className="space-y-4">
       {deletedView !== 'active' && (
         <div className="flex items-center justify-end gap-3">
-          <span className="text-xs text-destructive flex items-center gap-1">
+          <span className="text-xs text-[--on-tint-danger] flex items-center gap-1">
             <Trash2 className="h-3.5 w-3.5" />
             {deletedView === 'deleted' ? 'Exibindo apenas apagados' : 'Incluindo apagados'}
           </span>

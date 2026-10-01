@@ -24,8 +24,7 @@ import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import { toast } from 'sonner';
 import { excluirContato } from '@/lib/contatos';
 import { ErroApi } from '@/lib/api';
-import { STATUS_COLORS } from './StatusBadge';
-import { COR_DE_DADO_PADRAO } from '@/lib/corDeDado';
+import { corDoStatus } from './StatusBadge';
 
 interface ContactsTableProps {
   leads: (Lead | EnrichedLead)[];
@@ -137,7 +136,7 @@ export function ContactsTable({
       if (bv == null) return -1;
       const aStr = String(av);
       const bStr = String(bv);
-      if (sortKey.includes('date') || sortKey === 'created_at' || sortKey === 'updated_at' || sortKey === 'data_interesse' || sortKey === 'last_conversion_date') {
+      if (sortKey.includes('date') || sortKey === 'created_at' || sortKey === 'updated_at' || sortKey === 'last_conversion_date') {
         const aTime = new Date(aStr).getTime();
         const bTime = new Date(bStr).getTime();
         if (!isNaN(aTime) && !isNaN(bTime)) return sortDir === 'asc' ? aTime - bTime : bTime - aTime;
@@ -365,7 +364,7 @@ export function ContactsTable({
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
+                                className="text-[--on-tint-danger] focus:text-[--on-tint-danger]"
                                 onClick={(e) => { e.stopPropagation(); setDeleteTarget(lead); }}
                               >
                                 <Trash2 className="h-3.5 w-3.5 mr-2" />
@@ -566,7 +565,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         <div className="flex items-center gap-2">
           <div
             className="w-[7px] h-[7px] rounded-full flex-shrink-0"
-            style={{ backgroundColor: STATUS_COLORS[lead.status || 'Lead'] || COR_DE_DADO_PADRAO }}
+            style={{ backgroundColor: corDoStatus(lead.status) }}
           />
           <span className="text-xs">{lead.status || 'Lead'}</span>
         </div>
@@ -630,8 +629,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
       );
     }
 
-    case 'created_at':
-    case 'data_interesse': {
+    case 'created_at': {
       if (!val) return <span className="text-xs text-muted-foreground">-</span>;
       const d = new Date(val);
       return (
@@ -641,11 +639,6 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         </div>
       );
     }
-
-    case 'interesse_ecossistema':
-    case 'interesse_mtia':
-    case 'interesse_formacao':
-      return <span className="text-xs">{val ? 'Sim' : 'Não'}</span>;
 
     default:
       return <span className="text-xs truncate max-w-[200px] block">{val != null ? String(val) : '-'}</span>;
