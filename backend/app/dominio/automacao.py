@@ -15,7 +15,8 @@ marca (migration 023).
 devolvida ao pool não carrega a marca para o pedido seguinte. Fora de
 transação o Postgres só avisa e ignora: chame sempre dentro de `sessao()`.
 
-⚠️ Antes da 023 aplicada, a marca é inofensiva e INERTE: nenhuma função a lê.
+A 023 foi aplicada em 01/10/2026; num banco sem ela a marca é inerte
+(nenhuma função a lê) — `test_automacao_em_massa.py` fica vermelho.
 """
 
 MARCA = "marketinghs.sem_automacao"
