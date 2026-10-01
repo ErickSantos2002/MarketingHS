@@ -31,6 +31,8 @@ dist-landing
 
 # permissões locais do Claude Code — pessoais, não vão para o repositório
 .claude/settings.local.json
+# worktrees das frentes paralelas (claude --worktree)
+.claude/worktrees/
 
 # python
 __pycache__/

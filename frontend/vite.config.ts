@@ -2,6 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
+// Frentes paralelas (worktree) com backend próprio apontam o proxy por
+// MKT_BACKEND_PORT; sem a variável, é a 8100 de sempre.
+const backend = `http://localhost:${process.env.MKT_BACKEND_PORT ?? 8100}`;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -16,7 +20,7 @@ export default defineConfig(({ mode }) => ({
       // ⚠️ 8100 e não 8000: nesta máquina a 8000 é do TaskHS. Dentro do
       // contêiner o backend continua na 8000; 8100 é só o lado do host.
       "/api": {
-        target: "http://localhost:8100",
+        target: backend,
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
@@ -24,8 +28,8 @@ export default defineConfig(({ mode }) => ({
       // em `/landing/`), não por este SPA. Sem estas duas entradas, "Abrir
       // página" e o link de anúncio caem no 404 do admin em desenvolvimento.
       // Em produção o nginx precisa rotear os mesmos dois prefixos.
-      "/p/": { target: "http://localhost:8100", changeOrigin: true },
-      "/landing/": { target: "http://localhost:8100", changeOrigin: true },
+      "/p/": { target: backend, changeOrigin: true },
+      "/landing/": { target: backend, changeOrigin: true },
     },
   },
   plugins: [react()],

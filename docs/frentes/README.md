@@ -1,0 +1,85 @@
+# Frentes paralelas — plano em vigor (01/10/2026)
+
+As regras gerais (modo autônomo, dono único, portas, quem faz merge) estão no
+`CLAUDE.md`, seções "Modo autônomo" e "Frentes paralelas com worktree". Este
+arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
+
+> **Por que estas frentes e não as da conversa de 30/09.** A lista daquela
+> conversa (redesign das 12 telas, lotes 5C, 6 e 7) estava velha: todos os
+> lotes fecharam e o visual foi até o G5. O que resta de paralelizável é o
+> G6 (último grupo do visual, 124 no guarda) — partido em dois por arquivo —,
+> os resíduos visuais anotados nos G1–G5, e uma frente de backend que não
+> encosta em `frontend/`.
+
+## As frentes
+
+| Frente | n | Vite | Backend | Território (escreve só aqui + `docs/frentes/<frente>.md`) | Quando abrir |
+|---|---|---|---|---|---|
+| `coordenadora` | 0 | 8080 | 8100 | `docs/frentes/README.md`, `docs/CONTINUAR-AQUI.md`, `docs/perguntas-abertas.md`, `CLAUDE.md`, merge na `main` | já (raiz do repo) |
+| `g6-integracoes` | 1 | 8081 | usa a 8100 | `settings/ApiDocumentation.tsx` (38), `settings/ApiKeysManagement.tsx` (31) | já |
+| `g6-cartoes` | 2 | 8082 | usa a 8100 | `settings/GrowthHSCard.tsx` (13), `SuppressionList.tsx` (12), `ResendConfigCard.tsx` (9), `LeadScoringSettings.tsx` (6), `IACard.tsx` (5), `MetaCard.tsx` (5), `SocialLinksSettings.tsx` (3), `UserManagement.tsx` (0, só conferir), `pages/admin/SettingsPage.tsx` (2) | já |
+| `backend` | 4 | 8084 | **8104** | `backend/**` inteiro (é a única dona de migration, `config.py`, routers e testes) | já |
+| `residuos-visuais` | 3 | 8083 | usa a 8100 | os arquivos listados no backlog dela, todos fora de `settings/` | quando uma das duas do G6 fechar |
+
+Os números entre parênteses são o guarda de 01/10 (`npm run guarda:visual -- <arquivo>`).
+`settings/` = `frontend/src/components/admin/settings/`.
+
+**Quatro frentes de uma vez, no máximo.** Acima disso o merge come o ganho.
+Começar com três (`g6-integracoes`, `g6-cartoes`, `backend`) e abrir a
+`residuos-visuais` no lugar da primeira que fechar.
+
+## Como abrir uma frente
+
+No Konsole, da raiz do repo:
+
+```bash
+cd ~/github/MarketingHS && claude --worktree g6-integracoes
+```
+
+E a primeira mensagem para a sessão (troque o nome):
+
+```
+Você é a frente g6-integracoes. Leia docs/frentes/README.md e docs/frentes/g6-integracoes.md,
+rode bash scripts/preparar-worktree.sh e trabalhe no modo autônomo do CLAUDE.md.
+/loop puxe o próximo item do backlog de docs/frentes/g6-integracoes.md até ele acabar.
+```
+
+O `/loop` sem intervalo deixa a sessão se cadenciar sozinha; quando o backlog
+da frente acaba, ela registra o fim no próprio arquivo, faz push da branch e
+para o loop.
+
+## Navegador
+
+O Playwright está em `--isolated`: cada sessão tem o próprio navegador, sem
+disputa de perfil, mas **cada frente precisa logar uma vez** com a conta admin
+do Claude. Quem loga é a sessão da frente; subagente nunca abre o arquivo de
+credencial (regra de 24/09). A regra de só leitura em produção vale em todas.
+
+## O ciclo de merge (coordenadora)
+
+1. A frente fecha um lote (revisão final feita), faz push de `worktree-<frente>`
+   e marca **"pronto para merge"** no arquivo dela.
+2. A coordenadora: `git fetch && git merge --no-ff worktree-<frente>` na `main`.
+3. Portão depois do merge: `npm run guarda:visual -- src` (não pode subir),
+   `tsc --noEmit -p tsconfig.app.json` (sem erro novo além dos 4 conhecidos),
+   `vite build` e `build:landing`; `pytest -q` se o merge tocou `backend/`.
+4. Push da `main`; bloco novo no `CONTINUAR-AQUI.md`; perguntas da frente
+   copiadas para `docs/perguntas-abertas.md`.
+5. As outras frentes trazem a `main` com `git merge main` (nunca rebase —
+   a branch já foi pushada).
+
+**O fim do G6 é marco:** quando `g6-integracoes` e `g6-cartoes` estiverem as
+duas na `main`, o guarda do app tem que dar **0**. A coordenadora roda a
+revisão final do G6 inteiro (as duas metades juntas) e fecha a Fase 2.
+
+## Riscos conhecidos deste arranjo
+
+- **`LeadScoringSettings.tsx` tem 1 dos 4 erros de `tsc` pré-existentes**: é da
+  `g6-cartoes`. Os 3 do `useJourneys` são da `residuos-visuais`.
+- **Testes de backend batem no banco de produção**, em transação revertida.
+  Por isso só a frente `backend` roda `pytest`. Banco de teste próprio por
+  frente é melhoria possível, não pré-requisito.
+- **`node_modules` e `.venv` são links para a checkout principal.** Nenhuma
+  frente instala dependência; se precisar, anota e a coordenadora instala.
+- `ApiDocumentation.tsx` já ensinou URL morta oito vezes: a frente mexe em
+  classe, nunca em URL nem em exemplo de payload.

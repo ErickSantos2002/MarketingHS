@@ -24,6 +24,57 @@ duas são a referência para as decisões daqui. A travessia acabou no lote 8E
 - **Onde parou:** `docs/CONTINUAR-AQUI.md`
 - **Plano do lote atual:** `docs/superpowers/plans/`
 
+## Modo autônomo (desde 01/10/2026)
+
+O gargalo deste repositório nunca foi permissão: foram os portões de
+aprovação (spec? plano? inline ou subagente?) e uma frente por vez. Daqui em
+diante:
+
+- **spec → plano → execução sem parar.** Não pergunto se o plano está bom nem
+  como executar: execução é `superpowers:subagent-driven-development` por
+  padrão, com revisão por tarefa e revisão final da branch, como nos G1–G5.
+- **Ao fim de cada lote: commit + push + registro.** O registro é o bloco do
+  `docs/CONTINUAR-AQUI.md` (sessão única) ou o arquivo da frente em
+  `docs/frentes/` (frentes paralelas, ver abaixo).
+- **Dúvida de produto não para o trabalho.** Vai para
+  `docs/perguntas-abertas.md` com as opções e a que eu assumi; assumo a **mais
+  segura e reversível** e sigo. Se nenhuma opção é segura, o item fica de
+  fora e eu puxo o próximo do backlog.
+- **Backlog ordenado + `/loop`** para puxar o próximo item sozinho.
+- **Continuo parando em:** ação irreversível (`push --force`, `reset --hard`,
+  `rm -rf`, apagar branch não mergeada); escrita em produção (banco, deploy no
+  EasyPanel, botão de ação no navegador — a regra de só leitura continua);
+  bloqueio externo (ex.: o 5A espera o GrowthHS). Nesses casos registro e
+  puxo o próximo item; não fico esperando.
+- **A varredura antes do push continua:** `git diff --stat` do que vai subir,
+  nenhum `.env`/credencial no diff, testes e `tsc` sem erro novo.
+- O que se escreve no banco continua sendo script que o Erick roda no Konsole.
+
+### Frentes paralelas com worktree
+
+Várias sessões no mesmo repositório, cada frente na sua worktree. O plano em
+vigor está em `docs/frentes/README.md` — é ele que diz quem é dono do quê.
+
+- **Uma coordenadora** (sessão aberta na raiz do repo, na `main`): mantém o
+  `docs/frentes/README.md`, faz o merge das frentes na `main`, roda o portão
+  depois do merge, consolida `CONTINUAR-AQUI.md` e `perguntas-abertas.md`.
+  **Não escreve feature.**
+- **Cada frente** abre com `claude --worktree <nome>` (worktree em
+  `.claude/worktrees/<nome>`, branch `worktree-<nome>`), roda
+  `bash scripts/preparar-worktree.sh` uma vez, e escreve **só** nos arquivos
+  que o `README.md` dá a ela, mais o próprio `docs/frentes/<nome>.md` (backlog,
+  estado, perguntas). Faz push da **própria branch**; nunca faz merge na
+  `main` nem mexe em `CONTINUAR-AQUI.md`.
+- **Dono único:** `backend/migrations/`, `backend/app/config.py`, routers,
+  `frontend/src/lib/api*`, tipos compartilhados, `components/ui/`,
+  `vite.config.ts`, `package.json`. Precisou mexer fora do seu território,
+  anota no arquivo da frente e a coordenadora decide.
+- **Portas:** Vite da frente na `8080 + n`; backend próprio só para a frente
+  de backend (`8100 + n`, com `MKT_BACKEND_PORT` no Vite). O worker de fila
+  **nunca** sobe numa frente.
+- **pytest** roda contra o banco de produção em transação revertida
+  (`tests/conftest.py`): só a frente de backend roda a suíte.
+
 ## Estrutura
 
 ```
