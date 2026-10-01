@@ -8,91 +8,36 @@ frentes anotam no próprio `docs/frentes/<frente>.md`.
 Quando o Erick responde, a pergunta sai daqui e a resposta vai para o bloco do
 dia no `CONTINUAR-AQUI.md`.
 
-## Herdadas (antes de 01/10) — detalhe no topo do `CONTINUAR-AQUI.md`
+## Respondidas pelo Erick em 01/10/2026
 
-Nenhuma destas teve opção assumida: esperam o Erick e nenhuma frente depende
-delas.
-
-1. Paleta de gráfico própria no Design System oficial.
-2. Status com duas cores (lista × ficha), 3 divergentes.
-3. Cores nomeadas de etiqueta — 4 de 6 se distinguem.
-4. Altura botão × campo (Fase 1).
-5. Fluxo "Conferência lote 4" em rascunho.
-6. Recálculo de pontuação e sync do DataCore disparando automação.
-7. Peso 0 numa variante de A/B.
-8. Conta Unlayer `dnmkt`: HS ou dn.ia?
-9. Colunas de funil da dn.ia em Contatos.
-10. Cor padrão do botão das landings (`#E41A11` no editor × `#1e3a5f` na landing).
-11. Campanhas presas em "Enviando..." — **a frente `backend` investiga o
-    motivo; a correção do dado continua sendo do Erick.**
-12. Contrastes do DS oficial abaixo de 4,5:1 — pedir ajuste ao Design System?
-13. Regra do texto destrutivo (`text-destructive` dá ~3,76:1) no app inteiro (G5).
+| # | Decisão | Vira |
+|---|---|---|
+| 1 | Paleta de gráfico: **aceitar as 6 cores** (7ª+ repete) | nada |
+| 2 | Status: **mapa fixo por token em todo lugar** (ficha deixa de ler o hex do banco) | frente `contatos-decisoes` |
+| 3 | Etiquetas: **reduzir o seletor para as 4 distinguíveis**; antigas remapeadas | frente `contatos-decisoes` |
+| 4 | Altura: **`h-9` nos primitivos** (botão e campo 36 px), tirar o `h-9` manual das telas | frente `primitivos-cta` |
+| 5 | Fluxo "Conferência lote 4": **fica em rascunho** | nada |
+| 6 | Recálculo e sync do DataCore **não disparam automação** | frente `backend` |
+| 7 | A/B: **peso 0 = sem tráfego** | frente `backend` |
+| 8 | Unlayer: **criar projeto próprio da HS** | **Erick** cria e passa o id |
+| 9 | Colunas de funil da dn.ia em Contatos: **remover** | frente `contatos-decisoes` |
+| 10 | CTA das landings: **azul da marca**, uma constante para editor e landing | frente `primitivos-cta` |
+| 11 | Campanhas presas | ✅ resolvida (script rodado) |
+| 12 | Contrastes do DS: **aceitar como está** | nada |
+| 13 | Texto destrutivo: **`--on-tint-danger` no app todo** | frente `cores-decisoes` |
+| 14 | Bloco de código: **bloco da casa** (fica) | nada |
+| 15 | Quadrado de marca: **GrowthHS verde** (`success-700`) | frente `cores-decisoes` |
+| 16 | Descadastro: **âmbar nos dois** (supressão e campanhas) | frente `cores-decisoes` |
+| 17 | Hotlead **verde** (fica) | nada |
+| 18 | Toast do recálculo **fica** | nada |
+| 19 | Permissão de API Key: **escala própria** (Leitura neutra, qualquer escrita âmbar) | frente `cores-decisoes` |
+| 20 | Migration 021 | ✅ aplicada |
+| 21 | Rotas convertidas: **só admin** (fica) | nada |
+| 22 | Fixture `envio` | ✅ feita |
+| 23+24 | Fusão: **migration 022 + reatribuir todo o histórico** — a 022 passa pelo Erick antes de aplicar | frente `backend` |
+| 25 | Checkbox de menu: **só o indicador** (fica) | nada |
+| 26 | Título padrão **"MarketingHS"** (fica) | nada |
+| 27 | Suítes em paralelo: **fazer** (trava no banco + e-mail único nos leads) | frente `backend` |
 
 ## Novas
 
-### G6 (01/10) — já aplicadas com a opção assumida; trocar é uma classe
-
-14. **Bloco de código** em Documentação da API e API Keys: era um editor escuro
-    fixo da dn.ia (`#1E1E2E`) nos dois temas. **Assumido:** o bloco da casa
-    (`bg-muted/50`, borda, texto do tema), igual ao `ExperimentsSetup`.
-    Alternativa: pedir ao DS oficial um token de "superfície de código" escura.
-15. **Quadrado de marca** dos cartões (G do GrowthHS, M do Meta, IA).
-    **Assumido:** pelo matiz da origem — G e M em `info-700`, IA em
-    `warning-700`. Alternativa: GrowthHS em `success-700`, como a pílula em Contatos.
-16. **"Descadastrou" na lista de supressão** ficou neutro (`secondary`), como na
-    origem; em Campanhas (G3) "Descadastrado" é atenção. Unificar?
-17. **Hotlead na barra de faixas do Lead Scoring** passou de vermelho para
-    verde (regra Hot = sucesso do G1/G2). Confirmar.
-18. **Toast do "Recalcular agora"** dizia "undefined leads" (o front lia
-    `result.updated`, a API devolve `atualizados`). **Assumido:** corrigido
-    dentro do G6; revert de uma linha se preferir fora.
-19. **Badge de permissão das API Keys** (revisão final do G6): "Leitura +
-    Escrita" é `success`, o mesmo verde de "Ativa" ao lado, enquanto "Escrita"
-    sozinha é âmbar — o acesso mais amplo parece o mais "seguro". **Mantido**
-    como veio da origem (pelo matiz). Alternativa: escala própria para
-    permissão (ex.: neutro para Leitura, âmbar para qualquer escrita).
-
-### Backend (01/10)
-
-20. ✅ **Respondida 01/10: aplicar.** Aplicada pela coordenadora, duas vezes (reaplicação ok); `leads` tem as 4 políticas admin para `authenticated`. **Migration 021** (política de INSERT/UPDATE em `leads` para o admin) —
-    pronta, não aplicada. Sem ela, `escrita_contatos.py` e `contatos.py` não
-    vão para `authenticated` (o UPDATE afetaria 0 linhas, calado).
-    **Assumido:** os dois ficam em `service_role` + `admin_atual` até o Erick
-    aplicar. Se aprovar, o Erick roda o arquivo duas vezes no Konsole.
-21. **`usuario_atual` → `admin_atual`** nas 7 rotas convertidas. Hoje os 2
-    usuários são admin; um futuro não-admin leva 403 em vez de tela vazia.
-    **Assumido:** `admin_atual` (regra do `CLAUDE.md`).
-22. **Fixture `envio` deixa campanha para trás quando o pytest morre.**
-    **Assumido:** só acrescentar a campanha à pré-limpeza depois que o script
-    de limpeza das 2 de produção rodar. **O script rodou em 01/10** — o
-    conserto da fixture entrou no backlog da frente `backend`.
-23. **Migration 022** (política de UPDATE admin em `lead_conversions`) para a
-    fusão de contatos ir para `authenticated`. **Assumido: não** — a rota já
-    exige admin e a tabela está vazia em produção. Um teste quebra no dia em
-    que a política existir, avisando que dá para converter.
-24. **A fusão de contatos perde histórico** (achado de antes da conversão): não
-    reatribui `journey_runs` nem `crm_handoffs` — apagar o contato descartado
-    leva junto a jornada e a entrega ao comercial dele — e deixa
-    `email_events`, `email_suppressions` e `journey_step_log` com `lead_id`
-    NULL. Incluir na reatribuição (cuidando do `uniq_journey_runs_open`)?
-    **Assumido: não mexer** até o Erick decidir; é mudança de comportamento.
-
-### ui-primitivos (01/10)
-
-25. **Item marcado de menu de múltipla escolha** (`DropdownMenuCheckboxItem`)
-    ganha fundo? **Assumido: não** — só o indicador em `text-action`; várias
-    linhas tingidas viram ruído. Nenhum uso hoje.
-26. **Título de rota não mapeada:** **assumido "MarketingHS"** (com aviso no
-    console em dev). Alternativa: o rótulo do item mais próximo da sidebar.
-
-### Backend, rodada 3 (01/10)
-
-27. **Duas suítes INTEIRAS ao mesmo tempo ainda não são seguras.** Quatro
-    fixtures trocam configuração global de produção e devolvem no teardown
-    (`segredo`, `segredos_resend`, `config_ab`, `config_growthhs`); a `envio`
-    usa `a@b.c`/`re_abc` fixos; ainda há leads de teste com e-mail fixo em
-    `test_crm_entrega.py`, `test_conversao_authenticated.py`,
-    `test_conversao.py` e `test_ab_costura.py`. Proposta da frente:
-    `pg_advisory_lock` nessas fixtures + e-mail único nos leads. **Assumido:**
-    a regra "uma suíte inteira por vez" continua; arquivos isolados já podem
-    rodar em paralelo. Fazer a proposta numa próxima rodada?
