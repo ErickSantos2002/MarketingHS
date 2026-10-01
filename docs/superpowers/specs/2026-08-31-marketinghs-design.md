@@ -337,7 +337,7 @@ na casa.
 | **Lovable AI Gateway** | 3 functions de IA | **API da Claude direto** — troca de provedor, não de arquitetura |
 | **Z-API** (WhatsApp) | 1 function | **Evolution API**, que a HS já roda (com o gotcha do `@lid`) |
 | **Resend** | envio de e-mail | Resend mesmo — o HelpHS já usa. Domínio e chave novos |
-| **Unlayer** | editor de e-mail | Conta própria (tem plano gratuito). Hoje aponta para o projeto `288591` da dn.ia |
+| **Unlayer** | editor de e-mail | Conta própria (tem plano gratuito). Aponta, desde 01/10/2026, para o projeto `289750` da HS (antes, `288591` da dn.ia) |
 | **Meta CAPI** | pixel + token | Pixel da HS — **e a resposta se a HS faz anúncio no Meta** |
 | **Microsoft Clarity** | `useClarity` por página | Projeto próprio, ou remove |
 | **Cloudflare Worker** | teste A/B (lote 7) | Conta Cloudflare da HS |
