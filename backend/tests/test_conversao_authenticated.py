@@ -98,3 +98,66 @@ async def test_chaves_admin_cria_desativa_e_remove(cliente, token_admin):
     finally:
         async with db.sessao(role="service_role") as conn:
             await conn.execute("DELETE FROM api_keys WHERE id = $1::uuid", cid)
+
+
+# ── automacoes.py ────────────────────────────────────────────────────────────
+
+# ⚠️ As rotas COMITAM em produção, e regra ativa dispara em lead de verdade
+# (o gatilho enfileira entrega ao GrowthHS). Por isso a regra de teste nasce
+# INATIVA e com uma etiqueta que nenhum lead tem.
+REGRA_TESTE = {"name": "teste-conversao-authenticated", "is_active": False,
+               "condition_type": "etiqueta", "condition_operator": "is",
+               "condition_value": "teste-conversao-nunca",
+               "action_type": "create_in_growthhs"}
+
+
+async def _apagar_regras_de_teste():
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM automation_rules WHERE name = $1",
+                           REGRA_TESTE["name"])
+
+
+async def test_automacoes_admin_cria_lista_edita_e_apaga(cliente, token_admin):
+    """Produção tem 0 regras: a contagem só prova algo com uma semeada — e a
+    semeada é a da própria rota, sob `authenticated`."""
+    h = _auth(token_admin)
+    await _apagar_regras_de_teste()
+    try:
+        r = await cliente.post("/automacoes", headers=h, json=REGRA_TESTE)
+        assert r.status_code == 201, r.text
+        rid = r.json()["id"]
+        esperado = await _contar("SELECT count(*) FROM automation_rules")
+        assert esperado > 0
+        r = await cliente.get("/automacoes", headers=h)
+        assert r.status_code == 200 and len(r.json()) == esperado, r.text
+        r = await cliente.patch(f"/automacoes/{rid}", headers=h, json={"priority": 3})
+        assert r.status_code == 200, r.text
+        assert await _contar("SELECT priority FROM automation_rules WHERE id = $1::uuid",
+                             rid) == 3
+        assert (await cliente.delete(f"/automacoes/{rid}", headers=h)).status_code == 204
+    finally:
+        await _apagar_regras_de_teste()
+
+
+async def test_automacoes_previa_bate_com_service_role(cliente, token_admin):
+    """A prévia lê `leads`, `ecosystem_identities` (e `lead_tags`/`tags`), as
+    três sob política admin-only. Corte no passado: lead de teste criado por
+    outra rodada não entra na conta no meio do teste."""
+    corte = "2026-09-30"
+    esperado = await _contar(
+        """SELECT count(*) FROM leads l
+            WHERE l.created_at < ($1::date + 1)
+              AND NOT EXISTS (SELECT 1 FROM ecosystem_identities ei
+                               WHERE l.dnia_id IS NOT NULL AND ei.dnia_id = l.dnia_id
+                                 AND ei.growthhs_card_id IS NOT NULL)""", corte)
+    assert esperado > 0
+    r = await cliente.post("/automacoes/previa", headers=_auth(token_admin),
+                           json={"conditions": [{"type": "created_at", "operator": "before",
+                                                 "value": corte}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] == esperado
+
+
+async def test_automacoes_exige_admin(cliente, token_usuario):
+    r = await cliente.get("/automacoes", headers=_auth(token_usuario))
+    assert r.status_code == 403, r.text
