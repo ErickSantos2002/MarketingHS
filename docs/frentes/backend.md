@@ -51,6 +51,20 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
      `config_growthhs`) e e-mail único nos leads de teste fixos. Prova: duas
      suítes inteiras juntas, verdes.
 
+- [ ] **Rodada 5 (01/10):**
+  1. A 022 foi APLICADA: converter a fusão de contatos para
+     `sessao(role="authenticated", user_id=...)` e trocar o teste-sentinela
+     `test_fusao_continua_service_role_enquanto_nao_houver_a_022` (hoje
+     vermelho, de propósito) por teste que prova a fusão completa sob
+     `authenticated` (todas as 15 tabelas reatribuídas, nada zerado calado).
+  2. A 023 foi APLICADA: os testes de massa já rodam (17 passed em
+     `test_automacao_em_massa.py` + `test_fusao_historico.py` + `test_fila.py`).
+  3. `test_captura.py::pagina_sonda` limpa a identidade que cria.
+  4. **Frontend, liberado para esta frente:** em
+     `frontend/src/pages/admin/Experiments.tsx:~116` a variante nova nasce com
+     o mesmo peso das outras (dividir igual), em vez de 0. Guarda 0, `tsc` 0,
+     `vite build`.
+
 ## Estado
 
 **01/10/2026 — rodada 4.** Branch `worktree-agent-ac6eb5bc3dba1b0d4`.

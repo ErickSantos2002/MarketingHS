@@ -57,3 +57,16 @@ dia no `CONTINUAR-AQUI.md`.
     ou dar ao `sm` altura fixa no primitivo.
 33. **A cor de destaque da landing inteira** (foco de campo, confirmação)
     passou a seguir a mesma constante do botão. **Assumido: é o desejado.**
+34. ✅ **Variante nova de A/B** (com peso 0 = sem tráfego): **dividir igual**
+    (Erick, 01/10). → rodada 5.
+35. ✅ **Migrations 022 e 023 aplicadas** (Erick aprovou, 01/10): 023 conferida
+    contra o banco vivo (só as 3 linhas de trava por função); 022 liga RLS em
+    `crm_handoffs`/`email_send_queue`/`email_send_dead` — worker e `leitura`
+    têm BYPASSRLS, conferido. → a fusão vai para `authenticated` na rodada 5.
+36. **Recálculo pode pôr contato num segmento de jornada** e a matrícula por
+    segmento olha o estado, não o evento (hoje: 1 fluxo por segmento, em
+    rascunho). **Assumido: não mexer.**
+37. **`pagina_sonda` (`test_captura.py`) cria identidade e nunca apaga.**
+    **Assumido:** o teste passa a limpar o que cria (rodada 5). Os restos
+    antigos (1 identidade de 21/09, 2 chaves `teste 8B` de 23/09) ficam para o
+    reset do banco.
