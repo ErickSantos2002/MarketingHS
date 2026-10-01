@@ -6,7 +6,12 @@ somem (CASCADE) os runs de jornada e as entregas ao comercial dele, ou ficam
 relatório do contato mantido só fica mais pobre.
 
 Tudo na fixture `conexao` (transação revertida), chamando o MESMO
-`fundir_leads` que a rota chama.
+`fundir_leads` que a rota chama — sob `service_role` E sob `authenticated`
+com um admin de verdade, que é o papel da rota desde a migration 022
+(rodada 5). Sob `authenticated` o modo de falhar é pior que o 500: tabela sem
+política de UPDATE afeta 0 linhas sem erro, e o DELETE do descartado leva o
+que não foi movido pelo CASCADE. Por isso a semeadura cobre as 15 tabelas e o
+teste exige que CADA uma tenha movido pelo menos uma linha.
 """
 
 import json
@@ -51,7 +56,30 @@ def marca():
     return uuid4().hex[:10]
 
 
-async def test_fusao_reatribui_todo_o_historico(conexao, marca):
+@pytest.fixture(params=["service_role", "authenticated"])
+def papel(request):
+    return request.param
+
+
+async def _fundir(conexao, papel, manter, descartar) -> dict:
+    """Chama `fundir_leads` no papel pedido e volta a `service_role` para as
+    conferências (BYPASSRLS: vê o que o admin não visse)."""
+    if papel == "service_role":
+        return await fundir_leads(conexao, manter, descartar)
+    admin = await conexao.fetchval(
+        "SELECT user_id::text FROM user_roles WHERE role = 'admin' LIMIT 1")
+    if admin is None:
+        pytest.skip("nenhum admin em user_roles")
+    await conexao.execute("SELECT set_config('app.current_user_id', $1, true)", admin)
+    await conexao.execute("SET LOCAL ROLE authenticated")
+    try:
+        return await fundir_leads(conexao, manter, descartar)
+    finally:
+        await conexao.execute("SET LOCAL ROLE service_role")
+        await conexao.execute("SELECT set_config('app.current_user_id', '', true)")
+
+
+async def test_fusao_reatribui_todo_o_historico(conexao, marca, papel):
     m = await _lead(conexao, "mantido")
     d = await _lead(conexao, "descartado")
 
@@ -109,8 +137,30 @@ async def test_fusao_reatribui_todo_o_historico(conexao, marca):
         f"v_teste-fusao-{marca}", d)
     await conexao.execute(
         "INSERT INTO lead_conversions (lead_id, tipo) VALUES ($1::uuid, 'diagnostico')", d)
+    # Etiqueta, segmento e nota: uma do descartado sozinho (vai) e uma que os
+    # dois têm (a repetida sai).
+    t1, t2 = [await conexao.fetchval(
+        "INSERT INTO tags (name) VALUES ($1) RETURNING id", f"teste-fusao-{n}-{marca}")
+        for n in (1, 2)]
+    s1, s2 = [await conexao.fetchval(
+        "INSERT INTO segments (name) VALUES ($1) RETURNING id", f"teste-fusao-{n}-{marca}")
+        for n in (1, 2)]
+    for lead, tag, seg in ((m, t1, s1), (d, t1, s1), (d, t2, s2)):
+        await conexao.execute(
+            "INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2)", lead, tag)
+        await conexao.execute(
+            "INSERT INTO segment_contacts (segment_id, lead_id) VALUES ($1, $2::uuid)", seg, lead)
+    await conexao.execute(
+        "INSERT INTO lead_notes (lead_id, content) VALUES ($1::uuid, 'nota do descartado')", d)
 
-    resultado = await fundir_leads(conexao, m, d)
+    resultado = await _fundir(conexao, papel, m, d)
+
+    # Nenhuma tabela "andou" zero: sob `authenticated`, 0 aqui é a política
+    # que falta, não a ausência de histórico (as 15 foram semeadas).
+    parados = [t for t in _TABELAS_FILHAS if resultado["movidos"][t] < 1]
+    assert parados == [], parados
+    assert resultado["resolvidos"]["lead_tags_repetidos"] == 1
+    assert resultado["resolvidos"]["segment_contacts_repetidos"] == 1
 
     assert await conexao.fetchval("SELECT count(*) FROM leads WHERE id = $1::uuid", d) == 0
     # Nada do histórico ficou com o id do descartado (as tabelas sem FK
@@ -124,6 +174,7 @@ async def test_fusao_reatribui_todo_o_historico(conexao, marca):
     runs = {str(r["id"]): r for r in await conexao.fetch(
         "SELECT id, lead_id::text, state, context FROM journey_runs WHERE id = ANY($1::uuid[])",
         [run_m_j1, run_d_j1, run_d_j2, run_d_j3])}
+    assert len(runs) == 4  # o CASCADE não levou nenhum
     assert all(r["lead_id"] == m for r in runs.values())
     assert runs[run_m_j1]["state"] == "waiting"
     assert runs[run_d_j1]["state"] == "exited"
@@ -166,9 +217,17 @@ async def test_fusao_reatribui_todo_o_historico(conexao, marca):
             f"SELECT lead_id::text FROM {tabela} WHERE {filtro} = $1", valor) == m, tabela
     assert await conexao.fetchval(
         "SELECT count(*) FROM lead_conversions WHERE lead_id = $1::uuid", m) == 1
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM lead_tags WHERE lead_id = $1::uuid "
+        "AND tag_id = ANY($2::uuid[])", m, [t1, t2]) == 2
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM segment_contacts WHERE lead_id = $1::uuid "
+        "AND segment_id = ANY($2::uuid[])", m, [s1, s2]) == 2
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM lead_notes WHERE lead_id = $1::uuid", m) == 1
 
 
-async def test_fusao_sem_colisao_nao_encerra_nem_apaga_nada(conexao, marca):
+async def test_fusao_sem_colisao_nao_encerra_nem_apaga_nada(conexao, marca, papel):
     """A regra de colisão só age quando há colisão: run aberto em fluxo
     diferente e pedido de ação diferente vão inteiros."""
     m = await _lead(conexao, "mantido")
@@ -181,8 +240,10 @@ async def test_fusao_sem_colisao_nao_encerra_nem_apaga_nada(conexao, marca):
     await conexao.execute(
         "INSERT INTO crm_handoffs (lead_id, acao, origem) VALUES ($1::uuid, 'mover', 'regra')", d)
 
-    resultado = await fundir_leads(conexao, m, d)
+    resultado = await _fundir(conexao, papel, m, d)
 
+    assert resultado["movidos"]["journey_runs"] == 1
+    assert resultado["movidos"]["crm_handoffs"] == 1
     assert resultado["resolvidos"]["runs_encerrados"] == 0
     assert resultado["resolvidos"]["pedidos_repetidos"] == 0
     assert await conexao.fetchval(

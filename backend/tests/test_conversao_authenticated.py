@@ -695,17 +695,51 @@ async def test_escrita_tags_em_lote_edicao_e_exclusao_afetam_o_lead(
     assert (await cliente.delete(f"/contatos/{b}", headers=h)).status_code == 404
 
 
-async def test_fusao_continua_service_role_enquanto_nao_houver_a_022():
-    """A fusão reatribui todo o histórico e depois apaga o descartado. Sem as
-    políticas e GRANTs da migration 022, sob `authenticated` parte da
-    reatribuição afetaria 0 linhas calada (e o CASCADE levaria o resto) — por
-    isso `fundir_contatos` fica em `service_role`. Este teste quebra no dia
-    em que a 022 estiver aplicada: é o aviso de que a fusão pode (e deve) ir
-    para `authenticated`."""
-    await db.init_db()
-    n = await _contar("SELECT count(*) FROM pg_policies WHERE schemaname = 'public' "
-                      "AND tablename = 'lead_conversions' AND cmd IN ('UPDATE', 'ALL')")
-    assert n == 0
+async def test_fusao_pela_rota_sob_authenticated_leva_o_historico(
+        cliente, token_admin, leads_escrita):
+    """A migration 022 foi aplicada (01/10/2026) e a fusão foi para
+    `authenticated` (rodada 5). Este teste substitui o sentinela que esperava
+    por ela. A prova das 15 tabelas, colisões inclusive, está em
+    `test_fusao_historico.py` (transação revertida, os dois papéis); aqui é a
+    ROTA, comitando: o histórico do descartado tem de chegar ao mantido, e não
+    sumir pelo CASCADE do DELETE.
+
+    Só o que não aciona nada fora do banco: o pedido ao comercial nasce
+    'entregue' (o worker de produção só pega 'pendente')."""
+    h = _auth(token_admin)
+    a, b = leads_escrita
+    async with db.sessao(role="service_role") as conn:
+        # Caso 1 (funde os LEADS) exige a mesma identidade ou nenhuma; o
+        # gatilho de captura pode ter dado uma a cada um.
+        await conn.execute("UPDATE leads SET dnia_id = NULL WHERE id = ANY($1::uuid[])", [a, b])
+        await conn.execute(
+            "INSERT INTO lead_notes (lead_id, content) VALUES ($1::uuid, 'nota da fusão')", b)
+        await conn.execute(
+            "INSERT INTO lead_conversions (lead_id, tipo) VALUES ($1::uuid, 'diagnostico')", b)
+        await conn.execute(
+            "INSERT INTO crm_handoffs (lead_id, acao, origem, status, card_id) "
+            "VALUES ($1::uuid, 'criar', 'manual', 'entregue', 1)", b)
+
+    r = await cliente.post("/contatos/fundir", headers=h, json={"manter": a, "descartar": b})
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert corpo["caso"] == "leads", corpo
+    for tabela in ("lead_notes", "lead_conversions", "crm_handoffs"):
+        assert corpo["movidos"][tabela] == 1, (tabela, corpo)
+        assert await _contar(
+            f"SELECT count(*) FROM {tabela} WHERE lead_id = $1::uuid", a) == 1, tabela
+    assert await _contar("SELECT count(*) FROM leads WHERE id = $1::uuid", b) == 0
+
+
+def test_fusao_roda_como_authenticated():
+    """O teste de cima passaria também sob `service_role` (BYPASSRLS). Este lê
+    o código: a rota abre a sessão como o admin que chamou."""
+    import inspect
+
+    from app.routers.escrita_contatos import fundir_contatos
+    fonte = inspect.getsource(fundir_contatos)
+    assert 'sessao(role="authenticated", user_id=admin.id)' in fonte
+    assert 'role="service_role"' not in fonte
 
 
 async def test_escrita_contatos_exige_admin(cliente, token_usuario):
