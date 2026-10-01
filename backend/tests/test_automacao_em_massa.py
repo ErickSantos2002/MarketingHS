@@ -143,6 +143,7 @@ def test_so_as_operacoes_em_massa_marcam():
 
 # ── O lado em massa: só atualiza dado (exige a 023) ──────────────────────────
 
+@pytest.mark.trava_global  # o UPDATE da base inteira trava toda linha de `leads`
 async def test_recalculo_atualiza_pontuacao_sem_disparar_regra(conexao):
     await _exigir_023(conexao)
     lead = await _lead(conexao, "decisao6-recalculo@exemplo.invalid", cargo="CEO",

@@ -13,6 +13,7 @@ isso cada router convertido prova duas coisas:
 from datetime import date
 
 import pytest_asyncio
+from rodada import EmailDeRodada
 
 import app.database as db
 
@@ -597,20 +598,28 @@ async def test_contatos_leitura_exige_admin(cliente, token_usuario):
 # SEM erro, e a rota responde 200. Por isso cada escrita é conferida no banco,
 # sob `service_role`, depois da chamada — o status da resposta não basta.
 
-EMAILS_ESCRITA = [f"teste-conversao-escrita-{i}@exemplo.invalid" for i in range(4)]
+# Únicos por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
+_EMAILS_ESCRITA = [EmailDeRodada(f"teste-conversao-escrita-{i}",
+                                 antigo=f"teste-conversao-escrita-{i}@exemplo.invalid")
+                   for i in range(4)]
+EMAILS_ESCRITA = [e.atual for e in _EMAILS_ESCRITA]
 TAG_ESCRITA = "teste-conversao-escrita"
 
 
 async def _apagar_leads_de_escrita():
     async with db.sessao(role="service_role") as conn:
-        ids = [r["id"] for r in await conn.fetch(
-            "SELECT id FROM leads WHERE email = ANY($1::text[])", EMAILS_ESCRITA)]
+        ids = []
+        for e in _EMAILS_ESCRITA:
+            ids += [r["id"] for r in await conn.fetch(
+                f"SELECT id FROM leads WHERE {e.onde(1)}", *e.parametros())]
         # contact_events é ON DELETE SET NULL: sem isto os eventos do teste
-        # ficariam órfãos na timeline.
+        # ficariam órfãos na timeline (e a cópia em journey_events, sem FK).
+        await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
         await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
         await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
-        await conn.execute("DELETE FROM ecosystem_identities WHERE email = ANY($1::text[])",
-                           EMAILS_ESCRITA)
+        for e in _EMAILS_ESCRITA:
+            await conn.execute(f"DELETE FROM ecosystem_identities WHERE {e.onde(1)}",
+                               *e.parametros())
         await conn.execute("DELETE FROM tags WHERE name = $1", TAG_ESCRITA)
 
 

@@ -150,6 +150,42 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   quebra quando ela estiver: aí troca o papel na rota e roda
   `test_fusao_historico.py` sob `authenticated`.
 
+- [x] **#27 Duas suítes inteiras ao mesmo tempo.** Antes de mexer, um
+  levantamento (subagente, só leitura) de tudo o que uma rodada comita e a
+  outra vê achou bem mais que as 4 fixtures: limpeza por prefixo (`limpar_ab`
+  `teste-8c%`, tags `api-teste-8b%`, campanhas/segmentos/fluxos
+  `teste-conversao-authenticated%`), contagem da tabela inteira
+  (`test_conversao_authenticated`: templates, regras, campanhas, prévia de
+  segmento, recálculo), o `reenfileirar` de TODAS as falhas
+  (`test_config_growthhs`), página/slug/tag fixos (`test_captura`), o
+  `_algum_admin` que pegaria o admin efêmero da outra rodada. E-mail único
+  sozinho não cobre isso. Por isso a trava ficou **mais larga que as 4
+  fixtures** (as 4 estão dentro):
+  - `tests/conftest.py`: `pg_advisory_lock(7270010027)` numa conexão própria
+    (thread + laço próprios, uma por processo), tomada por fixture autouse
+    **antes de qualquer outra** e solta depois da última. Trava o teste que
+    usa fixture que comita (`cliente`, `envio`, `segredo`, `segredos_resend`,
+    `config_ab`, `config_growthhs`, `limpar_ab`, `chave_de`, `token_admin`,
+    `token_usuario`, em cadeia), todo teste assíncrono sem `conexao` (pode
+    comitar por `db.sessao` direto — `lead_8d`, `pagina_sonda`…) e o marcado
+    `@pytest.mark.trava_global` (usa só `conexao` mas lê estado comitado:
+    `test_fila.py` inteiro, `test_acha_por_telefone_normalizado`,
+    `test_nexus_config_saiu…`, o recálculo da decisão 6). O que só usa
+    `conexao` anda livre. Processo morto solta a trava junto com a conexão.
+  - **E-mail único** (`tests/rodada.py`, molde do `lead_real`): `lead_8d` e
+    `gemeo` (`test_crm_entrega.py`), `EMAILS_ESCRITA`, `EMAIL_E2E`,
+    `EMAIL_AB` (`test_ab_costura.py`) e o contato da `envio` (era `a@b.c`;
+    os corpos do webhook usam `rodada.ENVIO`). Limpeza: o desta rodada, o
+    fixo antigo, e o de rodada morta (forma exata + > 2 h).
+  - **Defeito achado (consertado):** o teardown da `envio` fazia
+    `DELETE FROM email_events WHERE svix_id LIKE 'msg_%'` — o Svix de verdade
+    também usa `msg_`: em produção ele apagaria os eventos reais de e-mail.
+    Agora só os dos testes (`resend_email_id` `re_abc`/`re_x`, inventados).
+  - Resíduo antigo achado na leitura, não mexido: 1 identidade
+    `sonda-captura@exemplo.invalid` (+5585999991234), de 21/09 — a
+    `pagina_sonda` de `test_captura.py` cria a identidade pelo telefone e
+    nunca a apaga (ver Perguntas 8).
+
 **01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
 Testes: 396 passed + 1 failed antes (rodada 2) → **397 passed** depois (29 min 27 s, sozinha; o I5 verde). Fim: 0 usuários, 0 leads e 0 campanhas de teste no banco (leitura).
 **Pronto para merge** (a branch inteira; só `backend/tests/` muda).
@@ -359,3 +395,8 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    marca — invasivo e com pergunta própria (até quando vale a marca?).
    **Assumido: não mexido.** Hoje (leitura, 01/10): 1 fluxo por segmento,
    em rascunho; nenhum ativo — o caso não acontece ainda.
+8. **(rodada 4) A `pagina_sonda` (`test_captura.py`) vaza identidade.** A
+   captura cria `ecosystem_identities` pelo telefone fixo, e a fixture não a
+   apaga: há uma de 21/09 no banco. Apagar a identidade no teardown (e a
+   que está lá) é escrita de limpeza — **assumido: não feito nesta rodada**
+   (fora do backlog; a trava já impede que ela atrapalhe a outra rodada).

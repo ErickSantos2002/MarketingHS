@@ -9,7 +9,9 @@ import pytest
 
 from app import fila
 
-pytestmark = pytest.mark.asyncio
+# ⚠️ `trava_global`: `fila.reivindicar` e `fechar_campanhas_drenadas` olham a
+# fila e as campanhas INTEIRAS — o que outra rodada comitou entra na conta.
+pytestmark = [pytest.mark.asyncio, pytest.mark.trava_global]
 
 
 async def test_reivindicar_esconde_a_mensagem_dos_outros(conexao, semear):

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from rodada import EmailDeRodada
 
 import app.database as db
 from app.chave_api import gerar_chave
@@ -37,7 +38,9 @@ async def _lead(conexao, **campos):
         *campos.values()))
 
 
-EMAIL_E2E = "conversao-e2e@exemplo.invalid"
+# Único por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
+_EMAIL_E2E = EmailDeRodada("conversao-e2e", antigo="conversao-e2e@exemplo.invalid")
+EMAIL_E2E = _EMAIL_E2E.atual
 
 
 @pytest_asyncio.fixture
@@ -58,7 +61,8 @@ async def chamador():
         # se o pytest morrer no meio (timeout, Ctrl-C), a linha fica e
         # `leads_email_unique`/o hash da chave derrubam a rodada seguinte no
         # setup, com um erro que aponta para o índice e não para o motivo.
-        await conn.execute("DELETE FROM leads WHERE email = $1", EMAIL_E2E)
+        await conn.execute(f"DELETE FROM leads WHERE {_EMAIL_E2E.onde(1)}",
+                           *_EMAIL_E2E.parametros())
         await conn.execute("DELETE FROM api_keys WHERE key_hash = $1", hash_)
         lead = await conn.fetchval(
             "INSERT INTO leads (nome, email, tipo) VALUES "
@@ -152,6 +156,7 @@ async def test_dnia_id_vence_o_email(conexao):
     assert achado == certo
 
 
+@pytest.mark.trava_global  # o lead comitado da captura de outra rodada tem o mesmo telefone
 async def test_acha_por_telefone_normalizado(conexao):
     normalizado = await conexao.fetchval(
         "SELECT normalize_phone_br($1)", "(85) 99999-1234")

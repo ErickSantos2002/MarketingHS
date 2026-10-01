@@ -15,9 +15,12 @@ import pytest_asyncio
 import app.database as db
 from app.crm import entrega
 from app.crm.growthhs import Config
+from rodada import EmailDeRodada
 
-EMAIL = "entrega-8d@exemplo.invalid"
-EMAIL_GEMEO = "entrega-8d-gemeo@exemplo.invalid"
+# Único por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
+_EMAIL = EmailDeRodada("entrega-8d", antigo="entrega-8d@exemplo.invalid")
+_EMAIL_GEMEO = EmailDeRodada("entrega-8d-gemeo", antigo="entrega-8d-gemeo@exemplo.invalid")
+EMAIL, EMAIL_GEMEO = _EMAIL.atual, _EMAIL_GEMEO.atual
 CFG = Config(base_url="https://growthhs.exemplo.invalid", board_id=3,
              app_url="https://app.exemplo.invalid", api_key="chave-8d")
 
@@ -47,11 +50,12 @@ async def lead_8d():
     async def limpar():
         async with db.sessao(role="service_role") as conn:
             ids = [r["id"] for r in await conn.fetch(
-                "SELECT id FROM leads WHERE email = $1", EMAIL)]
+                f"SELECT id FROM leads WHERE {_EMAIL.onde(1)}", *_EMAIL.parametros())]
             await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
-            await conn.execute("DELETE FROM ecosystem_identities WHERE email = $1", EMAIL)
+            await conn.execute(f"DELETE FROM ecosystem_identities WHERE {_EMAIL.onde(1)}",
+                               *_EMAIL.parametros())
 
     await limpar()
     async with db.sessao(role="service_role") as conn:
@@ -220,11 +224,13 @@ async def gemeo(lead_8d):
     async def limpar():
         async with db.sessao(role="service_role") as conn:
             ids = [r["id"] for r in await conn.fetch(
-                "SELECT id FROM leads WHERE email = $1", EMAIL_GEMEO)]
+                f"SELECT id FROM leads WHERE {_EMAIL_GEMEO.onde(1)}",
+                *_EMAIL_GEMEO.parametros())]
             await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
-            await conn.execute("DELETE FROM ecosystem_identities WHERE email = $1", EMAIL_GEMEO)
+            await conn.execute(f"DELETE FROM ecosystem_identities WHERE {_EMAIL_GEMEO.onde(1)}",
+                               *_EMAIL_GEMEO.parametros())
 
     await limpar()
     async with db.sessao(role="service_role") as conn:

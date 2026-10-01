@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 
 import app.database as db
+from rodada import ENVIO
 
 pytestmark = pytest.mark.asyncio
 
@@ -32,7 +33,7 @@ def _corpo(tipo: str, send_id: str | None = None, **extra) -> str:
     return json.dumps({
         "type": tipo,
         "created_at": "2026-09-01T12:00:00.000Z",
-        "data": {"email_id": "re_abc", "to": ["a@b.c"], "tags": tags, **extra},
+        "data": {"email_id": "re_abc", "to": [ENVIO.atual], "tags": tags, **extra},
     })
 
 
@@ -120,13 +121,13 @@ async def test_hard_bounce_suprime_e_transiente_nao(cliente, segredo, envio):
                   _corpo("email.bounced", envio, bounce={"type": "Transient"}))
     async with sessao(role="service_role") as conn:
         assert await conn.fetchval(
-            "SELECT count(*) FROM email_suppressions WHERE email = 'a@b.c'") == 0
+            "SELECT count(*) FROM email_suppressions WHERE email = $1", ENVIO.atual) == 0
 
     await _postar(cliente, segredo, "msg_p",
                   _corpo("email.bounced", envio, bounce={"type": "Permanent"}))
     async with sessao(role="service_role") as conn:
         assert await conn.fetchval(
-            "SELECT reason FROM email_suppressions WHERE email = 'a@b.c'") == "bounce"
+            "SELECT reason FROM email_suppressions WHERE email = $1", ENVIO.atual) == "bounce"
 
 
 async def test_reclamacao_suprime(cliente, segredo, envio):
@@ -134,7 +135,7 @@ async def test_reclamacao_suprime(cliente, segredo, envio):
     await _postar(cliente, segredo, "msg_c", _corpo("email.complained", envio))
     async with sessao(role="service_role") as conn:
         assert await conn.fetchval(
-            "SELECT reason FROM email_suppressions WHERE email = 'a@b.c'") == "complaint"
+            "SELECT reason FROM email_suppressions WHERE email = $1", ENVIO.atual) == "complaint"
 
 
 async def test_timestamp_nao_numerico_devolve_401(cliente, segredo):
@@ -152,7 +153,7 @@ async def test_evento_de_campanha_excluida_nao_entra_em_laco(cliente, segredo, e
     from app.database import sessao
     corpo = json.dumps({
         "type": "email.opened", "created_at": "2026-09-01T12:00:00.000Z",
-        "data": {"email_id": "re_x", "to": ["a@b.c"], "tags": [
+        "data": {"email_id": "re_x", "to": [ENVIO.atual], "tags": [
             {"name": "campaign_id", "value": "00000000-0000-0000-0000-000000000000"},
             {"name": "lead_id", "value": "00000000-0000-0000-0000-000000000001"}]},
     })

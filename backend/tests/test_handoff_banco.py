@@ -61,6 +61,7 @@ async def test_identidade_tem_as_colunas_inteiras_do_growthhs(conexao):
     assert tipos == {"growthhs_card_id": "bigint", "growthhs_person_id": "bigint"}
 
 
+@pytest.mark.trava_global  # apaga e recria a linha ÚNICA que `config_growthhs` de outra rodada grava
 async def test_nexus_config_saiu_e_growthhs_config_e_linha_unica(conexao):
     assert await conexao.fetchval("SELECT to_regclass('public.nexus_config')") is None
     await conexao.execute("DELETE FROM growthhs_config")
