@@ -47,7 +47,7 @@ export function ContactsToolbar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Buscar por nome, email, telefone..."
-          className="pl-9 h-9"
+          className="pl-9"
         />
       </div>
 

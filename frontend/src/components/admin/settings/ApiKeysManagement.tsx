@@ -270,7 +270,7 @@ export default function ApiKeysManagement() {
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
                 placeholder='ex: "Agente Lia", "N8N Flows"'
-                className="text-xs h-9"
+                className="text-xs"
               />
             </div>
             <div className="space-y-1.5">
@@ -285,7 +285,7 @@ export default function ApiKeysManagement() {
             <div className="space-y-1.5">
               <Label className="text-xs">Permissões</Label>
               <Select value={formPerm} onValueChange={setFormPerm}>
-                <SelectTrigger className="text-xs h-9">
+                <SelectTrigger className="text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -320,7 +320,7 @@ export default function ApiKeysManagement() {
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
-                      className={cn("w-full justify-start text-left text-xs h-9", !expiryDate && "text-muted-foreground")}
+                      className={cn("w-full justify-start text-left text-xs", !expiryDate && "text-muted-foreground")}
                     >
                       <CalendarIcon className="mr-2 h-3.5 w-3.5" />
                       {expiryDate ? format(expiryDate, "PPP", { locale: ptBR }) : "Selecione a data de expiração"}

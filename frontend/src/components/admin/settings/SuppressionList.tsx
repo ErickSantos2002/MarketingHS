@@ -187,7 +187,7 @@ export default function SuppressionList() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Buscar por email..."
-          className="text-xs h-9"
+          className="text-xs"
         />
         <Button type="submit" variant="outline" size="sm" className="flex-shrink-0">
           <Search className="h-3.5 w-3.5" />
@@ -322,7 +322,7 @@ export default function SuppressionList() {
                 onChange={(e) => setAddEmail(e.target.value)}
                 placeholder="exemplo@dominio.com"
                 type="email"
-                className="text-xs h-9"
+                className="text-xs"
                 onKeyDown={(e) => { if (e.key === 'Enter' && !adding) handleAdd(); }}
               />
             </div>

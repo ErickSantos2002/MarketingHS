@@ -68,7 +68,7 @@ export function StatusDropdown({ leadId, currentStatus, onStatusChange, size = '
   return (
     <Select value={value} onValueChange={handleChange}>
       <SelectTrigger
-        className={`${size === 'sm' ? 'h-7 text-xs px-2 w-[140px]' : 'h-9 text-sm'} border text-conteudo-heading`}
+        className={`${size === 'sm' ? 'h-7 text-xs px-2 w-[140px]' : 'text-sm'} border text-conteudo-heading`}
         style={estiloDeCorDeDado(color)}
         onClick={(e) => e.stopPropagation()}
       >

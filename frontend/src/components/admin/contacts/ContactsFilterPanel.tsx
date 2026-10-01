@@ -359,7 +359,7 @@ function FilterSelect({
     <div className="space-y-1.5">
       <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="h-9">
+        <SelectTrigger>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
