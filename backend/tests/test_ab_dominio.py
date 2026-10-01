@@ -51,12 +51,26 @@ def test_sorteio_respeita_o_peso():
     assert sortear(variantes, lambda: 0.31)["key"] == "B"
 
 
-def test_peso_zero_ou_ausente_vale_um_como_na_origem():
-    """⚠️ A tela deixa digitar 0 esperando "sem tráfego"; a origem dava peso 1.
-    Preservado de propósito — decisão 15 do plano, pergunta ao Erick."""
-    variantes = [{"key": "A", "weight": 0}, {"key": "B"}]
+def test_peso_zero_nao_recebe_trafego():
+    """Decisão 7 do Erick (01/10/2026): 0 = sem tráfego. Até então valia 1,
+    como na origem — a tela deixa digitar 0 esperando o contrário."""
+    variantes = [{"key": "A", "weight": 0}, {"key": "B", "weight": 50},
+                 {"key": "C", "weight": -3}]
+    for r in (0.0, 0.25, 0.5, 0.99):
+        assert sortear(variantes, lambda: r)["key"] == "B"
+
+
+def test_peso_ausente_ou_nao_numerico_continua_valendo_um():
+    """Variante gravada antes de o campo existir não pediu zero."""
+    variantes = [{"key": "A"}, {"key": "B", "weight": "x"}]
     assert sortear(variantes, lambda: 0.49)["key"] == "A"
     assert sortear(variantes, lambda: 0.51)["key"] == "B"
+
+
+def test_todas_zeradas_nao_sorteiam_ninguem():
+    """O chamador decide (o redirecionador manda ao controle)."""
+    assert sortear([{"key": "A", "weight": 0}, {"key": "B", "weight": 0}],
+                   lambda: 0.5) is None
 
 
 LIDO = {"device_type": "desktop", "os": "Windows", "browser": "Chrome", "browser_version": "1"}

@@ -1,0 +1,192 @@
+"""A fusão de contatos leva TODO o histórico (decisão 23+24 do Erick, 01/10/2026).
+
+O modo de falhar é o calado: a fusão responde 200, o descartado some, e com ele
+somem (CASCADE) os runs de jornada e as entregas ao comercial dele, ou ficam
+órfãos (`lead_id` NULL) os eventos de e-mail e a supressão. Ninguém vê; o
+relatório do contato mantido só fica mais pobre.
+
+Tudo na fixture `conexao` (transação revertida), chamando o MESMO
+`fundir_leads` que a rota chama.
+"""
+
+import json
+from uuid import uuid4
+
+import pytest
+
+from app.routers.escrita_contatos import _TABELAS_FILHAS, fundir_leads
+
+
+async def _lead(conexao, rotulo) -> str:
+    return str(await conexao.fetchval(
+        "INSERT INTO leads (nome, email, tipo) VALUES ($1, $2, 'teste') RETURNING id",
+        f"Fusão {rotulo}", f"fusao-{rotulo}-{uuid4().hex[:8]}@exemplo.invalid"))
+
+
+async def _jornada(conexao, nome) -> str:
+    return str(await conexao.fetchval(
+        "INSERT INTO journeys (name, entry_type) VALUES ($1, 'event') RETURNING id", nome))
+
+
+async def _run(conexao, jornada, lead, estado="waiting") -> str:
+    return str(await conexao.fetchval(
+        "INSERT INTO journey_runs (journey_id, lead_id, state, current_node_id) "
+        "VALUES ($1::uuid, $2::uuid, $3, 'n1') RETURNING id", jornada, lead, estado))
+
+
+async def _campanha(conexao, nome) -> str:
+    return str(await conexao.fetchval(
+        "INSERT INTO campaigns (name, channel, status) VALUES ($1, 'email', 'draft') "
+        "RETURNING id", nome))
+
+
+async def _envio(conexao, campanha, lead) -> str:
+    return str(await conexao.fetchval(
+        "INSERT INTO campaign_sends (campaign_id, lead_id, channel, status) "
+        "VALUES ($1::uuid, $2::uuid, 'email', 'sent') RETURNING id", campanha, lead))
+
+
+@pytest.fixture
+def marca():
+    return uuid4().hex[:10]
+
+
+async def test_fusao_reatribui_todo_o_historico(conexao, marca):
+    m = await _lead(conexao, "mantido")
+    d = await _lead(conexao, "descartado")
+
+    # Jornadas: J1 os dois abertos (colidiria no uniq_journey_runs_open),
+    # J2 só o descartado aberto, J3 o descartado já concluído.
+    j1, j2, j3 = [await _jornada(conexao, f"fusão {n} {marca}") for n in (1, 2, 3)]
+    run_m_j1 = await _run(conexao, j1, m)
+    run_d_j1 = await _run(conexao, j1, d)
+    run_d_j2 = await _run(conexao, j2, d, "active")
+    run_d_j3 = await _run(conexao, j3, d, "done")
+    await conexao.execute(
+        "INSERT INTO journey_step_log (run_id, journey_id, lead_id, node_id, node_type, result) "
+        "VALUES ($1::uuid, $2::uuid, $3::uuid, 'n1', 'send_email', 'ok')", run_d_j3, j3, d)
+
+    # Comercial: os dois com 'criar' pendente (colidiria no
+    # uniq_crm_handoffs_pendente); o descartado ainda tem um 'criar' entregue e
+    # um 'mover' pendente (que não colidem).
+    pend_m = await conexao.fetchval(
+        "INSERT INTO crm_handoffs (lead_id, acao, origem) VALUES ($1::uuid, 'criar', 'manual') "
+        "RETURNING id", m)
+    await conexao.execute(
+        "INSERT INTO crm_handoffs (lead_id, acao, origem) VALUES ($1::uuid, 'criar', 'regra')", d)
+    await conexao.execute(
+        "INSERT INTO crm_handoffs (lead_id, acao, origem, status, card_id) "
+        "VALUES ($1::uuid, 'criar', 'manual', 'entregue', 4821)", d)
+    await conexao.execute(
+        "INSERT INTO crm_handoffs (lead_id, acao, origem) VALUES ($1::uuid, 'mover', 'regra')", d)
+
+    # Campanhas: C1 os dois receberam (colidiria no
+    # uniq_campaign_sends_email_campaign_lead); C2 só o descartado.
+    c1, c2 = await _campanha(conexao, f"fusão C1 {marca}"), await _campanha(conexao, f"fusão C2 {marca}")
+    await _envio(conexao, c1, m)
+    envio_d_c1 = await _envio(conexao, c1, d)
+    envio_d_c2 = await _envio(conexao, c2, d)
+    await conexao.execute(
+        "INSERT INTO email_send_queue (send_id, campaign_id, lead_id) "
+        "VALUES ($1::uuid, $2::uuid, $3::uuid)", envio_d_c2, c2, d)
+    await conexao.execute(
+        "INSERT INTO email_send_dead (send_id, campaign_id, lead_id, tentativas) "
+        "VALUES ($1::uuid, $2::uuid, $3::uuid, 5)", envio_d_c2, c2, d)
+    await conexao.execute(
+        "INSERT INTO email_events (svix_id, event_type, payload, occurred_at, campaign_id, lead_id) "
+        "VALUES ($1, 'email.opened', '{}'::jsonb, now(), $2::uuid, $3::uuid)",
+        f"teste-fusao-{marca}", c2, d)
+    await conexao.execute(
+        "INSERT INTO email_suppressions (email, reason, source, lead_id) "
+        "VALUES ($1, 'unsubscribe', 'teste', $2::uuid)",
+        f"fusao-supressao-{marca}@exemplo.invalid", d)
+    await conexao.execute(
+        "INSERT INTO ab_events (ab_test, ab_var, ab_vid, event_type, lead_id) "
+        "VALUES ($1, 'A', $2, 'conversion', $3::uuid)", f"teste-fusao-{marca}",
+        f"v_teste-fusao-{marca}", d)
+    await conexao.execute(
+        "INSERT INTO ab_identities (ab_vid, lead_id) VALUES ($1, $2::uuid)",
+        f"v_teste-fusao-{marca}", d)
+    await conexao.execute(
+        "INSERT INTO lead_conversions (lead_id, tipo) VALUES ($1::uuid, 'diagnostico')", d)
+
+    resultado = await fundir_leads(conexao, m, d)
+
+    assert await conexao.fetchval("SELECT count(*) FROM leads WHERE id = $1::uuid", d) == 0
+    # Nada do histórico ficou com o id do descartado (as tabelas sem FK
+    # ficariam apontando para um contato que não existe mais).
+    for tabela in _TABELAS_FILHAS:
+        assert await conexao.fetchval(
+            f"SELECT count(*) FROM {tabela} WHERE lead_id = $1::uuid", d) == 0, tabela
+
+    # Jornadas: o run do mantido segue intacto; o do descartado no MESMO fluxo
+    # veio encerrado; os outros vieram como estavam.
+    runs = {str(r["id"]): r for r in await conexao.fetch(
+        "SELECT id, lead_id::text, state, context FROM journey_runs WHERE id = ANY($1::uuid[])",
+        [run_m_j1, run_d_j1, run_d_j2, run_d_j3])}
+    assert all(r["lead_id"] == m for r in runs.values())
+    assert runs[run_m_j1]["state"] == "waiting"
+    assert runs[run_d_j1]["state"] == "exited"
+    contexto = runs[run_d_j1]["context"]
+    contexto = json.loads(contexto) if isinstance(contexto, str) else contexto
+    assert contexto["encerrado_por"] == "fusao" and contexto["fundido_em"] == m
+    assert runs[run_d_j2]["state"] == "active"
+    assert runs[run_d_j3]["state"] == "done"
+    assert await conexao.fetchval(
+        "SELECT lead_id::text FROM journey_step_log WHERE run_id = $1::uuid", run_d_j3) == m
+    assert resultado["resolvidos"]["runs_encerrados"] == 1
+
+    # Comercial: um só 'criar' pendente (o do mantido), o entregue e o
+    # 'mover' do descartado vieram.
+    pedidos = await conexao.fetch(
+        "SELECT id, acao, status FROM crm_handoffs WHERE lead_id = $1::uuid ORDER BY id", m)
+    assert [(p["acao"], p["status"]) for p in pedidos] == [
+        ("criar", "pendente"), ("criar", "entregue"), ("mover", "pendente")]
+    assert pedidos[0]["id"] == pend_m
+    assert resultado["resolvidos"]["pedidos_repetidos"] == 1
+
+    # Campanhas: o envio de C1 do descartado não pode ir (um e-mail por
+    # campanha e contato) e fica sem dono, como ficava antes da fusão existir;
+    # o de C2 veio, com a fila e a fila morta.
+    assert await conexao.fetchval(
+        "SELECT lead_id FROM campaign_sends WHERE id = $1::uuid", envio_d_c1) is None
+    assert await conexao.fetchval(
+        "SELECT lead_id::text FROM campaign_sends WHERE id = $1::uuid", envio_d_c2) == m
+    for tabela in ("email_send_queue", "email_send_dead"):
+        assert await conexao.fetchval(
+            f"SELECT lead_id::text FROM {tabela} WHERE send_id = $1::uuid", envio_d_c2) == m
+
+    # E o resto do histórico.
+    for tabela, filtro, valor in (
+            ("email_events", "svix_id", f"teste-fusao-{marca}"),
+            ("email_suppressions", "email", f"fusao-supressao-{marca}@exemplo.invalid"),
+            ("ab_events", "ab_test", f"teste-fusao-{marca}"),
+            ("ab_identities", "ab_vid", f"v_teste-fusao-{marca}")):
+        assert await conexao.fetchval(
+            f"SELECT lead_id::text FROM {tabela} WHERE {filtro} = $1", valor) == m, tabela
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM lead_conversions WHERE lead_id = $1::uuid", m) == 1
+
+
+async def test_fusao_sem_colisao_nao_encerra_nem_apaga_nada(conexao, marca):
+    """A regra de colisão só age quando há colisão: run aberto em fluxo
+    diferente e pedido de ação diferente vão inteiros."""
+    m = await _lead(conexao, "mantido")
+    d = await _lead(conexao, "descartado")
+    j1, j2 = [await _jornada(conexao, f"fusão {n} {marca}") for n in (1, 2)]
+    await _run(conexao, j1, m)
+    run_d = await _run(conexao, j2, d)
+    await conexao.execute(
+        "INSERT INTO crm_handoffs (lead_id, acao, origem) VALUES ($1::uuid, 'criar', 'manual')", m)
+    await conexao.execute(
+        "INSERT INTO crm_handoffs (lead_id, acao, origem) VALUES ($1::uuid, 'mover', 'regra')", d)
+
+    resultado = await fundir_leads(conexao, m, d)
+
+    assert resultado["resolvidos"]["runs_encerrados"] == 0
+    assert resultado["resolvidos"]["pedidos_repetidos"] == 0
+    assert await conexao.fetchval(
+        "SELECT state FROM journey_runs WHERE id = $1::uuid", run_d) == "waiting"
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1::uuid AND status = 'pendente'",
+        m) == 2

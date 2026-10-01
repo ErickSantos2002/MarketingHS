@@ -66,24 +66,37 @@ def ler_user_agent(ua: str | None) -> dict:
             "browser_version": versao}
 
 
-def _peso(variante: dict) -> float:
-    """⚠️ Peso ausente, não numérico ou <= 0 vale 1 — como na origem."""
-    peso = variante.get("weight")
-    if isinstance(peso, bool) or not isinstance(peso, (int, float)) or peso <= 0:
+def peso(variante: dict) -> float:
+    """Peso 0 (ou negativo) = SEM TRÁFEGO — decisão 7 do Erick (01/10/2026).
+
+    A origem dava peso 1 a quem tinha 0, e a tela deixa digitar 0 esperando
+    "sem tráfego" (a variante nova nasce com 0). Peso AUSENTE ou não numérico
+    continua valendo 1, como na origem: é variante gravada antes de o campo
+    existir, não alguém que pediu zero.
+    """
+    valor = variante.get("weight")
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
         return 1
-    return peso
+    return valor if valor > 0 else 0
 
 
 def sortear(variantes: list[dict],
-            aleatorio: Callable[[], float] | None = None) -> dict:
+            aleatorio: Callable[[], float] | None = None) -> dict | None:
     """Sorteio por peso. `aleatorio` existe para o teste; o padrão é
     `random.random`, lido na hora da chamada (e não na definição) para que o
-    `monkeypatch` do teste alcance."""
+    `monkeypatch` do teste alcance.
+
+    Variante de peso 0 nunca sai. Se NENHUMA tem peso, devolve None — quem
+    chama decide para onde vai o tráfego (o redirecionador manda ao controle,
+    como no teste pausado)."""
     aleatorio = aleatorio or random.random
-    pesos = [_peso(v) for v in variantes]
-    r = aleatorio() * sum(pesos)
-    for variante, peso in zip(variantes, pesos):
-        r -= peso
+    candidatas = [(v, peso(v)) for v in variantes]
+    candidatas = [(v, p) for v, p in candidatas if p > 0]
+    if not candidatas:
+        return None
+    r = aleatorio() * sum(p for _, p in candidatas)
+    for variante, p in candidatas:
+        r -= p
         if r < 0:
             return variante
-    return variantes[-1]
+    return candidatas[-1][0]

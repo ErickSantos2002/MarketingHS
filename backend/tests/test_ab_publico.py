@@ -114,6 +114,43 @@ async def test_volta_do_mesmo_visitante_mantem_a_variante(cliente, config_ab, li
     assert await _contar("ab_events", slug, "AND event_name = 'sticky'") == 1
 
 
+ZERADA_B = [{"key": "A", "url": "https://lp.exemplo.invalid/a", "weight": 50},
+            {"key": "B", "url": "https://lp.exemplo.invalid/b", "weight": 0}]
+
+
+async def test_variante_de_peso_zero_nao_recebe_clique(
+        cliente, config_ab, limpar_ab, monkeypatch):
+    """Decisão 7: peso 0 = sem tráfego. Com o sorteio no fim da faixa (0.99),
+    o peso antigo (0 valia 1) mandaria para B."""
+    await config_ab("exemplo.invalid")
+    await _teste(limpar_ab, variantes=ZERADA_B)
+    monkeypatch.setattr(dominio.random, "random", lambda: 0.99)
+    _, q = _query(await cliente.get(f"/publico/ab/go/{limpar_ab}-lp"))
+    assert q["ab_var"] == "A"
+
+
+async def test_quem_tinha_cookie_da_variante_zerada_e_sorteado_de_novo(
+        cliente, config_ab, limpar_ab):
+    """Zerar uma variante no meio do teste tira o tráfego dela, inclusive de
+    quem já tinha passado lá. A permanência continua valendo para as outras
+    (`test_volta_do_mesmo_visitante_mantem_a_variante`)."""
+    await config_ab("exemplo.invalid")
+    slug = await _teste(limpar_ab, variantes=ZERADA_B)
+    r = await cliente.get(f"/publico/ab/go/{limpar_ab}-lp", headers={
+        "cookie": f"ab_vid=v_teste8c0; ab_{slug}=B%7Cv_teste8c0"})
+    _, q = _query(r)
+    assert q["ab_var"] == "A" and q["ab_vid"] == "v_teste8c0"
+    assert any(c.startswith(f"ab_{slug}=A%7Cv_teste8c0")
+               for c in r.headers.get_list("set-cookie"))
+
+
+async def test_todas_zeradas_vai_para_o_controle(cliente, config_ab, limpar_ab):
+    await config_ab("exemplo.invalid")
+    await _teste(limpar_ab, variantes=[{**v, "weight": 0} for v in ZERADA_B])
+    _, q = _query(await cliente.get(f"/publico/ab/go/{limpar_ab}-lp"))
+    assert q["ab_var"] == "A"
+
+
 async def test_pausado_manda_tudo_para_o_controle_e_concluido_para_a_vencedora(
         cliente, config_ab, limpar_ab, monkeypatch):
     await config_ab("exemplo.invalid")

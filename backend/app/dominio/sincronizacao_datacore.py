@@ -35,6 +35,7 @@ aguenta. Agora são quatro consultas por bloco de 500.
 import logging
 from dataclasses import dataclass, field
 
+from app.dominio.automacao import marcar_sem_automacao
 from app.dominio.datacore import ClienteErp
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,13 @@ class Resumo:
 
 
 async def sincronizar(conn, clientes: list[ClienteErp]) -> Resumo:
+    """⚠️ Chame dentro de `sessao()`: a marca abaixo é `SET LOCAL`."""
     r = Resumo()
+    # Decisão 6 do Erick (01/10/2026): a carga do ERP só ATUALIZA DADO — não
+    # dispara regra de automação (entrega ao comercial) nem fluxo por evento
+    # (o `form_submitted` que o INSERT de lead grava). A marca vem ANTES dos
+    # SAVEPOINTs: um bloco revertido não a desfaz.
+    await marcar_sem_automacao(conn)
     for i in range(0, len(clientes), TAMANHO_DO_BLOCO):
         bloco = clientes[i:i + TAMANHO_DO_BLOCO]
         try:
@@ -190,14 +197,9 @@ async def _um_bloco(conn, bloco: list[ClienteErp], r: Resumo) -> None:
     #    ⚠️ O e-mail é PREENCHIDO, nunca sobrescrito: se alguém corrigiu o
     #    endereço do lado do marketing, o ERP não desfaz a correção.
     #    ⚠️ `source` é uma das colunas vigiadas por `trg_score_lead_on_change`
-    #    (score/etiqueta) — e, desde a migration 019,
-    #    `trg_automation_on_etiqueta_change` reavalia em TODO UPDATE de leads,
-    #    sem lista de colunas própria. Se este UPDATE mudar a etiqueta/score de
-    #    muitos leads de uma vez e houver regra de automação ATIVA casando com
-    #    o resultado, esta sincronização pode enfileirar um lote inteiro para o
-    #    GrowthHS numa rodada só. Não é bug desta sincronização — é o mesmo
-    #    efeito do achado da migration 019, e decisão de produto pendente com
-    #    o Erick. Nada foi alterado aqui para evitar isso.
+    #    (score/etiqueta), e o gatilho de automação reavalia em todo UPDATE de
+    #    leads. A marca do `sincronizar` (migration 023) é o que impede este
+    #    UPDATE de virar um lote inteiro na fila do GrowthHS.
     await conn.execute(
         """UPDATE leads l
               SET nome     = COALESCE(d.nome, l.nome),

@@ -5,10 +5,120 @@ deixar linha para trás — uma mensagem esquecida em `email_send_queue` viraria
 e-mail enviado de verdade na próxima vez que o worker subisse.
 """
 
+import asyncio
+import inspect
+import threading
+
 import pytest
 import pytest_asyncio
 
 import app.database as db
+from rodada import ENVIO
+
+
+# ── Trava entre rodadas (decisão 27 do Erick, 01/10/2026) ────────────────────
+# Duas suítes inteiras (duas frentes, ou a suíte e um arquivo solto) rodam ao
+# mesmo tempo contra o MESMO banco. O que um processo COMITA o outro vê — e
+# aí uma rodada derruba a outra: a configuração global que uma fixture troca e
+# devolve (`segredo`, `segredos_resend`, `config_ab`, `config_growthhs`), a
+# limpeza por prefixo (`limpar_ab`, tags, campanhas), a contagem da tabela
+# inteira (`test_conversao_authenticated`), o reenfileirar de TODAS as falhas
+# (`test_config_growthhs`). O levantamento de 01/10 achou dezenas desses; a
+# lista está em docs/frentes/backend.md (rodada 4).
+#
+# A saída é uma trava de sessão do Postgres (`pg_advisory_lock`), tomada por
+# TESTE antes de qualquer outra fixture (autouse) e solta depois da última:
+# entre processos, os testes que comitam andam um de cada vez; os que só usam
+# `conexao` (transação revertida, invisível para o outro) andam livres.
+#
+# ⚠️ A trava mora numa conexão própria, num laço asyncio próprio, numa thread
+# própria: o pytest-asyncio abre um laço por teste, e a pool do app é
+# fechada a cada fixture — nenhum dos dois vive o bastante para segurá-la.
+# Se o processo morrer, o servidor solta a trava junto com a conexão.
+
+CHAVE_DA_TRAVA = 7_270_010_027  # "rodada de pytest do MarketingHS"
+
+# Toda fixture que grava fora da transação revertida (direto ou em cadeia —
+# `item.fixturenames` já é o fecho transitivo).
+FIXTURES_QUE_COMITAM = frozenset({
+    "cliente", "envio", "segredo", "segredos_resend", "config_ab",
+    "config_growthhs", "limpar_ab", "chave_de", "token_admin", "token_usuario",
+})
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "trava_global: o teste lê estado comitado que outra rodada "
+        "muda — anda sob a trava entre rodadas mesmo usando só `conexao`")
+
+
+def _precisa_da_trava(item) -> bool:
+    if item.get_closest_marker("trava_global"):
+        return True
+    nomes = set(getattr(item, "fixturenames", ()))
+    if nomes & FIXTURES_QUE_COMITAM:
+        return True
+    if "conexao" in nomes:
+        return False
+    # Teste assíncrono sem `conexao` pode gravar por `db.sessao()` direto (ou
+    # por fixture local do arquivo, como `lead_8d`). Na dúvida, trava:
+    # travar a mais só custa tempo; travar a menos derruba a outra rodada.
+    return inspect.iscoroutinefunction(getattr(item, "obj", None))
+
+
+class _TravaEntreRodadas:
+    """Uma por processo. `pegar()` bloqueia até a outra rodada soltar."""
+
+    def __init__(self):
+        self._laco = None
+        self._conn = None
+
+    def _rodar(self, coro):
+        return asyncio.run_coroutine_threadsafe(coro, self._laco).result()
+
+    def _subir(self):
+        self._laco = asyncio.new_event_loop()
+        threading.Thread(target=self._laco.run_forever, daemon=True,
+                         name="trava-entre-rodadas").start()
+
+    async def _conectar(self):
+        import asyncpg
+        from app.config import settings
+        if self._conn is None or self._conn.is_closed():
+            self._conn = await asyncpg.connect(settings.DATABASE_URL)
+        return self._conn
+
+    async def _pegar(self):
+        conn = await self._conectar()
+        await conn.execute("SELECT pg_advisory_lock($1)", CHAVE_DA_TRAVA)
+
+    async def _soltar(self):
+        if self._conn is not None and not self._conn.is_closed():
+            await self._conn.execute("SELECT pg_advisory_unlock($1)", CHAVE_DA_TRAVA)
+
+    def pegar(self):
+        if self._laco is None:
+            self._subir()
+        self._rodar(self._pegar())
+
+    def soltar(self):
+        self._rodar(self._soltar())
+
+
+_trava = _TravaEntreRodadas()
+
+
+@pytest.fixture(autouse=True)
+def _trava_entre_rodadas(request):
+    from app.config import settings
+    if not settings.DATABASE_URL or not _precisa_da_trava(request.node):
+        yield
+        return
+    _trava.pegar()
+    try:
+        yield
+    finally:
+        _trava.soltar()
 
 
 @pytest_asyncio.fixture
@@ -115,7 +225,10 @@ async def envio():
         # e `leads_email_unique` faz TODA rodada seguinte falhar no setup, com
         # um erro que aponta para o índice e não para o motivo. E a exclusão
         # lógica não resolve: o índice único não olha `deleted_at`.
-        await conn.execute("DELETE FROM leads WHERE email = 'a@b.c' AND tipo = 'teste'")
+        # ⚠️ E-mail único por rodada (decisão 27; era `a@b.c` fixo): a
+        # pré-limpeza pega o desta rodada, o antigo e o de rodada morta (> 2 h).
+        await conn.execute(f"DELETE FROM leads WHERE {ENVIO.onde(1)} AND tipo = 'teste'",
+                           *ENVIO.parametros())
         # ⚠️ E a CAMPANHA que a rodada morta deixou. Até 01/10 a pré-limpeza só
         # cobria o lead, e duas campanhas 'teste de webhook' ficaram presas em
         # 'sending' em produção desde 02/09 (apagadas pelo Erick com
@@ -145,15 +258,21 @@ async def envio():
             "VALUES ('teste de webhook', 'email', 'sending') RETURNING id")
         lead = await conn.fetchval(
             "INSERT INTO leads (nome, email, tipo) "
-            "VALUES ('Webhook', 'a@b.c', 'teste') RETURNING id")
+            "VALUES ('Webhook', $1, 'teste') RETURNING id", ENVIO.atual)
         send = await conn.fetchval(
             "INSERT INTO campaign_sends (campaign_id, lead_id, channel, status, "
             "resend_email_id) VALUES ($1, $2, 'email', 'sent', 're_abc') "
             "RETURNING id", campanha, lead)
     yield str(send)
     async with db.sessao(role="service_role") as conn:
-        await conn.execute("DELETE FROM email_events WHERE svix_id LIKE 'msg_%'")
-        await conn.execute("DELETE FROM email_suppressions WHERE email = 'a@b.c'")
+        # ⚠️ Só os eventos DOS TESTES: `re_abc`/`re_x` são os ids de e-mail que
+        # test_webhook.py inventa (o Resend usa UUID). Até 01/10 era
+        # `svix_id LIKE 'msg_%'` — e o Svix de verdade também começa com
+        # `msg_`: o teardown apagaria os eventos reais de produção.
+        await conn.execute(
+            "DELETE FROM email_events WHERE svix_id LIKE 'msg_%' "
+            "AND resend_email_id IN ('re_abc', 're_x')")
+        await conn.execute("DELETE FROM email_suppressions WHERE email = $1", ENVIO.atual)
         await conn.execute("UPDATE campaigns SET status='failed' WHERE id=$1", campanha)
         await conn.execute("DELETE FROM campaigns WHERE id = $1", campanha)
         await conn.execute("DELETE FROM leads WHERE id = $1", lead)

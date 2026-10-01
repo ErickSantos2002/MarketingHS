@@ -8,6 +8,7 @@ o que aconteceu entre os lotes 1D e 8C, e nenhuma tela acusou.
 import pytest_asyncio
 
 import app.database as db
+from rodada import EmailDeRodada
 from app.ab.costura import Ab, costurar_visitante, extrair_ab, registrar_conversao_ab
 
 
@@ -60,7 +61,9 @@ async def test_conversao_so_uma_vez_e_so_com_teste(conexao):
         "dedupe_key": "v_teste8c-c:teste-8c-t:conversion:lead_criado"}]
 
 
-EMAIL_AB = "ab-8c@exemplo.invalid"
+# Único por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
+_EMAIL_AB = EmailDeRodada("ab-8c", antigo="ab-8c@exemplo.invalid")
+EMAIL_AB = _EMAIL_AB.atual
 
 
 @pytest_asyncio.fixture
@@ -72,17 +75,21 @@ async def contato_ab(chave_de, limpar_ab):
     """
     async def limpar():
         async with db.sessao(role="service_role") as conn:
-            leads = await conn.fetch("SELECT id FROM leads WHERE lower(email) = $1", EMAIL_AB)
+            leads = await conn.fetch(f"SELECT id FROM leads WHERE {_EMAIL_AB.onde(1)}",
+                                     *_EMAIL_AB.parametros())
             ids = [l["id"] for l in leads]
             identidades = await conn.fetch(
-                "SELECT dnia_id FROM ecosystem_identities WHERE lower(email) = $1", EMAIL_AB)
+                f"SELECT dnia_id FROM ecosystem_identities WHERE {_EMAIL_AB.onde(1)}",
+                *_EMAIL_AB.parametros())
             dnias = [i["dnia_id"] for i in identidades]
             await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
             await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[]) "
                                "OR dnia_id = ANY($2::uuid[])", ids, dnias)
-            await conn.execute("DELETE FROM ab_identities WHERE lower(email) = $1", EMAIL_AB)
-            await conn.execute("DELETE FROM ecosystem_identities WHERE lower(email) = $1",
-                               EMAIL_AB)
+            await conn.execute(
+                f"DELETE FROM ab_identities WHERE {_EMAIL_AB.onde(1, criado='linked_at')}",
+                *_EMAIL_AB.parametros())
+            await conn.execute(f"DELETE FROM ecosystem_identities WHERE {_EMAIL_AB.onde(1)}",
+                               *_EMAIL_AB.parametros())
             await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
 
     await limpar()

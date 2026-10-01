@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual
+from app.dominio.automacao import marcar_sem_automacao
 from app.dominio.importacao import (
     MODOS, LinhaCsv, campos_para_gravar, campos_preenchidos_no_csv,
     combinar_duplicadas, normalizar_status,
@@ -182,6 +183,15 @@ async def importar(dados: ImportacaoIn, admin: Usuario = Depends(admin_atual)):
 SQL_RECALCULO = "UPDATE leads SET cargo = cargo"
 
 
+async def recalcular(conn) -> int:
+    """O recálculo em si, dentro da transação de quem chama — separado da rota
+    para o teste rodar o MESMO caminho (marca + UPDATE) numa transação
+    revertida. Devolve quantos leads o UPDATE tocou."""
+    await marcar_sem_automacao(conn)
+    resultado = await conn.execute(SQL_RECALCULO)
+    return int(resultado.rsplit(" ", 1)[-1])
+
+
 class RecalculoOut(BaseModel):
     atualizados: int
 
@@ -194,17 +204,13 @@ async def recalcular_scores(admin: Usuario = Depends(admin_atual)):
     há laço: o score é um trigger BEFORE UPDATE, então basta um UPDATE que toque
     uma coluna vigiada. Uma fonte de verdade a menos para divergir.
 
-    ⚠️ Desde a migration 019, `trg_automation_on_etiqueta_change` não tem mais
-    lista de colunas (`AFTER INSERT OR UPDATE`, sem `OF ...`) — ele reavalia em
-    TODO UPDATE de `leads`, inclusive este. Se uma etiqueta/status/score mudar
-    como efeito colateral do recálculo (`UPDATE leads SET cargo = cargo`
-    dispara `trg_score_lead_on_change`, que pode reescrever `etiqueta` e
-    `lead_score`), e houver regra de automação ATIVA casando com o resultado,
-    esta rota pode enfileirar MUITOS leads para o comercial de uma vez — um
-    recálculo em massa virando um envio em massa ao GrowthHS. Não é bug: é
-    consequência de remover a lista de colunas do gatilho (correção de um
-    achado maior — ver migration 019). Decisão de produto pendente com o
-    Erick; nada foi alterado aqui para evitar isso.
+    ⚠️ Recálculo NÃO dispara automação (decisão 6 do Erick, 01/10/2026). O
+    `UPDATE leads SET cargo = cargo` acorda `trg_score_lead_on_change`, que
+    pode mudar etiqueta e pontuação da base inteira — e o gatilho de
+    automação (019) reavalia em todo UPDATE de `leads`: com uma regra ativa
+    casando, um recálculo virava um envio em massa ao GrowthHS. A transação se
+    marca com `marcar_sem_automacao` antes do UPDATE, e os gatilhos saem cedo
+    (migration 023). Só o dado muda.
     """
     async with sessao(role="authenticated", user_id=admin.id) as conn:
         # ⚠️ Tem de tocar uma das colunas da lista do trigger:
@@ -213,8 +219,8 @@ async def recalcular_scores(admin: Usuario = Depends(admin_atual)):
         # Um UPDATE em qualquer outra coluna NÃO dispara o scoring, e a rota
         # responderia "atualizados: N" sem ter recalculado nada — o pior tipo
         # de erro, o que se reporta como sucesso.
-        resultado = await conn.execute(SQL_RECALCULO)
-    return RecalculoOut(atualizados=int(resultado.rsplit(" ", 1)[-1]))
+        atualizados = await recalcular(conn)
+    return RecalculoOut(atualizados=atualizados)
 
 
 class EtiquetaIn(BaseModel):

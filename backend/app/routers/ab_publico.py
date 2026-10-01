@@ -33,7 +33,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from app.ab.dominio import host_no_dominio, ler_user_agent, normalizar_dominio, sortear
+from app.ab.dominio import host_no_dominio, ler_user_agent, normalizar_dominio, peso, sortear
 from app.ab.eventos import (MAX_EVENTOS, ORIGEM, ROBO, SEM_DUPLICATA, inserir,
                             normalizar_evento)
 from app.database import sessao
@@ -176,15 +176,22 @@ def _decidir(request: Request, tarefas: BackgroundTasks, dominio: str, teste) ->
     # `running`: permanece na variante do cookie ou sorteia. Qualquer outro
     # status: 100% numa variante — a vencedora se o teste foi concluído com
     # uma, senão o controle (o "kill switch" do `paused`).
+    #
+    # Peso 0 = sem tráfego (decisão 7): a variante zerada não sai no sorteio,
+    # e quem tem cookie dela é sorteado de novo — zerar uma variante no meio
+    # do teste é tirar o tráfego dela, inclusive de quem já tinha passado lá.
+    # (A primeira atribuição em `ab_assignments` não muda: ON CONFLICT DO
+    # NOTHING guarda o first-touch.) Todas zeradas: controle, como no pausado.
     escolhida, fixa = None, False
     if teste["status"] == "running":
         anterior = cookies.get(f"ab_{slug}")  # formato "{variante}|{vid}"
         if anterior:
             chave = anterior.split("|")[0]
-            escolhida = next((v for v in variantes if v.get("key") == chave), None)
+            escolhida = next((v for v in variantes
+                              if v.get("key") == chave and peso(v) > 0), None)
             fixa = escolhida is not None
         if escolhida is None:
-            escolhida = sortear(variantes)
+            escolhida = sortear(variantes) or controle
     else:
         escolhida = next((v for v in variantes if v.get("key") == teste["winner_variant"]),
                          None) or controle

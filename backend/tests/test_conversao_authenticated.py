@@ -13,6 +13,7 @@ isso cada router convertido prova duas coisas:
 from datetime import date
 
 import pytest_asyncio
+from rodada import EmailDeRodada
 
 import app.database as db
 
@@ -597,20 +598,28 @@ async def test_contatos_leitura_exige_admin(cliente, token_usuario):
 # SEM erro, e a rota responde 200. Por isso cada escrita é conferida no banco,
 # sob `service_role`, depois da chamada — o status da resposta não basta.
 
-EMAILS_ESCRITA = [f"teste-conversao-escrita-{i}@exemplo.invalid" for i in range(4)]
+# Únicos por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
+_EMAILS_ESCRITA = [EmailDeRodada(f"teste-conversao-escrita-{i}",
+                                 antigo=f"teste-conversao-escrita-{i}@exemplo.invalid")
+                   for i in range(4)]
+EMAILS_ESCRITA = [e.atual for e in _EMAILS_ESCRITA]
 TAG_ESCRITA = "teste-conversao-escrita"
 
 
 async def _apagar_leads_de_escrita():
     async with db.sessao(role="service_role") as conn:
-        ids = [r["id"] for r in await conn.fetch(
-            "SELECT id FROM leads WHERE email = ANY($1::text[])", EMAILS_ESCRITA)]
+        ids = []
+        for e in _EMAILS_ESCRITA:
+            ids += [r["id"] for r in await conn.fetch(
+                f"SELECT id FROM leads WHERE {e.onde(1)}", *e.parametros())]
         # contact_events é ON DELETE SET NULL: sem isto os eventos do teste
-        # ficariam órfãos na timeline.
+        # ficariam órfãos na timeline (e a cópia em journey_events, sem FK).
+        await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
         await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
         await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
-        await conn.execute("DELETE FROM ecosystem_identities WHERE email = ANY($1::text[])",
-                           EMAILS_ESCRITA)
+        for e in _EMAILS_ESCRITA:
+            await conn.execute(f"DELETE FROM ecosystem_identities WHERE {e.onde(1)}",
+                               *e.parametros())
         await conn.execute("DELETE FROM tags WHERE name = $1", TAG_ESCRITA)
 
 
@@ -686,12 +695,13 @@ async def test_escrita_tags_em_lote_edicao_e_exclusao_afetam_o_lead(
     assert (await cliente.delete(f"/contatos/{b}", headers=h)).status_code == 404
 
 
-async def test_escrita_fusao_continua_service_role_porque_conversoes_nao_tem_update():
-    """A fusão reatribui `lead_conversions` e depois apaga o descartado (ON
-    DELETE CASCADE). Sem política de UPDATE nela, sob `authenticated` as
-    conversões sumiriam caladas — por isso `fundir_contatos` ficou em
-    `service_role`. Este teste quebra no dia em que a política existir: é o
-    aviso de que a fusão pode ser convertida."""
+async def test_fusao_continua_service_role_enquanto_nao_houver_a_022():
+    """A fusão reatribui todo o histórico e depois apaga o descartado. Sem as
+    políticas e GRANTs da migration 022, sob `authenticated` parte da
+    reatribuição afetaria 0 linhas calada (e o CASCADE levaria o resto) — por
+    isso `fundir_contatos` fica em `service_role`. Este teste quebra no dia
+    em que a 022 estiver aplicada: é o aviso de que a fusão pode (e deve) ir
+    para `authenticated`."""
     await db.init_db()
     n = await _contar("SELECT count(*) FROM pg_policies WHERE schemaname = 'public' "
                       "AND tablename = 'lead_conversions' AND cmd IN ('UPDATE', 'ALL')")
@@ -772,17 +782,16 @@ class _Reverter(Exception):
 async def test_recalculo_afeta_a_base_inteira_sob_authenticated(token_admin):
     """A rota reescreve TODOS os leads (e o gatilho de automação reavalia cada
     um): rodá-la de verdade no teste seria escrita em produção. O teste
-    executa o MESMO comando (`SQL_RECALCULO`) sob `authenticated`, como o
-    admin, numa transação revertida, e compara com o total que `service_role`
-    vê na mesma transação."""
-    from app.routers.contatos import SQL_RECALCULO
+    executa o MESMO caminho (`recalcular`: marca + `SQL_RECALCULO`) sob
+    `authenticated`, como o admin, numa transação revertida, e compara com o
+    total que `service_role` vê na mesma transação."""
+    from app.routers.contatos import recalcular
 
     uid = await _uid_admin(token_admin)
     medido = {}
     try:
         async with db.sessao(role="authenticated", user_id=uid) as conn:
-            r = await conn.execute(SQL_RECALCULO)
-            medido["afetadas"] = int(r.rsplit(" ", 1)[-1])
+            medido["afetadas"] = await recalcular(conn)
             await conn.execute("SET LOCAL ROLE service_role")
             medido["total"] = await conn.fetchval("SELECT count(*) FROM leads")
             raise _Reverter

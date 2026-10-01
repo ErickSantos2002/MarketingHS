@@ -53,6 +53,155 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 
 ## Estado
 
+**01/10/2026 — rodada 4.** Branch `worktree-agent-ac6eb5bc3dba1b0d4`.
+Testes: **397 passed** antes (main 6a4d3fa, sozinha, 29 min) → **409 passed,
+2 skipped** depois (+14 testes: 7 da decisão 6, dos quais 2 pulados até a
+023; 2 da fusão; 5 do A/B — 3 pela rota, 3 de domínio no lugar do que fixava
+"0 vale 1"). **Prova da decisão
+27: duas suítes INTEIRAS ao mesmo tempo, cada uma com log próprio — as duas
+409 passed, 2 skipped** (57 min 54 s e 58 min 02 s; durante a rodada, em
+`pg_locks`, uma trava concedida e a outra esperando). Elas andam quase em
+série — a maior parte dos testes comita —, então juntas não são mais rápidas
+que uma depois da outra: o ganho é não derrubar uma à outra.
+Fim (leitura): 0 usuários `@exemplo.invalid`, 0 leads de teste, 0 campanhas,
+regras, pedidos ao comercial, testes A/B, eventos de e-mail e supressões de
+teste, 0 travas abertas. Restos ANTIGOS, não desta rodada: 1 identidade
+`sonda-captura` (21/09, Perguntas 8) e 2 chaves de API `teste 8B
+leitura/escrita` (23/09).
+**Pronto para merge** (a branch inteira). **O Erick roda:** a 022 e a 023
+(cada uma duas vezes). Depois da 022, a fusão vai para `authenticated` (não
+feito: sem aviso de que foi aplicada).
+
+- [x] **#6 Operação em massa não dispara automação.** Os caminhos achados:
+  1. recálculo (`UPDATE leads SET cargo = cargo`) → `trg_score_lead_on_change`
+     muda etiqueta/pontuação → `trg_automation_on_etiqueta_change` → INSERT
+     em `crm_handoffs` (regra);
+  2. sincronização do DataCore, UPDATE em lote (`source = 'datacore'`) → o
+     mesmo par de gatilhos;
+  3. sincronização do DataCore, INSERT de lead novo → o gatilho de automação
+     (todo INSERT avalia) **e** `fn_lead_insert_event` → `contact_events`
+     `form_submitted` → `trg_contact_event_journey` → `journey_events` →
+     matrícula em fluxo que entra por evento (com nó `handoff_growthhs`, é
+     entrega ao comercial também).
+
+  A automação mora em gatilho do banco, então a exceção também: a transação
+  em massa se marca com `SET LOCAL marketinghs.sem_automacao = 'on'`
+  (`app/dominio/automacao.py`, chamado só por `contatos.recalcular` e
+  `sincronizacao_datacore.sincronizar` — um teste lê o código e quebra se
+  outro lugar marcar) e as duas funções de gatilho saem cedo com a marca:
+  **`backend/migrations/023_operacao_em_massa_nao_dispara_automacao.sql`,
+  NÃO aplicada** — o Erick roda (duas vezes, para provar a reaplicação). As
+  funções são as do banco (conferido: o corpo vivo é o da 020), cada uma com
+  uma guarda a mais e nada mais. `contact_events` continua gravado — a linha
+  do tempo não perde o "capturado via datacore"; só a cópia para a fila de
+  jornada não é feita. Antes da 023 a marca é inerte (nenhum risco agora:
+  0 regras de automação em produção).
+  **Testes** (`tests/test_automacao_em_massa.py`): captura e mudança manual
+  de status continuam enfileirando (verde hoje); recálculo e sincronização
+  não enfileiram nem matriculam (**pulados até a 023**, com o motivo). Prova
+  de que o teste morde: sem o `skip`, os dois ficam vermelhos hoje
+  (`assert 1 == 0` — o pedido nasce). Também: a marca morre com a
+  transação (conexão volta limpa ao pool).
+  ⚠️ **Não muda:** a matrícula por SEGMENTO (bloco A do worker) olha o estado
+  do contato, não o evento — contato que o recálculo põe num segmento entra
+  no fluxo dele no próximo tick, como se tivesse sido editado à mão (ver
+  Perguntas 7). A importação de CSV e o status **em lote** continuam
+  disparando: são manuais (decisão diz "mudança manual de status").
+
+- [x] **#7 A/B: peso 0 = sem tráfego.** Onde a variante é escolhida: **só**
+  `backend/app/ab/dominio.py` (`sortear`), chamado só por
+  `backend/app/routers/ab_publico.py` (`_decidir`, o `/publico/ab/go`). Fora
+  do `backend/` ninguém sorteia: `frontend/public/ab.js` só coleta evento;
+  `Experiments.tsx`/`ExperimentDetail.tsx`/`abStats.ts` editam e mostram peso,
+  não escolhem. Regras: peso numérico ≤ 0 → nunca sai no sorteio; peso
+  ausente ou não numérico continua valendo 1 (variante gravada antes do
+  campo; não pediu zero); **todas zeradas → controle** (como no pausado);
+  visitante com **cookie de variante zerada é sorteado de novo** (zerar no
+  meio do teste tira o tráfego de quem já passou lá; o `ab_assignments`
+  guarda o first-touch, ON CONFLICT DO NOTHING). Testes: `test_ab_dominio.py`
+  (3, troca o que fixava "0 vale 1") e `test_ab_publico.py` (3, pela rota).
+  ⚠️ Para a coordenadora (frontend, não mexido): a variante NOVA nasce com
+  peso 0 em `frontend/src/pages/admin/Experiments.tsx:116` — agora isso quer
+  dizer "sem tráfego até alguém pôr peso". Antes recebia como peso 1.
+
+- [x] **#23+24 Fusão leva todo o histórico.** `fundir_contatos` (caso 1)
+  virou `fundir_leads(conn, manter, descartar)` e `_TABELAS_FILHAS` cresceu de
+  6 para 15: + `journey_runs`, `journey_step_log`, `crm_handoffs`,
+  `email_events`, `email_suppressions`, `email_send_queue` (o link de
+  descadastro sai do `lead_id` dela), `email_send_dead`, `ab_events`,
+  `ab_identities`. **Regra das colisões — o mantido ganha** (`_preparar_unicos`):
+  - `uniq_journey_runs_open`: run ABERTO do descartado num fluxo em que o
+    mantido também está aberto é **encerrado** (`exited`, contexto
+    `encerrado_por: fusao`, lease limpo) e depois reatribuído. Nada se apaga;
+    o contato não anda duas vezes no mesmo fluxo nem recebe o e-mail do mesmo
+    nó duas vezes; o run do mantido segue intacto.
+  - `uniq_crm_handoffs_pendente`: o PENDENTE do descartado sai quando o
+    mantido já tem pendente da mesma ação (é o mesmo pedido; o gatilho faz o
+    mesmo com ON CONFLICT DO NOTHING). Entregue/falhou vão inteiros.
+  - **Defeito achado e consertado:** `uniq_campaign_sends_email_campaign_lead`
+    (intocável) derrubava a fusão com **500** quando os dois tinham recebido a
+    mesma campanha — o caso comum de cadastro duplicado. Agora o envio do
+    descartado nessa campanha não é movido e fica com `lead_id` NULL pelo
+    ON DELETE SET NULL; o resto vai.
+  - Fora, de propósito: `journey_events` (fila de trânsito, consumida a cada
+    tick, sem GRANT a `authenticated`).
+  Testes: `tests/test_fusao_historico.py` (2, em transação revertida, chamando
+  o mesmo `fundir_leads`). Com a lista antiga de 6 tabelas o teste fica
+  vermelho (conferido). Resposta da rota: `movidos` continua; ganhou
+  `resolvidos` (o frontend só lê `caso`).
+
+  **Migration 022 — `backend/migrations/022_fusao_de_contatos_admin.sql`,
+  NÃO aplicada** (a coordenadora mostra ao Erick). Não é só
+  `lead_conversions`: com o histórico inteiro, a fusão sob `authenticated`
+  precisa de política de UPDATE admin em `lead_conversions`, `journey_runs`,
+  `journey_step_log`, `email_events` (RLS sem política de UPDATE = 0 linhas
+  calado) e, nas três tabelas de máquina sem GRANT nenhum a `authenticated`
+  (`crm_handoffs`, `email_send_queue`, `email_send_dead`), **RLS ligado +
+  política admin + GRANT** (SELECT/UPDATE; DELETE só em `crm_handoffs`). O RLS
+  vem antes do GRANT para não abrir a tabela a qualquer logado. Não afeta
+  `service_role` nem `leitura` (BYPASSRLS) nem os gatilhos (SECURITY DEFINER
+  de dono superusuário). Reaplicável.
+  **A conversão da fusão para `authenticated` NÃO foi feita** — espera a 022
+  aplicada. O sentinela `test_fusao_continua_service_role_enquanto_nao_houver_a_022`
+  quebra quando ela estiver: aí troca o papel na rota e roda
+  `test_fusao_historico.py` sob `authenticated`.
+
+- [x] **#27 Duas suítes inteiras ao mesmo tempo.** Antes de mexer, um
+  levantamento (subagente, só leitura) de tudo o que uma rodada comita e a
+  outra vê achou bem mais que as 4 fixtures: limpeza por prefixo (`limpar_ab`
+  `teste-8c%`, tags `api-teste-8b%`, campanhas/segmentos/fluxos
+  `teste-conversao-authenticated%`), contagem da tabela inteira
+  (`test_conversao_authenticated`: templates, regras, campanhas, prévia de
+  segmento, recálculo), o `reenfileirar` de TODAS as falhas
+  (`test_config_growthhs`), página/slug/tag fixos (`test_captura`), o
+  `_algum_admin` que pegaria o admin efêmero da outra rodada. E-mail único
+  sozinho não cobre isso. Por isso a trava ficou **mais larga que as 4
+  fixtures** (as 4 estão dentro):
+  - `tests/conftest.py`: `pg_advisory_lock(7270010027)` numa conexão própria
+    (thread + laço próprios, uma por processo), tomada por fixture autouse
+    **antes de qualquer outra** e solta depois da última. Trava o teste que
+    usa fixture que comita (`cliente`, `envio`, `segredo`, `segredos_resend`,
+    `config_ab`, `config_growthhs`, `limpar_ab`, `chave_de`, `token_admin`,
+    `token_usuario`, em cadeia), todo teste assíncrono sem `conexao` (pode
+    comitar por `db.sessao` direto — `lead_8d`, `pagina_sonda`…) e o marcado
+    `@pytest.mark.trava_global` (usa só `conexao` mas lê estado comitado:
+    `test_fila.py` inteiro, `test_acha_por_telefone_normalizado`,
+    `test_nexus_config_saiu…`, o recálculo da decisão 6). O que só usa
+    `conexao` anda livre. Processo morto solta a trava junto com a conexão.
+  - **E-mail único** (`tests/rodada.py`, molde do `lead_real`): `lead_8d` e
+    `gemeo` (`test_crm_entrega.py`), `EMAILS_ESCRITA`, `EMAIL_E2E`,
+    `EMAIL_AB` (`test_ab_costura.py`) e o contato da `envio` (era `a@b.c`;
+    os corpos do webhook usam `rodada.ENVIO`). Limpeza: o desta rodada, o
+    fixo antigo, e o de rodada morta (forma exata + > 2 h).
+  - **Defeito achado (consertado):** o teardown da `envio` fazia
+    `DELETE FROM email_events WHERE svix_id LIKE 'msg_%'` — o Svix de verdade
+    também usa `msg_`: em produção ele apagaria os eventos reais de e-mail.
+    Agora só os dos testes (`resend_email_id` `re_abc`/`re_x`, inventados).
+  - Resíduo antigo achado na leitura, não mexido: 1 identidade
+    `sonda-captura@exemplo.invalid` (+5585999991234), de 21/09 — a
+    `pagina_sonda` de `test_captura.py` cria a identidade pelo telefone e
+    nunca a apaga (ver Perguntas 8).
+
 **01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
 Testes: 396 passed + 1 failed antes (rodada 2) → **397 passed** depois (29 min 27 s, sozinha; o I5 verde). Fim: 0 usuários, 0 leads e 0 campanhas de teste no banco (leitura).
 **Pronto para merge** (a branch inteira; só `backend/tests/` muda).
@@ -255,3 +404,15 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    a segunda rodada espera em vez de pisar. E os leads de e-mail fixo fora
    do conftest ganhariam o molde do `lead_real`. **Assumido: não feito** —
    fora do pedido da rodada; a regra continua "uma suíte inteira por vez".
+7. **(rodada 4) Recálculo que põe contato num SEGMENTO de jornada.** A
+   decisão 6 cala regra e fluxo por evento; o fluxo que entra por segmento
+   olha o estado, e o recálculo muda o estado. Calar também esse caminho
+   exigiria marcar o contato ("mudou por recálculo") e o segmento ignorar a
+   marca — invasivo e com pergunta própria (até quando vale a marca?).
+   **Assumido: não mexido.** Hoje (leitura, 01/10): 1 fluxo por segmento,
+   em rascunho; nenhum ativo — o caso não acontece ainda.
+8. **(rodada 4) A `pagina_sonda` (`test_captura.py`) vaza identidade.** A
+   captura cria `ecosystem_identities` pelo telefone fixo, e a fixture não a
+   apaga: há uma de 21/09 no banco. Apagar a identidade no teardown (e a
+   que está lá) é escrita de limpeza — **assumido: não feito nesta rodada**
+   (fora do backlog; a trava já impede que ela atrapalhe a outra rodada).
