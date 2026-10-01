@@ -266,7 +266,7 @@ export default function Experiments() {
             Split-URL por redirecionamento — mede qual página gera leads e agendamentos de maior valor.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => navigate("/experiments/setup")}>
             <Settings2 className="h-4 w-4 mr-2" /> Configuração & Instruções
           </Button>
