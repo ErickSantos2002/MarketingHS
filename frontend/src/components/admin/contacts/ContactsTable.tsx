@@ -24,8 +24,7 @@ import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import { toast } from 'sonner';
 import { excluirContato } from '@/lib/contatos';
 import { ErroApi } from '@/lib/api';
-import { STATUS_COLORS } from './StatusBadge';
-import { COR_DE_DADO_PADRAO } from '@/lib/corDeDado';
+import { corDoStatus } from './StatusBadge';
 
 interface ContactsTableProps {
   leads: (Lead | EnrichedLead)[];
@@ -566,7 +565,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         <div className="flex items-center gap-2">
           <div
             className="w-[7px] h-[7px] rounded-full flex-shrink-0"
-            style={{ backgroundColor: STATUS_COLORS[lead.status || 'Lead'] || COR_DE_DADO_PADRAO }}
+            style={{ backgroundColor: corDoStatus(lead.status) }}
           />
           <span className="text-xs">{lead.status || 'Lead'}</span>
         </div>
