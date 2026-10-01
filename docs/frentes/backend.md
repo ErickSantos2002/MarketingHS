@@ -55,8 +55,9 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 
 **01/10/2026 — rodada 4.** Branch `worktree-agent-ac6eb5bc3dba1b0d4`.
 Testes: **397 passed** antes (main 6a4d3fa, sozinha, 29 min) → **409 passed,
-2 skipped** depois (+14 testes: 7 da decisão 6, 2 skipped até a 023; 2 da
-fusão; 3+1 do A/B, menos o que fixava "0 vale 1"; ...). **Prova da decisão
+2 skipped** depois (+14 testes: 7 da decisão 6, dos quais 2 pulados até a
+023; 2 da fusão; 5 do A/B — 3 pela rota, 3 de domínio no lugar do que fixava
+"0 vale 1"). **Prova da decisão
 27: duas suítes INTEIRAS ao mesmo tempo, cada uma com log próprio — as duas
 409 passed, 2 skipped** (57 min 54 s e 58 min 02 s; durante a rodada, em
 `pg_locks`, uma trava concedida e a outra esperando). Elas andam quase em
