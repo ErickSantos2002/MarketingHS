@@ -76,7 +76,7 @@ export function JourneyContactsDrawer({ journey, open, onOpenChange }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl flex flex-col gap-0 p-0">
+      <SheetContent aria-describedby={undefined} className="w-full sm:max-w-xl flex flex-col gap-0 p-0">
         <SheetHeader className="p-4 border-b border-border/40">
           <div className="flex items-center justify-between gap-2">
             <SheetTitle className="flex items-center gap-2 text-base">

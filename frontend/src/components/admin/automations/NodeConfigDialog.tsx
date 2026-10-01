@@ -269,7 +269,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{type && isBranch(type) ? 'Condição' : type ? NODE_LABELS[type] : 'Passo'}</DialogTitle>
         </DialogHeader>

@@ -86,7 +86,7 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[560px] max-h-[85vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-w-[560px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Links rastreados — {page.name}</DialogTitle>
         </DialogHeader>

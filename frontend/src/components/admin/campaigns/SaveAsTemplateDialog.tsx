@@ -45,7 +45,7 @@ export function SaveAsTemplateDialog({ open, onClose, getContent }: SaveAsTempla
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !saving && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle>Salvar como template</DialogTitle>
         </DialogHeader>

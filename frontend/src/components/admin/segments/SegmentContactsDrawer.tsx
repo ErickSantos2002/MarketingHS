@@ -61,7 +61,7 @@ export function SegmentContactsDrawer({ segment, onClose }: Props) {
 
   return (
     <Sheet open={!!segment} onOpenChange={open => { if (!open) onClose(); }}>
-      <SheetContent className="w-full sm:max-w-[600px] p-0 flex flex-col">
+      <SheetContent aria-describedby={undefined} className="w-full sm:max-w-[600px] p-0 flex flex-col">
         <SheetHeader className="p-6 pb-4 border-b">
           <div className="flex items-center gap-2">
             <SheetTitle className="flex-1">{segment?.name}</SheetTitle>

@@ -48,7 +48,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader><DialogTitle>Novo fluxo</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
