@@ -176,7 +176,7 @@ export function LeadGoalGauge({
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8 text-destructive hover:text-destructive/80"
+              className="h-8 w-8 text-[--on-tint-danger] hover:opacity-80"
               onClick={handleCancel}
               disabled={isSaving}
             >

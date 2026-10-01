@@ -176,7 +176,7 @@ function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, de
             <Button
               size="icon"
               variant="ghost"
-              className="h-10 w-10 text-destructive hover:text-destructive/80"
+              className="h-10 w-10 text-[--on-tint-danger] hover:opacity-80"
               onClick={handleCancel}
               disabled={isSaving}
             >

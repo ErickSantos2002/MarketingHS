@@ -177,7 +177,7 @@ function ConditionRow({
         {renderValue()}
       </div>
       {canRemove && (
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 mt-0.5 text-destructive/60 hover:text-destructive" onClick={() => onRemove(index)}>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 mt-0.5 text-[--on-tint-danger] opacity-60 hover:opacity-100" onClick={() => onRemove(index)}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       )}

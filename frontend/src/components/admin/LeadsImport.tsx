@@ -544,7 +544,7 @@ export function LeadsImport() {
           <AlertDescription>
             <ul className="list-disc list-inside mt-2 space-y-1">
               {importResult.fatalError && (
-                <li className="text-destructive">
+                <li className="text-[--on-tint-danger]">
                   <strong>Falha geral:</strong> {importResult.fatalError}
                 </li>
               )}
@@ -594,12 +594,12 @@ export function LeadsImport() {
                 </li>
               )}
               {importResult.tagError && (
-                <li className="text-destructive">
+                <li className="text-[--on-tint-danger]">
                   <strong>Erro ao aplicar tag:</strong> {importResult.tagError}
                 </li>
               )}
               {importResult.errors.length > 0 && (
-                <li className="text-destructive">
+                <li className="text-[--on-tint-danger]">
                   <strong>{importResult.errors.length}</strong> erros:
                   <ul className="ml-4 mt-1">
                     {importResult.errors.slice(0, 5).map((err, i) => (

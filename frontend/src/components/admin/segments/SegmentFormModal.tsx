@@ -642,7 +642,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
 
                       <button
                         onClick={() => removeRule(i)}
-                        className="shrink-0 p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        className="shrink-0 p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-[--on-tint-danger] transition-colors"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>

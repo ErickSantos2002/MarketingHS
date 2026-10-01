@@ -204,7 +204,7 @@ export default function Automations() {
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rule)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => setDeleteId(rule.id)}>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[--on-tint-danger]" onClick={() => setDeleteId(rule.id)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>

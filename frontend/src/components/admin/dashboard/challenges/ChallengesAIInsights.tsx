@@ -280,7 +280,7 @@ export function ChallengesAIInsights({ leads }: ChallengesAIInsightsProps) {
                     </button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-[--on-tint-danger] hover:text-[--on-tint-danger]">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>

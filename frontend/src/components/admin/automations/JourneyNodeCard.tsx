@@ -49,7 +49,7 @@ export function JourneyNodeCard({ node, summary, metrics, onPreview, onEdit, onD
               <Pencil className="h-3.5 w-3.5" />
             </Button>
             {canDelete && (
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={onDelete}>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[--on-tint-danger]" onClick={onDelete}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             )}

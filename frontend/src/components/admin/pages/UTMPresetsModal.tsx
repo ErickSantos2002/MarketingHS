@@ -105,7 +105,7 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => copyUrl(buildUrl(preset.source, preset.medium, preset.campaign, preset.content))}>
                   <Copy className="h-3 w-3" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive hover:text-destructive" onClick={() => deletePreset(i)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-[--on-tint-danger] hover:text-[--on-tint-danger]" onClick={() => deletePreset(i)}>
                   <Trash2 className="h-3 w-3" />
                 </Button>
               </div>

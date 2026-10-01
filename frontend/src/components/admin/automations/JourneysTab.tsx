@@ -145,7 +145,7 @@ export function JourneysTab() {
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   {j.status === 'draft' && (
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => setDeleteId(j.id)}>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[--on-tint-danger]" onClick={() => setDeleteId(j.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}

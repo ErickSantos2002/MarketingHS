@@ -52,7 +52,7 @@ function ReasonBadge({ reason }: { reason: SuppressionReason }) {
     return <Badge variant="warning">Marcou spam</Badge>;
   }
   if (reason === 'unsubscribe') {
-    return <Badge variant="secondary">Descadastrou</Badge>;
+    return <Badge variant="warning">Descadastrou</Badge>;
   }
   return <Badge variant="info">Manual</Badge>;
 }

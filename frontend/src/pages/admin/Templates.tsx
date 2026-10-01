@@ -78,7 +78,7 @@ export default function Templates() {
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateTemplate(t); }}>
                         <Copy className="h-4 w-4 mr-2" /> Duplicar
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); }}>
+                      <DropdownMenuItem className="text-[--on-tint-danger]" onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); }}>
                         <Trash2 className="h-4 w-4 mr-2" /> Excluir
                       </DropdownMenuItem>
                     </DropdownMenuContent>
