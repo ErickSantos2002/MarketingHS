@@ -41,3 +41,10 @@ dia no `CONTINUAR-AQUI.md`.
 
 ## Novas
 
+28. **"Participante" saiu junto com o funil da dn.ia** (#9) — a lista do 8E
+    tinha 6 colunas, mas o campo é do mesmo funil. **Assumido: sai** (revert de
+    uma linha).
+29. **Ficha e modal do painel** ainda mostram os cartões "Tipo Participante" e
+    "Presença" (dn.ia). **Assumido: ficam** (a decisão falava de colunas).
+    Tirar também?
+30. **`LeadsExport.tsx`** não tem importador (código morto). Apagar?

@@ -77,6 +77,11 @@ vigor está em `docs/frentes/README.md` — é ele que diz quem é dono do quê.
   `node scripts/conferir-telas.mjs --porta <vite> --saida <pasta> <rotas>`,
   que sobe Chrome próprio, loga com a conta admin do Claude sem imprimir a
   credencial, e salva PNG por tema e largura + `resumo.json`. Só navega e lê.
+- **Recusa de comando:** a proteção da worktree às vezes recusa pela
+  **forma** (comando composto, subshell, `cd` + `git`) e diz qual forma usar —
+  refazer o mesmo passo naquela forma é seguir a instrução, não contornar.
+  Recusa pela **ação** (permissão negada, caminho proibido, credencial) não se
+  refaz de jeito nenhum: a frente para o passo e relata.
 - **pytest** pode rodar em qualquer frente. Bate no banco de produção em
   transação revertida; o Erick liberou (01/10): ninguém usa o dado e o banco
   será limpo e resetado antes de entrar no ar.
