@@ -41,6 +41,13 @@
 > 396 passed + 1 instável (`test_crm_entrega.py::test_cancelar_depois_do_2xx_ainda_grava_entregue`,
 > `sleep` fixo contra o banco remoto; 5/5 sozinho) — a trocar por espera com prazo.
 >
+> **Rodada 3 (01/10):** `ui-primitivos` na `main` (aviso do Radix fora em 15
+> diálogos, listas com o mesmo marcado/realçado, `input` com `file:*`, título
+> padrão "MarketingHS"); cache do Vite por checkout (`0e32d59`) — o cache
+> compartilhado derrubava o 8080 com dois Reacts. `backend` rodada 3: o I5
+> espera com prazo em vez de `sleep`; `token_admin`/`token_usuario` com e-mail
+> único — **suíte 397 passed**. Duas suítes inteiras juntas ainda não (pergunta 27).
+>
 > **O Erick roda no Konsole** (comando no cabeçalho de cada arquivo):
 > 1. ~~`backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql`~~ —
 >    **rodado pelo Erick em 01/10: UPDATE 2, DELETE 2, 0 em `sending`.** **Antes** de o worker com este código subir em

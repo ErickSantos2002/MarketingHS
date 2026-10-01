@@ -84,3 +84,15 @@ delas.
     linhas tingidas viram ruído. Nenhum uso hoje.
 26. **Título de rota não mapeada:** **assumido "MarketingHS"** (com aviso no
     console em dev). Alternativa: o rótulo do item mais próximo da sidebar.
+
+### Backend, rodada 3 (01/10)
+
+27. **Duas suítes INTEIRAS ao mesmo tempo ainda não são seguras.** Quatro
+    fixtures trocam configuração global de produção e devolvem no teardown
+    (`segredo`, `segredos_resend`, `config_ab`, `config_growthhs`); a `envio`
+    usa `a@b.c`/`re_abc` fixos; ainda há leads de teste com e-mail fixo em
+    `test_crm_entrega.py`, `test_conversao_authenticated.py`,
+    `test_conversao.py` e `test_ab_costura.py`. Proposta da frente:
+    `pg_advisory_lock` nessas fixtures + e-mail único nos leads. **Assumido:**
+    a regra "uma suíte inteira por vez" continua; arquivos isolados já podem
+    rodar em paralelo. Fazer a proposta numa próxima rodada?
