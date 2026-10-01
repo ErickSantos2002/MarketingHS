@@ -48,3 +48,12 @@ dia no `CONTINUAR-AQUI.md`.
     "Presença" (dn.ia). **Assumido: ficam** (a decisão falava de colunas).
     Tirar também?
 30. **`LeadsExport.tsx`** não tem importador (código morto). Apagar?
+31. **Azul do botão das landings:** **assumido `#1a71a8`** (`primary-600`, o
+    `--action`); o `primary-500` daria texto branco a ~3,8:1. Uma linha em
+    `src/landing/padroes.ts`.
+32. **Botão `sm` esticado com `h-9` ao lado de campo** (`LeadsExport`,
+    `ColumnSelector`, `GlobalFilters`, e casos em contatos/configurações).
+    **Assumido: deixar.** Alternativas: passar essas telas ao tamanho padrão,
+    ou dar ao `sm` altura fixa no primitivo.
+33. **A cor de destaque da landing inteira** (foco de campo, confirmação)
+    passou a seguir a mesma constante do botão. **Assumido: é o desejado.**
