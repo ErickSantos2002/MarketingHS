@@ -364,7 +364,7 @@ export function ContactsTable({
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
+                                className="text-[--on-tint-danger] focus:text-[--on-tint-danger]"
                                 onClick={(e) => { e.stopPropagation(); setDeleteTarget(lead); }}
                               >
                                 <Trash2 className="h-3.5 w-3.5 mr-2" />
