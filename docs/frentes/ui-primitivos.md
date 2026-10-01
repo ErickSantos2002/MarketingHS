@@ -17,7 +17,7 @@ nova, nenhuma variante nova) — o que pedir API nova vira pergunta.
   as três com o mesmo estado de item marcado/realçado, por token.
 - [ ] `input.tsx` perdeu as classes `file:*` ao ser reescrito: devolver por
   token (não há uso hoje; é para o primeiro `type="file"` não nascer cru).
-- [ ] `AdminLayout.tsx:~119` devolve `''` para rota não mapeada (rota nova
+- [ ] `components/admin/AdminLayout.tsx:~119` devolve `''` para rota não mapeada (rota nova
   nasce com `<h1>` vazio): devolver um título padrão e avisar no console em dev.
 - [ ] Portão: guarda 0, `tsc` 0, `vite build`, telas com select/command/
   dropdown abertos (abrir lista é visualização, permitido) nos dois temas.
