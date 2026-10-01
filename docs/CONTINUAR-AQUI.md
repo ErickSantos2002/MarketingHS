@@ -1,5 +1,22 @@
 # Continuar aqui
 
+> ## 🌅 Comece por aqui — 02/10/2026 (plano combinado com o Erick em 01/10)
+>
+> 1. **Responder as perguntas abertas** de `docs/perguntas-abertas.md` (28–33,
+>    36, 38, 39) com o `AskUserQuestion`, opções + recomendação, como em 01/10.
+> 2. **Subir em produção** (projeto `erick` do EasyPanel), no molde do Homo
+>    (memória `marketinghs-no-homo`): API + front + **worker de fila** (nunca
+>    rodou fora daqui) + domínio; reset do banco (decidir o que fica — os 2.083
+>    contatos do DataCore, provavelmente); Resend (domínio, chave, remetente);
+>    sync do DataCore; primeiro envio pequeno para endereços internos antes da
+>    base; apagar a conta `claude.dev@example.com`.
+> 3. Fora do alcance desta sessão: o handoff ao GrowthHS (5A) depende do
+>    endpoint de card comercial no `hsgrowth-sistema` (contrato em `docs/contratos/`).
+>
+> **Homo no ar desde 01/10:** https://homo-marketinghs.healthsafetytech.com —
+> conta `ti@healthsafetytech.com` (admin; a `erick@healthsafety.com.br` saiu do
+> Homo e da origem).
+
 > ## 🌅 Comece por aqui — 01/10/2026 (Fase 2 do visual fechada; frentes paralelas)
 >
 > **Novo jeito de trabalhar:** modo autônomo e frentes paralelas com worktree
