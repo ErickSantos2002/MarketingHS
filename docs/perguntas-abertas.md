@@ -46,3 +46,8 @@ delas.
 18. **Toast do "Recalcular agora"** dizia "undefined leads" (o front lia
     `result.updated`, a API devolve `atualizados`). **Assumido:** corrigido
     dentro do G6; revert de uma linha se preferir fora.
+19. **Badge de permissão das API Keys** (revisão final do G6): "Leitura +
+    Escrita" é `success`, o mesmo verde de "Ativa" ao lado, enquanto "Escrita"
+    sozinha é âmbar — o acesso mais amplo parece o mais "seguro". **Mantido**
+    como veio da origem (pelo matiz). Alternativa: escala própria para
+    permissão (ex.: neutro para Leitura, âmbar para qualquer escrita).
