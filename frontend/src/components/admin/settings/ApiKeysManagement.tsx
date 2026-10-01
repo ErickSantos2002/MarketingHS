@@ -349,7 +349,7 @@ export default function ApiKeysManagement() {
 
       {/* Reveal Modal */}
       <Dialog open={revealOpen} onOpenChange={() => {}}>
-        <DialogContent className="max-w-[520px]" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={e => e.preventDefault()}>
+        <DialogContent aria-describedby={undefined} className="max-w-[520px]" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={e => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-base">Chave criada com sucesso</DialogTitle>
           </DialogHeader>

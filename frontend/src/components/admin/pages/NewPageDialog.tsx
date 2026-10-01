@@ -70,7 +70,7 @@ export function NewPageDialog({ open, onOpenChange, pages, onCreated }: NewPageD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[560px]">
+      <DialogContent aria-describedby={undefined} className="max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Nova Página</DialogTitle>
         </DialogHeader>

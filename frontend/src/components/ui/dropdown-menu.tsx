@@ -25,7 +25,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-sm outline-none transition-colors data-[state=open]:bg-surface-elevated focus:bg-surface-elevated",
+      "flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-sm outline-none transition-colors data-[state=open]:bg-surface-elevated data-[state=open]:text-conteudo-heading focus:bg-surface-elevated focus:text-conteudo-heading",
       inset && "pl-8",
       className,
     )}
@@ -103,7 +103,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <span className="absolute left-2.5 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-primary" />
+        <Check className="h-3.5 w-3.5 text-action" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -118,14 +118,14 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 focus:bg-surface-elevated focus:text-conteudo-heading",
+      "relative flex cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 focus:bg-surface-elevated focus:text-conteudo-heading data-[state=checked]:bg-action-tint data-[state=checked]:text-action",
       className,
     )}
     {...props}
   >
     <span className="absolute left-2.5 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Circle className="h-2 w-2 fill-current text-primary" />
+        <Circle className="h-2 w-2 fill-current text-action" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}

@@ -26,7 +26,7 @@ export function LeadsListSheet({ leads, title, open, onOpenChange }: LeadsListSh
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-md p-0 gap-0">
+        <SheetContent aria-describedby={undefined} className="w-full sm:max-w-md p-0 gap-0">
           <SheetHeader className="p-6 pb-4 border-b border-border/50">
             <div className="flex items-center justify-between">
               <SheetTitle className="text-lg font-bold flex items-center gap-2">

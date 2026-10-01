@@ -47,7 +47,7 @@ export function LeadDetailModal({ lead, open, onOpenChange }: LeadDetailModalPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0">
+      <DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[90vh] p-0 gap-0">
         <DialogHeader className="p-6 pb-4 border-b border-border/50">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">

@@ -7,7 +7,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, Save, RefreshCw, Flame, Thermometer, Minus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useScoringConfig } from '@/hooks/useScoringConfig';
@@ -302,9 +302,9 @@ export default function LeadScoringSettings() {
           <DialogHeader>
             <DialogTitle>Recalcular score de todos os leads?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <DialogDescription>
             Isso vai recalcular o score e a etiqueta de todos os leads existentes com base na nova configuração. Pode levar alguns segundos.
-          </p>
+          </DialogDescription>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRecalcModal(false)}>Deixar para depois</Button>
             <Button onClick={handleRecalculate} disabled={recalculating}>

@@ -153,7 +153,7 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent aria-describedby={undefined} className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 flex-wrap">
             {campaign.name}

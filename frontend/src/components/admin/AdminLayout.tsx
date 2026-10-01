@@ -33,8 +33,21 @@ const TITULOS_ROTA: { padrao: RegExp; titulo: string }[] = [
   { padrao: /^\/experiments(\/.*)?$/, titulo: 'Testes A/B' },
 ];
 
+// Rota sem entrada acima não pode nascer com <h1> vazio: cai no nome do
+// sistema e, em dev, avisa uma vez por caminho para alguém mapear a rota.
+const TITULO_PADRAO = 'MarketingHS';
+const rotasSemTituloAvisadas = new Set<string>();
+
 function tituloDaRota(pathname: string): string {
-  return TITULOS_ROTA.find(({ padrao }) => padrao.test(pathname))?.titulo ?? '';
+  const titulo = TITULOS_ROTA.find(({ padrao }) => padrao.test(pathname))?.titulo;
+  if (titulo) return titulo;
+  if (import.meta.env.DEV && !rotasSemTituloAvisadas.has(pathname)) {
+    rotasSemTituloAvisadas.add(pathname);
+    console.warn(
+      `[AdminLayout] rota sem título em TITULOS_ROTA: "${pathname}" — usando "${TITULO_PADRAO}".`,
+    );
+  }
+  return TITULO_PADRAO;
 }
 
 function AdminLayoutInner() {
