@@ -110,15 +110,39 @@ async def envio():
     testes escreveram a partir dele."""
     await db.init_db()
     async with db.sessao(role="service_role") as conn:
-        campanha = await conn.fetchval(
-            "INSERT INTO campaigns (name, channel, status) "
-            "VALUES ('teste de webhook', 'email', 'sending') RETURNING id")
         # ⚠️ Limpa antes de inserir. Esta fixture COMMITA e só desfaz no
         # teardown — se o pytest morrer no meio (timeout, Ctrl-C), a linha fica
         # e `leads_email_unique` faz TODA rodada seguinte falhar no setup, com
         # um erro que aponta para o índice e não para o motivo. E a exclusão
         # lógica não resolve: o índice único não olha `deleted_at`.
         await conn.execute("DELETE FROM leads WHERE email = 'a@b.c' AND tipo = 'teste'")
+        # ⚠️ E a CAMPANHA que a rodada morta deixou. Até 01/10 a pré-limpeza só
+        # cobria o lead, e duas campanhas 'teste de webhook' ficaram presas em
+        # 'sending' em produção desde 02/09 (apagadas pelo Erick com
+        # scripts/2026-10-01-limpar-campanhas-teste-webhook.sql). A trava é a
+        # MESMA do script: nome, status, TODOS os envios com a assinatura da
+        # fixture (lead_id NULL — o DELETE acima já soltou o lead — e
+        # resend_email_id 're_abc') e nada na fila. Campanha de verdade com
+        # esse nome não casa. 'failed' antes do DELETE porque o
+        # `guard_campaign_delete` recusa apagar em 'sending'.
+        orfas = await conn.fetch(
+            """SELECT c.id FROM campaigns c
+                WHERE c.name = 'teste de webhook' AND c.status = 'sending'
+                  AND EXISTS (SELECT 1 FROM campaign_sends cs WHERE cs.campaign_id = c.id)
+                  AND NOT EXISTS (SELECT 1 FROM campaign_sends cs
+                                   WHERE cs.campaign_id = c.id
+                                     AND (cs.lead_id IS NOT NULL
+                                          OR cs.resend_email_id IS DISTINCT FROM 're_abc'))
+                  AND NOT EXISTS (SELECT 1 FROM email_send_queue q
+                                   WHERE q.campaign_id = c.id)""")
+        ids = [o["id"] for o in orfas]
+        if ids:
+            await conn.execute(
+                "UPDATE campaigns SET status = 'failed' WHERE id = ANY($1::uuid[])", ids)
+            await conn.execute("DELETE FROM campaigns WHERE id = ANY($1::uuid[])", ids)
+        campanha = await conn.fetchval(
+            "INSERT INTO campaigns (name, channel, status) "
+            "VALUES ('teste de webhook', 'email', 'sending') RETURNING id")
         lead = await conn.fetchval(
             "INSERT INTO leads (nome, email, tipo) "
             "VALUES ('Webhook', 'a@b.c', 'teste') RETURNING id")

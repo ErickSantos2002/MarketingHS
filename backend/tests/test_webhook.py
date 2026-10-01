@@ -12,6 +12,9 @@ import json
 import time
 
 import pytest
+import pytest_asyncio
+
+import app.database as db
 
 pytestmark = pytest.mark.asyncio
 
@@ -164,3 +167,49 @@ async def test_evento_de_campanha_excluida_nao_entra_em_laco(cliente, segredo, e
     # evento tivesse chegado antes da exclusão.
     assert linha["campaign_id"] is None and linha["lead_id"] is None
     assert linha["payload"] is not None
+
+
+# ── A pré-limpeza da fixture `envio` ─────────────────────────────────────────
+# Rodada morta no meio deixa a campanha 'teste de webhook' em 'sending' (foram
+# 2 em produção, de 02/09 a 01/10). A fixture seguinte tem de apagá-la — e só
+# ela: a trava é a do script de limpeza.
+
+async def _semear_campanha_de_webhook(resend_email_id: str) -> str:
+    """Uma campanha como a que a rodada morta deixa: 'sending', 1 envio sem lead."""
+    await db.init_db()
+    async with db.sessao(role="service_role") as conn:
+        cid = await conn.fetchval(
+            "INSERT INTO campaigns (name, channel, status) "
+            "VALUES ('teste de webhook', 'email', 'sending') RETURNING id::text")
+        await conn.execute(
+            "INSERT INTO campaign_sends (campaign_id, lead_id, channel, status, "
+            "resend_email_id) VALUES ($1::uuid, NULL, 'email', 'sent', $2)",
+            cid, resend_email_id)
+    return cid
+
+
+async def _campanha_existe(cid: str) -> bool:
+    async with db.sessao(role="service_role") as conn:
+        return bool(await conn.fetchval(
+            "SELECT 1 FROM campaigns WHERE id = $1::uuid", cid))
+
+
+@pytest_asyncio.fixture
+async def campanhas_largadas():
+    """Semeadas ANTES da `envio` (ordem dos argumentos do teste): uma órfã da
+    fixture e uma com o mesmo nome mas envio de verdade, que tem de sobreviver."""
+    orfa = await _semear_campanha_de_webhook("re_abc")
+    alheia = await _semear_campanha_de_webhook("re_de_verdade")
+    yield {"orfa": orfa, "alheia": alheia}
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE campaigns SET status = 'failed' WHERE id = ANY($1::uuid[])",
+            [orfa, alheia])
+        await conn.execute("DELETE FROM campaigns WHERE id = ANY($1::uuid[])",
+                           [orfa, alheia])
+
+
+async def test_envio_apaga_a_campanha_que_a_rodada_morta_deixou(campanhas_largadas, envio):
+    assert not await _campanha_existe(campanhas_largadas["orfa"])
+    assert await _campanha_existe(campanhas_largadas["alheia"]), \
+        "envio sem a assinatura da fixture: não é resíduo, não se apaga"

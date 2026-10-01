@@ -23,12 +23,55 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 - [ ] Ao fim de cada router: `pytest -q`, push, marcar "pronto para merge"
   (merge por router, não no fim de tudo).
 
-- [ ] **Rodada 2:** pré-limpeza da fixture `envio` passa a apagar também a
+- [x] **Rodada 2:** pré-limpeza da fixture `envio` passa a apagar também a
   campanha 'teste de webhook' que ela deixa quando o pytest morre (as 2 de
   produção já foram apagadas pelo Erick em 01/10). E, se a migration 021 for
   aplicada, `escrita_contatos.py` e `contatos.py` para `authenticated`.
 
 ## Estado
+
+**01/10/2026 — rodada 2.** Branch `worktree-agent-abdba54f9f6c6f44f`.
+Testes: 387 antes (main, 426aab2) → **396 passed, 1 failed** depois (397 testes; 29 min, sozinha) (+1 em `test_webhook.py`,
++9 em `test_conversao_authenticated.py`). **Pronto para merge** (a branch
+inteira; cada commit leva o teste dele).
+
+- [x] **Pré-limpeza da fixture `envio`** — apaga a campanha 'teste de
+  webhook' que a rodada morta deixa, com a trava do script de 01/10 (nome,
+  `sending`, ≥1 envio e TODOS com `lead_id IS NULL` e `re_abc`, nada na fila;
+  `failed` antes do DELETE). Roda depois do DELETE do lead `a@b.c`, que é o
+  que deixa `lead_id` NULL. Teste semeia uma órfã (some) e uma de mesmo nome
+  com outro `resend_email_id` (fica).
+- [x] **`escrita_contatos.py` → `authenticated`** (5 de 6). Status
+  individual/em lote, tags em lote, edição e exclusão; as quatro que eram
+  `usuario_atual` viraram `admin_atual`. Testes conferem no banco (sob
+  `service_role`) que a escrita afetou as linhas, inclusive os eventos da
+  timeline, e que não-admin leva 403 nas 6 rotas.
+  **`fundir_contatos` fica `service_role`:** `lead_conversions` não tem
+  política de UPDATE — a reatribuição afetaria 0 linhas calada e o DELETE do
+  descartado levaria as conversões pelo CASCADE. Um teste olha `pg_policies`
+  e quebra quando a política existir (ver Perguntas).
+- [x] **`contatos.py` → `authenticated`** (3 de 3): importação, recálculo,
+  tag avulsa. O recálculo é provado numa transação revertida
+  (`SQL_RECALCULO` sob `authenticated` afeta o mesmo total que
+  `service_role` vê) — rodar a rota reescreveria a base de produção.
+  **Defeito achado e consertado:** a importação não tinha SAVEPOINT por
+  linha. Uma linha recusada pelo banco abortava a transação, as seguintes
+  caíam em "current transaction is aborted" e o COMMIT virava ROLLBACK calado:
+  200 e nada gravado. Reproduzido no código da `main` (NUL no nome: 0 criados,
+  2 erros, a linha boa perdida) e verde com o conserto. Os contadores agora
+  sobem só depois da escrita, e UPDATE que afeta 0 linhas vira erro da linha.
+
+⚠️ **O 1 vermelho é flaky de tempo, não regressão:**
+`test_crm_entrega.py::test_cancelar_depois_do_2xx_ainda_grava_entregue`
+espera a gravação blindada (`sleep 0.3` + idas ao banco remoto) terminar num
+`sleep(0.6)` fixo; sob a carga da suíte inteira não deu tempo (`pendente`).
+Sozinho: 5/5 verde; o arquivo inteiro: 18/18. A rodada 2 não toca
+`app/crm/` (o diff em `app/` é só `contatos.py` e `escrita_contatos.py`), e
+o teste usa `service_role` direto, sem passar pelas rotas convertidas. Fica
+como candidato a trocar o sleep fixo por espera com prazo (sondar o status
+até ~5 s) — não mexido aqui.
+
+Medição: **68 × 91** nos routers (`service_role` × `authenticated`).
 
 **01/10/2026 — rodada 1.** Branch `worktree-agent-a955e097afd0091b3`.
 Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
@@ -112,8 +155,8 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
 
 ## Perguntas
 
-1. **Política de escrita em `leads` para o admin** (migration 021, pronta e
-   não aplicada). Sem ela, `escrita_contatos.py` e `contatos.py` não podem ir
+1. ✅ *Resolvida em 01/10: a 021 foi aplicada e os dois routers converteram
+   na rodada 2.* **Política de escrita em `leads` para o admin** (migration 021). Sem ela, `escrita_contatos.py` e `contatos.py` não podem ir
    para `authenticated`: o UPDATE de lead afetaria 0 linhas calado. Opções:
    (a) aplicar a 021 e converter os dois routers; (b) deixá-los em
    `service_role` com `admin_atual` (como estão — seguro hoje, porque a rota
@@ -124,8 +167,21 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    `service_role`, a base inteira). **Assumido: `admin_atual`** — é a regra
    do `CLAUDE.md` para tabela admin-only. Se algum dia houver papel de
    leitura, é política nova no banco, não `usuario_atual`.
-3. **Fixture `envio` deixa campanha para trás se o pytest morre.** A
+3. ✅ *Resolvida na rodada 2 (as 2 de produção já tinham sido apagadas).*
+   **Fixture `envio` deixa campanha para trás se o pytest morre.** A
    pré-limpeza cobre o contato e não a campanha. Acrescentar a campanha à
    pré-limpeza apagaria as 2 de produção na próxima rodada — escrita em
    produção por efeito colateral de teste. **Assumido: não mexer** até o
    script da limpeza rodar; depois disso, acrescentar é seguro.
+4. **(rodada 2) Política de UPDATE admin em `lead_conversions`?** É o que
+   falta para `fundir_contatos` ir para `authenticated`. Seria a migration
+   022 (pequena, mesmo molde da 021). **Assumido: não escrever** — a rota já
+   autoriza sozinha (`admin_atual`) e a tabela está vazia em produção; ganho
+   pequeno por uma migration a mais para o Erick rodar.
+5. **(rodada 2) Achado lateral, não mexido:** a fusão não reatribui
+   `journey_runs` nem `crm_handoffs` (ambas ON DELETE CASCADE para `leads`) —
+   apagar o descartado leva junto o histórico de jornada e de entrega ao
+   comercial dele. Também `email_events`, `email_suppressions` e
+   `journey_step_log` ficam com `lead_id` NULL. É anterior à conversão.
+   Acrescentar as tabelas a `_TABELAS_FILHAS`? (cuidado com o índice
+   `uniq_journey_runs_open`: dois runs abertos da mesma jornada colidem).

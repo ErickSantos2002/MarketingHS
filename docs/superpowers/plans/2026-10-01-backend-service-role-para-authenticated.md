@@ -32,8 +32,8 @@ operação interna, ficam.
 | `campanhas.py` | 10 | converter (5º) | `campaigns`/`campaign_sends` ALL admin; conferir `email_send_queue` (sem GRANT a `authenticated`) no cancelar |
 | `jornadas.py` | 6 | converter (6º) | `journeys` ALL; `journey_runs`/`journey_step_log` só SELECT — só leitura neles |
 | `leitura_contatos.py` | 13 | converter (7º) | `leads` SELECT admin; conferir cada tabela do JOIN |
-| `escrita_contatos.py` | 6 | **pergunta** | `leads` NÃO tem política de INSERT/UPDATE: sob `authenticated` o UPDATE afeta 0 linhas calado. Precisa de migration (política admin de escrita em `leads`) antes |
-| `contatos.py` | 3 | **pergunta** | mesma razão (importar insere em `leads`) |
+| `escrita_contatos.py` | 6 | **convertido** (8º, rodada 2) menos a fusão | migration 021 aplicada em 01/10. `fundir_contatos` **fica** `service_role`: `lead_conversions` não tem política de UPDATE, e a reatribuição afetaria 0 linhas antes do DELETE em cascata do descartado (perda calada de conversões). Converter exige política de UPDATE admin em `lead_conversions`; `test_escrita_fusao_continua_service_role…` quebra quando ela existir |
+| `contatos.py` | 3 | **convertido** (9º, rodada 2) | idem. O recálculo é provado em transação revertida (rodar a rota reescreve a base). A importação ganhou SAVEPOINT por linha — ver Estado da frente |
 | `usuarios.py` | 6 | fica | `auth.users` sem GRANT; `user_roles` tem política `false` para escrita — administração de conta é operação de máquina por desenho |
 | `configuracao.py` | 17 | fica | `integration_secrets`/`growthhs_config` sem GRANT a `authenticated`; metade das rotas é de máquina (chave) |
 | `crm.py` | 1 | fica | `crm_handoffs` sem GRANT |
@@ -41,6 +41,10 @@ operação interna, ficam.
 | `envio.py` | 2 | fica | `enfileirar` é do worker também; `email_send_queue` sem GRANT |
 | `datacore.py` | 2 | fica | sincronização, operação de máquina |
 | `publico.py`, `ab_publico.py`, `captura.py`, `api_contato.py`, `webhook.py`, `landing.py` | 37 | fica | não há usuário: chave de API, webhook ou página pública |
+
+**Medição depois da rodada 2 (01/10/2026):** 68 × 91 nos routers. O que
+resta em `service_role` é o "fica" da tabela acima, mais a fusão de
+contatos.
 
 ## Ordem e entrega
 

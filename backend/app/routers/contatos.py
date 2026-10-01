@@ -67,7 +67,7 @@ class ImportacaoOut(BaseModel):
 
 
 @router.post("/importar", response_model=ImportacaoOut)
-async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
+async def importar(dados: ImportacaoIn, admin: Usuario = Depends(admin_atual)):
     if dados.modo not in MODOS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Modo de importação inválido.")
 
@@ -98,7 +98,7 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
 
     emails = list(por_email)
 
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         existentes: dict[str, dict] = {}
         for i in range(0, len(emails), LOTE_CONSULTA):
             fatia = emails[i:i + LOTE_CONSULTA]
@@ -113,43 +113,59 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
 
         for email, linha in por_email.items():
             existente = existentes.get(email)
-            try:
-                if existente is None:
-                    novo_id = await conn.fetchval(
-                        """INSERT INTO leads (email, tipo, status, source, nome, whatsapp,
-                                              empresa, cargo, faturamento, funcionarios, desafios)
-                           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                           RETURNING id""",
-                        email,
-                        linha.tipo or "csv_import",
-                        normalizar_status(linha.status) or "Lead",
-                        linha.source or "csv_import",
-                        linha.nome, linha.whatsapp or linha.telefone_completo,
-                        linha.empresa, linha.cargo, linha.faturamento,
-                        linha.funcionarios, linha.desafios_ia,
-                    )
-                    criados += 1
-                    contatos.append(ContatoImportado(email=email, id=str(novo_id)))
-                    await _resolver_identidade(conn, novo_id, linha, email)
-                    continue
-
+            if existente is not None:
+                # O contato existe mesmo que a atualização dele falhe abaixo:
+                # a tela aplica as tags da importação por esta lista.
                 contatos.append(ContatoImportado(email=email, id=existente["id"]))
-                campos = campos_para_gravar(linha, existente, dados.modo)
-                campos_enriquecidos += len(campos)
-                campos_pulados += campos_preenchidos_no_csv(linha) - len(campos)
-                if not campos:
-                    inalterados += 1
-                    continue
+            try:
+                # ⚠️ SAVEPOINT por linha. Sem ele, o `except` abaixo era
+                # mentira: a linha que falha no BANCO aborta a transação
+                # inteira, toda linha seguinte cai em "current transaction is
+                # aborted", e o COMMIT do fim vira ROLLBACK sem erro — a rota
+                # respondia 200 e a importação inteira sumia, inclusive as
+                # linhas que o relatório contava como criadas.
+                async with conn.transaction():
+                    if existente is None:
+                        novo_id = await conn.fetchval(
+                            """INSERT INTO leads (email, tipo, status, source, nome, whatsapp,
+                                                  empresa, cargo, faturamento, funcionarios, desafios)
+                               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                               RETURNING id""",
+                            email,
+                            linha.tipo or "csv_import",
+                            normalizar_status(linha.status) or "Lead",
+                            linha.source or "csv_import",
+                            linha.nome, linha.whatsapp or linha.telefone_completo,
+                            linha.empresa, linha.cargo, linha.faturamento,
+                            linha.funcionarios, linha.desafios_ia,
+                        )
+                        await _resolver_identidade(conn, novo_id, linha, email)
+                        criados += 1
+                        contatos.append(ContatoImportado(email=email, id=str(novo_id)))
+                        continue
 
-                # asyncpg não aceita nome de coluna parametrizado. As chaves vêm
-                # de _CAMPOS em app/dominio/importacao.py — lista fechada no
-                # código, nunca do corpo da requisição.
-                atribuicoes = ", ".join(f"{c} = ${i + 2}" for i, c in enumerate(campos))
-                await conn.execute(
-                    f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
-                    existente["id"], *campos.values(),
-                )
-                atualizados += 1
+                    campos = campos_para_gravar(linha, existente, dados.modo)
+                    if campos:
+                        # asyncpg não aceita nome de coluna parametrizado. As chaves vêm
+                        # de _CAMPOS em app/dominio/importacao.py — lista fechada no
+                        # código, nunca do corpo da requisição.
+                        atribuicoes = ", ".join(f"{c} = ${i + 2}" for i, c in enumerate(campos))
+                        r = await conn.execute(
+                            f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
+                            existente["id"], *campos.values(),
+                        )
+                        # ⚠️ UPDATE que afeta 0 linhas é o jeito deste banco de
+                        # dizer "sem permissão". Vira erro da linha, não
+                        # "atualizado".
+                        if r.endswith(" 0"):
+                            raise RuntimeError("o UPDATE não afetou o contato")
+                    # Contadores DEPOIS da escrita: linha que falha não conta.
+                    campos_enriquecidos += len(campos)
+                    campos_pulados += campos_preenchidos_no_csv(linha) - len(campos)
+                    if campos:
+                        atualizados += 1
+                    else:
+                        inalterados += 1
             except Exception as exc:  # noqa: BLE001 — uma linha ruim não derruba o lote
                 logger.warning("Falha ao importar %s: %s", email, exc)
                 erros.append(f"{email}: {exc}")
@@ -161,12 +177,17 @@ async def importar(dados: ImportacaoIn, _: Usuario = Depends(admin_atual)):
                          campos_pulados=campos_pulados)
 
 
+# Constante para o teste executar o MESMO comando sob `authenticated` numa
+# transação revertida — rodar a rota de verdade reescreveria a base inteira.
+SQL_RECALCULO = "UPDATE leads SET cargo = cargo"
+
+
 class RecalculoOut(BaseModel):
     atualizados: int
 
 
 @router.post("/recalcular-scores", response_model=RecalculoOut)
-async def recalcular_scores(_: Usuario = Depends(admin_atual)):
+async def recalcular_scores(admin: Usuario = Depends(admin_atual)):
     """Reaplica a régua a toda a base.
 
     O original percorria os leads em Deno e recalculava em TypeScript. Aqui não
@@ -185,14 +206,14 @@ async def recalcular_scores(_: Usuario = Depends(admin_atual)):
     achado maior — ver migration 019). Decisão de produto pendente com o
     Erick; nada foi alterado aqui para evitar isso.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         # ⚠️ Tem de tocar uma das colunas da lista do trigger:
         #   BEFORE INSERT OR UPDATE OF cargo, faturamento, funcionarios,
         #                              desafios, whatsapp, utm_source, source
         # Um UPDATE em qualquer outra coluna NÃO dispara o scoring, e a rota
         # responderia "atualizados: N" sem ter recalculado nada — o pior tipo
         # de erro, o que se reporta como sucesso.
-        resultado = await conn.execute("UPDATE leads SET cargo = cargo")
+        resultado = await conn.execute(SQL_RECALCULO)
     return RecalculoOut(atualizados=int(resultado.rsplit(" ", 1)[-1]))
 
 
@@ -202,7 +223,7 @@ class EtiquetaIn(BaseModel):
 
 @router.post("/{lead_id}/tags", status_code=status.HTTP_204_NO_CONTENT)
 async def aplicar_tag(lead_id: str, dados: EtiquetaIn,
-                      _: Usuario = Depends(admin_atual)):
+                      admin: Usuario = Depends(admin_atual)):
     """Cria a tag se ainda não existir e associa ao contato.
 
     Idempotente: aplicar a mesma tag duas vezes não é erro, é ausência de
@@ -214,7 +235,7 @@ async def aplicar_tag(lead_id: str, dados: EtiquetaIn,
     if not nome:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tag vazia.")
 
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         existe = await conn.fetchval("SELECT 1 FROM leads WHERE id = $1::uuid", lead_id)
         if not existe:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
@@ -255,18 +276,21 @@ async def _resolver_identidade(conn, lead_id, linha: LinhaCsv, email: str) -> No
     reconciliada depois.
     """
     try:
-        resultado = await conn.fetchval(
-            """SELECT resolve_or_create_identity(
-                   p_phone => $1, p_email => $2, p_nome => $3,
-                   p_source_app => 'marketinghs', p_local_id => $4,
-                   p_utm_source => $5, p_stage => 'lead')""",
-            linha.whatsapp or linha.telefone_completo, email, linha.nome,
-            lead_id, linha.source,
-        )
-        if resultado and resultado.get("dnia_id"):
-            await conn.execute(
-                "UPDATE leads SET dnia_id = $2, phone_normalized = $3 WHERE id = $1",
-                lead_id, resultado["dnia_id"], resultado.get("phone_normalized"),
+        # SAVEPOINT próprio: a falha daqui é engolida, e sem ele a transação
+        # da linha ficaria abortada — e o contato recém-criado iria junto.
+        async with conn.transaction():
+            resultado = await conn.fetchval(
+                """SELECT resolve_or_create_identity(
+                       p_phone => $1, p_email => $2, p_nome => $3,
+                       p_source_app => 'marketinghs', p_local_id => $4,
+                       p_utm_source => $5, p_stage => 'lead')""",
+                linha.whatsapp or linha.telefone_completo, email, linha.nome,
+                lead_id, linha.source,
             )
+            if resultado and resultado.get("dnia_id"):
+                await conn.execute(
+                    "UPDATE leads SET dnia_id = $2, phone_normalized = $3 WHERE id = $1",
+                    lead_id, resultado["dnia_id"], resultado.get("phone_normalized"),
+                )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Identidade não resolvida para %s: %s", email, exc)
