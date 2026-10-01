@@ -23,6 +23,9 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 | `backend` | 4 | 8084 | **8104** | `backend/**` inteiro (é a única dona de migration, `config.py`, routers e testes) | já |
 | `residuos-visuais` | 3 | 8083 | usa a 8100 | os arquivos listados no backlog dela, todos fora de `settings/` | quando uma das duas do G6 fechar |
 | `ui-primitivos` | 5 | 8085 | usa a 8100 | `components/ui/` (dona única nesta rodada), os usos de `DialogContent` sem descrição, `components/admin/AdminLayout.tsx` | 01/10, rodada 3 |
+| `cores-decisoes` | 6 | 8086 | usa a 8100 | ver `cores-decisoes.md` | 01/10, rodada 4 |
+| `contatos-decisoes` | 7 | 8087 | usa a 8100 | `components/admin/contacts/` e a ficha | 01/10, rodada 4 |
+| `primitivos-cta` | 8 | 8088 | usa a 8100 | `ui/button`, `ui/input`, `h-9` manual, CTA das landings | 01/10, rodada 4 |
 
 Os números entre parênteses são o guarda de 01/10 (`npm run guarda:visual -- <arquivo>`).
 `settings/` = `frontend/src/components/admin/settings/`.

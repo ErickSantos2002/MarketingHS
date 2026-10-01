@@ -35,6 +35,22 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   passam a usar e-mail único por rodada, para duas suítes poderem rodar ao
   mesmo tempo sem se derrubar — limpando o que criam, inclusive se a rodada morrer.
 
+- [ ] **Rodada 4 (decisões do Erick, 01/10):**
+  1. **#6** Recálculo de pontuação e sync do DataCore **não disparam**
+     automação (atualizam score/dado; só evento individual dispara). Teste.
+  2. **#7** A/B: peso 0 = sem tráfego (onde a escolha de variante acontece —
+     achar todos os lugares). Teste.
+  3. **#23+#24** Fusão de contatos: escrever a migration 022 (UPDATE admin em
+     `lead_conversions`, reaplicável) **e parar** — a coordenadora mostra ao
+     Erick e aplica. Em paralelo, a reatribuição de histórico na fusão
+     (`journey_runs` respeitando `uniq_journey_runs_open`, `crm_handoffs`,
+     `email_events`, `email_suppressions`, `journey_step_log`), com teste.
+     Converter a fusão para `authenticated` só depois da 022 aplicada.
+  4. **#27** Suítes inteiras em paralelo: `pg_advisory_lock` nas fixtures que
+     trocam configuração global (`segredo`, `segredos_resend`, `config_ab`,
+     `config_growthhs`) e e-mail único nos leads de teste fixos. Prova: duas
+     suítes inteiras juntas, verdes.
+
 ## Estado
 
 **01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
