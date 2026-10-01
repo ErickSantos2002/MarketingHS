@@ -35,6 +35,18 @@ import { useAbConfig } from "@/hooks/useAbConfig";
 
 const VARIANT_KEYS = ["A", "B", "C", "D", "E", "F"];
 
+/**
+ * Pesos iguais para `n` variantes, somando 100 — o resto vai para as
+ * primeiras (3 → 34/33/33). Decisão do Erick (01/10, pergunta 34): a
+ * variante nova DIVIDE IGUAL com as outras. Desde a rodada 4 do backend,
+ * peso 0 quer dizer "sem tráfego" (o sorteio a pula), então nascer com 0
+ * deixaria a variante criada e calada.
+ */
+function dividirIgual(n: number): number[] {
+  const base = Math.floor(100 / n);
+  return Array.from({ length: n }, (_, i) => base + (i < 100 % n ? 1 : 0));
+}
+
 const STATUS_LABEL: Record<string, string> = {
   draft: "Rascunho", running: "Rodando", paused: "Pausado",
   completed: "Concluído", archived: "Arquivado",
@@ -113,7 +125,9 @@ export default function Experiments() {
     setForm((f) => {
       if (f.variants.length >= VARIANT_KEYS.length) return f;
       const key = VARIANT_KEYS[f.variants.length];
-      return { ...f, variants: [...f.variants, { key, url: "", weight: 0, label: `Variante ${key}` }] };
+      const variants = [...f.variants, { key, url: "", weight: 0, label: `Variante ${key}` }];
+      const pesos = dividirIgual(variants.length);
+      return { ...f, variants: variants.map((v, i) => ({ ...v, weight: pesos[i] })) };
     });
   };
   const removeVariant = (i: number) => {
