@@ -33,8 +33,8 @@
 > fixo se derrubam). A suíte leva ~28 min.
 >
 > **O Erick roda no Konsole** (comando no cabeçalho de cada arquivo):
-> 1. `backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql` — apaga
->    as 2 campanhas de teste. **Antes** de o worker com este código subir em
+> 1. ~~`backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql`~~ —
+>    **rodado pelo Erick em 01/10: UPDATE 2, DELETE 2, 0 em `sending`.** **Antes** de o worker com este código subir em
 >    produção; senão a varredura as fecha como enviadas.
 > 2. Se aprovar a pergunta 20: `backend/migrations/021_leads_escrita_admin.sql`,
 >    duas vezes. Depois disso, uma frente converte `escrita_contatos.py` e `contatos.py`.

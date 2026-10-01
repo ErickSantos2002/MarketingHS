@@ -23,6 +23,11 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 - [ ] Ao fim de cada router: `pytest -q`, push, marcar "pronto para merge"
   (merge por router, não no fim de tudo).
 
+- [ ] **Rodada 2:** pré-limpeza da fixture `envio` passa a apagar também a
+  campanha 'teste de webhook' que ela deixa quando o pytest morre (as 2 de
+  produção já foram apagadas pelo Erick em 01/10). E, se a migration 021 for
+  aplicada, `escrita_contatos.py` e `contatos.py` para `authenticated`.
+
 ## Estado
 
 **01/10/2026 — rodada 1.** Branch `worktree-agent-a955e097afd0091b3`.

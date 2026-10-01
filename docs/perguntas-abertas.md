@@ -64,4 +64,5 @@ delas.
     **Assumido:** `admin_atual` (regra do `CLAUDE.md`).
 22. **Fixture `envio` deixa campanha para trás quando o pytest morre.**
     **Assumido:** só acrescentar a campanha à pré-limpeza depois que o script
-    de limpeza das 2 de produção rodar.
+    de limpeza das 2 de produção rodar. **O script rodou em 01/10** — o
+    conserto da fixture entrou no backlog da frente `backend`.
