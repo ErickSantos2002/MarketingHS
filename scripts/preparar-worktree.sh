@@ -44,5 +44,7 @@ if [[ -n "$n" ]]; then
   echo "  Backend: cd backend && ./.venv/bin/python -m uvicorn app.main:app --port $((8100 + n))"
   echo "           (só a frente de backend; o Vite dela sobe com MKT_BACKEND_PORT=$((8100 + n)))"
 else
-  echo "Frente $nome não está na tabela de docs/frentes/README.md — confira o nome." >&2
+  # Frente despachada como subagente nasce em .claude/worktrees/agent-<id>:
+  # o nome não bate com a tabela, e a porta vem no próprio despacho.
+  echo "Worktree $nome fora da tabela de docs/frentes/README.md — use a porta que o despacho der." >&2
 fi

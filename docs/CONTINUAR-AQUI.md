@@ -32,6 +32,15 @@
 > ⚠️ **Nunca duas rodadas de pytest ao mesmo tempo** (fixtures com e-mail
 > fixo se derrubam). A suíte leva ~28 min.
 >
+> **Rodada 2 da `backend` na `main` (`c1e25ba`):** `escrita_contatos.py` e
+> `contatos.py` (importação, recálculo, tag) em `authenticated` depois da 021
+> (a fusão fica `service_role`, pergunta 23); a fixture `envio` se limpa
+> sozinha; **a importação perdia linhas boas calada** — uma linha recusada
+> abortava a transação e a rota dizia 200 — consertado com SAVEPOINT por
+> linha. Routers: 68 `service_role` × 91 `authenticated`. Suíte da branch:
+> 396 passed + 1 instável (`test_crm_entrega.py::test_cancelar_depois_do_2xx_ainda_grava_entregue`,
+> `sleep` fixo contra o banco remoto; 5/5 sozinho) — a trocar por espera com prazo.
+>
 > **O Erick roda no Konsole** (comando no cabeçalho de cada arquivo):
 > 1. ~~`backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql`~~ —
 >    **rodado pelo Erick em 01/10: UPDATE 2, DELETE 2, 0 em `sending`.** **Antes** de o worker com este código subir em

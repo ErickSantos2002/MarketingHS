@@ -28,6 +28,9 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   produção já foram apagadas pelo Erick em 01/10). E, se a migration 021 for
   aplicada, `escrita_contatos.py` e `contatos.py` para `authenticated`.
 
+- [ ] **Rodada 3:** `test_cancelar_depois_do_2xx_ainda_grava_entregue` troca o
+  `sleep` fixo por espera com prazo (falhou 1 vez com a suíte inteira, 5/5 sozinho).
+
 ## Estado
 
 **01/10/2026 — rodada 2.** Branch `worktree-agent-abdba54f9f6c6f44f`.

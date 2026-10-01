@@ -66,3 +66,13 @@ delas.
     **Assumido:** só acrescentar a campanha à pré-limpeza depois que o script
     de limpeza das 2 de produção rodar. **O script rodou em 01/10** — o
     conserto da fixture entrou no backlog da frente `backend`.
+23. **Migration 022** (política de UPDATE admin em `lead_conversions`) para a
+    fusão de contatos ir para `authenticated`. **Assumido: não** — a rota já
+    exige admin e a tabela está vazia em produção. Um teste quebra no dia em
+    que a política existir, avisando que dá para converter.
+24. **A fusão de contatos perde histórico** (achado de antes da conversão): não
+    reatribui `journey_runs` nem `crm_handoffs` — apagar o contato descartado
+    leva junto a jornada e a entrega ao comercial dele — e deixa
+    `email_events`, `email_suppressions` e `journey_step_log` com `lead_id`
+    NULL. Incluir na reatribuição (cuidando do `uniq_journey_runs_open`)?
+    **Assumido: não mexer** até o Erick decidir; é mudança de comportamento.
