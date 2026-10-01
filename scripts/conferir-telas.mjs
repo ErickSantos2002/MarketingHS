@@ -3,6 +3,7 @@
 // não podem dividir o navegador do Playwright MCP da sessão.
 //
 //   node scripts/conferir-telas.mjs --porta 8081 --saida <pasta> /settings /pages
+//   node scripts/conferir-telas.mjs --base https://homo-marketinghs.healthsafetytech.com --saida <pasta> /
 //
 // Para cada rota: tema claro e escuro, 1440 e 390 px. Salva um PNG por
 // combinação e um resumo.json com scrollWidth, erros e avisos de console.
@@ -33,7 +34,8 @@ const saida = path.resolve(opc('saida', 'conferencia'));
 const temas = opc('temas', 'claro,escuro').split(',');
 const larguras = opc('larguras', '1440,390').split(',').map(Number);
 const rotas = args.length ? args : ['/'];
-const base = `http://127.0.0.1:${porta}`;
+// --base aponta para um ambiente publicado (ex.: o Homo); sem ela, o Vite local.
+const base = opc('base', `http://127.0.0.1:${porta}`);
 
 // node_modules e .ferramentas moram na checkout principal, mesmo numa worktree.
 const principal = path.dirname(
@@ -43,7 +45,9 @@ const { chromium } = require('playwright-core');
 
 // Token reaproveitado por 1 h: /auth/login tem limite de taxa por IP e várias
 // frentes logando a cada conferência esbarrariam nele.
-const arqToken = path.join(principal, '.ferramentas', 'token');
+// Um token por ambiente: cada um tem o próprio JWT_SECRET.
+const arqToken = path.join(principal, '.ferramentas',
+  base.startsWith('http://127.0.0.1') ? 'token' : `token-${new URL(base).host}`);
 async function token() {
   if (existsSync(arqToken) && Date.now() - statSync(arqToken).mtimeMs < 3600e3) {
     return readFileSync(arqToken, 'utf8').trim();
