@@ -136,7 +136,7 @@ export function ContactsTable({
       if (bv == null) return -1;
       const aStr = String(av);
       const bStr = String(bv);
-      if (sortKey.includes('date') || sortKey === 'created_at' || sortKey === 'updated_at' || sortKey === 'data_interesse' || sortKey === 'last_conversion_date') {
+      if (sortKey.includes('date') || sortKey === 'created_at' || sortKey === 'updated_at' || sortKey === 'last_conversion_date') {
         const aTime = new Date(aStr).getTime();
         const bTime = new Date(bStr).getTime();
         if (!isNaN(aTime) && !isNaN(bTime)) return sortDir === 'asc' ? aTime - bTime : bTime - aTime;
@@ -629,8 +629,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
       );
     }
 
-    case 'created_at':
-    case 'data_interesse': {
+    case 'created_at': {
       if (!val) return <span className="text-xs text-muted-foreground">-</span>;
       const d = new Date(val);
       return (
@@ -640,11 +639,6 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
         </div>
       );
     }
-
-    case 'interesse_ecossistema':
-    case 'interesse_mtia':
-    case 'interesse_formacao':
-      return <span className="text-xs">{val ? 'Sim' : 'Não'}</span>;
 
     default:
       return <span className="text-xs truncate max-w-[200px] block">{val != null ? String(val) : '-'}</span>;
