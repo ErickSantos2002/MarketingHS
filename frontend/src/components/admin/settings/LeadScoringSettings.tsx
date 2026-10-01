@@ -91,7 +91,7 @@ export default function LeadScoringSettings() {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Total configurado</span>
-            <span className={`text-sm font-bold ${isOverLimit ? 'text-destructive' : 'text-foreground'}`}>
+            <span className={`text-sm font-bold ${isOverLimit ? 'text-[--on-tint-danger]' : 'text-foreground'}`}>
               {totalPoints}/100 pts
             </span>
           </div>

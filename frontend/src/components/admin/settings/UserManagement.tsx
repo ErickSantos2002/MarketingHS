@@ -266,7 +266,7 @@ export default function UserManagement() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          className="h-7 w-7 text-[--on-tint-danger] hover:text-[--on-tint-danger] hover:bg-[--tint-danger]"
                           title="Excluir usuário"
                           onClick={() => {
                             setDeleteEmail(u.email);
