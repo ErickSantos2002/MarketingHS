@@ -78,10 +78,7 @@ export default function IACard() {
     <Card className="border-border/40">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm"
-            style={{ backgroundColor: '#D97757' }}
-          >
+          <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[--color-warning-700] text-[--color-white] font-bold text-sm">
             IA
           </div>
           <div>
@@ -89,12 +86,7 @@ export default function IACard() {
             <CardDescription className="text-xs">Chave da Anthropic (Claude), usada pelo chat e pelas análises</CardDescription>
           </div>
         </div>
-        <Badge
-          variant={configurado ? 'default' : 'secondary'}
-          className={`text-[10px] ${
-            configurado ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20' : ''
-          }`}
-        >
+        <Badge variant={configurado ? 'success' : 'secondary'}>
           {configurado ? 'configurado' : 'não configurado'}
         </Badge>
       </CardHeader>
@@ -145,13 +137,13 @@ export default function IACard() {
                 )}
               </div>
               {configurado && !input && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Já salva. Deixe em branco para manter.
                 </p>
               )}
             </div>
 
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Modelo em uso: <code className="bg-muted/50 px-1 py-0.5 rounded">{config?.modelo}</code>
             </p>
           </div>

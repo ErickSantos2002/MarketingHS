@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Save, RefreshCw, Flame, Thermometer, Minus } from 'lucide-react';
+import { Loader2, Save, RefreshCw, Flame, Thermometer, Minus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useScoringConfig } from '@/hooks/useScoringConfig';
 import type { ScoringCriteria, ScoringThresholds } from '@/lib/leadScoring';
@@ -52,7 +52,7 @@ export default function LeadScoringSettings() {
     setShowRecalcModal(false);
     try {
       const result = await recalculateAll();
-      toast.success(`Score recalculado para ${result.updated} leads!`);
+      toast.success(`Score recalculado para ${result.atualizados} leads!`);
     } catch {
       toast.error('Erro ao recalcular scores');
     } finally {
@@ -100,7 +100,10 @@ export default function LeadScoringSettings() {
             className={`h-2 ${isOverLimit ? '[&>div]:bg-destructive' : ''}`}
           />
           {isOverLimit && (
-            <p className="text-xs text-destructive mt-1">⚠ O total excede 100 pontos. Reduza os pesos.</p>
+            <p className="flex items-center gap-1 text-xs text-[--on-tint-danger] mt-1">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-danger" />
+              <span>O total excede 100 pontos. Reduza os pesos.</span>
+            </p>
           )}
         </CardContent>
       </Card>
@@ -141,14 +144,14 @@ export default function LeadScoringSettings() {
             onPointsChange={(v) => updateCriteria('faturamento', 'points', v)}
           >
             <div className="mt-2">
-              <label className="text-[10px] text-muted-foreground">Faturamento mínimo (R$/mês)</label>
+              <label className="text-xs text-muted-foreground">Faturamento mínimo (R$/mês)</label>
               <Input
                 type="number"
                 className="text-xs mt-1 w-48"
                 value={criteria.faturamento.min_value || 100000}
                 onChange={(e) => updateCriteria('faturamento', 'min_value', Number(e.target.value))}
               />
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Mapeamento: "100k-500k" = 100.000 · "500k-1M" = 500.000 · "acima de 1M" = 1.000.000
               </p>
             </div>
@@ -165,14 +168,14 @@ export default function LeadScoringSettings() {
             onPointsChange={(v) => updateCriteria('funcionarios', 'points', v)}
           >
             <div className="mt-2">
-              <label className="text-[10px] text-muted-foreground">Mínimo de funcionários</label>
+              <label className="text-xs text-muted-foreground">Mínimo de funcionários</label>
               <Input
                 type="number"
                 className="text-xs mt-1 w-48"
                 value={criteria.funcionarios?.min_value || 10}
                 onChange={(e) => updateCriteria('funcionarios', 'min_value', Number(e.target.value))}
               />
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Mapeamento: "Individual" = 1 · "2-10" = 2 · "11-25" = 11 · "26-49" = 26 · "Acima de 50" = 50
               </p>
             </div>
@@ -200,7 +203,7 @@ export default function LeadScoringSettings() {
             onPointsChange={(v) => updateCriteria('origem', 'points', v)}
           >
             <div className="mt-2">
-              <label className="text-[10px] text-muted-foreground">Sources qualificadas (separadas por vírgula)</label>
+              <label className="text-xs text-muted-foreground">Sources qualificadas (separadas por vírgula)</label>
               <Input
                 className="text-xs mt-1"
                 placeholder="landing-exemplo, instagram, google"
@@ -242,14 +245,14 @@ export default function LeadScoringSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Visual bar */}
-          <div className="flex h-6 rounded-md overflow-hidden text-[10px] font-medium">
+          <div className="flex h-6 rounded-md overflow-hidden text-xs font-medium">
             <div className="bg-muted flex items-center justify-center" style={{ width: `${thresholds.warm}%` }}>
               <Minus className="h-3 w-3 mr-0.5" /> Raw
             </div>
-            <div className="bg-amber-500/30 text-amber-700 dark:text-amber-400 flex items-center justify-center" style={{ width: `${thresholds.hotlead - thresholds.warm}%` }}>
+            <div className="bg-[--tint-warning] text-[--on-tint-warning] flex items-center justify-center" style={{ width: `${thresholds.hotlead - thresholds.warm}%` }}>
               <Thermometer className="h-3 w-3 mr-0.5" /> Warm
             </div>
-            <div className="bg-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-center" style={{ width: `${100 - thresholds.hotlead}%` }}>
+            <div className="bg-[--tint-success] text-[--on-tint-success] flex items-center justify-center" style={{ width: `${100 - thresholds.hotlead}%` }}>
               <Flame className="h-3 w-3 mr-0.5" /> Hotlead
             </div>
           </div>
@@ -334,7 +337,7 @@ function CriterionRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">{label}</span>
-            <Badge variant="secondary" className="text-[10px]">{points} pts</Badge>
+            <Badge variant="secondary">{points} pts</Badge>
           </div>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>

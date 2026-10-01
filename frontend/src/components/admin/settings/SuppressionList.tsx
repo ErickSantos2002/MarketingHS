@@ -46,15 +46,15 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function ReasonBadge({ reason }: { reason: SuppressionReason }) {
   if (reason === 'bounce') {
-    return <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px]" variant="outline">Bounce</Badge>;
+    return <Badge variant="destructive">Bounce</Badge>;
   }
   if (reason === 'complaint') {
-    return <Badge className="bg-orange-500/15 text-orange-400 border-orange-500/30 text-[10px]" variant="outline">Marcou spam</Badge>;
+    return <Badge variant="warning">Marcou spam</Badge>;
   }
   if (reason === 'unsubscribe') {
-    return <Badge className="bg-muted/50 text-muted-foreground border-border/30 text-[10px]" variant="outline">Descadastrou</Badge>;
+    return <Badge variant="secondary">Descadastrou</Badge>;
   }
-  return <Badge className="bg-blue-500/15 text-blue-400 border-blue-500/30 text-[10px]" variant="outline">Manual</Badge>;
+  return <Badge variant="info">Manual</Badge>;
 }
 
 export default function SuppressionList() {
@@ -216,11 +216,11 @@ export default function SuppressionList() {
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border/30 hover:bg-transparent">
-                <TableHead className="text-[11px] h-9">Email</TableHead>
-                <TableHead className="text-[11px] h-9">Motivo</TableHead>
-                <TableHead className="text-[11px] h-9">Origem</TableHead>
-                <TableHead className="text-[11px] h-9">Data</TableHead>
-                <TableHead className="text-[11px] h-9 text-right">Ações</TableHead>
+                <TableHead className="text-xs h-9">Email</TableHead>
+                <TableHead className="text-xs h-9">Motivo</TableHead>
+                <TableHead className="text-xs h-9">Origem</TableHead>
+                <TableHead className="text-xs h-9">Data</TableHead>
+                <TableHead className="text-xs h-9 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -238,7 +238,7 @@ export default function SuppressionList() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 text-[10px] text-muted-foreground hover:text-red-400 hover:bg-red-500/10 px-2 gap-1"
+                          className="h-6 text-xs text-muted-foreground hover:text-[--on-tint-danger] hover:bg-[--tint-danger] px-2 gap-1"
                           disabled={removing === item.id}
                         >
                           {removing === item.id ? (
@@ -258,7 +258,10 @@ export default function SuppressionList() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleRemove(item.id)}>
+                          <AlertDialogAction
+                            className="bg-danger text-destructive-foreground border border-danger hover:bg-danger/90"
+                            onClick={() => handleRemove(item.id)}
+                          >
                             Remover
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -313,7 +316,7 @@ export default function SuppressionList() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Email <span className="text-red-400">*</span></Label>
+              <Label className="text-xs">Email <span className="text-[--on-tint-danger]">*</span></Label>
               <Input
                 value={addEmail}
                 onChange={(e) => setAddEmail(e.target.value)}

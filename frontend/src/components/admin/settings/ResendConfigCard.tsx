@@ -265,10 +265,10 @@ export default function ResendConfigCard() {
             </Button>
           </div>
           {teste?.valida && teste.escopo === 'full' && (
-            <p className="text-xs text-green-600">Chave válida, acesso completo — {teste.dominios.length} domínio(s) na conta.</p>
+            <p className="text-xs text-[--on-tint-success]">Chave válida, acesso completo — {teste.dominios.length} domínio(s) na conta.</p>
           )}
           {teste?.valida && teste.escopo === 'sending_only' && (
-            <p className="text-xs text-amber-600">
+            <p className="text-xs text-[--on-tint-warning]">
               Chave válida, <strong>somente envio</strong>: ela não lista domínios nem liga o
               rastreamento. Digite o domínio à mão e confira a verificação em resend.com/domains.
             </p>
@@ -281,9 +281,9 @@ export default function ResendConfigCard() {
             </p>
           )}
           {config?.resend_api_key.configurado && config.resend_api_key.escopo === null && !teste && (
-            <Alert className="py-2 border-amber-500/40 bg-amber-500/10">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-              <AlertDescription className="text-xs text-amber-600 dark:text-amber-400">
+            <Alert className="py-2 border-warning/30 bg-[--tint-warning] text-[--on-tint-warning] [&>svg]:text-warning">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <AlertDescription className="text-xs text-[--on-tint-warning]">
                 Não foi possível confirmar agora a chave salva junto ao Resend — ela pode ter
                 sido revogada. Teste uma chave nova ou confira em resend.com/api-keys.
               </AlertDescription>
@@ -421,7 +421,7 @@ export default function ResendConfigCard() {
             )}
             {info?.disponivel && (info.records ?? []).length > 0 && (
               <div className="overflow-x-auto">
-                <table className="w-full text-[11px]">
+                <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-muted-foreground">
                       <th className="pr-2">Tipo</th><th className="pr-2">Nome</th>
@@ -459,12 +459,12 @@ export default function ResendConfigCard() {
           {diagnostico && (
             <div className="text-xs space-y-1">
               {diagnostico.ok
-                ? <p className="text-green-600">Conectado. Remetente: {diagnostico.remetente}</p>
+                ? <p className="text-[--on-tint-success]">Conectado. Remetente: {diagnostico.remetente}</p>
                 : <p className="text-destructive">
                     {diagnostico.erro_api ?? `Faltando: ${diagnostico.faltando.join(', ')}`}
                   </p>}
               {diagnostico.segredo_descadastro_faltando && (
-                <p className="text-amber-600">
+                <p className="text-[--on-tint-warning]">
                   Sem segredo de descadastro: o worker não envia nada.
                 </p>
               )}

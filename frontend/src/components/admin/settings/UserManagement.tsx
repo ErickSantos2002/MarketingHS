@@ -210,7 +210,7 @@ export default function UserManagement() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="gap-1 text-[10px] h-6 px-2"
+                        className="gap-1 text-xs h-6 px-2"
                         disabled={togglingRole === u.id}
                         onClick={() => handleToggleRole(u.id, u.role)}
                         title={u.role === 'admin' ? 'Rebaixar para user' : 'Promover a admin'}
@@ -222,7 +222,7 @@ export default function UserManagement() {
                         ) : (
                           <User className="h-3 w-3" />
                         )}
-                        <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="text-[10px] pointer-events-none">
+                        <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="pointer-events-none">
                           {u.role}
                         </Badge>
                       </Button>

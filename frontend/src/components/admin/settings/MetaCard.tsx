@@ -140,10 +140,7 @@ export default function MetaCard() {
     <Card className="border-border/40">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-sm"
-            style={{ backgroundColor: '#185FA5' }}
-          >
+          <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[--color-info-700] text-[--color-white] font-bold text-sm">
             M
           </div>
           <div>
@@ -151,14 +148,7 @@ export default function MetaCard() {
             <CardDescription className="text-xs">Conversions API (CAPI) e Pixel</CardDescription>
           </div>
         </div>
-        <Badge
-          variant={configuredCount === requiredFields.length ? 'default' : 'secondary'}
-          className={`text-[10px] ${
-            configuredCount === requiredFields.length
-              ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20'
-              : ''
-          }`}
-        >
+        <Badge variant={configuredCount === requiredFields.length ? 'success' : 'secondary'}>
           {configuredCount}/{requiredFields.length} configurados
         </Badge>
       </CardHeader>
@@ -214,7 +204,7 @@ export default function MetaCard() {
                     )}
                   </div>
                   {saved && !inputs[f.key] && (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Já salvo. Deixe em branco para manter.
                     </p>
                   )}
