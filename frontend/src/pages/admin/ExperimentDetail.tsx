@@ -396,7 +396,7 @@ function FilterSelect({ label, value, options, onChange }: {
     <div>
       <Label className="text-xs">{label}</Label>
       <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? "" : v)}>
-        <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL}>Todos</SelectItem>
           {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
