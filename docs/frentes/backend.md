@@ -53,6 +53,45 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 
 ## Estado
 
+**01/10/2026 — rodada 4.** Branch `worktree-agent-ac6eb5bc3dba1b0d4`.
+*(em andamento — fechado item a item abaixo)*
+
+- [x] **#6 Operação em massa não dispara automação.** Os caminhos achados:
+  1. recálculo (`UPDATE leads SET cargo = cargo`) → `trg_score_lead_on_change`
+     muda etiqueta/pontuação → `trg_automation_on_etiqueta_change` → INSERT
+     em `crm_handoffs` (regra);
+  2. sincronização do DataCore, UPDATE em lote (`source = 'datacore'`) → o
+     mesmo par de gatilhos;
+  3. sincronização do DataCore, INSERT de lead novo → o gatilho de automação
+     (todo INSERT avalia) **e** `fn_lead_insert_event` → `contact_events`
+     `form_submitted` → `trg_contact_event_journey` → `journey_events` →
+     matrícula em fluxo que entra por evento (com nó `handoff_growthhs`, é
+     entrega ao comercial também).
+
+  A automação mora em gatilho do banco, então a exceção também: a transação
+  em massa se marca com `SET LOCAL marketinghs.sem_automacao = 'on'`
+  (`app/dominio/automacao.py`, chamado só por `contatos.recalcular` e
+  `sincronizacao_datacore.sincronizar` — um teste lê o código e quebra se
+  outro lugar marcar) e as duas funções de gatilho saem cedo com a marca:
+  **`backend/migrations/023_operacao_em_massa_nao_dispara_automacao.sql`,
+  NÃO aplicada** — o Erick roda (duas vezes, para provar a reaplicação). As
+  funções são as do banco (conferido: o corpo vivo é o da 020), cada uma com
+  uma guarda a mais e nada mais. `contact_events` continua gravado — a linha
+  do tempo não perde o "capturado via datacore"; só a cópia para a fila de
+  jornada não é feita. Antes da 023 a marca é inerte (nenhum risco agora:
+  0 regras de automação em produção).
+  **Testes** (`tests/test_automacao_em_massa.py`): captura e mudança manual
+  de status continuam enfileirando (verde hoje); recálculo e sincronização
+  não enfileiram nem matriculam (**pulados até a 023**, com o motivo). Prova
+  de que o teste morde: sem o `skip`, os dois ficam vermelhos hoje
+  (`assert 1 == 0` — o pedido nasce). Também: a marca morre com a
+  transação (conexão volta limpa ao pool).
+  ⚠️ **Não muda:** a matrícula por SEGMENTO (bloco A do worker) olha o estado
+  do contato, não o evento — contato que o recálculo põe num segmento entra
+  no fluxo dele no próximo tick, como se tivesse sido editado à mão (ver
+  Perguntas 7). A importação de CSV e o status **em lote** continuam
+  disparando: são manuais (decisão diz "mudança manual de status").
+
 **01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
 Testes: 396 passed + 1 failed antes (rodada 2) → **397 passed** depois (29 min 27 s, sozinha; o I5 verde). Fim: 0 usuários, 0 leads e 0 campanhas de teste no banco (leitura).
 **Pronto para merge** (a branch inteira; só `backend/tests/` muda).
@@ -255,3 +294,10 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    a segunda rodada espera em vez de pisar. E os leads de e-mail fixo fora
    do conftest ganhariam o molde do `lead_real`. **Assumido: não feito** —
    fora do pedido da rodada; a regra continua "uma suíte inteira por vez".
+7. **(rodada 4) Recálculo que põe contato num SEGMENTO de jornada.** A
+   decisão 6 cala regra e fluxo por evento; o fluxo que entra por segmento
+   olha o estado, e o recálculo muda o estado. Calar também esse caminho
+   exigiria marcar o contato ("mudou por recálculo") e o segmento ignorar a
+   marca — invasivo e com pergunta própria (até quando vale a marca?).
+   **Assumido: não mexido.** Hoje (leitura, 01/10): 1 fluxo por segmento,
+   em rascunho; nenhum ativo — o caso não acontece ainda.

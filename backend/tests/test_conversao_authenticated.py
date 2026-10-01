@@ -772,17 +772,16 @@ class _Reverter(Exception):
 async def test_recalculo_afeta_a_base_inteira_sob_authenticated(token_admin):
     """A rota reescreve TODOS os leads (e o gatilho de automação reavalia cada
     um): rodá-la de verdade no teste seria escrita em produção. O teste
-    executa o MESMO comando (`SQL_RECALCULO`) sob `authenticated`, como o
-    admin, numa transação revertida, e compara com o total que `service_role`
-    vê na mesma transação."""
-    from app.routers.contatos import SQL_RECALCULO
+    executa o MESMO caminho (`recalcular`: marca + `SQL_RECALCULO`) sob
+    `authenticated`, como o admin, numa transação revertida, e compara com o
+    total que `service_role` vê na mesma transação."""
+    from app.routers.contatos import recalcular
 
     uid = await _uid_admin(token_admin)
     medido = {}
     try:
         async with db.sessao(role="authenticated", user_id=uid) as conn:
-            r = await conn.execute(SQL_RECALCULO)
-            medido["afetadas"] = int(r.rsplit(" ", 1)[-1])
+            medido["afetadas"] = await recalcular(conn)
             await conn.execute("SET LOCAL ROLE service_role")
             medido["total"] = await conn.fetchval("SELECT count(*) FROM leads")
             raise _Reverter
