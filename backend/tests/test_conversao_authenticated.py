@@ -25,10 +25,21 @@ async def _contar(sql: str, *args) -> int:
 # ── templates.py ─────────────────────────────────────────────────────────────
 
 async def test_templates_admin_ve_o_mesmo_total_que_service_role(cliente, token_admin):
-    esperado = await _contar("SELECT count(*) FROM email_templates")
-    r = await cliente.get("/templates", params={"limit": 1}, headers=_auth(token_admin))
-    assert r.status_code == 200, r.text
-    assert r.json()["pagination"]["total"] == esperado
+    # ⚠️ Produção tinha 0 templates em 01/10 — e 0 == 0 não prova nada. Uma
+    # linha semeada garante que o total comparado é > 0.
+    async with db.sessao(role="service_role") as conn:
+        tid = await conn.fetchval(
+            "INSERT INTO email_templates (name) VALUES ('teste-conversao-contagem') "
+            "RETURNING id::text")
+    try:
+        esperado = await _contar("SELECT count(*) FROM email_templates")
+        assert esperado > 0
+        r = await cliente.get("/templates", params={"limit": 1}, headers=_auth(token_admin))
+        assert r.status_code == 200, r.text
+        assert r.json()["pagination"]["total"] == esperado
+    finally:
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM email_templates WHERE id = $1::uuid", tid)
 
 
 async def test_templates_admin_cria_le_edita_e_apaga(cliente, token_admin):
@@ -61,3 +72,29 @@ async def test_templates_exige_admin(cliente, token_usuario):
     ]:
         r = await cliente.request(metodo, caminho, json=corpo, headers=h)
         assert r.status_code == 403, (metodo, caminho, r.text)
+
+
+# ── chaves.py ────────────────────────────────────────────────────────────────
+
+async def test_chaves_admin_ve_o_mesmo_total_que_service_role(cliente, token_admin):
+    # ⚠️ Sem as chaves de teste ('teste 8A', 'teste-conversao…'): o banco é
+    # compartilhado com outras rodadas de pytest, que criam e apagam chave no
+    # meio — contar tudo deu falso vermelho em 01/10.
+    esperado = await _contar("SELECT count(*) FROM api_keys WHERE name NOT LIKE 'teste%'")
+    r = await cliente.get("/chaves", headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    assert len([c for c in r.json() if not c["name"].startswith("teste")]) == esperado
+
+
+async def test_chaves_admin_cria_desativa_e_remove(cliente, token_admin):
+    h = _auth(token_admin)
+    r = await cliente.post("/chaves", headers=h, json={"nome": "teste-conversao-authenticated"})
+    assert r.status_code in (200, 201), r.text
+    cid = r.json()["id"]
+    try:
+        r = await cliente.patch(f"/chaves/{cid}", headers=h, json={"ativa": False})
+        assert r.status_code == 200 and r.json()["is_active"] is False, r.text
+        assert (await cliente.delete(f"/chaves/{cid}", headers=h)).status_code == 204
+    finally:
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM api_keys WHERE id = $1::uuid", cid)
