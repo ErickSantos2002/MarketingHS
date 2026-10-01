@@ -29,3 +29,25 @@ delas.
 13. Regra do texto destrutivo (`text-destructive` dá ~3,76:1) no app inteiro (G5).
 
 ## Novas
+
+### G6 (01/10) — já aplicadas com a opção assumida; trocar é uma classe
+
+14. **Bloco de código** em Documentação da API e API Keys: era um editor escuro
+    fixo da dn.ia (`#1E1E2E`) nos dois temas. **Assumido:** o bloco da casa
+    (`bg-muted/50`, borda, texto do tema), igual ao `ExperimentsSetup`.
+    Alternativa: pedir ao DS oficial um token de "superfície de código" escura.
+15. **Quadrado de marca** dos cartões (G do GrowthHS, M do Meta, IA).
+    **Assumido:** pelo matiz da origem — G e M em `info-700`, IA em
+    `warning-700`. Alternativa: GrowthHS em `success-700`, como a pílula em Contatos.
+16. **"Descadastrou" na lista de supressão** ficou neutro (`secondary`), como na
+    origem; em Campanhas (G3) "Descadastrado" é atenção. Unificar?
+17. **Hotlead na barra de faixas do Lead Scoring** passou de vermelho para
+    verde (regra Hot = sucesso do G1/G2). Confirmar.
+18. **Toast do "Recalcular agora"** dizia "undefined leads" (o front lia
+    `result.updated`, a API devolve `atualizados`). **Assumido:** corrigido
+    dentro do G6; revert de uma linha se preferir fora.
+19. **Badge de permissão das API Keys** (revisão final do G6): "Leitura +
+    Escrita" é `success`, o mesmo verde de "Ativa" ao lado, enquanto "Escrita"
+    sozinha é âmbar — o acesso mais amplo parece o mais "seguro". **Mantido**
+    como veio da origem (pelo matiz). Alternativa: escala própria para
+    permissão (ex.: neutro para Leitura, âmbar para qualquer escrita).
