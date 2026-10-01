@@ -20,7 +20,7 @@ export function AIAnalysis({ leads }: AIAnalysisProps) {
     return (
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
+          <CardTitle className="flex items-center gap-2 text-[--on-tint-danger]">
             <AlertCircle className="h-5 w-5" />
             Erro na Análise
           </CardTitle>

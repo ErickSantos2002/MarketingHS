@@ -104,7 +104,7 @@ export function DatacoreImport() {
               por outro contato
             </p>
             {resumo.total_de_erros > 0 && (
-              <p className="text-destructive">
+              <p className="text-[--on-tint-danger]">
                 {resumo.total_de_erros} com erro — os primeiros: {resumo.erros.slice(0, 3).join(' · ')}
               </p>
             )}

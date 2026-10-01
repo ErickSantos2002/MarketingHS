@@ -97,11 +97,15 @@ export const BASE_EMAIL_DESIGN = {
   },
 };
 
-// VITE_UNLAYER_PROJECT_ID (Unlayer → Builder → Settings → General → Project ID)
-// é lida aqui e enviada em `options.projectId`. Projeto atual: `dnmkt`, id
-// 288591, sem restrição de Allowed Domains — o mesmo id vale para localhost e
-// produção.
+// Projeto Unlayer da Health & Safety: id 289750, criado pelo Erick em
+// 01/10/2026 no lugar do `dnmkt` (288591), que era da dn.ia. O id não é
+// segredo — vai do navegador para a Unlayer em toda sessão —, então mora aqui
+// como padrão; VITE_UNLAYER_PROJECT_ID (Unlayer → Builder → Settings → General
+// → Project ID) só existe para apontar para outro projeto sem mexer no código.
+// ⚠️ Se o projeto ganhar restrição de Allowed Domains, localhost e o domínio
+// de produção precisam estar na lista.
 //
+// O que segue foi medido com o projeto antigo, no mesmo plano Free:
 // VERIFICADO no navegador (POST api.unlayer.com/v2/editor/auth + /editor/session
 // retornam 200 com projectId 288591): a chave ESTÁ sendo lida e o editor NÃO
 // roda mais em modo anônimo. O que ainda não aparece é limitação de PLANO, não
@@ -113,10 +117,11 @@ export const BASE_EMAIL_DESIGN = {
 // nenhuma opção no código libera isso. O PREVIEW (ícone de olho) segue com
 // desktop/tablet/mobile em qualquer plano.
 
-const UNLAYER_PROJECT_ID = Number(import.meta.env.VITE_UNLAYER_PROJECT_ID) || undefined;
+const UNLAYER_PROJECT_ID_HS = 289750;
+const UNLAYER_PROJECT_ID = Number(import.meta.env.VITE_UNLAYER_PROJECT_ID) || UNLAYER_PROJECT_ID_HS;
 
 export const EMAIL_EDITOR_OPTIONS = {
-  ...(UNLAYER_PROJECT_ID ? { projectId: UNLAYER_PROJECT_ID } : {}),
+  projectId: UNLAYER_PROJECT_ID,
   locale: 'pt-BR',
   fonts: { showDefaultFonts: true },
   features: {

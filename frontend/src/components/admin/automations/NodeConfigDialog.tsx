@@ -403,7 +403,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                       </Select>
                     )}
                     {rule.field && renderRuleValue(rule, i)}
-                    <button onClick={() => removeRule(i)} className="shrink-0 p-1 text-muted-foreground hover:text-destructive">
+                    <button onClick={() => removeRule(i)} className="shrink-0 p-1 text-muted-foreground hover:text-[--on-tint-danger]">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

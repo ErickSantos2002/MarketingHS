@@ -41,9 +41,9 @@ type ApiKey = {
 
 
 function PermissionBadge({ permissions }: { permissions: string }) {
-  if (permissions === 'read') return <Badge variant="info">Leitura</Badge>;
+  if (permissions === 'read') return <Badge variant="secondary">Leitura</Badge>;
   if (permissions === 'write') return <Badge variant="warning">Escrita</Badge>;
-  return <Badge variant="success">Leitura + Escrita</Badge>;
+  return <Badge variant="warning">Leitura + Escrita</Badge>;
 }
 
 function StatusBadge({ apiKey }: { apiKey: ApiKey }) {

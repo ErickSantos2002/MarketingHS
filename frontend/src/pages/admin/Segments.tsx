@@ -110,7 +110,7 @@ export default function Segments() {
                       <button className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted rounded-sm" onClick={() => duplicateSegment(seg)}>
                         <Copy className="h-3.5 w-3.5" /> Duplicar
                       </button>
-                      <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-sm" onClick={() => setDeleteConfirm(seg)}>
+                      <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[--on-tint-danger] hover:bg-destructive/10 rounded-sm" onClick={() => setDeleteConfirm(seg)}>
                         <Trash2 className="h-3.5 w-3.5" /> Excluir
                       </button>
                     </PopoverContent>

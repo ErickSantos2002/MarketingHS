@@ -19,7 +19,7 @@ dia no `CONTINUAR-AQUI.md`.
 | 5 | Fluxo "Conferência lote 4": **fica em rascunho** | nada |
 | 6 | Recálculo e sync do DataCore **não disparam automação** | frente `backend` |
 | 7 | A/B: **peso 0 = sem tráfego** | frente `backend` |
-| 8 | Unlayer: **criar projeto próprio da HS** | **Erick** cria e passa o id |
+| 8 | Unlayer: **criar projeto próprio da HS** | ✅ projeto `289750`, padrão em `emailEditorConfig.ts` (01/10) |
 | 9 | Colunas de funil da dn.ia em Contatos: **remover** | frente `contatos-decisoes` |
 | 10 | CTA das landings: **azul da marca**, uma constante para editor e landing | frente `primitivos-cta` |
 | 11 | Campanhas presas | ✅ resolvida (script rodado) |
