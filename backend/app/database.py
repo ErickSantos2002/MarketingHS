@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -27,6 +28,21 @@ async def init_db() -> None:
     if not settings.DATABASE_URL:
         logger.warning("DATABASE_URL vazio — subindo sem banco.")
         return
+    # ⚠️ Idempotente no MESMO laço. A API chama uma vez só, mas os testes
+    # chamam a cada fixture (`cliente`, `token_admin`, `semear`…): cada
+    # chamada criava uma pool nova e largava a anterior aberta, sem fechar.
+    # Medido em 01/10: 22 conexões penduradas no meio da suíte, e a suíte
+    # travada em ep_poll. Pool de outro laço (o pytest-asyncio abre um por
+    # teste) não serve — é terminada e trocada.
+    if _pool is not None:
+        if (not _pool._closed
+                and getattr(_pool, "_loop", None) is asyncio.get_running_loop()):
+            return
+        try:
+            _pool.terminate()
+        except Exception:  # noqa: BLE001 — pool de laço morto; só soltar
+            pass
+        _pool = None
     try:
         _pool = await asyncpg.create_pool(
             settings.DATABASE_URL, min_size=2, max_size=10, setup=_preparar_conexao
@@ -36,8 +52,10 @@ async def init_db() -> None:
 
 
 async def close_db() -> None:
+    global _pool
     if _pool:
         await _pool.close()
+        _pool = None
 
 
 # ---------------------------------------------------------------------------

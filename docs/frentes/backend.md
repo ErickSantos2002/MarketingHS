@@ -90,7 +90,20 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
   no setup: uma rodada derruba a outra com 401. Medido hoje: 4 falsos
   vermelhos em `test_crm_caminhos.py` com outra rodada em paralelo, 23/23 verde
   sozinha. Vale também entre frentes.
-- A suíte inteira leva ~40 min contra o banco remoto.
+- A suíte inteira leva ~28 min contra o banco remoto. **387 passed** em
+  01/10 (rodada final, sozinha).
+- **Travamento da suíte (achado pela coordenadora, consertado):** uma rodada
+  parou 17 min em `test_automacoes_admin_cria_lista_edita_e_apaga`, em
+  ep_poll, com 22 conexões abertas. Causa: `init_db()` criava pool nova a cada
+  fixture e largava a anterior aberta; o pytest-asyncio abre um laço por
+  teste, e pool de laço morto ficava pendurada. Conserto em
+  `app/database.py`: `init_db` idempotente no mesmo laço (pool de outro laço é
+  terminada e trocada) e `close_db` zera a global. Depois disso a pytest
+  segura 2 conexões e a suíte fechou 387/387. Não reproduziu isolado
+  (`test_conversao*.py` sozinhos passam), então é intermitente; não dá para
+  afirmar se já travava na `main` — o vazamento, sim, já existia lá.
+  `pytest.ini` ganhou `faulthandler_timeout = 300` (despeja a pilha se um
+  teste passar de 5 min; não mata).
 
 ## Perguntas
 
