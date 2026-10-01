@@ -597,7 +597,6 @@ async def test_contatos_leitura_exige_admin(cliente, token_usuario):
 # SEM erro, e a rota responde 200. Por isso cada escrita é conferida no banco,
 # sob `service_role`, depois da chamada — o status da resposta não basta.
 
-EMAIL_ADMIN = "admin-teste-8a@exemplo.invalid"   # o da fixture token_admin
 EMAILS_ESCRITA = [f"teste-conversao-escrita-{i}@exemplo.invalid" for i in range(4)]
 TAG_ESCRITA = "teste-conversao-escrita"
 
@@ -630,8 +629,12 @@ async def leads_escrita():
     await _apagar_leads_de_escrita()
 
 
-async def _uid_admin() -> str:
-    return await _contar("SELECT id::text FROM auth.users WHERE email = $1", EMAIL_ADMIN)
+async def _uid_admin(token: str) -> str:
+    """O id do admin da fixture `token_admin`, conferido no banco. O e-mail é
+    único por rodada: sai do próprio token, não de uma constante."""
+    from app.auth.security import ler_token
+    return await _contar("SELECT id::text FROM auth.users WHERE email = $1",
+                         ler_token(token)["email"])
 
 
 async def test_escrita_status_individual_e_em_lote_afetam_o_lead(
@@ -677,7 +680,7 @@ async def test_escrita_tags_em_lote_edicao_e_exclusao_afetam_o_lead(
     assert r.status_code == 204, r.text
     assert await _contar("SELECT deleted_at IS NOT NULL FROM leads WHERE id = $1::uuid", b)
     assert await _contar("SELECT deleted_by::text FROM leads WHERE id = $1::uuid", b) \
-        == await _uid_admin()
+        == await _uid_admin(token_admin)
     # A política de SELECT não filtra `deleted_at`: o segundo DELETE acha a
     # linha, e é o `deleted_at IS NULL` da rota que dá o 404.
     assert (await cliente.delete(f"/contatos/{b}", headers=h)).status_code == 404
@@ -774,7 +777,7 @@ async def test_recalculo_afeta_a_base_inteira_sob_authenticated(token_admin):
     vê na mesma transação."""
     from app.routers.contatos import SQL_RECALCULO
 
-    uid = await _uid_admin()
+    uid = await _uid_admin(token_admin)
     medido = {}
     try:
         async with db.sessao(role="authenticated", user_id=uid) as conn:

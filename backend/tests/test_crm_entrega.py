@@ -398,6 +398,15 @@ async def test_cancelar_depois_do_2xx_ainda_grava_entregue(lead_8d, monkeypatch)
     tarefa.cancel()
     with pytest.raises(asyncio.CancelledError):
         await tarefa
-    await asyncio.sleep(0.6)
-    pedido = await _pedido(lead_8d["lead_id"])
+    # A gravação blindada continua depois do cancelamento (0,3 s do `lento` +
+    # idas ao banco remoto). Até 01/10 era um `sleep(0.6)` fixo, que sob a
+    # carga da suíte inteira não bastou (achou 'pendente'). Agora sonda até
+    # gravar ou estourar o teto — o teto é generoso porque só é gasto no
+    # vermelho de verdade; a asserção abaixo não muda.
+    prazo = asyncio.get_running_loop().time() + 10
+    while True:
+        pedido = await _pedido(lead_8d["lead_id"])
+        if pedido["status"] == "entregue" or asyncio.get_running_loop().time() > prazo:
+            break
+        await asyncio.sleep(0.1)
     assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
