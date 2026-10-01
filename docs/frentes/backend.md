@@ -54,7 +54,22 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 ## Estado
 
 **01/10/2026 — rodada 4.** Branch `worktree-agent-ac6eb5bc3dba1b0d4`.
-*(em andamento — fechado item a item abaixo)*
+Testes: **397 passed** antes (main 6a4d3fa, sozinha, 29 min) → **409 passed,
+2 skipped** depois (+14 testes: 7 da decisão 6, 2 skipped até a 023; 2 da
+fusão; 3+1 do A/B, menos o que fixava "0 vale 1"; ...). **Prova da decisão
+27: duas suítes INTEIRAS ao mesmo tempo, cada uma com log próprio — as duas
+409 passed, 2 skipped** (57 min 54 s e 58 min 02 s; durante a rodada, em
+`pg_locks`, uma trava concedida e a outra esperando). Elas andam quase em
+série — a maior parte dos testes comita —, então juntas não são mais rápidas
+que uma depois da outra: o ganho é não derrubar uma à outra.
+Fim (leitura): 0 usuários `@exemplo.invalid`, 0 leads de teste, 0 campanhas,
+regras, pedidos ao comercial, testes A/B, eventos de e-mail e supressões de
+teste, 0 travas abertas. Restos ANTIGOS, não desta rodada: 1 identidade
+`sonda-captura` (21/09, Perguntas 8) e 2 chaves de API `teste 8B
+leitura/escrita` (23/09).
+**Pronto para merge** (a branch inteira). **O Erick roda:** a 022 e a 023
+(cada uma duas vezes). Depois da 022, a fusão vai para `authenticated` (não
+feito: sem aviso de que foi aplicada).
 
 - [x] **#6 Operação em massa não dispara automação.** Os caminhos achados:
   1. recálculo (`UPDATE leads SET cargo = cargo`) → `trg_score_lead_on_change`
