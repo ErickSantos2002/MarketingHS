@@ -48,6 +48,14 @@
 > espera com prazo em vez de `sleep`; `token_admin`/`token_usuario` com e-mail
 > único — **suíte 397 passed**. Duas suítes inteiras juntas ainda não (pergunta 27).
 >
+> **Rodadas 4 e 5 (01/10):** as decisões do Erick (27 respostas) viraram
+> código em seis frentes; migrations **021, 022 e 023 aplicadas** (aprovadas
+> pelo Erick). A fusão de contatos roda em `authenticated` e leva o histórico
+> de 15 tabelas; recálculo e sync não disparam automação; peso 0 = sem
+> tráfego; duas suítes inteiras podem rodar juntas (trava no banco). Suíte:
+> **414 passed** (~32 min sozinha). Unlayer no projeto da HS (`289750`).
+> Perguntas abertas que sobram: 28–33, 36, 38, 39.
+>
 > **O Erick roda no Konsole** (comando no cabeçalho de cada arquivo):
 > 1. ~~`backend/scripts/2026-10-01-limpar-campanhas-teste-webhook.sql`~~ —
 >    **rodado pelo Erick em 01/10: UPDATE 2, DELETE 2, 0 em `sending`.** **Antes** de o worker com este código subir em

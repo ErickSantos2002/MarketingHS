@@ -67,6 +67,16 @@ dia no `CONTINUAR-AQUI.md`.
     segmento olha o estado, não o evento (hoje: 1 fluxo por segmento, em
     rascunho). **Assumido: não mexer.**
 37. **`pagina_sonda` (`test_captura.py`) cria identidade e nunca apaga.**
-    **Assumido:** o teste passa a limpar o que cria (rodada 5). Os restos
-    antigos (1 identidade de 21/09, 2 chaves `teste 8B` de 23/09) ficam para o
-    reset do banco.
+    ✅ O teste passa a limpar o que cria (rodada 5). A identidade de 21/09
+    era a mesma que a captura reusa pelo telefone e saiu na primeira rodada,
+    com 20 eventos órfãos dela. As 2 chaves `teste 8B` ficam para o reset.
+38. **Eventos de contato órfãos crescem ~24 por suíte inteira** (`contact_events`
+    com `lead_id` NULL: 1.492 → 1.516; 1.307 `journey_events` sem lead):
+    fixtures que comitam apagam o lead e deixam o evento. Apagar por
+    `lead_id IS NULL` levaria junto eventos de contatos reais apagados.
+    Opções: (a) cada fixture apaga os eventos do seu lead antes do lead;
+    (b) deixar para o reset. **Assumido: (b)** até o Erick decidir.
+39. **Adicionar variante no A/B redistribui TODOS os pesos** (rodada 5):
+    um 70/30 ajustado à mão vira 34/33/33 ao adicionar a terceira. A decisão
+    34 falava da variante nova. Opções: (a) fica assim; (b) só a nova entra
+    com a parte igual e as outras encolhem na proporção (70/30 → 47/20/33).
