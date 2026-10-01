@@ -17,13 +17,19 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { StatusBadge } from './StatusBadge';
 import { getTagColor } from './TagsCell';
-import { estiloDeCorDeDado, resolverCorDeDado } from '@/lib/corDeDado';
+import { estiloDeCorDeDado, resolverCorDeDado, CORES_DE_ETIQUETA } from '@/lib/corDeDado';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 
 // ─── Tag Colors ───
-// Os nomes são os mesmos que `corDeDado.PALETA_NOMEADA` resolve — a cor do
-// swatch vem de lá, não de hex fixo aqui.
-const TAG_COLOR_OPTIONS = ['purple', 'blue', 'green', 'amber', 'red', 'teal'] as const;
+// Só as quatro que se distinguem (pergunta 3, 01/10/2026). Roxo e
+// verde-azulado saíram; as etiquetas já gravadas com eles são pintadas como
+// azul e verde por `resolverCorDeDado`, sem escrever no banco.
+const NOME_DA_COR: Record<(typeof CORES_DE_ETIQUETA)[number], string> = {
+  blue: 'Azul',
+  green: 'Verde',
+  amber: 'Âmbar',
+  red: 'Vermelho',
+};
 
 interface Note {
   id: string;
@@ -100,7 +106,7 @@ export function StatusTagsSection({
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [showCreateTag, setShowCreateTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('purple');
+  const [newTagColor, setNewTagColor] = useState<string>('blue');
   const [leadTags, setLeadTags] = useState<TagInfo[]>(lead.tags || []);
 
   useEffect(() => {
@@ -151,7 +157,7 @@ export function StatusTagsSection({
     }
 
     {
-      const data = { id: criada.id, name: criada.nome, color: criada.cor ?? 'purple' };
+      const data = { id: criada.id, name: criada.nome, color: criada.cor ?? 'blue' };
       await aplicarTag(lead.id, data.name);
       setLeadTags(prev => [...prev, data]);
       setNewTagName('');
@@ -241,9 +247,13 @@ export function StatusTagsSection({
               className="h-8 text-sm"
             />
             <div className="flex gap-1.5">
-              {TAG_COLOR_OPTIONS.map(name => (
+              {CORES_DE_ETIQUETA.map(name => (
                 <button
                   key={name}
+                  type="button"
+                  aria-label={NOME_DA_COR[name]}
+                  title={NOME_DA_COR[name]}
+                  aria-pressed={newTagColor === name}
                   className={`w-6 h-6 rounded-full border-2 transition-all ${
                     newTagColor === name ? 'ring-2 ring-offset-1 ring-primary scale-110' : 'border-transparent'
                   }`}
