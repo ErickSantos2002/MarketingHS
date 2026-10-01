@@ -1,11 +1,15 @@
 # Frente `residuos-visuais`
 
 Resíduos e dívidas anotados nos blocos da Fase 1 e do G1–G5 do
-`CONTINUAR-AQUI.md`, todos fora de `settings/`. Abre quando uma das frentes do
-G6 fechar. Território: só os arquivos nomeados abaixo.
+`CONTINUAR-AQUI.md`, todos fora de `settings/`. Aberta em 01/10, com o G6 já na `main`. Território: só os arquivos nomeados abaixo.
 
 ## Backlog (em ordem)
 
+- [ ] `/settings` rola na horizontal a 390 px (`scrollWidth` 973): a
+  `TabsList` de 7 abas de `pages/admin/SettingsPage.tsx` não quebra nem rola.
+  Sugestão das frentes do G6: `overflow-x-auto` no wrapper da lista.
+- [ ] Chave revelada em `settings/ApiKeysManagement.tsx`: o `<pre>` usa
+  `break-all` sem `whitespace-pre-wrap` e, a 390 px, passa por baixo do "Copiar".
 - [ ] `/experiments` rola na horizontal a 390 px (`scrollWidth` 424): a linha
   de botões do cabeçalho (`flex gap-2` sem quebra) em `pages/admin/Experiments.tsx`.
 - [ ] `SendTestEmailPopover.tsx:73` — popover com formulário a 4 px de respiro
