@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   listarJornadas, obterJornada, criarJornada, editarJornada, excluirJornada,
-  type JornadaPatch,
+  type JornadaPatch, type ContagemDeExecucoes,
 } from '@/lib/jornadas';
 import { ErroApi } from '@/lib/api';
 import type { Journey, JourneyNodeMetrics } from '@/lib/journeys';
@@ -36,7 +36,7 @@ export function useJourneys() {
   // usa (navegar para o construtor do fluxo novo).
   const createJourney = async (payload: Partial<Journey>): Promise<Journey | null> => {
     try {
-      const novo = await criarJornada(payload as Parameters<typeof criarJornada>[0]);
+      const novo = await criarJornada(payload as unknown as Parameters<typeof criarJornada>[0]);
       toast.success('Fluxo criado');
       await fetchJourneys();
       return novo as Journey;
@@ -48,7 +48,7 @@ export function useJourneys() {
 
   const updateJourney = async (id: string, payload: Partial<Journey>): Promise<boolean> => {
     try {
-      await editarJornada(id, payload as JornadaPatch);
+      await editarJornada(id, payload as unknown as JornadaPatch);
       await fetchJourneys();
       return true;
     } catch (erro) {
@@ -75,7 +75,7 @@ export function useJourneys() {
 export function useJourney(id: string | undefined) {
   const [journey, setJourney] = useState<Journey | null>(null);
   const [metrics, setMetrics] = useState<Record<string, JourneyNodeMetrics>>({});
-  const [runs, setRuns] = useState<Record<string, number>>({});
+  const [runs, setRuns] = useState<Partial<ContagemDeExecucoes>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchJourney = useCallback(async () => {
