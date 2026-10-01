@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 01/10:** `g6-integracoes`, `g6-cartoes` e `residuos-visuais` ✅ mergeadas (Fase 2 do visual fechada, guarda 0, `tsc` 0). `backend` em andamento.
+
 | Frente | n | Vite | Backend | Território (escreve só aqui + `docs/frentes/<frente>.md`) | Quando abrir |
 |---|---|---|---|---|---|
 | `coordenadora` | 0 | 8080 | 8100 | `docs/frentes/README.md`, `docs/CONTINUAR-AQUI.md`, `docs/perguntas-abertas.md`, `CLAUDE.md`, merge na `main` | já (raiz do repo) |

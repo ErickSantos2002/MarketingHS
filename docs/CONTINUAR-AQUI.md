@@ -1,5 +1,29 @@
 # Continuar aqui
 
+> ## 🌅 Comece por aqui — 01/10/2026 (Fase 2 do visual fechada; frentes paralelas)
+>
+> **Novo jeito de trabalhar:** modo autônomo e frentes paralelas com worktree
+> (`CLAUDE.md`, seções "Modo autônomo" e "Frentes paralelas"). A sessão na raiz
+> é a coordenadora; cada frente é subagente dela, em worktree própria. Mapa e
+> donos: `docs/frentes/README.md`. Perguntas ao Erick: `docs/perguntas-abertas.md`
+> (19 itens; 14–19 são do G6, já aplicados com a opção assumida).
+>
+> **A Fase 2 do visual acabou.** G6 (Configurações) em duas frentes —
+> `g6-cartoes` (55 → 0) e `g6-integracoes` (69 → 0) —, revisão final do G6
+> inteiro "pronto com ressalvas" (4 Minor: 3 consertados, 1 virou a pergunta
+> 19), e a frente `residuos-visuais` (os estouros de 390 px de `/settings` e
+> `/experiments`, `<pre>` da chave revelada, os 3 erros de tipo do `useJourneys`).
+> **Guarda do app: 0. `tsc`: 0 erros** (eram 4). `vite build` e
+> `build:landing` passando. Tudo na `main` com push (`77d0155`). Detalhe de
+> cada frente no arquivo dela em `docs/frentes/`.
+>
+> **Ferramenta nova:** `scripts/conferir-telas.mjs` — Chrome próprio por
+> frente, login com a conta admin do Claude sem imprimir credencial, PNG por
+> tema e largura + `resumo.json`.
+>
+> **Em andamento:** a frente `backend` (campanhas presas em "Enviando...",
+> docstring do `landing.py`, `service_role` → `authenticated`).
+
 > ## 🌅 Comece por aqui — 30/09/2026 (fim do G5)
 >
 > **Onde tudo está:** a `main` local tem a Fase 1, a preparação da Fase 2, o
