@@ -401,6 +401,14 @@ async def principal() -> None:
                     await _promover_agendadas()
                 except Exception:  # noqa: BLE001
                     logger.exception("falha na passada do agendador")
+                # A rede da campanha presa em 'sending': ver
+                # `fila.fechar_campanhas_drenadas`. No ritmo do agendador —
+                # é conserto de exceção, não precisa de pressa.
+                try:
+                    async with sessao(role="service_role") as conn:
+                        await fila.fechar_campanhas_drenadas(conn)
+                except Exception:  # noqa: BLE001
+                    logger.exception("falha na varredura de campanhas drenadas")
             if agora >= proximo_jornadas:
                 proximo_jornadas = agora + JORNADAS_INTERVALO
                 try:
