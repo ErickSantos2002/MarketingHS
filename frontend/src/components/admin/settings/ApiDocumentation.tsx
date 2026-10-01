@@ -30,19 +30,19 @@ function CodeBlock({ code, className = '' }: { code: string; className?: string 
   const parts = highlighted.split(/(§PID§|§WHS§)/);
 
   return (
-    <div className={`relative rounded-lg overflow-hidden ${className}`} style={{ background: '#1E1E2E' }}>
+    <div className={`relative rounded-lg overflow-hidden bg-muted/50 border border-border ${className}`}>
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-2 right-2 h-7 text-[10px] gap-1 text-[#A9B1D6] hover:text-white hover:bg-white/10 z-10"
+        className="absolute top-2 right-2 h-7 text-xs gap-1 z-10"
         onClick={handleCopy}
       >
-        {copied ? <><Check className="h-3 w-3" /> Copiado ✓</> : <><Copy className="h-3 w-3" /> Copiar</>}
+        {copied ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar</>}
       </Button>
-      <pre className="p-4 pr-24 overflow-x-auto text-xs font-mono whitespace-pre-wrap" style={{ color: '#A9B1D6' }}>
+      <pre className="p-4 pr-24 overflow-x-auto text-xs font-mono whitespace-pre-wrap text-foreground">
         {parts.map((part, i) =>
-          part === '§PID§' ? <span key={i} style={{ color: '#EF9F27' }}>[PROJECT_ID]</span> :
-          part === '§WHS§' ? <span key={i} style={{ color: '#EF9F27' }}>[WEBHOOK_SECRET]</span> :
+          part === '§PID§' ? <span key={i} className="text-[--on-tint-warning]">[PROJECT_ID]</span> :
+          part === '§WHS§' ? <span key={i} className="text-[--on-tint-warning]">[WEBHOOK_SECRET]</span> :
           <span key={i}>{part}</span>
         )}
       </pre>
@@ -52,14 +52,14 @@ function CodeBlock({ code, className = '' }: { code: string; className?: string 
 
 /* ── Method Badge ── */
 function MethodBadge({ method }: { method: string }) {
-  const colors = method === 'GET'
-    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+  const variant = method === 'GET'
+    ? 'success'
     : method === 'PATCH'
-    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+    ? 'warning'
     : method === 'DELETE'
-    ? 'bg-red-500/15 text-red-400 border-red-500/30'
-    : 'bg-blue-500/15 text-blue-400 border-blue-500/30';
-  return <Badge variant="outline" className={`text-[10px] font-mono font-bold ${colors}`}>{method}</Badge>;
+    ? 'destructive'
+    : 'info';
+  return <Badge variant={variant} className="font-mono font-bold">{method}</Badge>;
 }
 
 /* ── Param Table ── */
@@ -80,7 +80,7 @@ function ParamTable({ params }: { params: { name: string; type: string; required
             <tr key={p.name} className="border-b border-border/20">
               <td className="py-2 px-3 font-mono text-primary">{p.name}</td>
               <td className="py-2 px-3 text-muted-foreground">{p.type}</td>
-              <td className="py-2 px-3">{p.required === 'Sim' ? <Badge variant="destructive" className="text-[9px] h-4">Sim</Badge> : <span className="text-muted-foreground">{p.required}</span>}</td>
+              <td className="py-2 px-3">{p.required === 'Sim' ? <Badge variant="destructive" className="text-xs h-4">Sim</Badge> : <span className="text-muted-foreground">{p.required}</span>}</td>
               <td className="py-2 px-3 text-muted-foreground">{p.description}</td>
             </tr>
           ))}
@@ -399,7 +399,7 @@ const ENDPOINTS = [
             'onboarding_started', 'onboarding_completed',
             'health_updated', 'checkin_done'
           ].map(t => (
-            <code key={t} className="text-[10px] bg-muted/40 px-2 py-1 rounded font-mono">{t}</code>
+            <code key={t} className="text-xs bg-muted/40 px-2 py-1 rounded font-mono">{t}</code>
           ))}
         </div>
       </div>
@@ -792,12 +792,12 @@ const ENV_VARS = [
 ];
 
 const RESPONSE_CODES = [
-  { code: '200', desc: 'Sucesso', color: 'text-emerald-500' },
-  { code: '400', desc: 'Dados inválidos', color: 'text-yellow-500' },
-  { code: '401', desc: 'Token inválido ou ausente', color: 'text-red-500' },
-  { code: '404', desc: 'Não encontrado', color: 'text-orange-500' },
-  { code: '422', desc: 'Não foi possível processar', color: 'text-orange-500' },
-  { code: '500', desc: 'Erro interno', color: 'text-red-500' },
+  { code: '200', desc: 'Sucesso', color: 'text-[--on-tint-success]' },
+  { code: '400', desc: 'Dados inválidos', color: 'text-[--on-tint-warning]' },
+  { code: '401', desc: 'Token inválido ou ausente', color: 'text-[--on-tint-danger]' },
+  { code: '404', desc: 'Não encontrado', color: 'text-[--on-tint-warning]' },
+  { code: '422', desc: 'Não foi possível processar', color: 'text-[--on-tint-warning]' },
+  { code: '500', desc: 'Erro interno', color: 'text-[--on-tint-danger]' },
 ];
 
 const NAV_SECTIONS = [
@@ -855,15 +855,15 @@ export default function ApiDocumentation() {
     <nav className="space-y-4">
       {NAV_SECTIONS.map(section => (
         <div key={section.title}>
-          <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{section.title}</p>
+          <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-1.5">{section.title}</p>
           <ul className="space-y-0.5">
             {section.items.map(item => (
               <li key={item.id}>
                 <button
                   onClick={() => scrollToSection(item.id)}
-                  className={`w-full text-left text-xs px-2.5 py-1.5 rounded-md transition-colors ${
+                  className={`w-full text-left text-xs px-2.5 py-1.5 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     activeSection === item.id
-                      ? 'bg-primary/10 text-primary font-medium'
+                      ? 'bg-[--tint-primary] text-[--on-tint-primary] font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
                 >
@@ -907,8 +907,8 @@ export default function ApiDocumentation() {
           <div className="flex items-center gap-3 mb-3 flex-wrap">
             <img src={logoHs} alt="MarketingHS" className="h-14 w-auto" />
             <span className="text-lg font-bold">API</span>
-            <Badge variant="outline" className="text-[10px]">v1.0</Badge>
-            <Badge className="text-[10px] bg-primary/15 text-primary border-0">Interno</Badge>
+            <Badge variant="outline">v1.0</Badge>
+            <Badge>Interno</Badge>
             <div className="ml-auto flex gap-2">
               <a
                 href="/openapi/docs/index.html"
@@ -949,29 +949,29 @@ export default function ApiDocumentation() {
           </p>
           <CodeBlock code={`Authorization: Bearer <SUA_CHAVE>\nContent-Type: application/json`} />
           <div className="mt-3 space-y-3">
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+            <div className="p-3 rounded-xl bg-surface border border-border">
               <div className="flex items-center gap-2 mb-2">
                 <KeyRound className="h-4 w-4 text-primary" />
                 <span className="text-xs font-semibold">1. WEBHOOK_SECRET</span>
-                <Badge variant="outline" className="text-[9px] h-4">Master</Badge>
+                <Badge variant="outline" className="text-xs h-4">Master</Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Chave master configurada no ambiente do backend. Use para integrações de sistema de alta confiança.
               </p>
             </div>
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+            <div className="p-3 rounded-xl bg-surface border border-border">
               <div className="flex items-center gap-2 mb-2">
-                <KeyRound className="h-4 w-4 text-emerald-500" />
+                <KeyRound className="h-4 w-4 text-success" />
                 <span className="text-xs font-semibold">2. API Keys</span>
-                <Badge variant="outline" className="text-[9px] h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Recomendado</Badge>
+                <Badge variant="success" className="text-xs h-4">Recomendado</Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Chaves individuais criadas em Settings → API Keys. Recomendado para agentes e projetos específicos. Cada chave tem permissões granulares e pode ser revogada independentemente.
               </p>
               <Button
                 variant="link"
                 size="sm"
-                className="h-6 text-[11px] px-0 text-primary mt-1"
+                className="h-6 text-xs px-0 mt-1"
                 onClick={() => {
                   // Navigate to API Keys tab
                   const tabTrigger = document.querySelector('[value="apikeys"]') as HTMLButtonElement;
@@ -1037,9 +1037,9 @@ export default function ApiDocumentation() {
             </Tabs>
 
             {ep.notes && (
-              <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <ChevronRight className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-                <p className="text-[11px] text-blue-600 dark:text-blue-400">{ep.notes}</p>
+              <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-[--tint-info] border border-info/30">
+                <ChevronRight className="h-3.5 w-3.5 text-info flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-[--on-tint-info]">{ep.notes}</p>
               </div>
             )}
           </section>
@@ -1059,14 +1059,14 @@ export default function ApiDocumentation() {
               <tbody>
                 {ENV_VARS.map(v => (
                   <tr key={v.name} className="border-b border-border/20">
-                    <td className="py-2 px-3 font-mono text-primary text-[11px]">{v.name}</td>
+                    <td className="py-2 px-3 font-mono text-primary text-xs">{v.name}</td>
                     <td className="py-2 px-3 text-muted-foreground">{v.desc}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-3">
+          <p className="text-xs text-muted-foreground mt-3">
             Configurar em: <strong>ambiente do backend (arquivo .env)</strong>
           </p>
         </section>

@@ -41,17 +41,17 @@ type ApiKey = {
 
 
 function PermissionBadge({ permissions }: { permissions: string }) {
-  if (permissions === 'read') return <Badge className="bg-blue-500/15 text-blue-400 border-blue-500/30 text-[10px]" variant="outline">Leitura</Badge>;
-  if (permissions === 'write') return <Badge className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]" variant="outline">Escrita</Badge>;
-  return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]" variant="outline">Leitura + Escrita</Badge>;
+  if (permissions === 'read') return <Badge variant="info">Leitura</Badge>;
+  if (permissions === 'write') return <Badge variant="warning">Escrita</Badge>;
+  return <Badge variant="success">Leitura + Escrita</Badge>;
 }
 
 function StatusBadge({ apiKey }: { apiKey: ApiKey }) {
-  if (!apiKey.is_active) return <Badge className="bg-muted/50 text-muted-foreground border-border/30 text-[10px]" variant="outline">Revogada</Badge>;
+  if (!apiKey.is_active) return <Badge variant="secondary">Revogada</Badge>;
   if (apiKey.expires_at && isBefore(new Date(apiKey.expires_at), new Date())) {
-    return <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px]" variant="outline">Expirada</Badge>;
+    return <Badge variant="destructive">Expirada</Badge>;
   }
-  return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]" variant="outline">Ativa</Badge>;
+  return <Badge variant="success">Ativa</Badge>;
 }
 
 export default function ApiKeysManagement() {
@@ -179,13 +179,13 @@ export default function ApiKeysManagement() {
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border/30 hover:bg-transparent">
-                <TableHead className="text-[11px] h-9">Nome</TableHead>
-                <TableHead className="text-[11px] h-9">Permissões</TableHead>
-                <TableHead className="text-[11px] h-9">Prefixo</TableHead>
-                <TableHead className="text-[11px] h-9">Expira em</TableHead>
-                <TableHead className="text-[11px] h-9">Último uso</TableHead>
-                <TableHead className="text-[11px] h-9">Status</TableHead>
-                <TableHead className="text-[11px] h-9 text-right">Ações</TableHead>
+                <TableHead className="text-xs h-9">Nome</TableHead>
+                <TableHead className="text-xs h-9">Permissões</TableHead>
+                <TableHead className="text-xs h-9">Prefixo</TableHead>
+                <TableHead className="text-xs h-9">Expira em</TableHead>
+                <TableHead className="text-xs h-9">Último uso</TableHead>
+                <TableHead className="text-xs h-9">Status</TableHead>
+                <TableHead className="text-xs h-9 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -193,11 +193,11 @@ export default function ApiKeysManagement() {
                 <TableRow key={k.id} className="border-b border-border/20">
                   <TableCell className="py-2.5">
                     <p className="text-xs font-semibold">{k.name}</p>
-                    {k.description && <p className="text-[10px] text-muted-foreground mt-0.5">{k.description}</p>}
+                    {k.description && <p className="text-xs text-muted-foreground mt-0.5">{k.description}</p>}
                   </TableCell>
                   <TableCell className="py-2.5"><PermissionBadge permissions={k.permissions} /></TableCell>
                   <TableCell className="py-2.5">
-                    <code className="text-[10px] font-mono text-muted-foreground">{k.key_prefix}...</code>
+                    <code className="text-xs font-mono text-muted-foreground">{k.key_prefix}...</code>
                   </TableCell>
                   <TableCell className="py-2.5 text-xs text-muted-foreground">
                     {k.expires_at
@@ -214,11 +214,11 @@ export default function ApiKeysManagement() {
                     {k.is_active && !(k.expires_at && isBefore(new Date(k.expires_at), new Date())) ? (
                       confirmRevoke === k.id ? (
                         <div className="flex items-center gap-1.5 justify-end">
-                          <span className="text-[10px] text-red-400">Revogar esta chave?</span>
+                          <span className="text-xs text-[--on-tint-danger]">Revogar esta chave?</span>
                           <Button
                             variant="destructive"
                             size="sm"
-                            className="h-6 text-[10px] px-2"
+                            className="h-6 text-xs px-2"
                             onClick={() => handleRevoke(k.id)}
                             disabled={revoking === k.id}
                           >
@@ -227,7 +227,7 @@ export default function ApiKeysManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 text-[10px] px-2"
+                            className="h-6 text-xs px-2"
                             onClick={() => setConfirmRevoke(null)}
                           >
                             Não
@@ -237,14 +237,14 @@ export default function ApiKeysManagement() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2"
+                          className="h-6 text-xs text-[--on-tint-danger] hover:text-[--on-tint-danger] hover:bg-[--tint-danger] px-2"
                           onClick={() => setConfirmRevoke(k.id)}
                         >
                           Revogar
                         </Button>
                       )
                     ) : (
-                      <span className="text-[10px] text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -265,7 +265,7 @@ export default function ApiKeysManagement() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Nome <span className="text-red-400">*</span></Label>
+              <Label className="text-xs">Nome <span className="text-[--on-tint-danger]">*</span></Label>
               <Input
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
@@ -354,30 +354,30 @@ export default function ApiKeysManagement() {
             <DialogTitle className="text-base">Chave criada com sucesso</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-              <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-yellow-400">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-[--tint-warning] border border-warning/30">
+              <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-[--on-tint-warning]">
                 Copie esta chave agora. Por segurança, ela não será exibida novamente após fechar esta janela.
               </p>
             </div>
-            <div className="relative rounded-lg overflow-hidden" style={{ background: '#1E1E2E' }}>
-              <pre className="p-4 pr-20 text-xs font-mono break-all" style={{ color: '#A9B1D6' }}>
+            <div className="relative rounded-lg overflow-hidden bg-muted/50 border border-border">
+              <pre className="p-4 pr-20 text-xs font-mono break-all text-foreground">
                 {revealedKey}
               </pre>
               <Button
                 variant="ghost"
                 size="sm"
-                className="absolute top-2 right-2 h-7 text-[10px] gap-1 text-[#A9B1D6] hover:text-white hover:bg-white/10"
+                className="absolute top-2 right-2 h-7 text-xs gap-1"
                 onClick={handleCopyKey}
               >
-                {copied ? <><Check className="h-3 w-3" /> Copiado ✓</> : <><Copy className="h-3 w-3" /> Copiar</>}
+                {copied ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar</>}
               </Button>
             </div>
-            <div className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.08]">
-              <p className="text-[11px] text-muted-foreground">
+            <div className="p-3 rounded-lg bg-surface border border-border">
+              <p className="text-xs text-muted-foreground">
                 Use esta chave no header de todas as requisições:
               </p>
-              <code className="text-[10px] font-mono text-primary mt-1 block">
+              <code className="text-xs font-mono text-primary mt-1 block">
                 Authorization: Bearer {revealedKey.substring(0, 16)}...
               </code>
             </div>
