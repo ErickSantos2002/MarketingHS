@@ -28,14 +28,52 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   produção já foram apagadas pelo Erick em 01/10). E, se a migration 021 for
   aplicada, `escrita_contatos.py` e `contatos.py` para `authenticated`.
 
-- [ ] **Rodada 3:** `test_cancelar_depois_do_2xx_ainda_grava_entregue` troca o
+- [x] **Rodada 3:** `test_cancelar_depois_do_2xx_ainda_grava_entregue` troca o
   `sleep` fixo por espera com prazo (falhou 1 vez com a suíte inteira, 5/5 sozinho).
 
-- [ ] **Rodada 3:** fixtures com e-mail fixo (`token_admin`, `token_usuario`)
+- [x] **Rodada 3:** fixtures com e-mail fixo (`token_admin`, `token_usuario`)
   passam a usar e-mail único por rodada, para duas suítes poderem rodar ao
   mesmo tempo sem se derrubar — limpando o que criam, inclusive se a rodada morrer.
 
 ## Estado
+
+**01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
+Testes: 396 passed + 1 failed antes (rodada 2) → **397 passed** depois (29 min 27 s, sozinha; o I5 verde). Fim: 0 usuários, 0 leads e 0 campanhas de teste no banco (leitura).
+**Pronto para merge** (a branch inteira; só `backend/tests/` muda).
+
+- [x] **Espera com prazo no I5** (`test_crm_entrega.py`). O `sleep(0.6)` fixo
+  virou sondagem do pedido a cada 0,1 s até `'entregue'` ou 10 s; a asserção
+  final não mudou. 3/3 verde sozinho (~9 s cada). Prova de que não afrouxou:
+  com a gravação removida do `lento` (cópia temporária do arquivo, apagada),
+  o teste fica vermelho depois do teto.
+- [x] **E-mail único por rodada.** `token_admin` e `token_usuario` criam
+  `<prefixo>-<12 hex>@exemplo.invalid` (prefixos `admin-teste-8a` /
+  `usuario-teste-8c`) e apagam só o seu no teardown (`try/finally`). A
+  pré-limpeza leva o que rodada morta deixou: regex ancorada nessa forma
+  **e** `created_at` com mais de 2 h (nunca o usuário de uma rodada viva), mais
+  os dois e-mails fixos antigos pelo nome exato. Nada fora de
+  `@exemplo.invalid` casa — os admins reais e a conta do Claude não são
+  alcançáveis. `_uid_admin` (`test_conversao_authenticated.py`) lê o e-mail
+  do próprio token. O `lead_real` de `test_crm_caminhos.py` ganhou o mesmo
+  molde: com só o conftest consertado, a prova em paralelo trocou o 401 por
+  `UniqueViolation` em `leads_email_unique` (o lead comitado de uma rodada
+  colide com o `_lead` da outra).
+  **Prova:** `test_crm_caminhos.py` em dois processos ao mesmo tempo —
+  15/15 e 15/15, duas vezes seguidas. Depois, por leitura: 0 usuários
+  `@exemplo.invalid`, 0 leads de teste.
+
+⚠️ **Duas suítes INTEIRAS ao mesmo tempo ainda não são seguras.** O que
+sobrou não é e-mail de usuário (ver pergunta 6):
+- fixtures que trocam **configuração global de produção** e devolvem no
+  teardown — `segredo`, `segredos_resend`, `config_ab`, `config_growthhs`:
+  a devolução de uma rodada apaga o estado que a outra acabou de pôr;
+- a `envio` (`a@b.c`, `re_abc`, e o teardown apaga `email_events` por
+  `svix_id LIKE 'msg_%'`) — presa à `segredo` de qualquer forma;
+- leads de teste com e-mail fixo e COMMIT fora do conftest:
+  `test_crm_entrega.py` (`lead_8d`), `test_conversao_authenticated.py`
+  (`EMAILS_ESCRITA`), `test_conversao.py` (`EMAIL_E2E`), `test_ab_costura.py`.
+Arquivos que só usam `conexao` (transação revertida) + `token_*` podem rodar
+em paralelo.
 
 **01/10/2026 — rodada 2.** Branch `worktree-agent-abdba54f9f6c6f44f`.
 Testes: 387 antes (main, 426aab2) → **396 passed, 1 failed** depois (397 testes; 29 min, sozinha) (+1 em `test_webhook.py`,
@@ -140,7 +178,9 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    duas vezes para provar a reaplicação.
 
 **Achados de processo:**
-- ⚠️ **Nunca duas rodadas de pytest ao mesmo tempo** contra o banco. As
+- ⚠️ **Nunca duas rodadas de pytest ao mesmo tempo** contra o banco
+  (*rodada 3: o 401 falso dos usuários acabou; o resto do risco está no
+  Estado da rodada 3*). As
   fixtures `token_admin`/`token_usuario` usam e-mail fixo e apagam o usuário
   no setup: uma rodada derruba a outra com 401. Medido hoje: 4 falsos
   vermelhos em `test_crm_caminhos.py` com outra rodada em paralelo, 23/23 verde
@@ -192,3 +232,10 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    `journey_step_log` ficam com `lead_id` NULL. É anterior à conversão.
    Acrescentar as tabelas a `_TABELAS_FILHAS`? (cuidado com o índice
    `uniq_journey_runs_open`: dois runs abertos da mesma jornada colidem).
+6. **(rodada 3) Serializar as fixtures de configuração global?** Para duas
+   suítes inteiras rodarem juntas, `segredo`, `segredos_resend`, `config_ab`,
+   `config_growthhs` (e a `envio`, que depende da `segredo`) teriam de
+   segurar um `pg_advisory_lock` numa conexão própria enquanto o teste roda:
+   a segunda rodada espera em vez de pisar. E os leads de e-mail fixo fora
+   do conftest ganhariam o molde do `lead_real`. **Assumido: não feito** —
+   fora do pedido da rodada; a regra continua "uma suíte inteira por vez".
