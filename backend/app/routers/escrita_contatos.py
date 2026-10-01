@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status as http
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/contatos", tags=["contatos-escrita"])
@@ -171,14 +171,14 @@ async def _registrar_mudanca(conn, lead_id: str, de: str | None, para: str,
 
 @router.patch("/{lead_id}/status")
 async def mudar_status(lead_id: str, dados: StatusIn,
-                       _: Usuario = Depends(usuario_atual)):
+                       admin: Usuario = Depends(admin_atual)):
     """Muda o status de um contato.
 
     O status e o evento na timeline acontecem na MESMA transação. Na tela
     original eram idas ao banco independentes: o status mudava e o evento podia
     não ser gravado sem que nada avisasse.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         linha = await conn.fetchrow(
             "SELECT status FROM leads WHERE id = $1::uuid", lead_id)
         if linha is None:
@@ -199,13 +199,13 @@ async def mudar_status(lead_id: str, dados: StatusIn,
 
 
 @router.post("/status-em-lote")
-async def status_em_lote(dados: StatusEmLoteIn, _: Usuario = Depends(usuario_atual)):
+async def status_em_lote(dados: StatusEmLoteIn, admin: Usuario = Depends(admin_atual)):
     """Muda o status de vários contatos de uma vez.
 
     Um UPDATE só, e um INSERT ... SELECT para os eventos. A tela fazia lotes de
     100 num laço no navegador; aqui o banco resolve, e ou muda tudo ou nada.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         novo = await _resolver_status(conn, dados.status)
         # ⚠️ Os eventos vêm ANTES do UPDATE: eles leem `l.status` para gravar o
         # valor anterior. Invertido, todo evento registraria "de X para X".
@@ -239,7 +239,7 @@ async def status_em_lote(dados: StatusEmLoteIn, _: Usuario = Depends(usuario_atu
 
 
 @router.post("/tags-em-lote")
-async def tags_em_lote(dados: TagEmLoteIn, _: Usuario = Depends(usuario_atual)):
+async def tags_em_lote(dados: TagEmLoteIn, admin: Usuario = Depends(admin_atual)):
     """Aplica uma tag a vários contatos.
 
     A tag é criada se não existir, com o mesmo upsert do lote 1A e pelo mesmo
@@ -250,7 +250,7 @@ async def tags_em_lote(dados: TagEmLoteIn, _: Usuario = Depends(usuario_atual)):
     mesma tag a quem já a tem não é erro, é ausência de mudança.
     """
     nome = dados.tag.strip()
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         tag_id = await conn.fetchval(
             "SELECT id FROM tags WHERE lower(name) = lower($1)", nome)
         if tag_id is None:
@@ -289,6 +289,12 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
     if dados.manter == dados.descartar:
         raise HTTPException(http.HTTP_400_BAD_REQUEST, "Os dois contatos são o mesmo.")
 
+    # ⚠️ Fica `service_role` (a rota autoriza sozinha, `admin_atual`). Única do
+    # router que NÃO foi para `authenticated` em 01/10: `lead_conversions` não
+    # tem política de UPDATE, então a reatribuição dela afetaria 0 linhas
+    # calada — e o DELETE do descartado logo abaixo levaria as conversões
+    # junto pelo ON DELETE CASCADE. Perda de dado reportada como sucesso.
+    # Converter exige antes uma política de UPDATE admin em `lead_conversions`.
     async with sessao(role="service_role") as conn:
         manter = await conn.fetchrow(
             "SELECT id::text, dnia_id::text FROM leads WHERE id = $1::uuid", dados.manter)
@@ -364,7 +370,7 @@ async def fundir_contatos(dados: FusaoContatosIn, _: Usuario = Depends(admin_atu
 
 @router.patch("/{lead_id}")
 async def editar_contato(lead_id: str, dados: EdicaoContatoIn,
-                         _: Usuario = Depends(usuario_atual)):
+                         admin: Usuario = Depends(admin_atual)):
     """Edita os campos do contato.
 
     Só o que veio no corpo é tocado — campo ausente não é instrução de apagar,
@@ -378,7 +384,7 @@ async def editar_contato(lead_id: str, dados: EdicaoContatoIn,
         raise HTTPException(http.HTTP_400_BAD_REQUEST, "Nada para atualizar.")
 
     atribuicoes = ", ".join(f"{c} = ${i + 2}" for i, c in enumerate(campos))
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         r = await conn.execute(
             f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
             lead_id, *campos.values())
@@ -403,7 +409,7 @@ async def excluir_contato(lead_id: str, admin: Usuario = Depends(admin_atual)):
     vendedor é decisão do CRM, não do MarketingHS. Registrado como pergunta
     em aberto no contrato (docs/contratos/2026-09-02-endpoint-card-comercial-growthhs.md).
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
         r = await conn.execute(
             """UPDATE leads SET deleted_at = now(), deleted_by = $2::uuid
                 WHERE id = $1::uuid AND deleted_at IS NULL""",

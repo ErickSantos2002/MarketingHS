@@ -12,6 +12,8 @@ isso cada router convertido prova duas coisas:
 
 from datetime import date
 
+import pytest_asyncio
+
 import app.database as db
 
 
@@ -585,6 +587,124 @@ async def test_contatos_leitura_exige_admin(cliente, token_usuario):
         ("GET", f"/contatos/{falso}", None), ("GET", f"/contatos/{falso}/eventos", None),
         ("POST", f"/contatos/{falso}/notas", {"conteudo": "x"}),
         ("DELETE", f"/contatos/{falso}/tags/{falso}", None),
+    ]:
+        r = await cliente.request(metodo, caminho, json=corpo, headers=h)
+        assert r.status_code == 403, (metodo, caminho, r.text)
+
+
+# ── escrita_contatos.py (rodada 2, depois da migration 021) ──────────────────
+# O risco aqui é o pior dos dois: um UPDATE barrado pelo RLS afeta 0 linhas
+# SEM erro, e a rota responde 200. Por isso cada escrita é conferida no banco,
+# sob `service_role`, depois da chamada — o status da resposta não basta.
+
+EMAIL_ADMIN = "admin-teste-8a@exemplo.invalid"   # o da fixture token_admin
+EMAILS_ESCRITA = [f"teste-conversao-escrita-{i}@exemplo.invalid" for i in range(4)]
+TAG_ESCRITA = "teste-conversao-escrita"
+
+
+async def _apagar_leads_de_escrita():
+    async with db.sessao(role="service_role") as conn:
+        ids = [r["id"] for r in await conn.fetch(
+            "SELECT id FROM leads WHERE email = ANY($1::text[])", EMAILS_ESCRITA)]
+        # contact_events é ON DELETE SET NULL: sem isto os eventos do teste
+        # ficariam órfãos na timeline.
+        await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
+        await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
+        await conn.execute("DELETE FROM ecosystem_identities WHERE email = ANY($1::text[])",
+                           EMAILS_ESCRITA)
+        await conn.execute("DELETE FROM tags WHERE name = $1", TAG_ESCRITA)
+
+
+@pytest_asyncio.fixture
+async def leads_escrita():
+    """Dois contatos de teste (status 'Lead', sem cargo). Os outros dois
+    e-mails da lista são os que a importação cria."""
+    await db.init_db()
+    await _apagar_leads_de_escrita()
+    async with db.sessao(role="service_role") as conn:
+        ids = [await conn.fetchval(
+            "INSERT INTO leads (nome, email, tipo, status) "
+            "VALUES ('Escrita', $1, 'teste', 'Lead') RETURNING id::text", e)
+            for e in EMAILS_ESCRITA[:2]]
+    yield ids
+    await _apagar_leads_de_escrita()
+
+
+async def _uid_admin() -> str:
+    return await _contar("SELECT id::text FROM auth.users WHERE email = $1", EMAIL_ADMIN)
+
+
+async def test_escrita_status_individual_e_em_lote_afetam_o_lead(
+        cliente, token_admin, leads_escrita):
+    h = _auth(token_admin)
+    a, b = leads_escrita
+    r = await cliente.patch(f"/contatos/{a}/status", headers=h, json={"status": "Iniciado"})
+    assert r.status_code == 200 and r.json() == {"status": "Iniciado", "anterior": "Lead"}, r.text
+    assert await _contar("SELECT status FROM leads WHERE id = $1::uuid", a) == "Iniciado"
+    assert await _contar(
+        "SELECT count(*) FROM contact_events WHERE lead_id = $1::uuid "
+        "AND event_type = 'contact_updated'", a) == 1
+
+    r = await cliente.post("/contatos/status-em-lote", headers=h,
+                           json={"lead_ids": [a, b], "status": "Lead Qualificado"})
+    assert r.status_code == 200 and r.json()["atualizados"] == 2, r.text
+    assert await _contar("SELECT count(*) FROM leads WHERE id = ANY($1::uuid[]) "
+                         "AND status = 'Lead Qualificado'", [a, b]) == 2
+    # O evento específico da qualificação também passou pelo WITH CHECK.
+    assert await _contar("SELECT count(*) FROM contact_events WHERE lead_id = ANY($1::uuid[]) "
+                         "AND event_type = 'lead_qualified'", [a, b]) == 2
+
+
+async def test_escrita_tags_em_lote_edicao_e_exclusao_afetam_o_lead(
+        cliente, token_admin, leads_escrita):
+    h = _auth(token_admin)
+    a, b = leads_escrita
+    r = await cliente.post("/contatos/tags-em-lote", headers=h,
+                           json={"lead_ids": [a, b], "tag": TAG_ESCRITA})
+    assert r.status_code == 200 and r.json()["vinculados"] == 2, r.text
+    assert await _contar(
+        "SELECT count(*) FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id "
+        "WHERE t.name = $1", TAG_ESCRITA) == 2
+
+    r = await cliente.patch(f"/contatos/{a}", headers=h, json={"cargo": "Diretor"})
+    assert r.status_code == 200, r.text
+    assert await _contar("SELECT cargo FROM leads WHERE id = $1::uuid", a) == "Diretor"
+    falso = "00000000-0000-0000-0000-000000000000"
+    r = await cliente.patch(f"/contatos/{falso}", headers=h, json={"cargo": "x"})
+    assert r.status_code == 404, r.text
+
+    r = await cliente.delete(f"/contatos/{b}", headers=h)
+    assert r.status_code == 204, r.text
+    assert await _contar("SELECT deleted_at IS NOT NULL FROM leads WHERE id = $1::uuid", b)
+    assert await _contar("SELECT deleted_by::text FROM leads WHERE id = $1::uuid", b) \
+        == await _uid_admin()
+    # A política de SELECT não filtra `deleted_at`: o segundo DELETE acha a
+    # linha, e é o `deleted_at IS NULL` da rota que dá o 404.
+    assert (await cliente.delete(f"/contatos/{b}", headers=h)).status_code == 404
+
+
+async def test_escrita_fusao_continua_service_role_porque_conversoes_nao_tem_update():
+    """A fusão reatribui `lead_conversions` e depois apaga o descartado (ON
+    DELETE CASCADE). Sem política de UPDATE nela, sob `authenticated` as
+    conversões sumiriam caladas — por isso `fundir_contatos` ficou em
+    `service_role`. Este teste quebra no dia em que a política existir: é o
+    aviso de que a fusão pode ser convertida."""
+    await db.init_db()
+    n = await _contar("SELECT count(*) FROM pg_policies WHERE schemaname = 'public' "
+                      "AND tablename = 'lead_conversions' AND cmd IN ('UPDATE', 'ALL')")
+    assert n == 0
+
+
+async def test_escrita_contatos_exige_admin(cliente, token_usuario):
+    h = _auth(token_usuario)
+    falso = "00000000-0000-0000-0000-000000000000"
+    for metodo, caminho, corpo in [
+        ("PATCH", f"/contatos/{falso}/status", {"status": "Lead"}),
+        ("POST", "/contatos/status-em-lote", {"lead_ids": [falso], "status": "Lead"}),
+        ("POST", "/contatos/tags-em-lote", {"lead_ids": [falso], "tag": "x"}),
+        ("POST", "/contatos/fundir", {"manter": falso, "descartar": falso}),
+        ("PATCH", f"/contatos/{falso}", {"nome": "x"}),
+        ("DELETE", f"/contatos/{falso}", None),
     ]:
         r = await cliente.request(metodo, caminho, json=corpo, headers=h)
         assert r.status_code == 403, (metodo, caminho, r.text)
