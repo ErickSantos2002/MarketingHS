@@ -28,32 +28,24 @@ Os números entre parênteses são o guarda de 01/10 (`npm run guarda:visual -- 
 Começar com três (`g6-integracoes`, `g6-cartoes`, `backend`) e abrir a
 `residuos-visuais` no lugar da primeira que fechar.
 
-## Como abrir uma frente
+## Como uma frente roda
 
-No Konsole, da raiz do repo:
+A coordenadora despacha cada frente como **subagente em segundo plano com
+worktree própria** — sem Konsole, sem comando do Erick. A frente roda
+`bash scripts/preparar-worktree.sh`, sobe o próprio Vite na porta da tabela,
+trabalha o backlog do `docs/frentes/<frente>.md` em ordem, no modo autônomo do
+`CLAUDE.md`, e devolve à coordenadora o nome da branch e o estado.
 
-```bash
-cd ~/github/MarketingHS && claude --worktree g6-integracoes
-```
-
-E a primeira mensagem para a sessão (troque o nome):
-
-```
-Você é a frente g6-integracoes. Leia docs/frentes/README.md e docs/frentes/g6-integracoes.md,
-rode bash scripts/preparar-worktree.sh e trabalhe no modo autônomo do CLAUDE.md.
-/loop puxe o próximo item do backlog de docs/frentes/g6-integracoes.md até ele acabar.
-```
-
-O `/loop` sem intervalo deixa a sessão se cadenciar sozinha; quando o backlog
-da frente acaba, ela registra o fim no próprio arquivo, faz push da branch e
-para o loop.
+Abrir à mão continua possível: `claude --worktree <frente>` e pedir para ler
+este arquivo e o da frente.
 
 ## Navegador
 
-O Playwright está em `--isolated`: cada sessão tem o próprio navegador, sem
-disputa de perfil, mas **cada frente precisa logar uma vez** com a conta admin
-do Claude. Quem loga é a sessão da frente; subagente nunca abre o arquivo de
-credencial (regra de 24/09). A regra de só leitura em produção vale em todas.
+Cada frente confere tela com `scripts/conferir-telas.mjs` (Chrome próprio,
+login com a conta admin do Claude feito pelo script, token reaproveitado por
+1 h por causa do limite de taxa do login). O Playwright MCP fica com a
+coordenadora. Regra de só leitura em produção vale em todas: nenhum clique em
+ação.
 
 ## O ciclo de merge (coordenadora)
 
@@ -76,9 +68,8 @@ revisão final do G6 inteiro (as duas metades juntas) e fecha a Fase 2.
 
 - **`LeadScoringSettings.tsx` tem 1 dos 4 erros de `tsc` pré-existentes**: é da
   `g6-cartoes`. Os 3 do `useJourneys` são da `residuos-visuais`.
-- **Testes de backend batem no banco de produção**, em transação revertida.
-  Por isso só a frente `backend` roda `pytest`. Banco de teste próprio por
-  frente é melhoria possível, não pré-requisito.
+- **Testes de backend batem no banco de produção**, em transação revertida —
+  liberado pelo Erick em 01/10 (sem uso real; o banco será resetado).
 - **`node_modules` e `.venv` são links para a checkout principal.** Nenhuma
   frente instala dependência; se precisar, anota e a coordenadora instala.
 - `ApiDocumentation.tsx` já ensinou URL morta oito vezes: a frente mexe em

@@ -46,3 +46,6 @@ __pycache__/
 
 # Notas de setup do Erick — nunca versionado (fala do histórico do remix).
 SETUP-CLAUDE.md
+
+# ferramentas locais das frentes (playwright-core, token de conferência)
+.ferramentas/

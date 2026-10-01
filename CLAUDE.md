@@ -59,12 +59,13 @@ vigor está em `docs/frentes/README.md` — é ele que diz quem é dono do quê.
   `docs/frentes/README.md`, faz o merge das frentes na `main`, roda o portão
   depois do merge, consolida `CONTINUAR-AQUI.md` e `perguntas-abertas.md`.
   **Não escreve feature.**
-- **Cada frente** abre com `claude --worktree <nome>` (worktree em
-  `.claude/worktrees/<nome>`, branch `worktree-<nome>`), roda
-  `bash scripts/preparar-worktree.sh` uma vez, e escreve **só** nos arquivos
-  que o `README.md` dá a ela, mais o próprio `docs/frentes/<nome>.md` (backlog,
-  estado, perguntas). Faz push da **própria branch**; nunca faz merge na
-  `main` nem mexe em `CONTINUAR-AQUI.md`.
+- **Cada frente é um subagente da coordenadora**, despachado em segundo plano
+  com worktree própria (`isolation: "worktree"`) — o Erick não abre Konsole nem
+  roda comando. A frente roda `bash scripts/preparar-worktree.sh` uma vez e
+  escreve **só** nos arquivos que o `README.md` dá a ela, mais o próprio
+  `docs/frentes/<nome>.md` (backlog, estado, perguntas). Commita e faz push da
+  **própria branch**; nunca faz merge na `main` nem mexe em `CONTINUAR-AQUI.md`.
+  (Abrir uma frente à mão, `claude --worktree <nome>`, continua possível.)
 - **Dono único:** `backend/migrations/`, `backend/app/config.py`, routers,
   `frontend/src/lib/api*`, tipos compartilhados, `components/ui/`,
   `vite.config.ts`, `package.json`. Precisou mexer fora do seu território,
@@ -72,8 +73,13 @@ vigor está em `docs/frentes/README.md` — é ele que diz quem é dono do quê.
 - **Portas:** Vite da frente na `8080 + n`; backend próprio só para a frente
   de backend (`8100 + n`, com `MKT_BACKEND_PORT` no Vite). O worker de fila
   **nunca** sobe numa frente.
-- **pytest** roda contra o banco de produção em transação revertida
-  (`tests/conftest.py`): só a frente de backend roda a suíte.
+- **Navegador:** a frente não usa o Playwright MCP (é um só, da sessão); usa
+  `node scripts/conferir-telas.mjs --porta <vite> --saida <pasta> <rotas>`,
+  que sobe Chrome próprio, loga com a conta admin do Claude sem imprimir a
+  credencial, e salva PNG por tema e largura + `resumo.json`. Só navega e lê.
+- **pytest** pode rodar em qualquer frente. Bate no banco de produção em
+  transação revertida; o Erick liberou (01/10): ninguém usa o dado e o banco
+  será limpo e resetado antes de entrar no ar.
 
 ## Estrutura
 
