@@ -51,7 +51,7 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
      `config_growthhs`) e e-mail único nos leads de teste fixos. Prova: duas
      suítes inteiras juntas, verdes.
 
-- [ ] **Rodada 5 (01/10):**
+- [x] **Rodada 5 (01/10):**
   1. A 022 foi APLICADA: converter a fusão de contatos para
      `sessao(role="authenticated", user_id=...)` e trocar o teste-sentinela
      `test_fusao_continua_service_role_enquanto_nao_houver_a_022` (hoje
@@ -66,6 +66,64 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
      `vite build`.
 
 ## Estado
+
+**01/10/2026 — rodada 5.** Branch `worktree-agent-a28feaefa626c683f`.
+Testes: main 1c4246d tinha 1 vermelho de propósito (o sentinela da 022) →
+**414 passed, 0 skipped** (31 min 54 s, sozinha; +3 testes: 2 da fusão
+nos dois papéis, 1 de leitura do código da rota; o sentinela saiu; os 2 que
+ficavam pulados até a 023 agora rodam).
+Fim (leitura): 0 usuários `@exemplo.invalid`, 0 leads, identidades,
+campanhas, etiquetas, segmentos, páginas e testes A/B de teste, 0 pedidos ao
+comercial órfãos, 0 travas. Eventos órfãos: 1.492 → **1.516** com esta
+suíte (+24, de outras fixtures — Perguntas 9).
+**Pronto para merge** (a branch inteira; um commit por item, cada um com o
+teste dele).
+
+- [x] **1. Fusão de contatos → `authenticated`.** `fundir_contatos` abre a
+  sessão como o admin que chamou (`sessao(role="authenticated",
+  user_id=admin.id)`), nos três casos. Conferido antes no banco (leitura):
+  as 16 tabelas que a fusão toca têm RLS ligado, GRANT a `authenticated` e
+  política admin para o que ela faz (SELECT/UPDATE, DELETE em `leads`,
+  `lead_tags`, `segment_contacts`, `crm_handoffs`); `merge_identities` é
+  SECURITY DEFINER e executável por `authenticated`.
+  **Testes:** `test_fusao_historico.py` roda nos dois papéis (4, eram 2) —
+  sob `authenticated` com um admin real de `user_roles`, voltando a
+  `service_role` para conferir. A semeadura passou a cobrir as **15** tabelas
+  (+ etiqueta, segmento e nota, com uma repetida de cada) e o teste exige
+  `movidos[t] >= 1` em cada uma — sob `authenticated`, 0 ali é a política
+  que falta, não ausência de histórico; e `len(runs) == 4` (o CASCADE não
+  levou nenhum). Prova de que morde: com um `user_id` sem papel admin, os
+  dois testes `authenticated` ficam vermelhos. O sentinela
+  `test_fusao_continua_service_role_enquanto_nao_houver_a_022` saiu; no lugar,
+  `test_fusao_pela_rota_sob_authenticated_leva_o_historico` (pela rota,
+  comitando: nota, conversão e pedido ao comercial — este nasce `entregue`,
+  que o worker de produção não pega — chegam ao mantido) e
+  `test_fusao_roda_como_authenticated` (lê o código: o primeiro passaria
+  também sob `service_role`).
+- [x] **2. Testes de massa com a 023.** Já rodavam (17 passed). O que
+  mudou: o `skip` "023 não aplicada" virou **asserção** — com a 023 no
+  banco, um pulo calado esconderia um banco recriado sem ela ou uma função de
+  gatilho reescrita por cima. Os três arquivos: 19 passed (17 + 2 da fusão
+  nos dois papéis). Docstring de `app/dominio/automacao.py` atualizada.
+- [x] **3. `pagina_sonda` limpa o que cria.** O `limpar()` (antes e depois)
+  leva, além de lead/página/tag, a **identidade** (pelo e-mail da sonda, ou
+  pelo telefone inventado `+5585999991234` sem e-mail de fora de
+  `exemplo.invalid`), os `contact_events` do lead e da identidade (ON DELETE
+  SET NULL: ficavam órfãos) e a cópia em `journey_events` (sem FK). Mesmo
+  molde de `_apagar_leads_de_escrita`. ⚠️ A identidade de 21/09 era **a
+  mesma** que a captura reaproveita pelo telefone, então ela saiu na primeira
+  rodada, com os 20 eventos órfãos dela — a pergunta 37 dizia "fica para o
+  reset", mas não há como o teste limpar o que cria sem levá-la.
+  23 passed em `test_captura.py`.
+- [x] **4. Variante nova divide igual** (`frontend/src/pages/admin/Experiments.tsx`).
+  `dividirIgual(n)`: pesos iguais somando 100, o resto nas primeiras
+  (2 → 50/50, 3 → 34/33/33, 6 → 17/17/17/17/16/16 — conferido executando a
+  função extraída do arquivo, de 2 a 6). Ao acrescentar, TODAS as variantes
+  passam a esse peso (inclusive um 70/30 que o admin tinha posto —
+  "dividir igual" é isso). Remover não mexe (peso é relativo). Sem
+  navegador (o diálogo é ação). Guarda `src` **0**, `tsc` **0**,
+  `vite build` ok. Sem teste unitário: o frontend não tem executor de teste
+  (`package.json` não é desta frente).
 
 **01/10/2026 — rodada 4.** Branch `worktree-agent-ac6eb5bc3dba1b0d4`.
 Testes: **397 passed** antes (main 6a4d3fa, sozinha, 29 min) → **409 passed,
@@ -430,3 +488,15 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    apaga: há uma de 21/09 no banco. Apagar a identidade no teardown (e a
    que está lá) é escrita de limpeza — **assumido: não feito nesta rodada**
    (fora do backlog; a trava já impede que ela atrapalhe a outra rodada).
+9. **(rodada 5) Eventos órfãos de teste em produção.** Medido em 01/10
+   (leitura): **1.492** `contact_events` com `lead_id` NULL (`form_submitted`
+   626, `email_sent` 475, `email_opened` 196, `email_bounced` 129,
+   `email_complained` 64…, de 01/09 a hoje) e **1.307** `journey_events` sem
+   lead (1.516 depois da suíte final: cada rodada inteira deixa ~24). É o padrão que a `pagina_sonda` tinha (rodada 5) espalhado por
+   outras fixtures que comitam: apagam o lead e o evento fica (ON DELETE SET
+   NULL; `journey_events` sem FK). Contam no painel/linha do tempo? A
+   timeline é por lead, então não aparecem lá; contagens globais de evento,
+   sim. **Assumido: não mexido** — fora do backlog, e apagar por `lead_id IS
+   NULL` levaria evento real de contato apagado. Opções: (a) cada fixture
+   leva os eventos do lead antes de apagá-lo (molde de
+   `_apagar_leads_de_escrita`); (b) deixar para o reset do banco.
