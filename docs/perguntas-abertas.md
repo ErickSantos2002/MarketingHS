@@ -76,3 +76,11 @@ delas.
     `email_events`, `email_suppressions` e `journey_step_log` com `lead_id`
     NULL. Incluir na reatribuição (cuidando do `uniq_journey_runs_open`)?
     **Assumido: não mexer** até o Erick decidir; é mudança de comportamento.
+
+### ui-primitivos (01/10)
+
+25. **Item marcado de menu de múltipla escolha** (`DropdownMenuCheckboxItem`)
+    ganha fundo? **Assumido: não** — só o indicador em `text-action`; várias
+    linhas tingidas viram ruído. Nenhum uso hoje.
+26. **Título de rota não mapeada:** **assumido "MarketingHS"** (com aviso no
+    console em dev). Alternativa: o rótulo do item mais próximo da sidebar.

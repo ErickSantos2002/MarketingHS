@@ -8,6 +8,11 @@ const backend = `http://localhost:${process.env.MKT_BACKEND_PORT ?? 8100}`;
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Cache de dependências por checkout, não em node_modules/.vite: as
+  // worktrees das frentes linkam o node_modules da principal, e um Vite novo
+  // refazendo o cache compartilhado deixava o que já rodava com dois Reacts
+  // ("Invalid hook call" no menu de /contacts, 01/10).
+  cacheDir: path.resolve(__dirname, ".vite"),
   server: {
     // 127.0.0.1 e não "::": o padrão da casa para conferência com Playwright,
     // firmado no DataCoreHS.
