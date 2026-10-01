@@ -92,6 +92,22 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   Perguntas 7). A importação de CSV e o status **em lote** continuam
   disparando: são manuais (decisão diz "mudança manual de status").
 
+- [x] **#7 A/B: peso 0 = sem tráfego.** Onde a variante é escolhida: **só**
+  `backend/app/ab/dominio.py` (`sortear`), chamado só por
+  `backend/app/routers/ab_publico.py` (`_decidir`, o `/publico/ab/go`). Fora
+  do `backend/` ninguém sorteia: `frontend/public/ab.js` só coleta evento;
+  `Experiments.tsx`/`ExperimentDetail.tsx`/`abStats.ts` editam e mostram peso,
+  não escolhem. Regras: peso numérico ≤ 0 → nunca sai no sorteio; peso
+  ausente ou não numérico continua valendo 1 (variante gravada antes do
+  campo; não pediu zero); **todas zeradas → controle** (como no pausado);
+  visitante com **cookie de variante zerada é sorteado de novo** (zerar no
+  meio do teste tira o tráfego de quem já passou lá; o `ab_assignments`
+  guarda o first-touch, ON CONFLICT DO NOTHING). Testes: `test_ab_dominio.py`
+  (3, troca o que fixava "0 vale 1") e `test_ab_publico.py` (3, pela rota).
+  ⚠️ Para a coordenadora (frontend, não mexido): a variante NOVA nasce com
+  peso 0 em `frontend/src/pages/admin/Experiments.tsx:116` — agora isso quer
+  dizer "sem tráfego até alguém pôr peso". Antes recebia como peso 1.
+
 **01/10/2026 — rodada 3.** Branch `worktree-agent-a220f72652ed89988`.
 Testes: 396 passed + 1 failed antes (rodada 2) → **397 passed** depois (29 min 27 s, sozinha; o I5 verde). Fim: 0 usuários, 0 leads e 0 campanhas de teste no banco (leitura).
 **Pronto para merge** (a branch inteira; só `backend/tests/` muda).
