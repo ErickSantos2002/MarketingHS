@@ -65,8 +65,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Configurações</h1>
-
       <Tabs defaultValue="integrations">
         <TabsList className="h-9">
           <TabsTrigger value="integrations" className="text-xs gap-1.5">
@@ -121,7 +119,7 @@ export default function SettingsPage() {
                     O token é o <code className="bg-muted/50 px-1 py-0.5 rounded">WEBHOOK_SECRET</code> do
                     servidor — definido pelo TI no ambiente do backend. Por segurança, esta tela não o mostra.
                   </p>
-                  <p className="text-[10px] text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Envie como header: <code className="bg-muted/50 px-1 py-0.5 rounded">Authorization: Bearer SEU_TOKEN</code>
                   </p>
                 </div>
@@ -132,7 +130,7 @@ export default function SettingsPage() {
                       {testing ? 'Testando...' : 'Enviar evento de teste'}
                     </Button>
                     {testResult && (
-                      <span className={`text-xs ${testResult.ok ? 'text-emerald-500' : 'text-red-500'}`}>{testResult.message}</span>
+                      <span className={`text-xs ${testResult.ok ? 'text-[--on-tint-success]' : 'text-[--on-tint-danger]'}`}>{testResult.message}</span>
                     )}
                   </div>
                 </div>

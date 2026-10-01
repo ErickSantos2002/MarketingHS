@@ -113,10 +113,10 @@ export default function SocialLinksSettings() {
                   value={links[network.key] || ''}
                   onChange={e => setLinks(prev => ({ ...prev, [network.key]: e.target.value }))}
                   placeholder={network.placeholder}
-                  className={`mt-1.5 text-xs ${invalid ? 'border-red-500' : ''}`}
+                  className={`mt-1.5 text-xs ${invalid ? 'border-danger' : ''}`}
                 />
                 {invalid && (
-                  <p className="text-[10px] text-red-500 mt-1">
+                  <p className="text-xs text-[--on-tint-danger] mt-1">
                     Informe uma URL completa (começando com https://) ou deixe em branco
                   </p>
                 )}
@@ -133,7 +133,7 @@ export default function SocialLinksSettings() {
                 : 'Nenhuma rede configurada — o bloco "Social" continua disponível no editor, porém vazio.'}
             </p>
             {filled.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md bg-white p-3 w-fit">
+              <div className="flex items-center gap-2 rounded-md bg-[--color-white] p-3 w-fit">
                 {filled.map(network => (
                   <img
                     key={network.key}
