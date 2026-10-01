@@ -6,6 +6,10 @@ jornada sobreviveram ao port e estão em produção há meses:
 `journey_enroll_segment`, `journey_node_metrics`, `validate_journey_graph`,
 `evaluate_rules_for_lead`, `evaluate_segment_for_lead`, e os dois triggers.
 Confira com `\\df` antes de escrever qualquer coisa parecida.
+
+⚠️ `authenticated` + `admin_atual` desde 01/10/2026. `journeys` é admin-only
+no RLS e `journey_runs` é SELECT admin — as rotas só LEEM execuções; quem as
+escreve é o worker, como máquina. Teste: `tests/test_conversao_authenticated.py`.
 """
 
 import logging
@@ -15,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual, usuario_atual
+from app.dependencies import Usuario, admin_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jornadas", tags=["jornadas"])
@@ -76,8 +80,8 @@ def _sem_execucoes() -> dict:
 
 
 @router.get("")
-async def listar(_: Usuario = Depends(usuario_atual)):
-    async with sessao(role="service_role") as conn:
+async def listar(usuario: Usuario = Depends(admin_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"""SELECT {COLUNAS}, e.numeros AS runs
                   FROM journeys j {CONTAGEM_DE_EXECUCOES}
@@ -87,14 +91,14 @@ async def listar(_: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/{jornada_id}")
-async def detalhe(jornada_id: str, _: Usuario = Depends(usuario_atual)):
+async def detalhe(jornada_id: str, usuario: Usuario = Depends(admin_atual)):
     """O fluxo, as métricas por nó e a contagem de execuções.
 
     ⚠️ As métricas saem de `journey_node_metrics`, que já existe no banco. Não
     recalcule por nó aqui: seria a segunda implementação da mesma conta, e a que
     diverge é sempre a que ninguém está olhando.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"""SELECT {COLUNAS}, e.numeros AS runs
                   FROM journeys j {CONTAGEM_DE_EXECUCOES}
@@ -109,7 +113,7 @@ async def detalhe(jornada_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def criar(dados: JornadaIn, _: Usuario = Depends(admin_atual)):
+async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     """Nasce sempre em `draft` — o status não vem do corpo.
 
     ⚠️ O trigger `fn_journeys_validate` recusa grafo inválido ou cíclico com uma
@@ -128,7 +132,7 @@ async def criar(dados: JornadaIn, _: Usuario = Depends(admin_atual)):
     nomes = ", ".join(colunas)
     marcas = ", ".join(f"${i}{CASTS.get(c, '')}" for i, c in enumerate(colunas, 1))
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             novo = await conn.fetchval(
                 f"INSERT INTO journeys ({nomes}, status) "
                 f"VALUES ({marcas}, 'draft') RETURNING id",
@@ -140,7 +144,7 @@ async def criar(dados: JornadaIn, _: Usuario = Depends(admin_atual)):
 
 @router.patch("/{jornada_id}")
 async def editar(jornada_id: str, dados: JornadaPatch,
-                 _: Usuario = Depends(admin_atual)):
+                 usuario: Usuario = Depends(admin_atual)):
     """PATCH parcial. A validação do grafo continua sendo do trigger."""
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
@@ -152,7 +156,7 @@ async def editar(jornada_id: str, dados: JornadaPatch,
         valores.append(valor)
 
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             r = await conn.execute(
                 f"""UPDATE journeys SET {', '.join(partes)}, updated_at = now()
                      WHERE id = $1::uuid""",
@@ -165,7 +169,7 @@ async def editar(jornada_id: str, dados: JornadaPatch,
 
 
 @router.delete("/{jornada_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def excluir(jornada_id: str, _: Usuario = Depends(admin_atual)):
+async def excluir(jornada_id: str, usuario: Usuario = Depends(admin_atual)):
     """⚠️ `guard_journey_delete` é mais restritivo que as outras guardas do
     projeto: só apaga fluxo em `draft` E sem NENHUMA execução, mesmo antiga.
 
@@ -175,7 +179,7 @@ async def excluir(jornada_id: str, _: Usuario = Depends(admin_atual)):
     A mensagem do banco vira 409, como em segmento e campanha.
     """
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             r = await conn.execute(
                 "DELETE FROM journeys WHERE id = $1::uuid", jornada_id)
     except asyncpg.exceptions.RaiseError as exc:
@@ -185,9 +189,9 @@ async def excluir(jornada_id: str, _: Usuario = Depends(admin_atual)):
 
 
 @router.get("/{jornada_id}/execucoes")
-async def execucoes(jornada_id: str, _: Usuario = Depends(usuario_atual)):
+async def execucoes(jornada_id: str, usuario: Usuario = Depends(admin_atual)):
     """As execuções do fluxo, com o contato junto."""
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         existe = await conn.fetchval(
             "SELECT 1 FROM journeys WHERE id = $1::uuid", jornada_id)
         if existe is None:
