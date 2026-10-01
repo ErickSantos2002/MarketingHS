@@ -222,7 +222,7 @@ export function PagesManagement() {
                       <ExternalLink className="h-4 w-4 mr-2" /> Abrir página
                     </DropdownMenuItem>
                     {(page.total_leads || 0) === 0 && (
-                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(page)}>
+                      <DropdownMenuItem className="text-[--on-tint-danger]" onClick={() => handleDelete(page)}>
                         <Trash2 className="h-4 w-4 mr-2" /> Excluir
                       </DropdownMenuItem>
                     )}

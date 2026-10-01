@@ -196,7 +196,7 @@ export default function Campaigns() {
                             </DropdownMenuItem>
                           )}
                           {c.status !== 'sending' && (
-                            <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}>
+                            <DropdownMenuItem className="text-[--on-tint-danger]" onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}>
                               <Trash2 className="h-4 w-4 mr-2" /> Excluir
                             </DropdownMenuItem>
                           )}
@@ -258,7 +258,7 @@ export default function Campaigns() {
                     <Loader2 className="h-3 w-3 animate-spin" /> Verificando envios já realizados...
                   </p>
                 ) : !!deleteSendsCount && deleteSendsCount > 0 ? (
-                  <p className="text-sm font-medium text-destructive">
+                  <p className="text-sm font-medium text-[--on-tint-danger]">
                     Isso apaga permanentemente os {deleteSendsCount} registro{deleteSendsCount === 1 ? '' : 's'} de envio desta campanha
                     (quem recebeu, aberturas, cliques, bounces). Os eventos na timeline de cada contato são preservados.
                   </p>
