@@ -6,6 +6,12 @@ meses: `build_segment_condition`, `evaluate_segment_rules`,
 `count_segment_audience` e os dois triggers. Nenhuma delas é reimplementada
 aqui — transformar regra em SQL é trabalho do banco, e reescrever isso em Python
 seria trocar código provado por código novo sem ganho.
+
+⚠️ `authenticated` + `admin_atual` desde 01/10/2026. `segments` e
+`segment_contacts` são admin-only no RLS; com `usuario_atual` o não-admin
+levaria zero segmentos, sem erro. As funções de segmento são SECURITY
+DEFINER e contam igual sob os dois papéis. Teste:
+`tests/test_conversao_authenticated.py`.
 """
 
 import logging
@@ -15,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, admin_atual
 from app.routers.leitura_contatos import COLUNAS_LEAD
 
 logger = logging.getLogger(__name__)
@@ -59,7 +65,7 @@ class SegmentoIn(BaseModel):
 
 
 @router.get("")
-async def listar(_: Usuario = Depends(usuario_atual)):
+async def listar(usuario: Usuario = Depends(admin_atual)):
     """Lista os segmentos com a contagem de contatos já resolvida.
 
     ⚠️ Uma consulta, não N+1. A tela buscava os segmentos e depois, para CADA
@@ -67,7 +73,7 @@ async def listar(_: Usuario = Depends(usuario_atual)):
     consultas. O LATERAL abaixo resolve os dois tipos numa passada: estático
     conta linhas de segment_contacts, dinâmico chama evaluate_segment_rules.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """SELECT s.id::text, s.name AS nome, s.description AS descricao,
                       s.type AS tipo, s.rules AS regras,
@@ -89,7 +95,7 @@ async def listar(_: Usuario = Depends(usuario_atual)):
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def criar(dados: SegmentoIn, _: Usuario = Depends(usuario_atual)):
+async def criar(dados: SegmentoIn, usuario: Usuario = Depends(admin_atual)):
     """Cria o segmento e, se for estático, os membros — na MESMA transação.
 
     ⚠️ A tela gravava o segmento e só então inseria os membros, em lotes de 100.
@@ -97,7 +103,7 @@ async def criar(dados: SegmentoIn, _: Usuario = Depends(usuario_atual)):
     que estava pela metade. Aqui ou nasce inteiro, ou não nasce.
     """
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             segmento_id = await conn.fetchval(
                 """INSERT INTO segments (name, description, type, rules, logic)
                    VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id""",
@@ -119,14 +125,14 @@ async def criar(dados: SegmentoIn, _: Usuario = Depends(usuario_atual)):
 
 @router.put("/{segmento_id}")
 async def editar(segmento_id: str, dados: SegmentoIn,
-                 _: Usuario = Depends(usuario_atual)):
+                 usuario: Usuario = Depends(admin_atual)):
     """⚠️ A tela apagava TODOS os membros e reinseria. Havia uma janela em que o
     segmento ficava vazio, e se a reinserção falhasse ele ficava vazio para
     sempre. Na transação a janela não existe: quem consultar durante a operação
     vê o estado antigo, e quem consultar depois vê o novo.
     """
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             r = await conn.execute(
                 """UPDATE segments SET name = $2, description = $3, type = $4,
                                        rules = $5::jsonb, logic = $6, updated_at = now()
@@ -152,7 +158,7 @@ async def editar(segmento_id: str, dados: SegmentoIn,
 
 
 @router.post("/{segmento_id}/duplicar", status_code=status.HTTP_201_CREATED)
-async def duplicar(segmento_id: str, _: Usuario = Depends(usuario_atual)):
+async def duplicar(segmento_id: str, usuario: Usuario = Depends(admin_atual)):
     """Copia o segmento e os membros numa transação. O sufixo é ' (cópia)',
     o mesmo que a tela já usava.
 
@@ -160,7 +166,7 @@ async def duplicar(segmento_id: str, _: Usuario = Depends(usuario_atual)):
     estático devolvia uma casca sem ninguém dentro. Aqui os membros vêm junto,
     que é o que "duplicar" quer dizer para quem clica.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         novo_id = await conn.fetchval(
             """INSERT INTO segments (name, description, type, rules, logic)
                SELECT name || ' (cópia)', description, type, rules, logic
@@ -180,7 +186,7 @@ async def duplicar(segmento_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.delete("/{segmento_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def excluir(segmento_id: str, _: Usuario = Depends(usuario_atual)):
+async def excluir(segmento_id: str, usuario: Usuario = Depends(admin_atual)):
     """⚠️ `guard_segment_delete` é um trigger que impede excluir segmento em uso
     por campanha não enviada ou fluxo ativo, e levanta exceção com uma mensagem
     escrita para quem usa:
@@ -192,7 +198,7 @@ async def excluir(segmento_id: str, _: Usuario = Depends(usuario_atual)):
     O `except` abaixo devolve a mensagem do banco como 409.
     """
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             r = await conn.execute(
                 "DELETE FROM segments WHERE id = $1::uuid", segmento_id)
     except asyncpg.exceptions.RaiseError as exc:
@@ -207,7 +213,7 @@ async def excluir(segmento_id: str, _: Usuario = Depends(usuario_atual)):
 # mas a ordem segue a convenção do leitura_contatos para não virar armadilha
 # quando alguém acrescentar POST /{segmento_id}.
 @router.post("/previa")
-async def previa(dados: PreviaIn, _: Usuario = Depends(usuario_atual)):
+async def previa(dados: PreviaIn, usuario: Usuario = Depends(admin_atual)):
     """Quantos contatos batem com regras AINDA NÃO SALVAS, mais uma amostra.
 
     `preview_segment_rules` reusa o MESMO `build_segment_condition` que
@@ -219,7 +225,7 @@ async def previa(dados: PreviaIn, _: Usuario = Depends(usuario_atual)):
     amostra. O JOIN abaixo devolve as duas coisas juntas, e a lista completa de
     leads continua sem trafegar — só a amostra sai do banco.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             "SELECT count(*) FROM preview_segment_rules($1::jsonb, $2)",
             [r.model_dump() for r in dados.regras], dados.logica)
@@ -234,7 +240,7 @@ async def previa(dados: PreviaIn, _: Usuario = Depends(usuario_atual)):
 
 
 @router.post("/audiencia")
-async def audiencia(dados: AudienciaIn, _: Usuario = Depends(usuario_atual)):
+async def audiencia(dados: AudienciaIn, usuario: Usuario = Depends(admin_atual)):
     """Tamanho e amostra do público de vários segmentos, com exclusões.
 
     `count_segment_audience` e `resolve_segment_audience` são as MESMAS funções
@@ -242,7 +248,7 @@ async def audiencia(dados: AudienciaIn, _: Usuario = Depends(usuario_atual)):
     assistente seja o número enviado — trocar por uma contagem própria aqui
     seria criar duas verdades.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             "SELECT count_segment_audience($1::uuid[], $2::uuid[])",
             dados.incluir, dados.excluir)
@@ -255,7 +261,7 @@ async def audiencia(dados: AudienciaIn, _: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/{segmento_id}/contatos")
-async def contatos(segmento_id: str, _: Usuario = Depends(usuario_atual)):
+async def contatos(segmento_id: str, usuario: Usuario = Depends(admin_atual)):
     """Os contatos do segmento, resolvendo os dois tipos no banco.
 
     ⚠️ Para segmento dinâmico a tela chamava a RPC, recebia os ids e buscava os
@@ -266,7 +272,7 @@ async def contatos(segmento_id: str, _: Usuario = Depends(usuario_atual)):
     campanha. Para o segmento dinâmico isso já valia (as regras filtram), mas o
     estático guarda o vínculo em segment_contacts, que a exclusão não apaga.
     """
-    async with sessao(role="service_role") as conn:
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
         tipo = await conn.fetchval(
             "SELECT type FROM segments WHERE id = $1::uuid", segmento_id)
         if tipo is None:
@@ -289,7 +295,7 @@ async def contatos(segmento_id: str, _: Usuario = Depends(usuario_atual)):
 
 @router.post("/{segmento_id}/contatos", status_code=status.HTTP_204_NO_CONTENT)
 async def adicionar_contatos(segmento_id: str, dados: ContatosEmLoteIn,
-                             _: Usuario = Depends(usuario_atual)):
+                             usuario: Usuario = Depends(admin_atual)):
     """Adiciona contatos a um segmento estático — o que a barra de ações em
     massa da tela de Contatos precisa.
 
@@ -298,7 +304,7 @@ async def adicionar_contatos(segmento_id: str, dados: ContatosEmLoteIn,
     calado seria mentir para quem clicou.
     """
     try:
-        async with sessao(role="service_role") as conn:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
             tipo = await conn.fetchval(
                 "SELECT type FROM segments WHERE id = $1::uuid", segmento_id)
             if tipo is None:
