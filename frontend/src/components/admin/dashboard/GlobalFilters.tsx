@@ -3,15 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
-import { CalendarIcon, X, Filter, RotateCcw, UserCheck, Search, RefreshCw } from 'lucide-react';
+import { CalendarIcon, X, Filter, RotateCcw, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import type { DashboardFilters, DatePreset } from '@/hooks/useDashboardFilters';
-import { CHALLENGE_THEMES } from '@/hooks/useLeadAnalytics';
+import type { DashboardFilters, DatePreset, Recorrencia } from '@/hooks/useDashboardFilters';
 import type { QualificationSegment } from '@/hooks/useLeadQualification';
 
 interface GlobalFiltersProps {
@@ -21,9 +19,7 @@ interface GlobalFiltersProps {
   onSetCustomDateRange: (from: Date | null, to: Date | null) => void;
   onResetFilters: () => void;
   activeFiltersCount: number;
-  availableTipos: string[];
   availableCampaigns: string[];
-  availableFaturamentos: string[];
   availableCargos: string[];
   availableSources: string[];
   filteredCount?: number;
@@ -38,6 +34,12 @@ const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: 'last30days', label: 'Últimos 30 dias' },
   { value: 'thisMonth', label: 'Este mês' },
   { value: 'custom', label: 'Personalizado' },
+];
+
+const RECORRENCIA_OPTIONS: { value: Recorrencia; label: string }[] = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'novos', label: 'Novos' },
+  { value: 'recorrentes', label: 'Recorrentes' },
 ];
 
 const QUALIFICATION_OPTIONS: { value: QualificationSegment; label: string }[] = [
@@ -113,16 +115,13 @@ export function GlobalFilters({
   onSetCustomDateRange,
   onResetFilters,
   activeFiltersCount,
-  availableTipos,
   availableCampaigns,
-  availableFaturamentos,
   availableCargos,
   availableSources,
   filteredCount,
   totalCount,
 }: GlobalFiltersProps) {
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
-  const challengeThemeOptions = Object.keys(CHALLENGE_THEMES);
 
   return (
     // A faixa que envolve este componente (bg-surface/border-b) já vem do
@@ -221,13 +220,10 @@ export function GlobalFilters({
           </PopoverContent>
         </Popover>
 
-        {/* Modal/Tipo Filter */}
-        <MultiSelectDropdown
-          label="Modal"
-          options={availableTipos}
-          selected={filters.tipos}
-          onChange={(tipos) => onUpdateFilters({ tipos })}
-        />
+        {/* Modal, Faturamento, Tema de Desafio e "Só completos" saíram em
+            02/10/2026 (raio-x RD, R6): eram o funil de evento da dn.ia. Se
+            Modal, Faturamento ou "Só completos" vierem ligados do painel de
+            Contatos, o chip deles aparece abaixo — filtro nunca fica mudo. */}
 
         {/* Campaign Filter */}
         <MultiSelectDropdown
@@ -291,14 +287,6 @@ export function GlobalFilters({
           </PopoverContent>
         </Popover>
 
-        {/* Faturamento Filter */}
-        <MultiSelectDropdown
-          label="Faturamento"
-          options={availableFaturamentos}
-          selected={filters.faturamentos}
-          onChange={(faturamentos) => onUpdateFilters({ faturamentos })}
-        />
-
         {/* Cargo Filter */}
         <MultiSelectDropdown
           label="Cargo"
@@ -307,45 +295,21 @@ export function GlobalFilters({
           onChange={(cargos) => onUpdateFilters({ cargos })}
         />
 
-        {/* Challenge Themes Filter */}
-        <MultiSelectDropdown
-          label="Tema de Desafio"
-          options={challengeThemeOptions}
-          selected={filters.challengeThemes}
-          onChange={(challengeThemes) => onUpdateFilters({ challengeThemes })}
-        />
-
-        {/* Hide Incomplete Leads Toggle */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/50 bg-card/50">
-          <Switch
-            id="hide-incomplete"
-            checked={!!filters.hideIncomplete}
-            onCheckedChange={(checked) => onUpdateFilters({ hideIncomplete: !!checked })}
-          />
-          <Label 
-            htmlFor="hide-incomplete" 
-            className="text-sm text-muted-foreground cursor-pointer flex items-center gap-1.5"
-          >
-            <UserCheck className="h-3.5 w-3.5" />
-            Só completos
-          </Label>
-        </div>
-
-        {/* Only Reconversions Toggle */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/50 bg-card/50">
-          <Switch
-            id="only-reconversions"
-            checked={!!filters.onlyReconversions}
-            onCheckedChange={(checked) => onUpdateFilters({ onlyReconversions: !!checked })}
-          />
-          <Label 
-            htmlFor="only-reconversions" 
-            className="text-sm text-muted-foreground cursor-pointer flex items-center gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Só reconversões
-          </Label>
-        </div>
+        {/* Novos / Recorrentes / Todos (era o interruptor "Só reconversões") */}
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={filters.recorrencia}
+          onValueChange={(v) => v && onUpdateFilters({ recorrencia: v as Recorrencia })}
+          aria-label="Novos ou recorrentes"
+        >
+          {RECORRENCIA_OPTIONS.map(option => (
+            <ToggleGroupItem key={option.value} value={option.value} className="h-9">
+              {option.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
 
         {/* Reset Button */}
         {activeFiltersCount > 0 && (
@@ -371,7 +335,7 @@ export function GlobalFilters({
               className="bg-primary/10 text-primary/90 hover:bg-primary/20 cursor-pointer"
               onClick={() => onUpdateFilters({ tipos: filters.tipos.filter(t => t !== tipo) })}
             >
-              {tipo}
+              Modal: {tipo}
               <X className="ml-1 h-3 w-3" />
             </Badge>
           ))}
@@ -404,7 +368,7 @@ export function GlobalFilters({
               className="cursor-pointer hover:bg-warning/20"
               onClick={() => onUpdateFilters({ faturamentos: filters.faturamentos.filter(f => f !== fat) })}
             >
-              {fat}
+              Faturamento: {fat}
               <X className="ml-1 h-3 w-3" />
             </Badge>
           ))}
@@ -419,17 +383,6 @@ export function GlobalFilters({
               <X className="ml-1 h-3 w-3" />
             </Badge>
           ))}
-          {filters.challengeThemes.map(theme => (
-            <Badge
-              key={`theme-${theme}`}
-              variant="info"
-              className="cursor-pointer hover:bg-info/20"
-              onClick={() => onUpdateFilters({ challengeThemes: filters.challengeThemes.filter(t => t !== theme) })}
-            >
-              {theme}
-              <X className="ml-1 h-3 w-3" />
-            </Badge>
-          ))}
           {(filters.sources || []).map(source => (
             <Badge
               key={`source-${source}`}
@@ -441,13 +394,46 @@ export function GlobalFilters({
               <X className="ml-1 h-3 w-3" />
             </Badge>
           ))}
-          {filters.onlyReconversions && (
+          {/* Cadastro e UTM Content só se ligam no painel de Contatos; o chip
+              aqui é o que impede o filtro de agir sem aparecer. */}
+          {filters.createdDatePreset !== 'all' && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-surface-elevated"
+              onClick={() => onUpdateFilters({ createdDatePreset: 'all', createdDateFrom: null, createdDateTo: null })}
+            >
+              Cadastro: {DATE_PRESETS.find(p => p.value === filters.createdDatePreset)?.label}
+              <X className="ml-1 h-3 w-3" />
+            </Badge>
+          )}
+          {(filters.utmContents || []).map(u => (
+            <Badge
+              key={`utm-content-${u}`}
+              variant="secondary"
+              className="cursor-pointer hover:bg-surface-elevated"
+              onClick={() => onUpdateFilters({ utmContents: (filters.utmContents || []).filter(x => x !== u) })}
+            >
+              UTM Content: {u}
+              <X className="ml-1 h-3 w-3" />
+            </Badge>
+          ))}
+          {filters.hideIncomplete && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer hover:bg-surface-elevated"
+              onClick={() => onUpdateFilters({ hideIncomplete: false })}
+            >
+              Só completos
+              <X className="ml-1 h-3 w-3" />
+            </Badge>
+          )}
+          {filters.recorrencia !== 'todos' && (
             <Badge
               variant="info"
               className="cursor-pointer hover:bg-info/20"
-              onClick={() => onUpdateFilters({ onlyReconversions: false })}
+              onClick={() => onUpdateFilters({ recorrencia: 'todos' })}
             >
-              Só reconversões
+              {filters.recorrencia === 'novos' ? 'Só novos' : 'Só recorrentes'}
               <X className="ml-1 h-3 w-3" />
             </Badge>
           )}

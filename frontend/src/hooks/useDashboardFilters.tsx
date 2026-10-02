@@ -3,7 +3,6 @@ import { subDays, startOfMonth, startOfDay, endOfDay, addDays, parseISO, format 
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 import type { Lead } from './useLeads';
 import type { EnrichedLead, QualificationSegment } from './useLeadQualification';
-import { classifyChallengeThemes } from './useLeadAnalytics';
 
 const BRASILIA_TIMEZONE = 'America/Sao_Paulo';
 const STORAGE_KEY = 'dashboard-filters-v2';
@@ -14,6 +13,15 @@ export type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 't
 // (MTIA/Formação) — saíram da tela em 02/10/2026 (perguntas 28+29: "tirar
 // tudo"). Uma preferência salva que ainda traga um dos dois é descartada ao
 // carregar — filtro sem controle na tela esconderia contato em silêncio.
+//
+// Pelo mesmo motivo, em 02/10/2026 (raio-x RD, R6) saiu `challengeThemes`
+// (Tema de Desafio): o campo desafio é do funil da dn.ia e nenhuma tela
+// oferece mais o filtro. Modal (`tipos`), Faturamento e "Só completos"
+// saíram só do painel — o painel de Contatos ainda os oferece, então os
+// campos ficam; o painel mostra o chip quando algum deles vem de lá.
+
+/** Novos = contato que converteu uma vez só; recorrentes = voltou a converter. */
+export type Recorrencia = 'todos' | 'novos' | 'recorrentes';
 
 export interface DashboardFilters {
   datePreset: DatePreset;
@@ -27,9 +35,14 @@ export interface DashboardFilters {
   qualifications: QualificationSegment[];
   faturamentos: string[];
   cargos: string[];
-  challengeThemes: string[];
   hideIncomplete: boolean;
+  /**
+   * Espelho de `recorrencia === 'recorrentes'`, mantido porque o painel de
+   * Contatos ainda liga e desliga "Só reconversões" por ele. Quem manda é
+   * `recorrencia`; `updateFilters` mantém os dois em acordo.
+   */
   onlyReconversions: boolean;
+  recorrencia: Recorrencia;
   search: string;
   sources: string[];
   utmContents: string[];
@@ -47,9 +60,9 @@ const initialFilters: DashboardFilters = {
   qualifications: [],
   faturamentos: [],
   cargos: [],
-  challengeThemes: [],
   hideIncomplete: false,
   onlyReconversions: false,
+  recorrencia: 'todos',
   search: '',
   sources: [],
   utmContents: [],
@@ -68,9 +81,13 @@ function serializeFilters(filters: DashboardFilters): string {
 
 // Deserialize filters from localStorage (convert ISO strings to Dates)
 function deserializeFilters(stored: string): DashboardFilters {
-  // `presencas` e `interesseEcossistema` são chaves de preferência antigas
-  // (ver o comentário do topo).
-  const { presencas: _p, interesseEcossistema: _i, ...parsed } = JSON.parse(stored);
+  // `presencas`, `interesseEcossistema` e `challengeThemes` são chaves de
+  // preferência antigas (ver o comentário do topo).
+  const { presencas: _p, interesseEcossistema: _i, challengeThemes: _t, ...parsed } = JSON.parse(stored);
+  const recorrencia: Recorrencia =
+    parsed.recorrencia === 'novos' || parsed.recorrencia === 'recorrentes'
+      ? parsed.recorrencia
+      : parsed.onlyReconversions ? 'recorrentes' : 'todos';
   return {
     ...initialFilters,
     ...parsed,
@@ -80,7 +97,8 @@ function deserializeFilters(stored: string): DashboardFilters {
     createdDateTo: parsed.createdDateTo ? new Date(parsed.createdDateTo) : null,
     // Ensure booleans are always booleans (not undefined/null from old localStorage)
     hideIncomplete: !!parsed.hideIncomplete,
-    onlyReconversions: !!parsed.onlyReconversions,
+    onlyReconversions: recorrencia === 'recorrentes',
+    recorrencia,
     // Don't restore search (it's temporary)
     search: '',
   };
@@ -148,7 +166,7 @@ export function useDashboardFilters() {
   }, [filters]);
 
   const updateFilters = useCallback((updates: Partial<DashboardFilters>) => {
-    setFilters(prev => ({ ...prev, ...updates }));
+    setFilters(prev => alinharRecorrencia(prev, updates));
   }, []);
 
   const resetFilters = useCallback(() => {
@@ -188,9 +206,8 @@ export function useDashboardFilters() {
     if ((filters.qualifications?.length ?? 0) > 0) count++;
     if ((filters.faturamentos?.length ?? 0) > 0) count++;
     if ((filters.cargos?.length ?? 0) > 0) count++;
-    if ((filters.challengeThemes?.length ?? 0) > 0) count++;
     if (filters.hideIncomplete) count++;
-    if (filters.onlyReconversions) count++;
+    if (filters.recorrencia !== 'todos') count++;
     if (filters.search?.trim()) count++;
     if ((filters.sources?.length ?? 0) > 0) count++;
     if ((filters.utmContents?.length ?? 0) > 0) count++;
@@ -207,6 +224,32 @@ export function useDashboardFilters() {
     setCustomCreatedDateRange,
     activeFiltersCount,
   };
+}
+
+// `recorrencia` e `onlyReconversions` dizem a mesma coisa por dois caminhos
+// (o seletor do painel e o interruptor de Contatos). Quem veio na
+// atualização vence, e o outro é recalculado a partir dele.
+function alinharRecorrencia(prev: DashboardFilters, updates: Partial<DashboardFilters>): DashboardFilters {
+  const next = { ...prev, ...updates };
+  if (updates.recorrencia !== undefined) {
+    next.onlyReconversions = next.recorrencia === 'recorrentes';
+  } else if (updates.onlyReconversions !== undefined) {
+    next.recorrencia = updates.onlyReconversions
+      ? 'recorrentes'
+      : prev.recorrencia === 'recorrentes' ? 'todos' : prev.recorrencia;
+  }
+  return next;
+}
+
+/**
+ * Recorrente = voltou a converter depois do cadastro (última conversão mais de
+ * um minuto depois do `created_at`). É a mesma régua do antigo "Só reconversões".
+ */
+export function ehRecorrente(lead: { created_at: string | null; last_conversion_date: string | null }): boolean {
+  if (!lead.last_conversion_date || !lead.created_at) return false;
+  const created = new Date(lead.created_at).getTime();
+  const lastConversion = new Date(lead.last_conversion_date).getTime();
+  return Math.abs(lastConversion - created) > 60000;
 }
 
 export function applyFilters<T extends Lead | EnrichedLead>(
@@ -285,13 +328,6 @@ export function applyFilters<T extends Lead | EnrichedLead>(
       if (!filters.cargos.includes(leadCargo)) return false;
     }
 
-    // Challenge themes filter
-    if (filters.challengeThemes.length > 0) {
-      const leadThemes = classifyChallengeThemes(lead.desafios);
-      const hasMatchingTheme = filters.challengeThemes.some(theme => leadThemes.includes(theme));
-      if (!hasMatchingTheme) return false;
-    }
-
     // Hide incomplete leads filter
     if (filters.hideIncomplete) {
       const hasCompleteFaturamento = lead.faturamento && lead.faturamento.trim() !== '' && lead.faturamento.toLowerCase() !== 'não informado';
@@ -302,13 +338,9 @@ export function applyFilters<T extends Lead | EnrichedLead>(
       if (!hasCompleteFaturamento || !hasCompleteCargo) return false;
     }
 
-    // Only reconversions filter
-    if (filters.onlyReconversions) {
-      if (!lead.last_conversion_date || !lead.created_at) return false;
-      const created = new Date(lead.created_at).getTime();
-      const lastConversion = new Date(lead.last_conversion_date).getTime();
-      if (Math.abs(lastConversion - created) <= 60000) return false;
-    }
+    // Novos / Recorrentes / Todos
+    if (filters.recorrencia === 'recorrentes' && !ehRecorrente(lead)) return false;
+    if (filters.recorrencia === 'novos' && ehRecorrente(lead)) return false;
 
     // Search filter
     if (filters.search.trim()) {
