@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 02/10 (fim da tarde):** `consertos-urgentes` (R0), `proteger-envio` (R1) e `painel-limpeza` (R6 parte 1) mergeadas e em produção; **nenhuma frente aberta**. Próxima: "R5 sem decisão" (ver topo do `CONTINUAR-AQUI.md`).
+
 **Estado em 02/10 (tarde) — raio-x RD:** abertas `consertos-urgentes` (R0, front+back nos arquivos dela), `proteger-envio` (R1, backend + tela de campanha; dona de migration a partir da 026), `painel-limpeza` (R6 parte 1, só painel/analytics). Plano em `docs/raio-x-rd.md`.
 
 **Estado em 02/10 (fim do dia):** rodadas 6 e 7 mergeadas e em produção; nenhuma frente aberta. ⚠️ Sem conta admin do Claude — `conferir-telas.mjs` não loga até criar outra.

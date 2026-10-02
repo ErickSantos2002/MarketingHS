@@ -68,15 +68,16 @@ lead novo pelo site**, depois o que **qualifica e mede**.
 
 | Lote | O quê | Esforço | Depende de |
 |---|---|---|---|
-| **R0 Consertos urgentes** | U1 captura da landing · U2 descadastro de um clique · U3 importação sem automação · U4 gatilho "Lead criado" · U5 regra por tag | P | — (em andamento) |
-| **R1 Proteger envio e base** | Controle de volume no worker (por segundo, teto diário, rampa de aquecimento) · pausar/parar campanha · captura não destrutiva (não sobrescreve o que já existe) · honeypot anti-robô · congelar a origem do primeiro toque | P–M | — |
+| **R0 Consertos urgentes** ✅ | U1 captura da landing · U2 descadastro de um clique · U3 importação sem automação · U4 gatilho "Lead criado" · U5 regra por tag | P | ✅ 02/10, em produção |
+| **R1 Proteger envio e base** ✅ | Controle de volume no worker (por segundo, teto diário, rampa de aquecimento) · pausar/parar campanha · captura não destrutiva (não sobrescreve o que já existe) · honeypot anti-robô · congelar a origem do primeiro toque | P–M | ✅ 02/10, em produção. Sobra: campo-isca no formulário; `POST /publico/conversao` ainda sobrescreve UTMs (pergunta 50) |
 | **R2 LGPD mínima** | Base legal e consentimento por contato (texto, versão, data, IP, página) · checkbox e link da política no formulário · rodapé com razão social e motivo · exportar e eliminar dados de um titular | M | decisão D3 |
 | **R3 Captura no site (troca o RD)** | Endpoint de formulário por token público, CORS por domínio, aceita POST de formulário HTML · snippet para colar no WordPress (formulário embutido e pop-up) · script de rastreio leve (visita, referrer, UTMs, gclid/fbclid, primeiro e último toque) | M–G | R2 |
 | **R4 Perfil B2B** | Campos: setor, porte (faixas), UF/cidade, CNPJ, nº de motoristas/operadores, produto de interesse · formulário configurável (lista, máscara, obrigatório) · limpar os campos da dn.ia da captura · alinhar editor e landing | M | decisão D2 |
 | **R5 Qualificação H&S** | Funil H&S explícito, movido por regra/jornada · régua perfil × interesse com decaimento · evento de conversão por página ("pediu demonstração" dispara na hora) · nós "mudar status"/"remover tag" · modelo pronto "pediu demonstração" · uma pontuação só (sai o P1–P4 do navegador) · "Enviar ao comercial" para qualquer etiqueta | M | D1, R4 |
-| **R6 Painel H&S** | Tirar o funil da dn.ia (Grupo WhatsApp, Modal, Faturamento, Tema de Desafio, aba Desafios, recomendações sem custo) · "Leads novos" como número principal · agregação no servidor (acaba o teto de 10 mil) · por canal e por página · funil · visitas → taxa de conversão · custo manual → custo por lead | P→M | R3 para canal/visitas |
+| **R6 Painel H&S** (parte 1 ✅) | Tirar o funil da dn.ia (Grupo WhatsApp, Modal, Faturamento, Tema de Desafio, aba Desafios, recomendações sem custo) · "Leads novos" como número principal · agregação no servidor (acaba o teto de 10 mil) · por canal e por página · funil · visitas → taxa de conversão · custo manual → custo por lead | P→M | parte 1 (limpeza, leads novos, meta, pontuação do banco) ✅ 02/10; resto depende do R3 |
 | **R7 Migração do RD** | Importação de verdade (CSV real, mapeamento de colunas, consentimento, supressão em lote, data/origem da primeira conversão) · papel de operador de marketing | M | acesso ao RD, R0 (U3), R2 |
 | **R8 Depois** | Editor de landing com blocos/imagem/página de obrigado · Pixel/CAPI/Clarity condicionados ao consentimento · escopo de chave de API · central de preferências · A/B de assunto | M–G | R2 |
+| **R9 Provedor de envio** | Se o Nicholson escolher o **Amazon SES** (D8): adaptador de envio no lugar do Resend (o código isola o envio em `app/email/`), eventos de entrega/abertura/clique/bounce/reclamação pelo SNS no lugar do webhook do Resend, pedido de saída do sandbox na AWS, DNS do domínio no SES, rampa recomeçando (`ENVIO_AQUECIMENTO_INICIO`) | M | D8 |
 | Fora | Endpoint de card no GrowthHS (5A) e volta ganho/perdido | M | repositório do GrowthHS |
 
 Em paralelo (até 4 frentes): R1 + R2 + limpeza do R6 logo depois do R0; R3 e
@@ -102,5 +103,12 @@ R4 quando a migration do R2 estiver na `main` (migration tem dono único).
   por lead entram cedo ou tarde.
 - **D6 Quem opera.** Uma pessoa de marketing/comercial vai usar o sistema?
   Define a urgência do papel de operador (hoje só admin).
+- **D8 Provedor de envio.** Hoje: Resend **plano gratuito** (100/dia, 3.000/mês
+  — teto do worker em 90/dia por `~/marketinghs-teto-envio.sh`), só para teste.
+  O Nicholson pensa em AWS. Fato: o Resend roda sobre o Amazon SES —
+  **trocar não melhora a entrega**, melhora o **preço** (SES ≈ US$ 0,10/mil ×
+  Resend Pro US$ 20/mês até 50 mil). Spam se evita com domínio autenticado
+  (feito), aquecimento (R1), descadastro de um clique (R0), base com permissão
+  (D4) e consentimento (R2). Opções: Resend Pro (zero trabalho) ou SES (R9).
 - **D7 Acesso de leitura ao RD.** Para o inventário (leads, formulários, LPs,
   automações, volume mensal) e a migração.

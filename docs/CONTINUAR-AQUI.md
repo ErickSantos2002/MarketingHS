@@ -1,5 +1,53 @@
 # Continuar aqui
 
+> ## 🌅 Comece por aqui — próxima sessão (fechado em 02/10/2026, fim da tarde)
+>
+> **Onde estamos.** MarketingHS **em produção** desde 02/10 em
+> https://marketinghs.healthsafetytech.com (projeto `erick` do EasyPanel:
+> `marketinghs-api`, `-sistema`, `-worker`, `-banco`). Banco zerado e
+> ressincronizado com o DataCore (2.104 + 3 de teste "Equipe TI"; 295 com
+> e-mail, contando os de nota fiscal). Resend no domínio
+> `mkt.healthsafetytech.com` (plano **gratuito**, só para teste). Primeiro
+> envio interno validado de ponta a ponta. Conta `claude.dev` **apagada** — não
+> há conta para conferir tela (pedir ao Erick uma temporária se precisar).
+>
+> **Norte novo (02/10):** substituir o **RD Station** com foco em **captar
+> lead NOVO** — plano inteiro em `docs/raio-x-rd.md` (lotes R0–R9, decisões
+> D1–D8). Feito e em produção: **R0** (a landing dava 405 e não captava nada;
+> descadastro de um clique; importação sem automação; gatilho
+> `form_submitted`; regra sem tag), **R1** (ritmo/aquecimento do worker,
+> pausar/retomar/parar campanha, captura não destrutiva, primeiro toque,
+> honeypot no servidor), **R6 parte 1** (painel sem o funil da dn.ia, "Leads
+> novos" como número principal).
+>
+> **Pendências do Erick:**
+> 1. Deploy do **`marketinghs-sistema`** (os botões de pausar/parar campanha
+>    da R1 ainda não estão na tela). ⚠️ O classificador da sessão barra deploy
+>    de produção pela coordenadora — o Erick clica Deploy no painel.
+> 2. Rodar `bash ~/marketinghs-teto-envio.sh` (teto 90/dia e 90/h, por causa
+>    do plano gratuito do Resend).
+> 3. Conversa com o Nicholson: decisões **D1–D8** do raio-x (funil, campos do
+>    formulário, base legal/política, ⚠️ **e-mail de nota fiscal — não mandar
+>    campanha para a base até decidir**, mídia paga, quem opera, acesso ao RD,
+>    provedor de envio Resend Pro × Amazon SES).
+>
+> **Próxima frente (não depende do Nicholson nem do RD) — "R5 sem decisão":**
+> nós de jornada "mudar status" e "remover tag"; evento de conversão por página
+> (`page_slug`) para "pediu demonstração" disparar na hora; uma pontuação só
+> (sai o P1–P4 do navegador da ficha e do `useLeadQualification`); "Enviar ao
+> comercial" para qualquer etiqueta; Contatos com o seletor
+> Novos/Recorrentes (pergunta 42); campo-isca `website` no formulário da
+> landing e `POST /publico/conversao` sem sobrescrever UTMs (pergunta 50).
+> Depois, com as decisões: R2 (LGPD) → R3 (captura no site, troca o RD) → R4
+> (campos B2B).
+>
+> **Perguntas abertas:** 41–50 em `docs/perguntas-abertas.md` (todas com opção
+> assumida). **Frentes:** nenhuma aberta (`docs/frentes/README.md`).
+> ⚠️ A suíte pytest leva ~35 min e bate no banco de **produção com dado real**:
+> só apagar o que o teste criou, por id; `count(*) FROM leads` igual antes e
+> depois; nunca duas suítes ao mesmo tempo (uma travou em 02/10 na trava entre
+> rodadas — rodar com `timeout 3600`).
+
 > ## 🌅 Comece por aqui — 02/10/2026 (plano combinado com o Erick em 01/10)
 >
 > 1. **Responder as perguntas abertas** de `docs/perguntas-abertas.md` (28–33,
