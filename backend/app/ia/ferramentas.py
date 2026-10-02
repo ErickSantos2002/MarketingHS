@@ -332,7 +332,10 @@ EXECUTORES = {
     "serie_temporal": serie_temporal,
     "listar_contatos": listar_contatos,
     "desempenho_de_campanhas": desempenho_de_campanhas,
-    "desafios_frequentes": desafios_frequentes,
+    # `desafios_frequentes` saiu daqui em 02/10/2026 (raio-x RD, R6): o campo
+    # desafio é do funil de evento da dn.ia e a H&S não o coleta. A função
+    # continua acima só porque `routers/ia.py` (analisar-leads e
+    # analisar-desafios) ainda a chama — o assistente não a oferece mais.
 }
 
 
@@ -457,23 +460,6 @@ ESQUEMAS: list[dict] = [
                     "required": [],
                     "additionalProperties": False,
                 },
-            },
-            "required": [],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "desafios_frequentes",
-        "description": ("Os desafios escritos pelos contatos, para identificar "
-                        "temas. Devolve o texto, não o autor."),
-        "strict": True,
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "filtros": _FILTROS_SCHEMA,
-                # ⚠️ Ver o comentário em `listar_contatos` acima — mesmo
-                # motivo, mesma ausência proposital de `minimum`/`maximum`.
-                "limite": {"type": "integer"},
             },
             "required": [],
             "additionalProperties": False,
