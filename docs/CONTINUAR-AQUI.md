@@ -31,6 +31,10 @@
 >    campanha para a base até decidir**, mídia paga, quem opera, acesso ao RD,
 >    provedor de envio Resend Pro × Amazon SES).
 >
+> **Acesso ao RD:** o Nicholson disse (02/10) que vê na **segunda, 05/10**.
+> Quando chegar: inventário (leads, formulários, LPs, automações, volume) →
+> reordenar o `docs/raio-x-rd.md` → R7 (migração).
+>
 > **Próxima frente (não depende do Nicholson nem do RD) — "R5 sem decisão":**
 > nós de jornada "mudar status" e "remover tag"; evento de conversão por página
 > (`page_slug`) para "pediu demonstração" disparar na hora; uma pontuação só

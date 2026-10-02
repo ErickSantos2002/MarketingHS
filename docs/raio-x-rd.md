@@ -110,5 +110,5 @@ R4 quando a migration do R2 estiver na `main` (migration tem dono único).
   Resend Pro US$ 20/mês até 50 mil). Spam se evita com domínio autenticado
   (feito), aquecimento (R1), descadastro de um clique (R0), base com permissão
   (D4) e consentimento (R2). Opções: Resend Pro (zero trabalho) ou SES (R9).
-- **D7 Acesso de leitura ao RD.** Para o inventário (leads, formulários, LPs,
+- **D7 Acesso de leitura ao RD.** (Nicholson vê na segunda, 05/10.) Para o inventário (leads, formulários, LPs,
   automações, volume mensal) e a migração.
