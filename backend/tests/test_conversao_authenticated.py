@@ -10,9 +10,11 @@ isso cada router convertido prova duas coisas:
    tem de transformar o silêncio do RLS em recusa explícita (`admin_atual`).
 """
 
-from datetime import date
+import uuid
+from datetime import date, datetime
 
 import pytest_asyncio
+from limpeza import apagar_leads
 from rodada import EmailDeRodada
 
 import app.database as db
@@ -25,6 +27,99 @@ def _auth(token: str) -> dict:
 async def _contar(sql: str, *args) -> int:
     async with db.sessao(role="service_role") as conn:
         return await conn.fetchval(sql, *args)
+
+
+# ── semente própria (rodada 7, pergunta 12 (a)) ──────────────────────────────
+# Até 02/10 seis testes daqui comparavam o dado ANTIGO de produção (corte fixo
+# em 30/09, segmento, segmento dinâmico, fluxo com execução e etiqueta que já
+# existiam). O reset de 02/10 apagou tudo isso e os seis passaram a falhar na
+# pré-condição. Agora cada um semeia o que precisa e o corte é "antes de o
+# teste começar" (o `now()` do banco depois da semeadura).
+#
+# ⚠️ O que se semeia COMITA em produção, com o worker rodando. Por isso:
+# fluxo em 'draft' com execuções já encerradas ('done'/'exited' — o worker só
+# reivindica 'active'/'waiting'); evento de tipo que nenhum fluxo escuta;
+# etiqueta e segmento com nome que nenhuma regra usa. E a limpeza é SÓ por id
+# — nunca por nome, padrão ou critério amplo.
+
+SEMENTE = "teste-conversao-semente"
+
+
+@pytest_asyncio.fixture
+async def semente():
+    """Três contatos, duas etiquetas, um segmento dinâmico (pela etiqueta 0),
+    um estático, um fluxo com duas execuções encerradas e dois eventos no
+    contato 0. Devolve os ids e o `corte`."""
+    await db.init_db()
+    marca = uuid.uuid4().hex[:12]
+    emails = [f"{SEMENTE}-{marca}-{i}@exemplo.invalid" for i in range(3)]
+    s = {"leads": [], "tags": [], "segmentos": [], "jornada": None, "identidades": []}
+    try:
+        async with db.sessao(role="service_role") as conn:
+            for e in emails:
+                s["leads"].append(await conn.fetchval(
+                    "INSERT INTO leads (nome, email, tipo, status) "
+                    "VALUES ('Semente', $1, 'teste', 'Lead') RETURNING id::text", e))
+            s["identidades"] = [r["d"] for r in await conn.fetch(
+                "SELECT dnia_id::text AS d FROM leads WHERE id = ANY($1::uuid[]) "
+                "AND dnia_id IS NOT NULL", s["leads"])]
+            for i in range(2):
+                s["tags"].append(await conn.fetchval(
+                    "INSERT INTO tags (name) VALUES ($1) RETURNING id::text",
+                    f"{SEMENTE}-{marca}-{i}"))
+            l0, l1, _ = s["leads"]
+            t0, t1 = s["tags"]
+            await conn.execute(
+                "INSERT INTO lead_tags (lead_id, tag_id) VALUES "
+                "($1::uuid, $3::uuid), ($1::uuid, $4::uuid), ($2::uuid, $3::uuid)",
+                l0, l1, t0, t1)
+            for titulo in ("semente 1", "semente 2"):
+                await conn.execute(
+                    """INSERT INTO contact_events (lead_id, source_app, event_type, title)
+                       VALUES ($1::uuid, 'marketinghs', 'teste_conversao', $2)""",
+                    l0, titulo)
+            s["dinamico"] = await conn.fetchval(
+                "INSERT INTO segments (name, type, rules, logic) "
+                "VALUES ($1, 'dynamic', $2::jsonb, 'and') RETURNING id::text",
+                f"{SEMENTE}-{marca}-dinamico",
+                [{"field": "tag", "operator": "is", "value": t0}])
+            s["segmentos"].append(s["dinamico"])
+            s["estatico"] = await conn.fetchval(
+                "INSERT INTO segments (name, type, rules) VALUES ($1, 'static', '[]'::jsonb) "
+                "RETURNING id::text", f"{SEMENTE}-{marca}-estatico")
+            s["segmentos"].append(s["estatico"])
+            await conn.execute(
+                "INSERT INTO segment_contacts (segment_id, lead_id) "
+                "VALUES ($1::uuid, $2::uuid), ($1::uuid, $3::uuid)", s["estatico"], l0, l1)
+            s["jornada"] = await conn.fetchval(
+                """INSERT INTO journeys (name, status, entry_type, entry_config,
+                                         entry_node_id, nodes)
+                   VALUES ($1, 'draft', 'event', '{"event_type": "teste-conversao-nunca"}',
+                           'a', '[{"id": "a", "next": null, "type": "delay",
+                                   "config": {"minutes": 1}}]')
+                   RETURNING id::text""", f"{SEMENTE}-{marca}-fluxo")
+            await conn.execute(
+                "INSERT INTO journey_runs (journey_id, lead_id, current_node_id, state) "
+                "VALUES ($1::uuid, $2::uuid, 'a', 'done'), ($1::uuid, $3::uuid, 'a', 'exited')",
+                s["jornada"], l0, l1)
+        s["corte"] = await _contar("SELECT now()")
+        yield s
+    finally:
+        async with db.sessao(role="service_role") as conn:
+            if s["jornada"]:
+                # O guard recusa apagar fluxo com execução: as execuções antes.
+                await conn.execute("DELETE FROM journey_runs WHERE journey_id = $1::uuid",
+                                   s["jornada"])
+                await conn.execute("DELETE FROM journeys WHERE id = $1::uuid", s["jornada"])
+            await conn.execute("DELETE FROM segments WHERE id = ANY($1::uuid[])",
+                               s["segmentos"])
+            await conn.execute("DELETE FROM tags WHERE id = ANY($1::uuid[])", s["tags"])
+            await apagar_leads(conn, s["leads"])
+            # A identidade que a captura deu a cada um — só a que tem o e-mail
+            # exato de um contato da semente.
+            await conn.execute(
+                "DELETE FROM ecosystem_identities WHERE dnia_id = ANY($1::uuid[]) "
+                "AND lower(email) = ANY($2::text[])", s["identidades"], emails)
 
 
 # ── templates.py ─────────────────────────────────────────────────────────────
@@ -144,11 +239,11 @@ async def test_automacoes_admin_cria_lista_edita_e_apaga(cliente, token_admin):
         await _apagar_regras_de_teste()
 
 
-async def test_automacoes_previa_bate_com_service_role(cliente, token_admin):
+async def test_automacoes_previa_bate_com_service_role(cliente, token_admin, semente):
     """A prévia lê `leads`, `ecosystem_identities` (e `lead_tags`/`tags`), as
-    três sob política admin-only. Corte no passado: lead de teste criado por
-    outra rodada não entra na conta no meio do teste."""
-    corte = "2026-09-30"
+    três sob política admin-only. O corte é o dia em que o teste começou (a
+    prévia só aceita data); a semente garante que há contato antes dele."""
+    corte = semente["corte"].date().isoformat()
     esperado = await _contar(
         """SELECT count(*) FROM leads l
             WHERE l.created_at < ($1::date + 1)
@@ -156,7 +251,7 @@ async def test_automacoes_previa_bate_com_service_role(cliente, token_admin):
                                WHERE l.dnia_id IS NOT NULL AND ei.dnia_id = l.dnia_id
                                  AND ei.growthhs_card_id IS NOT NULL)""",
         date.fromisoformat(corte))
-    assert esperado > 0
+    assert esperado >= len(semente["leads"])
     r = await cliente.post("/automacoes/previa", headers=_auth(token_admin),
                            json={"conditions": [{"type": "created_at", "operator": "before",
                                                  "value": corte}]})
@@ -164,7 +259,7 @@ async def test_automacoes_previa_bate_com_service_role(cliente, token_admin):
     assert r.json()["total"] == esperado
     # Os outros dois operadores de data também respondiam 500 (texto num
     # parâmetro date/timestamptz). Só provam que respondem.
-    for op, val in (("after", "2026-01-01"), ("between", "2026-01-01|2026-09-30")):
+    for op, val in (("after", "2026-01-01"), ("between", f"2026-01-01|{corte}")):
         r = await cliente.post("/automacoes/previa", headers=_auth(token_admin),
                                json={"conditions": [{"type": "created_at",
                                                      "operator": op, "value": val}]})
@@ -187,9 +282,12 @@ async def _apagar_segmentos_de_teste():
                            SEGMENTO_TESTE + "%")
 
 
-async def test_segmentos_lista_e_contagens_batem_com_service_role(cliente, token_admin):
+async def test_segmentos_lista_e_contagens_batem_com_service_role(
+        cliente, token_admin, semente):
     """A lista e o `total_contatos` de cada segmento (que passa por
-    `evaluate_segment_rules`, em `leads`) sob `authenticated`."""
+    `evaluate_segment_rules`, em `leads`) sob `authenticated`. Os de nome
+    `teste%` de OUTROS testes ficam de fora (nascem e morrem no meio); os da
+    semente entram pelo id."""
     async with db.sessao(role="service_role") as conn:
         esperado = {r["id"]: r["total"] for r in await conn.fetch(
             """SELECT s.id::text AS id,
@@ -197,29 +295,29 @@ async def test_segmentos_lista_e_contagens_batem_com_service_role(cliente, token
                            THEN (SELECT count(*) FROM evaluate_segment_rules(s.id))
                            ELSE (SELECT count(*) FROM segment_contacts sc
                                   WHERE sc.segment_id = s.id) END AS total
-                 FROM segments s WHERE s.name NOT LIKE 'teste%'""")}
-    assert esperado, "produção sem segmento: o teste não provaria nada"
+                 FROM segments s
+                WHERE s.name NOT LIKE 'teste%' OR s.id = ANY($1::uuid[])""",
+            semente["segmentos"])}
+    # Dinâmico: os 2 com a etiqueta 0. Estático: os 2 vinculados.
+    assert esperado[semente["dinamico"]] == 2 and esperado[semente["estatico"]] == 2
     r = await cliente.get("/segmentos", headers=_auth(token_admin))
     assert r.status_code == 200, r.text
     obtido = {s["id"]: s["total_contatos"] for s in r.json()
-              if not s["nome"].startswith("teste")}
+              if not s["nome"].startswith("teste") or s["id"] in semente["segmentos"]}
     assert obtido == esperado
-    assert any(v > 0 for v in obtido.values())
 
 
-async def test_segmentos_contatos_e_audiencia_batem_com_service_role(cliente, token_admin):
+async def test_segmentos_contatos_e_audiencia_batem_com_service_role(
+        cliente, token_admin, semente):
     h = _auth(token_admin)
+    sid = semente["dinamico"]
     async with db.sessao(role="service_role") as conn:
-        sid = await conn.fetchval(
-            "SELECT id::text FROM segments WHERE type = 'dynamic' AND name NOT LIKE 'teste%' "
-            "ORDER BY created_at LIMIT 1")
-        assert sid, "sem segmento dinâmico em produção"
         n_contatos = await conn.fetchval(
             """SELECT count(*) FROM evaluate_segment_rules($1::uuid) r
                  JOIN leads l ON l.id = r.lead_id WHERE l.deleted_at IS NULL""", sid)
         n_audiencia = await conn.fetchval(
             "SELECT count_segment_audience($1::uuid[], '{}'::uuid[])", [sid])
-    assert n_contatos > 0
+    assert n_contatos == 2
     r = await cliente.get(f"/segmentos/{sid}/contatos", headers=h)
     assert r.status_code == 200 and len(r.json()) == n_contatos, r.text
     r = await cliente.post("/segmentos/audiencia", headers=h,
@@ -416,27 +514,28 @@ async def _apagar_jornadas_de_teste():
         await conn.execute("DELETE FROM journeys WHERE name LIKE $1", JORNADA_TESTE + "%")
 
 
-async def test_jornadas_execucoes_e_metricas_batem_com_service_role(cliente, token_admin):
+async def test_jornadas_execucoes_e_metricas_batem_com_service_role(
+        cliente, token_admin, semente):
     """`journey_runs` é SELECT admin: a contagem por estado, a lista de
-    execuções e as métricas por nó, sob `authenticated`. Produção tinha 1 fluxo
-    com 3 execuções em 01/10."""
+    execuções e as métricas por nó, sob `authenticated`. O fluxo com execução
+    é o da semente (draft, execuções encerradas: o worker não as pega)."""
+    com_runs = semente["jornada"]
     async with db.sessao(role="service_role") as conn:
         esperado = {r["id"]: r["n"] for r in await conn.fetch(
             """SELECT j.id::text AS id, count(r.id) AS n FROM journeys j
                  LEFT JOIN journey_runs r ON r.journey_id = j.id
-                WHERE j.name NOT LIKE 'teste%' GROUP BY j.id""")}
-        com_runs = next((j for j, n in esperado.items() if n), None)
-        metricas = (await conn.fetchval("SELECT journey_node_metrics($1::uuid)", com_runs)
-                    if com_runs else None)
-    assert com_runs, "sem fluxo com execução em produção: o teste não provaria nada"
+                WHERE j.name NOT LIKE 'teste%' OR j.id = $1::uuid GROUP BY j.id""",
+            com_runs)}
+        metricas = await conn.fetchval("SELECT journey_node_metrics($1::uuid)", com_runs)
+    assert esperado[com_runs] == 2
     h = _auth(token_admin)
     r = await cliente.get("/jornadas", headers=h)
     assert r.status_code == 200, r.text
     obtido = {j["id"]: sum(j["runs"].values()) for j in r.json()["data"]
-              if not j["name"].startswith("teste")}
+              if not j["name"].startswith("teste") or j["id"] == com_runs}
     assert obtido == esperado
     r = await cliente.get(f"/jornadas/{com_runs}/execucoes", headers=h)
-    assert r.status_code == 200 and len(r.json()) == min(esperado[com_runs], 200), r.text
+    assert r.status_code == 200 and len(r.json()) == esperado[com_runs], r.text
     r = await cliente.get(f"/jornadas/{com_runs}", headers=h)
     assert r.status_code == 200 and r.json()["metrics"] == (metricas or {}), r.text
 
@@ -473,34 +572,36 @@ async def test_jornadas_exige_admin(cliente, token_usuario):
 # fraco". Cada leitura compara com a mesma consulta sob `service_role`, em
 # dado do passado (corte) para não oscilar com lead de teste de outra rodada.
 
-async def test_contatos_lista_bate_com_service_role(cliente, token_admin):
+async def test_contatos_lista_bate_com_service_role(cliente, token_admin, semente):
+    """Corte = o `now()` do banco depois da semente: lead que outra rodada
+    criar no meio do teste não entra na conta."""
+    corte = semente["corte"]
     esperado = await _contar("SELECT count(*) FROM leads WHERE deleted_at IS NULL "
-                             "AND created_at < '2026-09-30'")
-    assert esperado > 1000
+                             "AND created_at < $1", corte)
+    assert esperado >= len(semente["leads"])
     h = _auth(token_admin)
     vistos, pagina = set(), 0
     while True:
         r = await cliente.get("/contatos", params={"pagina": pagina, "tamanho": 1000},
                               headers=h)
         assert r.status_code == 200, r.text
-        vistos |= {c["id"] for c in r.json()["itens"] if c["created_at"] < "2026-09-30"}
+        vistos |= {c["id"] for c in r.json()["itens"]
+                   if datetime.fromisoformat(c["created_at"]) < corte}
         if not r.json()["tem_mais"]:
             break
         pagina += 1
     assert len(vistos) == esperado
+    assert set(semente["leads"]) <= vistos
 
 
-async def test_contatos_ficha_eventos_e_conversoes_batem_com_service_role(cliente, token_admin):
+async def test_contatos_ficha_eventos_e_conversoes_batem_com_service_role(
+        cliente, token_admin, semente):
+    com_eventos = com_tags = semente["leads"][0]
     async with db.sessao(role="service_role") as conn:
-        com_eventos = await conn.fetchval(
-            """SELECT l.id::text FROM leads l JOIN contact_events ce ON ce.lead_id = l.id
-                GROUP BY l.id ORDER BY count(*) DESC LIMIT 1""")
         n_eventos = await conn.fetchval(
             """SELECT count(*) FROM contact_events ce WHERE ce.lead_id = $1::uuid
                   OR ce.dnia_id = (SELECT dnia_id FROM leads WHERE id = $1::uuid)""",
             com_eventos)
-        com_tags = await conn.fetchval(
-            "SELECT lead_id::text FROM lead_tags GROUP BY lead_id ORDER BY count(*) DESC LIMIT 1")
         n_tags = await conn.fetchval(
             "SELECT count(*) FROM lead_tags WHERE lead_id = $1::uuid", com_tags)
         com_conv = await conn.fetchval(
@@ -511,10 +612,10 @@ async def test_contatos_ficha_eventos_e_conversoes_batem_com_service_role(client
         n_utm = await conn.fetchval(
             "SELECT count(DISTINCT lead_id) FROM lead_conversions "
             "WHERE utm_content IS NOT NULL AND lead_id IS NOT NULL")
-    # ⚠️ `lead_conversions` estava VAZIA em 01/10, e semear tem efeito
-    # colateral (o gatilho grava `last_conversion_date` no lead real). Com a
-    # tabela vazia, as duas rotas de conversão só provam que respondem.
-    assert n_eventos > 0 and n_tags > 0
+    # ⚠️ Conversão NÃO se semeia: o gatilho de `lead_conversions` grava evento
+    # que fluxo de verdade escuta (`form_submitted`). Com a tabela vazia, as
+    # duas rotas de conversão só provam que respondem.
+    assert n_eventos >= 2 and n_tags == 2
     h = _auth(token_admin)
     r = await cliente.get(f"/contatos/{com_eventos}/eventos", params={"limite": 500}, headers=h)
     assert r.status_code == 200 and len(r.json()) == min(n_eventos, 500), r.text
