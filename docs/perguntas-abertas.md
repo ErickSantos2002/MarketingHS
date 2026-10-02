@@ -66,3 +66,16 @@ dia no `CONTINUAR-AQUI.md`.
     quem as chame. **Assumido: manter** até a limpeza do backend da dn.ia.
 44. **`whatsapp_group` em `lead_goal`** é preservado no PUT. **Assumido:** sai
     num reset/limpeza futura.
+
+45. **Tetos de envio** (R1): assumido 2/s, 500/h, 2.000/dia, rampa a partir de
+    50 dobrando por dia desde 02/10. ⚠️ Se o plano do Resend for o gratuito
+    (100/dia, 3.000/mês), baixar `ENVIO_TETO_DIA` em `integration_secrets`.
+46. **Campanha parada**: assumido `sent` + pendentes `suppressed` + contador
+    `interrompidos` (sem migration). Alternativa: status `cancelled` (migration).
+47. **Editar campanha pausada**: assumido continuar editável (como já era).
+48. **Rampa ao trocar domínio**: gravar `ENVIO_AQUECIMENTO_INICIO` com a data.
+49. **Pausar/retomar/parar em `service_role`** com `admin_atual`, igual ao
+    `/enviar` vizinho (`authenticated` não pode mexer em `email_send_queue`).
+    Fica na conversão lote a lote; alternativa: migration com GRANT.
+50. **Pendentes do R1:** `POST /publico/conversao` ainda sobrescreve UTMs com o
+    último toque; campo-isca `website` falta no formulário da landing.

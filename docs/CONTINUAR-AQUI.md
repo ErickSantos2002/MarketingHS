@@ -48,6 +48,19 @@
 > (`source = teste-interno`) e a campanha/segmento/template de teste ficam na
 > base de produção de propósito.
 >
+> ✅ **Raio-x RD (02/10, tarde):** objetivo = substituir o RD, foco em lead
+> NOVO. Plano em `docs/raio-x-rd.md` (R0–R8 + decisões D1–D7 para o Nicholson;
+> acesso ao RD pedido). Na `main`: **R0** consertos urgentes (landing captava
+> 405 → `/api`; descadastro de um clique; importação sem automação; gatilho
+> `form_submitted`; regra sem tag), **R6 parte 1** painel sem funil da dn.ia,
+> **R1** ritmo/aquecimento do worker, pausar/retomar/parar, captura não
+> destrutiva, primeiro toque, honeypot (`be1cb13`). Suíte 474 passed.
+> ⚠️ **Deploy da API e do worker com R0+R1 pendente** — o classificador barrou
+> deploy de produção pela coordenadora; o Erick faz no painel ou autoriza.
+> Próximo sem depender do Nicholson: R5 sem decisão (nós de jornada, evento de
+> conversão por página, uma pontuação só, ficha sem P1–P4, Contatos com
+> Novos/Recorrentes) + pendentes 50.
+>
 > 2. **Subir em produção** (projeto `erick` do EasyPanel), no molde do Homo
 >    (memória `marketinghs-no-homo`): API + front + **worker de fila** (nunca
 >    rodou fora daqui) + domínio; reset do banco (decidir o que fica — os 2.083
