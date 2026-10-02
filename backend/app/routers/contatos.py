@@ -71,7 +71,14 @@ class ImportacaoOut(BaseModel):
 async def importar(dados: ImportacaoIn, admin: Usuario = Depends(admin_atual)):
     if dados.modo not in MODOS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Modo de importação inválido.")
+    async with sessao(role="authenticated", user_id=admin.id) as conn:
+        return await importar_linhas(conn, dados)
 
+
+async def importar_linhas(conn, dados: ImportacaoIn) -> ImportacaoOut:
+    """A importação em si, dentro da transação de quem chama — separada da
+    rota para o teste rodar o MESMO caminho numa transação revertida (o molde
+    de `recalcular`)."""
     criados = atualizados = inalterados = sem_email = 0
     campos_enriquecidos = campos_pulados = 0
     erros: list[str] = []
@@ -99,77 +106,84 @@ async def importar(dados: ImportacaoIn, admin: Usuario = Depends(admin_atual)):
 
     emails = list(por_email)
 
-    async with sessao(role="authenticated", user_id=admin.id) as conn:
-        existentes: dict[str, dict] = {}
-        for i in range(0, len(emails), LOTE_CONSULTA):
-            fatia = emails[i:i + LOTE_CONSULTA]
-            linhas = await conn.fetch(
-                """SELECT id::text, lower(email) AS email, nome, whatsapp, empresa,
-                          cargo, faturamento, funcionarios, desafios, source, status
-                     FROM leads WHERE lower(email) = ANY($1::text[])""",
-                fatia,
-            )
-            for l in linhas:
-                existentes[l["email"]] = dict(l)
+    # ⚠️ Importação NÃO dispara automação (U3, raio-x de 02/10/2026), como o
+    # recálculo e o DataCore (decisão 6). Todo contato novo grava
+    # `form_submitted` (`fn_lead_insert_event`), copiado para a fila de
+    # jornada — importar a base do RD matricularia milhares de contatos em
+    # fluxo que entra por evento — e o gatilho de automação (019) mandaria ao
+    # comercial todo contato que uma regra ativa casasse. A marca vale para a
+    # transação inteira, inclusive os SAVEPOINTs por linha.
+    await marcar_sem_automacao(conn)
+    existentes: dict[str, dict] = {}
+    for i in range(0, len(emails), LOTE_CONSULTA):
+        fatia = emails[i:i + LOTE_CONSULTA]
+        linhas = await conn.fetch(
+            """SELECT id::text, lower(email) AS email, nome, whatsapp, empresa,
+                      cargo, faturamento, funcionarios, desafios, source, status
+                 FROM leads WHERE lower(email) = ANY($1::text[])""",
+            fatia,
+        )
+        for l in linhas:
+            existentes[l["email"]] = dict(l)
 
-        for email, linha in por_email.items():
-            existente = existentes.get(email)
-            if existente is not None:
-                # O contato existe mesmo que a atualização dele falhe abaixo:
-                # a tela aplica as tags da importação por esta lista.
-                contatos.append(ContatoImportado(email=email, id=existente["id"]))
-            try:
-                # ⚠️ SAVEPOINT por linha. Sem ele, o `except` abaixo era
-                # mentira: a linha que falha no BANCO aborta a transação
-                # inteira, toda linha seguinte cai em "current transaction is
-                # aborted", e o COMMIT do fim vira ROLLBACK sem erro — a rota
-                # respondia 200 e a importação inteira sumia, inclusive as
-                # linhas que o relatório contava como criadas.
-                async with conn.transaction():
-                    if existente is None:
-                        novo_id = await conn.fetchval(
-                            """INSERT INTO leads (email, tipo, status, source, nome, whatsapp,
-                                                  empresa, cargo, faturamento, funcionarios, desafios)
-                               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                               RETURNING id""",
-                            email,
-                            linha.tipo or "csv_import",
-                            normalizar_status(linha.status) or "Lead",
-                            linha.source or "csv_import",
-                            linha.nome, linha.whatsapp or linha.telefone_completo,
-                            linha.empresa, linha.cargo, linha.faturamento,
-                            linha.funcionarios, linha.desafios_ia,
-                        )
-                        await _resolver_identidade(conn, novo_id, linha, email)
-                        criados += 1
-                        contatos.append(ContatoImportado(email=email, id=str(novo_id)))
-                        continue
+    for email, linha in por_email.items():
+        existente = existentes.get(email)
+        if existente is not None:
+            # O contato existe mesmo que a atualização dele falhe abaixo:
+            # a tela aplica as tags da importação por esta lista.
+            contatos.append(ContatoImportado(email=email, id=existente["id"]))
+        try:
+            # ⚠️ SAVEPOINT por linha. Sem ele, o `except` abaixo era
+            # mentira: a linha que falha no BANCO aborta a transação
+            # inteira, toda linha seguinte cai em "current transaction is
+            # aborted", e o COMMIT do fim vira ROLLBACK sem erro — a rota
+            # respondia 200 e a importação inteira sumia, inclusive as
+            # linhas que o relatório contava como criadas.
+            async with conn.transaction():
+                if existente is None:
+                    novo_id = await conn.fetchval(
+                        """INSERT INTO leads (email, tipo, status, source, nome, whatsapp,
+                                              empresa, cargo, faturamento, funcionarios, desafios)
+                           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                           RETURNING id""",
+                        email,
+                        linha.tipo or "csv_import",
+                        normalizar_status(linha.status) or "Lead",
+                        linha.source or "csv_import",
+                        linha.nome, linha.whatsapp or linha.telefone_completo,
+                        linha.empresa, linha.cargo, linha.faturamento,
+                        linha.funcionarios, linha.desafios_ia,
+                    )
+                    await _resolver_identidade(conn, novo_id, linha, email)
+                    criados += 1
+                    contatos.append(ContatoImportado(email=email, id=str(novo_id)))
+                    continue
 
-                    campos = campos_para_gravar(linha, existente, dados.modo)
-                    if campos:
-                        # asyncpg não aceita nome de coluna parametrizado. As chaves vêm
-                        # de _CAMPOS em app/dominio/importacao.py — lista fechada no
-                        # código, nunca do corpo da requisição.
-                        atribuicoes = ", ".join(f"{c} = ${i + 2}" for i, c in enumerate(campos))
-                        r = await conn.execute(
-                            f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
-                            existente["id"], *campos.values(),
-                        )
-                        # ⚠️ UPDATE que afeta 0 linhas é o jeito deste banco de
-                        # dizer "sem permissão". Vira erro da linha, não
-                        # "atualizado".
-                        if r.endswith(" 0"):
-                            raise RuntimeError("o UPDATE não afetou o contato")
-                    # Contadores DEPOIS da escrita: linha que falha não conta.
-                    campos_enriquecidos += len(campos)
-                    campos_pulados += campos_preenchidos_no_csv(linha) - len(campos)
-                    if campos:
-                        atualizados += 1
-                    else:
-                        inalterados += 1
-            except Exception as exc:  # noqa: BLE001 — uma linha ruim não derruba o lote
-                logger.warning("Falha ao importar %s: %s", email, exc)
-                erros.append(f"{email}: {exc}")
+                campos = campos_para_gravar(linha, existente, dados.modo)
+                if campos:
+                    # asyncpg não aceita nome de coluna parametrizado. As chaves vêm
+                    # de _CAMPOS em app/dominio/importacao.py — lista fechada no
+                    # código, nunca do corpo da requisição.
+                    atribuicoes = ", ".join(f"{c} = ${i + 2}" for i, c in enumerate(campos))
+                    r = await conn.execute(
+                        f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
+                        existente["id"], *campos.values(),
+                    )
+                    # ⚠️ UPDATE que afeta 0 linhas é o jeito deste banco de
+                    # dizer "sem permissão". Vira erro da linha, não
+                    # "atualizado".
+                    if r.endswith(" 0"):
+                        raise RuntimeError("o UPDATE não afetou o contato")
+                # Contadores DEPOIS da escrita: linha que falha não conta.
+                campos_enriquecidos += len(campos)
+                campos_pulados += campos_preenchidos_no_csv(linha) - len(campos)
+                if campos:
+                    atualizados += 1
+                else:
+                    inalterados += 1
+        except Exception as exc:  # noqa: BLE001 — uma linha ruim não derruba o lote
+            logger.warning("Falha ao importar %s: %s", email, exc)
+            erros.append(f"{email}: {exc}")
 
     return ImportacaoOut(criados=criados, atualizados=atualizados,
                          inalterados=inalterados, sem_email=sem_email,

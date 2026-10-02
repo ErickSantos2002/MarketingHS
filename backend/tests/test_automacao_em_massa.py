@@ -142,6 +142,7 @@ def test_so_as_operacoes_em_massa_marcam():
                         and no.func.id == "marcar_sem_automacao"):
                     chamadores.add(f"{arquivo.relative_to(raiz)}:{funcao.name}")
     assert chamadores == {"routers/contatos.py:recalcular",
+                          "routers/contatos.py:importar_linhas",
                           "dominio/sincronizacao_datacore.py:sincronizar"}
 
 
@@ -181,6 +182,33 @@ async def test_sincronizacao_cria_e_atualiza_sem_disparar_regra_nem_jornada(cone
              JOIN ecosystem_identities i ON i.dnia_id = l.dnia_id
             WHERE i.datacore_cliente_id = $1""", cliente.cpf_cnpj)
     assert lead
+    assert await _pedidos(conexao, lead) == 0
+    assert await _fila_de_jornada(conexao, lead) == 0
+    # A linha do tempo NÃO perde o evento — só a cópia para a fila não é feita.
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM contact_events WHERE lead_id = $1::uuid "
+        "AND event_type = 'form_submitted'", lead) == 1
+
+
+async def test_importacao_cria_e_atualiza_sem_disparar_regra_nem_jornada(conexao):
+    """U3 (raio-x de 02/10): importar a base do RD pela tela matricularia cada
+    contato em fluxo que entra por `form_submitted` e mandaria ao comercial
+    todo contato que uma regra ativa casasse. Importação é operação em massa:
+    só grava o dado, como o recálculo e o DataCore."""
+    from app.routers.contatos import ImportacaoIn, importar_linhas
+
+    await _exigir_023(conexao)
+    await _regra_para_quem_nasce_agora(conexao)
+    email = "decisao6-importacao@exemplo.invalid"
+    for cargo in ("Analista", "CEO"):  # cria, depois atualiza
+        r = await importar_linhas(conexao, ImportacaoIn(
+            linhas=[{"email": email, "nome": "Decisão 6 CSV", "cargo": cargo}],
+            modo="sobrescrever"))
+        assert not r.erros, r.erros
+    assert (r.criados, r.atualizados) == (0, 1)
+    lead = r.contatos[0].id
+    assert await conexao.fetchval(
+        "SELECT cargo FROM leads WHERE id = $1::uuid", lead) == "CEO"
     assert await _pedidos(conexao, lead) == 0
     assert await _fila_de_jornada(conexao, lead) == 0
     # A linha do tempo NÃO perde o evento — só a cópia para a fila não é feita.

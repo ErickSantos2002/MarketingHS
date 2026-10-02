@@ -17,6 +17,12 @@ const ROTULOS: Record<string, string> = {
 
 const PADRAO = ["nome", "email", "whatsapp", "cargo", "empresa"];
 
+// O mesmo BASE do `Descadastrar.tsx`. Em produção o nginx só repassa /api/,
+// /p/ e /landing/ ao backend: um fetch direto em /publico (sem /api) cai no SPA e
+// volta 405 — a landing deixava de captar sem erro nenhum no painel (U1,
+// raio-x de 02/10). Guardado por `node --test scripts/landing-caminhos.test.mjs`.
+const BASE = import.meta.env.VITE_API_URL ?? "/api";
+
 function utmDaUrl(): Record<string, string> {
   const p = new URLSearchParams(window.location.search);
   const saida: Record<string, string> = {};
@@ -45,7 +51,7 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
     setEnviando(true);
     try {
       const { email, ...resto } = valores;
-      const r = await fetch("/publico/captura", {
+      const r = await fetch(`${BASE}/publico/captura`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
