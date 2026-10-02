@@ -2,6 +2,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { BarChart3 } from 'lucide-react';
 import { eixo, grade, tooltip, serie } from '@/lib/chartTheme';
 
+// `leads.source` guarda o slug da landing page que captou o contato (é por
+// ele que /publico/paginas conta lead). "Fontes" virou "Por landing page" em
+// 02/10/2026 (raio-x RD, R6).
 interface SourceBarChartProps {
   data: { source: string; count: number; percentage: number }[];
 }
@@ -12,7 +15,7 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
       <div className="bg-card border rounded-xl p-6">
         <div className="flex items-center gap-2 mb-6">
           <BarChart3 className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold text-foreground">Distribuição por Source</h3>
+          <h3 className="text-lg font-semibold text-foreground">Por landing page</h3>
         </div>
         <div className="h-[300px] flex items-center justify-center text-muted-foreground">
           Nenhum dado disponível
@@ -28,7 +31,7 @@ export function SourceBarChart({ data }: SourceBarChartProps) {
     <div className="bg-card border rounded-xl p-6">
       <div className="flex items-center gap-2 mb-6">
         <BarChart3 className="h-5 w-5 text-primary" />
-        <h3 className="text-lg font-semibold text-foreground">Distribuição por Source</h3>
+        <h3 className="text-lg font-semibold text-foreground">Por landing page</h3>
       </div>
 
       <div className="h-[300px]">

@@ -218,26 +218,12 @@ export function useLeadAnalytics(leads: Lead[] | EnrichedLead[]) {
     }).length;
   }, [leads]);
 
-  // Distribution by tipo (modal)
-  const distributionByTipo = useMemo(() => {
-    const counts = new Map<string, number>();
-    
-    for (const lead of leads) {
-      const tipo = lead.tipo || 'Não identificado';
-      counts.set(tipo, (counts.get(tipo) || 0) + 1);
-    }
-    
-    return Array.from(counts.entries())
-      .map(([tipo, count]) => ({ tipo, count, percentage: (count / leads.length) * 100 }))
-      .sort((a, b) => b.count - a.count);
-  }, [leads]);
-
-  // Distribution by source
+  // Distribution by landing page (`leads.source` = slug da página de captura)
   const distributionBySource = useMemo(() => {
     const counts = new Map<string, number>();
-    
+
     for (const lead of leads) {
-      const source = lead.source || 'Direto';
+      const source = lead.source || 'Sem página';
       counts.set(source, (counts.get(source) || 0) + 1);
     }
     
@@ -522,7 +508,6 @@ export function useLeadAnalytics(leads: Lead[] | EnrichedLead[]) {
     leadsByDay,
     conversionsByDay,
     conversionsToday,
-    distributionByTipo,
     distributionBySource,
     distributionByFaturamento,
     distributionByCargo,
