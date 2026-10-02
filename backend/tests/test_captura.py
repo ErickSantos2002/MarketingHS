@@ -490,3 +490,101 @@ async def test_captura_com_teste_ab_registra_lead_criado(cliente, pagina_sonda, 
             "WHERE ab_test = 'teste-8c-captura'")
     assert linha["event_name"] == "lead_criado" and linha["ab_var"] == "B"
     assert linha["page_slug"] == pagina_sonda and linha["lead_id"] is not None
+
+
+# ── Captura não destrutiva e primeiro toque (R1, 02/10/2026) ─────────────────
+# A rota é ANÔNIMA: quem souber o e-mail de um contato real não pode trocar o
+# nome, o cargo, a empresa, o WhatsApp nem a origem dele mandando o formulário.
+# Testado direto em `_atualizar`, numa transação revertida (`conexao`).
+
+async def _contato(conexao, **colunas):
+    nomes = ["email", "tipo", *colunas]
+    valores = ["r1-captura@exemplo.invalid", "lead", *colunas.values()]
+    marcas = ", ".join(f"${i}" for i in range(1, len(valores) + 1))
+    return await conexao.fetchrow(
+        f"INSERT INTO leads ({', '.join(nomes)}) VALUES ({marcas}) "
+        "RETURNING id::text AS id, session_id, deleted_at, deleted_by, "
+        "dnia_id::text AS dnia_id", *valores)
+
+
+async def test_reconversao_nao_sobrescreve_o_que_ja_existe(conexao):
+    from app.routers import captura
+
+    existente = await _contato(conexao, nome="Carla Real", cargo="Diretora",
+                               empresa="Empresa Real", whatsapp="85911112222",
+                               desafios="")
+    await captura._atualizar(conexao, existente, None, {
+        "nome": "Impostor", "cargo": "Estagiário", "empresa": "Outra",
+        "whatsapp": "11900000000", "desafios": "preenchido agora",
+        "faturamento": "até 1M"})
+    linha = await conexao.fetchrow(
+        "SELECT nome, cargo, empresa, whatsapp, desafios, faturamento "
+        "FROM leads WHERE id = $1::uuid", existente["id"])
+    assert (linha["nome"], linha["cargo"], linha["empresa"], linha["whatsapp"]) == \
+        ("Carla Real", "Diretora", "Empresa Real", "85911112222")
+    # O que estava vazio (NULL ou '') é preenchido: é enriquecimento.
+    assert linha["desafios"] == "preenchido agora"
+    assert linha["faturamento"] == "até 1M"
+
+
+async def test_primeiro_toque_fica_congelado(conexao):
+    """A origem do primeiro toque não é apagada pela última conversão. Os UTMs
+    andam em BLOCO: misturar `utm_source` de um toque com `utm_campaign` de
+    outro inventaria uma origem que nunca existiu. A reconversão continua
+    inteira em `lead_conversions`."""
+    from app.routers import captura
+
+    existente = await _contato(conexao, utm_source="google", utm_medium="cpc",
+                               source="landing")
+    await captura._atualizar(conexao, existente, None, {
+        "utm_source": "facebook", "utm_medium": "social",
+        "utm_campaign": "remarketing", "source": "outra"})
+    linha = await conexao.fetchrow(
+        "SELECT utm_source, utm_medium, utm_campaign, source FROM leads "
+        "WHERE id = $1::uuid", existente["id"])
+    assert dict(linha) == {"utm_source": "google", "utm_medium": "cpc",
+                           "utm_campaign": None, "source": "landing"}
+
+
+async def test_sem_origem_ainda_a_reconversao_grava_o_bloco(conexao):
+    """Contato importado (sem UTM) que converte depois: esse é o primeiro
+    toque com origem, e ele entra."""
+    from app.routers import captura
+
+    existente = await _contato(conexao, utm_source="")
+    await captura._atualizar(conexao, existente, None, {
+        "utm_source": "linkedin", "utm_campaign": "sipat"})
+    linha = await conexao.fetchrow(
+        "SELECT utm_source, utm_campaign FROM leads WHERE id = $1::uuid",
+        existente["id"])
+    assert dict(linha) == {"utm_source": "linkedin", "utm_campaign": "sipat"}
+
+
+# ── Honeypot (R1) ────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("onde", ["corpo", "fields"])
+async def test_honeypot_preenchido_responde_ok_e_nao_grava(cliente, pagina_sonda, onde):
+    """Robô preenche todo campo que vê, inclusive o escondido. A resposta é
+    IGUAL à de sucesso — dizer "recusado" ensinaria o robô a desviar."""
+    corpo = {"email": EMAIL_SONDA, "page_slug": pagina_sonda,
+             "fields": {"nome": "Robô"}}
+    if onde == "corpo":
+        corpo["website"] = "http://spam.exemplo.invalid"
+    else:
+        corpo["fields"]["website"] = "http://spam.exemplo.invalid"
+    r = await cliente.post("/publico/captura", json=corpo)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "redirect_url": "https://exemplo.invalid/obrigado"}
+    async with db.sessao(role="service_role") as conn:
+        assert await conn.fetchval(
+            "SELECT count(*) FROM leads WHERE email = $1", EMAIL_SONDA) == 0
+
+
+async def test_honeypot_vazio_segue_normal(cliente, pagina_sonda):
+    r = await cliente.post("/publico/captura", json={
+        "email": EMAIL_SONDA, "page_slug": pagina_sonda, "website": "",
+        "fields": {"nome": "Carla Sonda", "website": "  "}})
+    assert r.status_code == 200, r.text
+    async with db.sessao(role="service_role") as conn:
+        assert await conn.fetchval(
+            "SELECT count(*) FROM leads WHERE email = $1", EMAIL_SONDA) == 1
