@@ -52,13 +52,7 @@ dia no `CONTINUAR-AQUI.md`.
 | 36 | Matrícula por segmento olha o estado: **não mexer agora** — volta à pauta antes de ativar jornada por segmento | nada |
 | 37 | `pagina_sonda` limpa o que cria | ✅ rodada 5 |
 | 38 | Eventos órfãos: **(a) cada fixture apaga os eventos do seu lead antes do lead** | rodada 6, backend |
+| 40 | Fusão × `journey_events` do descartado: **(a) a fusão apaga** | rodada 7, backend |
 | 39 | Pesos A/B ao adicionar variante: **(b) a nova entra com a parte igual e as outras encolhem na proporção** (70/30 → 47/20/33) | rodada 6 |
 
 ## Novas
-
-40. **Fusão de contatos deixa `journey_events` do descartado apontando para
-    lead apagado** (achado na rodada 6 da `backend`). Se o worker de jornada
-    pegar um desses ainda pendente, roda para lead que não existe. Opções:
-    (a) a fusão apaga esses eventos; (b) move para o contato mantido (risco de
-    disparar automação de novo); (c) deixar. **Assumido: (c)**, só o teste
-    limpa. Recomendação: (a), a mais segura.

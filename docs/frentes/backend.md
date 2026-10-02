@@ -76,6 +76,16 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
   `test_crm_entrega.py::test_cancelar_depois_do_2xx_ainda_grava_entregue`
   por espera com prazo (instável contra o banco remoto).
 
+### Rodada 7 (02/10)
+
+- [ ] **#40 (a)** A fusão de contatos apaga os `journey_events` do contato
+  descartado (na mesma transação da fusão). Teste que prova: depois da fusão
+  pela rota, nenhum `journey_events` aponta para o `lead_id` descartado. O
+  `finally` de limpeza do teste da rodada 6 pode sair.
+- [ ] Worker sem Resend loga `RESEND_API_KEY ausente` a cada 2 s (produção
+  desde 02/10). Logar uma vez ao perceber a falta e de novo só quando mudar
+  (ausente → presente → ausente), sem mudar o comportamento da fila.
+
 ## Estado
 
 **02/10/2026 — rodada 6.** Branch `worktree-agent-ae7504f99435361e6`
