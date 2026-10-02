@@ -12,6 +12,13 @@ const STORAGE_KEY = 'dashboard-filters-v2';
 export type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisMonth' | 'all' | 'custom';
 export type InteresseFilter = 'mtia_e_formacao' | 'apenas_mtia' | 'apenas_formacao';
 
+// Os filtros do funil de evento e mentoria da dn.ia — Presença e Interesse
+// (MTIA/Formação) — saíram da tela em 02/10/2026 (perguntas 28+29: "tirar
+// tudo"). `interesseEcossistema` continua no tipo só porque o OverviewTab
+// ainda o lê; aqui ele é sempre null. Uma preferência salva que ainda traga
+// um dos dois é descartada ao carregar — filtro sem controle na tela
+// esconderia contato em silêncio.
+
 export interface DashboardFilters {
   datePreset: DatePreset;
   dateFrom: Date | null;
@@ -31,7 +38,6 @@ export interface DashboardFilters {
   interesseEcossistema: InteresseFilter | null;
   sources: string[];
   utmContents: string[];
-  presencas: string[];
 }
 
 const initialFilters: DashboardFilters = {
@@ -53,7 +59,6 @@ const initialFilters: DashboardFilters = {
   interesseEcossistema: null,
   sources: [],
   utmContents: [],
-  presencas: [],
 };
 
 // Serialize filters for localStorage (convert Dates to ISO strings)
@@ -69,7 +74,8 @@ function serializeFilters(filters: DashboardFilters): string {
 
 // Deserialize filters from localStorage (convert ISO strings to Dates)
 function deserializeFilters(stored: string): DashboardFilters {
-  const parsed = JSON.parse(stored);
+  // `presencas` é chave de preferência antiga (ver o comentário do topo).
+  const { presencas: _presencas, ...parsed } = JSON.parse(stored);
   return {
     ...initialFilters,
     ...parsed,
@@ -82,6 +88,7 @@ function deserializeFilters(stored: string): DashboardFilters {
     onlyReconversions: !!parsed.onlyReconversions,
     // Don't restore search (it's temporary)
     search: '',
+    interesseEcossistema: null,
   };
 }
 
@@ -191,10 +198,8 @@ export function useDashboardFilters() {
     if (filters.hideIncomplete) count++;
     if (filters.onlyReconversions) count++;
     if (filters.search?.trim()) count++;
-    if (filters.interesseEcossistema) count++;
     if ((filters.sources?.length ?? 0) > 0) count++;
     if ((filters.utmContents?.length ?? 0) > 0) count++;
-    if ((filters.presencas?.length ?? 0) > 0) count++;
     return count;
   }, [filters]);
 
@@ -319,36 +324,6 @@ export function applyFilters<T extends Lead | EnrichedLead>(
       const matchesCompany = lead.empresa?.toLowerCase().includes(searchLower);
       const matchesWhatsapp = lead.whatsapp?.toLowerCase().includes(searchLower);
       if (!matchesName && !matchesEmail && !matchesCompany && !matchesWhatsapp) return false;
-    }
-
-    // Presença filter
-    if ((filters.presencas?.length ?? 0) > 0) {
-      const leadPresenca = lead.presenca || '';
-      if (!filters.presencas!.some(p => leadPresenca.includes(p))) return false;
-    }
-
-    // Interesse Ecossistema filter
-    if (filters.interesseEcossistema) {
-      // Verificar se o lead preencheu o formulário de interesse
-      const preencheuFormulario = lead.data_interesse !== null && lead.data_interesse !== undefined;
-      
-      // Se não preencheu o formulário, não incluir em nenhum filtro de interesse
-      if (!preencheuFormulario) return false;
-      
-      const temMTIA = lead.interesse_mtia === true;
-      const temFormacao = lead.interesse_formacao === true;
-      
-      switch (filters.interesseEcossistema) {
-        case 'mtia_e_formacao':
-          if (!(temMTIA && temFormacao)) return false;
-          break;
-        case 'apenas_mtia':
-          if (!(temMTIA && !temFormacao)) return false;
-          break;
-        case 'apenas_formacao':
-          if (!(!temMTIA && temFormacao)) return false;
-          break;
-      }
     }
 
     return true;

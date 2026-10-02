@@ -474,9 +474,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
             <Section icon={Calendar} title="Metadados">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <InfoCard icon={Calendar} label="Criado em" value={formatDate(lead.created_at)} />
-                <InfoCard icon={User} label="Tipo Participante" value={lead.tipo_participante} />
                 {lead.etiqueta && <InfoCard icon={Tag} label="Etiqueta" value={lead.etiqueta} />}
-                {lead.presenca && <InfoCard icon={Check} label="Presença" value={lead.presenca} />}
               </div>
             </Section>
           </div>
