@@ -49,6 +49,23 @@ _parar = asyncio.Event()
 # Avisa "não configurado" uma vez só — não a cada passada do laço, senão o
 # log vira ruído a cada JORNADAS_INTERVALO segundos para sempre.
 _growthhs_avisado = False
+# Os segredos sem os quais a fila não anda e cuja falta JÁ foi avisada. Mesma
+# ideia do `_growthhs_avisado`, mas o segredo pode voltar e sumir de novo sem
+# reiniciar o worker (ele é relido a cada passada): então avisa na falta, avisa
+# na volta, e avisa de novo se faltar outra vez — nunca a cada 2 s.
+_ausentes: set[str] = set()
+
+
+def _registrar_presenca(nome: str, presente: bool, dica: str = "") -> None:
+    """Loga só a MUDANÇA de estado do segredo `nome`. Não decide nada sobre a
+    fila: quem chama continua retornando sem reivindicar."""
+    if not presente and nome not in _ausentes:
+        _ausentes.add(nome)
+        logger.warning("%s ausente — a fila NÃO será consumida. %s",
+                       nome, dica)
+    elif presente and nome in _ausentes:
+        _ausentes.discard(nome)
+        logger.info("%s presente de novo — a fila volta a ser consumida.", nome)
 
 
 async def _remetente() -> str:
@@ -174,18 +191,18 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
 async def _tick() -> int:
     """Uma passada. Devolve quantas mensagens foram tratadas."""
     chave = await integracoes.ler_segredo("RESEND_API_KEY")
+    _registrar_presenca(
+        "RESEND_API_KEY", bool(chave),
+        "Grave o segredo em integration_secrets ou no ambiente.")
     if not chave:
         # ⚠️ Não reivindica NADA. Ver o aviso no topo do módulo.
-        logger.warning(
-            "RESEND_API_KEY ausente — a fila NÃO será consumida. "
-            "Grave o segredo em integration_secrets ou no ambiente.")
         return 0
 
     segredo = await integracoes.ler_segredo("UNSUBSCRIBE_SECRET")
+    _registrar_presenca("UNSUBSCRIBE_SECRET", bool(segredo))
     if not segredo:
         # Sem ele o link de descadastro não pode ser assinado, e enviar e-mail
         # de campanha sem saída é o que queima a reputação do remetente.
-        logger.warning("UNSUBSCRIBE_SECRET ausente — a fila NÃO será consumida.")
         return 0
 
     de = await _remetente()

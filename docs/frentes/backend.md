@@ -78,15 +78,72 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 
 ### Rodada 7 (02/10)
 
-- [ ] **#40 (a)** A fusão de contatos apaga os `journey_events` do contato
+- [x] **#40 (a)** A fusão de contatos apaga os `journey_events` do contato
   descartado (na mesma transação da fusão). Teste que prova: depois da fusão
   pela rota, nenhum `journey_events` aponta para o `lead_id` descartado. O
   `finally` de limpeza do teste da rodada 6 pode sair.
-- [ ] Worker sem Resend loga `RESEND_API_KEY ausente` a cada 2 s (produção
+- [x] Worker sem Resend loga `RESEND_API_KEY ausente` a cada 2 s (produção
   desde 02/10). Logar uma vez ao perceber a falta e de novo só quando mudar
   (ausente → presente → ausente), sem mudar o comportamento da fila.
 
 ## Estado
+
+**02/10/2026 — rodada 7 (refeita a pedido da coordenadora).** Branch
+`worktree-agent-a649561e9d9a3df09` (sobre a `main` `1429eca`). **Pronto para
+merge** — só em `backend/`. ⚠️ **Traz a migration 024, NÃO aplicada**: o
+Erick roda `bash ~/marketinghs-migration-024.sh` **depois do merge** (o
+script lê o arquivo da `main`, aplica duas vezes e confere
+`has_table_privilege('authenticated','public.journey_events','DELETE')`).
+
+- [x] **#40 (a)** `fundir_leads` chama `_apagar_fila_de_jornada` antes do
+  DELETE do descartado, na mesma transação, **no papel de quem chamou** —
+  a primeira versão descia a `service_role` por uma instrução e a
+  coordenadora recusou (regra dura do `CLAUDE.md`); saiu. Quem dá o direito
+  é a `024_journey_events_delete.sql` (`GRANT DELETE ON journey_events TO
+  authenticated`; GRANT é idempotente, dito no cabeçalho). O resultado da
+  fusão ganha `fila_de_jornada_apagada`. Testes:
+  `test_fusao_apaga_a_fila_de_jornada_do_descartado` (transação revertida,
+  os dois papéis), o teste da rota sem o `finally` (semeia um
+  `journey_events` do descartado e exige 0 depois) e o sentinela
+  `test_authenticated_pode_apagar_a_fila_de_jornada`, que diz numa linha
+  que falta a 024.
+  ⚠️ **Até a 024 ser aplicada, a fusão sob `authenticated` — a da rota, em
+  produção — falha com permissão negada e volta atrás inteira** (nada se
+  perde, mas o botão de fundir dá erro). Não contornado, por instrução.
+- [x] **Worker sem Resend.** `_registrar_presenca` guarda em `_ausentes` o
+  segredo cuja falta já foi avisada: WARNING na falta, INFO na volta, WARNING
+  de novo se sumir — `RESEND_API_KEY` e `UNSUBSCRIBE_SECRET`. A fila continua
+  sem ser reivindicada sem as chaves. Teste `test_worker_aviso.py` (sem banco).
+- [x] **#12 (a)** Os 6 testes de `test_conversao_authenticated.py` que
+  dependiam do dado antigo de produção usam a fixture `semente`: 3 contatos,
+  2 etiquetas (`lead_tags`), segmento dinâmico (pela etiqueta) e estático,
+  fluxo `draft` com 2 execuções encerradas (`done`/`exited` — o worker não as
+  pega) e 2 eventos de tipo que nenhum fluxo escuta. Corte = `now()` do banco
+  depois da semente (a prévia de automação, que só aceita data, usa o dia
+  dele). Os de nome `teste%` de outros testes seguem fora; os da semente
+  entram por id. Conversão não se semeia (o gatilho grava `form_submitted`).
+  Limpeza só por id; identidade só a de `dnia_id` da semente **e** e-mail
+  exato. Conferido depois (leitura): 0 linhas da semente em `leads`, `tags`,
+  `segments`, `journeys`, `ecosystem_identities`.
+
+Suíte inteira (sozinha, 33 min 03 s, 024 **não** aplicada): **413 passed,
+5 failed** — as 5 são da fusão por permissão em `journey_events`, as
+aceitas:
+
+- `test_conversao_authenticated.py::test_fusao_pela_rota_sob_authenticated_leva_o_historico`
+- `test_fusao_historico.py::test_fusao_reatribui_todo_o_historico[authenticated]`
+- `test_fusao_historico.py::test_fusao_sem_colisao_nao_encerra_nem_apaga_nada[authenticated]`
+- `test_fusao_historico.py::test_fusao_apaga_a_fila_de_jornada_do_descartado[authenticated]`
+- `test_fusao_historico.py::test_authenticated_pode_apagar_a_fila_de_jornada` (o sentinela)
+
+Contagens (leitura, `bancos`), antes → depois da suíte: `leads` **2.104 →
+2.107**. ⚠️ Os +3 **não são da suíte**: nasceram às 13:08:53 UTC (no meio da
+rodada), `tipo = 'csv_import'`, `source = 'teste-interno'`, nome "Equipe TI",
+e-mails em `healthsafetytech.com`, `gmail.com` e `healthsafety.com.br` —
+importação pela tela. Nenhum teste nem código do app usa esse `source`,
+esse nome ou esses domínios (a importação da suíte usa só
+`@exemplo.invalid`). Não mexi neles. Leads `@exemplo.invalid`: 0;
+`journey_events` sem lead: 0 → 0; `contact_events` com `lead_id` NULL: 0 → 0.
 
 **02/10/2026 — rodada 6.** Branch `worktree-agent-ae7504f99435361e6`
 (sobre a `main` `f59e55c`). **Pronto para merge** — três commits, só em
@@ -568,3 +625,17 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
     outro (ex.: `form_submitted` de novo); (c) deixar. **Assumido: (c), só o
     teste limpa** — mudar a fusão é decisão de produto, e (a) é a mais
     segura se o Erick quiser.
+11. **(rodada 7) Fusão desce a `service_role` por uma instrução.** Foi o jeito de apagar
+    `journey_events` na mesma transação sem migration. A alternativa limpa é a
+    migration 024: `GRANT DELETE ON journey_events TO authenticated` (a tabela
+    não tem RLS; quem chega lá já passou por `admin_atual`) ou uma função
+    SECURITY DEFINER `apagar_fila_jornada(lead uuid)`. Assumi a elevação
+    (reversível, sem DDL); se preferir a migration, é um item de backend.
+    *Coordenadora (02/10): migration. Feito — 024, sem troca de papel.*
+12. **(rodada 7) 6 testes de conversão dependem de produção ter dado antigo.** Opções:
+    (a) trocar o corte fixo `2026-09-30` por "antes do início do teste" e
+    semear o que falta (segmento, fluxo com execução, tag) dentro da fixture,
+    limpando por id; (b) `skip` com o motivo quando a pré-condição não vale;
+    (c) deixar vermelho até a produção ter esse dado. Não mexi (fora dos dois
+    itens); a mais segura parece (b) agora e (a) como item da próxima rodada.
+    *Coordenadora (02/10): (a). Feito — fixture `semente`.*
