@@ -7,6 +7,7 @@ import { useDashboardCardSettings, type CardConfig } from '@/hooks/useDashboardC
 import type { Lead } from '@/hooks/useLeads';
 import { useLeadQualification, type EnrichedLead } from '@/hooks/useLeadQualification';
 import { useLeadAnalytics } from '@/hooks/useLeadAnalytics';
+import { pontuacaoDoBanco } from '../pontuacao';
 
 const TACTICAL_CARDS: CardConfig[] = [
   { key: 'priority_table', label: 'Tabela de Prioridade', defaultVisible: true },
@@ -23,7 +24,7 @@ export function TacticalTab({ leads }: TacticalTabProps) {
   const analytics = useLeadAnalytics(leads);
   const { visibleCards, toggleCard, resetCards, isVisible } = useDashboardCardSettings('tactical', TACTICAL_CARDS);
 
-  const sortedLeads = [...enrichedLeads].sort((a, b) => b.priorityScore - a.priorityScore);
+  const sortedLeads = [...enrichedLeads].sort((a, b) => pontuacaoDoBanco(b) - pontuacaoDoBanco(a));
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -52,9 +53,9 @@ export function TacticalTab({ leads }: TacticalTabProps) {
             <div className="space-y-4">
               <div className="p-3 rounded-lg bg-[--tint-success] border border-success/30">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-muted-foreground">Leads P1 (Hot)</span>
+                  <span className="text-sm text-muted-foreground">Leads hot</span>
                   <span className="text-lg font-bold text-[--on-tint-success]">
-                    {enrichedLeads.filter(l => l.priorityLevel === 'P1').length}
+                    {enrichedLeads.filter(l => l.etiqueta === 'hotlead').length}
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -64,9 +65,9 @@ export function TacticalTab({ leads }: TacticalTabProps) {
 
               <div className="p-3 rounded-lg bg-[--tint-warning] border border-warning/30">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-muted-foreground">Leads P2</span>
+                  <span className="text-sm text-muted-foreground">Leads warm</span>
                   <span className="text-lg font-bold text-[--on-tint-warning]">
-                    {enrichedLeads.filter(l => l.priorityLevel === 'P2').length}
+                    {enrichedLeads.filter(l => l.etiqueta === 'warm').length}
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground">
