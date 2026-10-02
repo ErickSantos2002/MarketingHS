@@ -67,16 +67,53 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 
 ### Rodada 6 (02/10)
 
-- [ ] **#38 (a)** Eventos órfãos: cada fixture que comita e apaga lead passa a
+- [x] **#38 (a)** Eventos órfãos: cada fixture que comita e apaga lead passa a
   apagar antes os `contact_events` e `journey_events` daquele lead. Medir
   `count(*) WHERE lead_id IS NULL` nas duas tabelas antes e depois de uma
   suíte inteira: **não pode crescer**. Não apagar órfão existente (fica para o
   reset).
-- [ ] Trocar o `sleep` fixo de
+- [x] Trocar o `sleep` fixo de
   `test_crm_entrega.py::test_cancelar_depois_do_2xx_ainda_grava_entregue`
   por espera com prazo (instável contra o banco remoto).
 
 ## Estado
+
+**02/10/2026 — rodada 6.** Branch `worktree-agent-ae7504f99435361e6`
+(sobre a `main` `f59e55c`). **Pronto para merge** — três commits, só em
+`backend/tests/`; nenhuma migration, nenhuma escrita no banco fora do pytest.
+Suíte inteira: **414 passed** (32 min 06 s, sozinha).
+
+Contagens (leitura, `bancos`), antes → depois da suíte inteira:
+
+| | antes | depois da suíte | depois do 3º commit |
+|---|---|---|---|
+| `contact_events` com `lead_id` NULL | 1.516 | **1.516** | 1.516 |
+| `journey_events` com `lead_id` NULL | 0 | **0** | 0 |
+| `journey_events` sem lead (`lead_id` que não existe) | 1.333 | 1.334 (+1) | 1.334 (o 3º commit fecha o vazamento; o +1 fica para o reset) |
+
+⚠️ `journey_events.lead_id` nunca é NULL: a coluna não tem FK, então o órfão
+dela é o que aponta para lead apagado — por isso a terceira linha. A rodada 5
+media ~24 novos por suíte (a maior parte da fixture `envio`).
+
+- [x] **#38 (a)** `tests/limpeza.py::apagar_leads(conn, ids)` apaga
+  `journey_events` e `contact_events` do lead e depois o lead. Usado onde a
+  limpeza ainda apagava só o lead: fixture `envio` (`conftest.py`, pré-limpeza
+  e teardown — era ela que deixava `form_submitted` + `email_sent` +
+  `email_opened/bounced/complained` a cada teste do webhook) e `chamador`
+  (`test_conversao.py`). As outras fixtures que comitam (`test_ab_costura`,
+  `test_api_contato`, `test_config_growthhs`, `test_crm_*`, `test_captura`,
+  `_apagar_leads_de_escrita`) já levavam os eventos; `test_contato_canonico`
+  roda em transação revertida. O +1 da suíte era da **fusão pela rota**
+  (`test_fusao_pela_rota_sob_authenticated_leva_o_historico`): a fusão move os
+  `contact_events` do descartado, mas não a cópia em `journey_events`; o teste
+  agora a apaga num `finally` (rodado sozinho depois: 1.334 → 1.334). Ver a
+  pergunta 10.
+- [x] **Teste instável do I5.** A espera *depois* do cancelamento já sondava
+  com prazo desde a rodada 3; sobrava o `sleep(0.1)` fixo *antes* do
+  `cancel()` (e um laço sem teto esperando a chamada HTTP). Agora um
+  `asyncio.Event` marca a entrada na gravação blindada e o teste espera por ele
+  com `wait_for(..., 30)`: o cancelamento cai dentro do `shield` sem aposta de
+  tempo. 30 passed em `test_crm_entrega.py` + `test_conversao.py`.
 
 **01/10/2026 — rodada 5.** Branch `worktree-agent-a28feaefa626c683f`.
 Testes: main 1c4246d tinha 1 vermelho de propósito (o sentinela da 022) →
@@ -511,3 +548,13 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
    NULL` levaria evento real de contato apagado. Opções: (a) cada fixture
    leva os eventos do lead antes de apagá-lo (molde de
    `_apagar_leads_de_escrita`); (b) deixar para o reset do banco.
+   *Rodada 6 (02/10): feito (a) — ver Estado. Os órfãos existentes ficam.*
+10. **(rodada 6) A fusão não move a cópia em `journey_events`.** Em
+    produção, fundir dois contatos deixa o `journey_events` do descartado
+    apontando para lead apagado (sem FK). Se o worker de jornada pegar esse
+    evento ainda pendente, ele roda para lead nenhum (ou falha). Opções:
+    (a) a fusão apaga o `journey_events` do descartado; (b) a fusão o move
+    para o mantido — mas aí o mantido pode disparar automação pelo evento do
+    outro (ex.: `form_submitted` de novo); (c) deixar. **Assumido: (c), só o
+    teste limpa** — mudar a fusão é decisão de produto, e (a) é a mais
+    segura se o Erick quiser.
