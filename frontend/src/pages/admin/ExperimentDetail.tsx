@@ -68,12 +68,10 @@ export default function ExperimentDetail() {
     const keys = (test?.variants || []).map((v) => v.key);
     const exposures: Record<string, Set<string>> = {};
     const conv: Record<string, Record<string, Set<string>>> = {};
-    const steps: Record<string, Record<string, Set<string>>> = {};
     const behavior: Record<string, { scrollSum: number; scrollN: number; cta: number; timeSum: number; timeN: number }> = {};
     for (const k of keys) {
       exposures[k] = new Set();
       conv[k] = {};
-      steps[k] = {};
       behavior[k] = { scrollSum: 0, scrollN: 0, cta: 0, timeSum: 0, timeN: 0 };
     }
     for (const r of rows) {
@@ -82,9 +80,6 @@ export default function ExperimentDetail() {
       if (r.event_type === "exposure") exposures[k].add(r.ab_vid);
       else if (r.event_type === "conversion" && r.event_name) {
         (conv[k][r.event_name] = conv[k][r.event_name] || new Set()).add(r.ab_vid);
-      } else if (r.event_type === "schedule_step") {
-        const st = String((r.metadata as { step?: unknown } | null)?.step ?? r.event_name ?? "?");
-        (steps[k][st] = steps[k][st] || new Set()).add(r.ab_vid);
       } else if (r.event_type === "behavior") {
         const md = (r.metadata || {}) as { depth?: number; seconds?: number };
         if (r.event_name === "scroll" && typeof md.depth === "number") { behavior[k].scrollSum += md.depth; behavior[k].scrollN++; }
@@ -92,7 +87,10 @@ export default function ExperimentDetail() {
         else if (r.event_name === "time_on_page" && typeof md.seconds === "number") { behavior[k].timeSum += md.seconds; behavior[k].timeN++; }
       }
     }
-    return { keys, exposures, conv, steps, behavior };
+    // O "Funil do agendamento" (eventos `schedule_step`) saiu em 02/10/2026
+    // (raio-x RD, R6): era o widget de agendamento de mentoria da dn.ia. Os
+    // eventos continuam na tabela de análise abaixo, filtráveis por tipo.
+    return { keys, exposures, conv, behavior };
   }, [rows, test]);
 
   const verdicts: VariantVerdict[] = useMemo(() => {
@@ -176,7 +174,6 @@ export default function ExperimentDetail() {
   if (isLoading) return <div className="p-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   if (!test) return <div className="p-10 text-center text-muted-foreground">Teste não encontrado.</div>;
 
-  const stepKeys = Array.from(new Set(report.keys.flatMap((k) => Object.keys(report.steps[k] || {})))).sort();
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -272,28 +269,6 @@ export default function ExperimentDetail() {
                   </TableBody>
                 </Table>
               </Card>
-
-              {stepKeys.length > 0 && (
-                <Card className="p-4">
-                  <h3 className="font-semibold mb-3 text-sm">Funil do agendamento (etapas, visitantes únicos)</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Variante</TableHead>
-                        {stepKeys.map((s) => <TableHead key={s}>Etapa {s}</TableHead>)}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {report.keys.map((k) => (
-                        <TableRow key={k}>
-                          <TableCell className="font-medium">{k}</TableCell>
-                          {stepKeys.map((s) => <TableCell key={s}>{report.steps[k]?.[s]?.size || 0}</TableCell>)}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Card>
-              )}
 
               <Card className="p-4">
                 <h3 className="font-semibold mb-3 text-sm">Comportamento por variante (explica o porquê)</h3>

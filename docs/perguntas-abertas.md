@@ -56,3 +56,13 @@ dia no `CONTINUAR-AQUI.md`.
 | 39 | Pesos A/B ao adicionar variante: **(b) a nova entra com a parte igual e as outras encolhem na proporção** (70/30 → 47/20/33) | rodada 6 |
 
 ## Novas
+
+41. **Painel — "Insights de Canais" no Operacional** ficou (saiu só o insight
+    de horário). **Assumido: fica.** (frente `painel-limpeza`)
+42. **Seletor Novos/Recorrentes vaza para Contatos**, que só conhece o
+    interruptor antigo. **Assumido:** trocar pelo mesmo seletor na próxima
+    frente que tocar Contatos (R5).
+43. **Rotas `/ia/analisar-desafios` e `/ia/insights-de-desafios`** ficaram sem
+    quem as chame. **Assumido: manter** até a limpeza do backend da dn.ia.
+44. **`whatsapp_group` em `lead_goal`** é preservado no PUT. **Assumido:** sai
+    num reset/limpeza futura.

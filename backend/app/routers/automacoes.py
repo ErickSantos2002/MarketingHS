@@ -155,10 +155,10 @@ def _condicao_sql(c: Condicao, params: list) -> str | None:
     if tipo == "etiqueta":
         return f"l.etiqueta = {p(val)}" if op == "is" else f"l.etiqueta <> {p(val)}"
 
-    if tipo == "tag":
-        existe = (f"EXISTS (SELECT 1 FROM lead_tags lt JOIN tags t ON t.id = lt.tag_id"
-                  f" WHERE lt.lead_id = l.id AND t.name = {p(val)})")
-        return existe if op == "contains" else f"NOT {existe}"
+    # Sem ramo 'tag' (U5, raio-x de 02/10/2026): a regra por tag não dispara
+    # (ver `_recusar_o_que_nao_dispara`), e contar quem a regra pegaria era
+    # dizer "N contatos atendem" de uma regra que não manda ninguém. A prévia
+    # recusa antes de chegar aqui; o `None` é a segunda linha.
 
     if tipo == "score":
         try:
@@ -226,6 +226,9 @@ async def previa(dados: PreviaIn, usuario: Usuario = Depends(admin_atual)):
                               operator=dados.condition_operator or "is",
                               value=dados.condition_value or "")]
 
+    # U5: a mesma recusa do salvar. Sem ela a prévia contava regra por tag.
+    _recusar_o_que_nao_dispara(None, condicoes, None)
+
     params: list = []
     partes = [s for s in (_condicao_sql(c, params) for c in condicoes) if s]
     if not partes:
@@ -269,7 +272,8 @@ async def previa(dados: PreviaIn, usuario: Usuario = Depends(admin_atual)):
 # regra não consegue CUMPRIR. Recusado ao salvar — admin e `/publico` passam
 # pelas duas funções abaixo —, porque uma regra "ativa" que nunca dispara (tag)
 # ou que só gera falha (mover) é o modo de falhar calado que este lote existe
-# para evitar. A prévia continua contando tag: é leitura.
+# para evitar. Desde 02/10 (U5) a prévia também recusa tag: contar quem uma
+# regra que não dispara "pegaria" era a mesma mentira, por outro caminho.
 MSG_TAG = ("Condição por tag ainda não dispara envio ao GrowthHS; use etiqueta, "
            "status, pontuação ou data de criação.")
 MSG_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — regra de "

@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, AlertCircle, Zap, GitBranch, Play, Plus, Trash2 } from 'lucide-react';
-import { listarTags } from '@/lib/contatos';
 import { AUTOMACAO_NAO_LIGADA } from '@/lib/automacoes';
 import type { AutomationRule, AutomationCondition } from '@/lib/automacoes';
 
@@ -25,8 +24,10 @@ interface Props {
 // ⚠️ Revisão final do 8D (I1): 'tag' ("Etiqueta") saiu das opções. O gatilho
 // que avalia as regras não tem ramo para ela (nem a origem tinha) e adicionar
 // tag grava `lead_tags`, não `leads` — a regra ficaria "ativa" sem nunca
-// disparar. O backend recusa ao salvar; o mapa de operadores de 'tag' abaixo
-// fica só para exibir regra antiga.
+// disparar. O backend recusa ao salvar e, desde 02/10 (U5), também na prévia.
+// O resto do suporte a 'tag' (operadores, lista de tags) saiu junto: nenhuma
+// regra com tag existe em produção (leitura de 02/10). Guardado por
+// scripts/regra-sem-tag.test.mjs.
 const CONDITION_TYPES = [
   { value: 'status', label: 'Status' },
   { value: 'etiqueta', label: 'Qualificação' },
@@ -45,12 +46,6 @@ const OPERATORS_MAP: Record<string, { value: string; label: string }[]> = {
   etiqueta: [
     { value: 'is', label: 'é' },
     { value: 'is_not', label: 'não é' },
-  ],
-  // Valores mantidos (Automations.tsx avalia `contains` como "tem a tag");
-  // só o rótulo acompanha o vocabulário das outras telas.
-  tag: [
-    { value: 'contains', label: 'tem' },
-    { value: 'is_not', label: 'não tem' },
   ],
   score: [
     { value: 'greater_than', label: 'maior que' },
@@ -86,14 +81,12 @@ function buildInitialConditions(rule: AutomationRule | null): AutomationConditio
 function ConditionRow({
   condition,
   index,
-  tags,
   onChange,
   onRemove,
   canRemove,
 }: {
   condition: AutomationCondition;
   index: number;
-  tags: { id: string; name: string }[];
   onChange: (index: number, cond: AutomationCondition) => void;
   onRemove: (index: number) => void;
   canRemove: boolean;
@@ -144,7 +137,6 @@ function ConditionRow({
     const values =
       condition.type === 'status' ? STATUS_VALUES :
       condition.type === 'etiqueta' ? ETIQUETA_VALUES :
-      condition.type === 'tag' ? tags.map(t => t.name) :
       [];
 
     return (
@@ -201,16 +193,6 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
   // (decisão 10 do plano), então o campo é texto livre, só para
   // `move_stage_growthhs` (a única ação que ainda pede uma etapa: criar e
   // bloquear não usam `action_value` — ver Step 1 do plano).
-
-  // Tags
-  const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
-
-  useEffect(() => {
-    // A API devolve {id, nome, cor}; o formulário fala {id, name}.
-    listarTags()
-      .then((lista) => setTags(lista.map((t) => ({ id: t.id, name: t.nome }))))
-      .catch(() => setTags([]));
-  }, []);
 
   const updateCondition = (index: number, cond: AutomationCondition) => {
     setConditions(prev => prev.map((c, i) => i === index ? cond : c));
@@ -330,7 +312,6 @@ export function AutomationRuleForm({ rule, onSave, onCancel }: Props) {
               <ConditionRow
                 condition={cond}
                 index={i}
-                tags={tags}
                 onChange={updateCondition}
                 onRemove={removeCondition}
                 canRemove={conditions.length > 1}

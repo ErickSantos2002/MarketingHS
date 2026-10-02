@@ -95,7 +95,11 @@ export const EVENT_OPTIONS: { value: string; label: string }[] = [
   { value: 'email_sent', label: 'Enviamos o email (despachado)' },
   { value: 'email_bounced', label: 'Email retornou (bounce)' },
   { value: 'email_unsubscribed', label: 'Descadastrou-se' },
-  { value: 'lead_created', label: 'Lead criado' },
+  // `form_submitted`, e não `lead_created`: é o que `fn_lead_insert_event`
+  // grava em todo INSERT de lead (captura, API, manual). `lead_created` não
+  // tem emissor, e a jornada que entrava por ele ficava vazia para sempre
+  // (U4, raio-x de 02/10). Guardado por scripts/journeys-eventos.test.mjs.
+  { value: 'form_submitted', label: 'Formulário enviado / lead criado' },
   { value: 'contact_updated', label: 'Contato atualizado' },
 ];
 

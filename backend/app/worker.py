@@ -205,7 +205,8 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
         chave=chave, de=de, para=email,
         assunto=assunto,
         html=html, texto=html_para_texto(html),
-        cabecalhos=cabecalhos_rfc8058(url),
+        cabecalhos=cabecalhos_rfc8058(settings.FRONTEND_URL, m.lead_id, email,
+                                      segredo_descadastro),
         # Estes três nomes exatos são os que o webhook procura. Qualquer outro
         # deixa a correlação no fallback do resend_email_id.
         #

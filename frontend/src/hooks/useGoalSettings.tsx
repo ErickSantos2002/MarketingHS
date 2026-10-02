@@ -6,6 +6,10 @@ export interface GoalSettings {
   goal: number;
   start_date: string;
   end_date: string;
+  /**
+   * O cartão "Grupo WhatsApp" saiu do painel em 02/10/2026 (raio-x RD, R6).
+   * O campo continua aqui só para o PUT da meta não apagar o valor gravado.
+   */
   whatsapp_group: number;
 }
 
@@ -85,17 +89,12 @@ export function useGoalSettings() {
     return updateSettings({ start_date, end_date });
   }, [updateSettings]);
 
-  const updateWhatsappGroup = useCallback((whatsapp_group: number) => {
-    return updateSettings({ whatsapp_group });
-  }, [updateSettings]);
-
   return {
     settings,
     isLoading,
     isSaving,
     updateGoal,
     updateDates,
-    updateWhatsappGroup,
     updateSettings,
   };
 }

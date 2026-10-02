@@ -52,15 +52,31 @@ def assinar_token(lead_id: str, email_normalizado: str, segredo: str) -> str:
     return _b64url(mac)
 
 
-def url_de_descadastro(base: str, lead_id: str, email: str, segredo: str) -> str:
-    """O link assinado, por destinatário."""
+def _parametros_assinados(lead_id: str, email: str, segredo: str) -> str:
     normalizado = normalizar_email(email)
-    parametros = urlencode({
+    return urlencode({
         "lid": lead_id,
         "e": _b64url(normalizado.encode("utf-8")),
         "t": assinar_token(lead_id, normalizado, segredo),
     })
-    return f"{base.rstrip('/')}/descadastrar?{parametros}"
+
+
+def url_de_descadastro(base: str, lead_id: str, email: str, segredo: str) -> str:
+    """O link assinado do RODAPÉ, por destinatário: a página do SPA, para gente."""
+    return f"{base.rstrip('/')}/descadastrar?{_parametros_assinados(lead_id, email, segredo)}"
+
+
+def url_de_descadastro_um_clique(base: str, lead_id: str, email: str,
+                                 segredo: str) -> str:
+    """O link assinado do CABEÇALHO `List-Unsubscribe`: a rota da API.
+
+    ⚠️ Não é a página. O botão nativo do Gmail/Yahoo faz POST nesta URL, e
+    `/descadastrar` é rota do SPA — o nginx devolvia 405 e o contato
+    continuava na lista (U2, raio-x de 02/10). `/api/` é o prefixo que o nginx
+    repassa ao backend.
+    """
+    return (f"{base.rstrip('/')}/api/publico/descadastro/um-clique?"
+            f"{_parametros_assinados(lead_id, email, segredo)}")
 
 
 def aplicar_merge_tags(html: str, contato: dict, url_descadastro: str) -> str:
@@ -97,15 +113,21 @@ def garantir_rodape(html: str, url_descadastro: str) -> str:
     return corpo + RODAPE.format(url=url_descadastro)
 
 
-def cabecalhos_rfc8058(url_descadastro: str) -> dict[str, str]:
+def cabecalhos_rfc8058(base: str, lead_id: str, email: str,
+                       segredo: str) -> dict[str, str]:
     """Os cabeçalhos que dão o botão nativo de descadastro no Gmail/Yahoo.
 
     ⚠️ `List-Unsubscribe-Post` é o que ativa o one-click — e é por isso que o
     endpoint de descadastro precisa aceitar POST, não só GET. Sem ele o botão
     nativo não aparece, e a reputação do remetente sofre: o contato sem saída
     fácil marca como spam.
+
+    Recebe os dados e monta a URL ela mesma (não recebe a URL pronta): até
+    02/10 o worker passava o link do rodapé, que é a página do SPA, e o POST
+    levava 405. Montar aqui impede de trocar um link pelo outro.
     """
+    url = url_de_descadastro_um_clique(base, lead_id, email, segredo)
     return {
-        "List-Unsubscribe": f"<{url_descadastro}>",
+        "List-Unsubscribe": f"<{url}>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     }
