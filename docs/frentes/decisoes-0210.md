@@ -55,15 +55,15 @@ Território: `components/admin/LeadDetailSheet.tsx`,
   sem Presença e Interesse), a ficha de um contato em `/contacts` e
   `/experiments/setup`.
 
-**Fora do território (para a coordenadora):**
-- `components/admin/AdminLayout.tsx:121` ainda passa `availablePresencas`
-  ao `GlobalFilters`. A prop ficou opcional e é ignorada; falta apagar a linha.
-- `components/admin/dashboard/overview/OverviewTab.tsx:96` ainda aplica o
-  filtro `interesseEcossistema`, que agora é sempre `null` e não filtra nada.
-  Falta apagar esse bloco e, depois, o campo de `DashboardFilters` e o tipo
-  `InteresseFilter`.
+**Fora do território, liberado pela coordenadora (02/10) e feito:** o
+`AdminLayout` não passa mais `availablePresencas`, e a prop saiu do
+`GlobalFilters`. O bloco `interesseEcossistema` saiu do `OverviewTab`; o
+campo saiu de `DashboardFilters` e o tipo `InteresseFilter` foi apagado.
+Portão refeito: guarda 0, `tsc` 0, os dois builds ok.
 
 ## Perguntas
+
+As duas abaixo foram aceitas pela coordenadora em 02/10.
 
 - **O filtro Interesse (MTIA/Formação) também saiu.** O backlog citava
   participante e presença, mas o Interesse é do mesmo funil: o comentário da

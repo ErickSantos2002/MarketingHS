@@ -118,7 +118,6 @@ function AdminLayoutInner() {
               availableFaturamentos={[...new Set(allLeads.map(l => l.faturamento).filter(Boolean) as string[])]}
               availableCargos={[...new Set(allLeads.map(l => l.cargo).filter(Boolean) as string[])]}
               availableSources={[...new Set(allLeads.map(l => l.utm_source || 'Sem origem').filter(Boolean))]}
-              availablePresencas={[...new Set(allLeads.map(l => l.presenca).filter(Boolean) as string[])]}
               filteredCount={filteredLeads.length}
               totalCount={allLeads.length}
             />

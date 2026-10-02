@@ -10,14 +10,10 @@ const STORAGE_KEY = 'dashboard-filters-v2';
 
 
 export type DatePreset = 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisMonth' | 'all' | 'custom';
-export type InteresseFilter = 'mtia_e_formacao' | 'apenas_mtia' | 'apenas_formacao';
-
 // Os filtros do funil de evento e mentoria da dn.ia — Presença e Interesse
 // (MTIA/Formação) — saíram da tela em 02/10/2026 (perguntas 28+29: "tirar
-// tudo"). `interesseEcossistema` continua no tipo só porque o OverviewTab
-// ainda o lê; aqui ele é sempre null. Uma preferência salva que ainda traga
-// um dos dois é descartada ao carregar — filtro sem controle na tela
-// esconderia contato em silêncio.
+// tudo"). Uma preferência salva que ainda traga um dos dois é descartada ao
+// carregar — filtro sem controle na tela esconderia contato em silêncio.
 
 export interface DashboardFilters {
   datePreset: DatePreset;
@@ -35,7 +31,6 @@ export interface DashboardFilters {
   hideIncomplete: boolean;
   onlyReconversions: boolean;
   search: string;
-  interesseEcossistema: InteresseFilter | null;
   sources: string[];
   utmContents: string[];
 }
@@ -56,7 +51,6 @@ const initialFilters: DashboardFilters = {
   hideIncomplete: false,
   onlyReconversions: false,
   search: '',
-  interesseEcossistema: null,
   sources: [],
   utmContents: [],
 };
@@ -74,8 +68,9 @@ function serializeFilters(filters: DashboardFilters): string {
 
 // Deserialize filters from localStorage (convert ISO strings to Dates)
 function deserializeFilters(stored: string): DashboardFilters {
-  // `presencas` é chave de preferência antiga (ver o comentário do topo).
-  const { presencas: _presencas, ...parsed } = JSON.parse(stored);
+  // `presencas` e `interesseEcossistema` são chaves de preferência antigas
+  // (ver o comentário do topo).
+  const { presencas: _p, interesseEcossistema: _i, ...parsed } = JSON.parse(stored);
   return {
     ...initialFilters,
     ...parsed,
@@ -88,7 +83,6 @@ function deserializeFilters(stored: string): DashboardFilters {
     onlyReconversions: !!parsed.onlyReconversions,
     // Don't restore search (it's temporary)
     search: '',
-    interesseEcossistema: null,
   };
 }
 

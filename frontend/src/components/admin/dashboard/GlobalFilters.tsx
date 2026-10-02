@@ -26,9 +26,6 @@ interface GlobalFiltersProps {
   availableFaturamentos: string[];
   availableCargos: string[];
   availableSources: string[];
-  // Presença saiu da tela em 02/10/2026 (perguntas 28+29). A prop fica
-  // opcional e ignorada até o AdminLayout parar de passá-la.
-  availablePresencas?: string[];
   filteredCount?: number;
   totalCount?: number;
 }
