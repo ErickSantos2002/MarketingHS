@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from limpeza import apagar_leads
 from rodada import EmailDeRodada
 
 import app.database as db
@@ -61,8 +62,9 @@ async def chamador():
         # se o pytest morrer no meio (timeout, Ctrl-C), a linha fica e
         # `leads_email_unique`/o hash da chave derrubam a rodada seguinte no
         # setup, com um erro que aponta para o índice e não para o motivo.
-        await conn.execute(f"DELETE FROM leads WHERE {_EMAIL_E2E.onde(1)}",
-                           *_EMAIL_E2E.parametros())
+        await apagar_leads(conn, [r["id"] for r in await conn.fetch(
+            f"SELECT id FROM leads WHERE {_EMAIL_E2E.onde(1)}",
+            *_EMAIL_E2E.parametros())])
         await conn.execute("DELETE FROM api_keys WHERE key_hash = $1", hash_)
         lead = await conn.fetchval(
             "INSERT INTO leads (nome, email, tipo) VALUES "
@@ -74,7 +76,7 @@ async def chamador():
     async with db.sessao(role="service_role") as conn:
         await conn.execute("DELETE FROM lead_conversions WHERE lead_id = $1::uuid", lead)
         await conn.execute("DELETE FROM lead_tags WHERE lead_id = $1::uuid", lead)
-        await conn.execute("DELETE FROM leads WHERE id = $1::uuid", lead)
+        await apagar_leads(conn, [lead])
         await conn.execute("DELETE FROM api_keys WHERE key_hash = $1", hash_)
 
 

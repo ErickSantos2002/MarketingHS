@@ -13,6 +13,7 @@ import pytest
 import pytest_asyncio
 
 import app.database as db
+from limpeza import apagar_leads
 from rodada import ENVIO
 
 
@@ -227,8 +228,11 @@ async def envio():
         # lógica não resolve: o índice único não olha `deleted_at`.
         # ⚠️ E-mail único por rodada (decisão 27; era `a@b.c` fixo): a
         # pré-limpeza pega o desta rodada, o antigo e o de rodada morta (> 2 h).
-        await conn.execute(f"DELETE FROM leads WHERE {ENVIO.onde(1)} AND tipo = 'teste'",
-                           *ENVIO.parametros())
+        # ⚠️ Com os eventos do lead (tests/limpeza.py): só o lead deixava
+        # `contact_events` órfãos e a cópia em `journey_events` (pergunta 38).
+        await apagar_leads(conn, [r["id"] for r in await conn.fetch(
+            f"SELECT id FROM leads WHERE {ENVIO.onde(1)} AND tipo = 'teste'",
+            *ENVIO.parametros())])
         # ⚠️ E a CAMPANHA que a rodada morta deixou. Até 01/10 a pré-limpeza só
         # cobria o lead, e duas campanhas 'teste de webhook' ficaram presas em
         # 'sending' em produção desde 02/09 (apagadas pelo Erick com
@@ -275,7 +279,7 @@ async def envio():
         await conn.execute("DELETE FROM email_suppressions WHERE email = $1", ENVIO.atual)
         await conn.execute("UPDATE campaigns SET status='failed' WHERE id=$1", campanha)
         await conn.execute("DELETE FROM campaigns WHERE id = $1", campanha)
-        await conn.execute("DELETE FROM leads WHERE id = $1", lead)
+        await apagar_leads(conn, [lead])
 
 
 # ── Usuários de teste ────────────────────────────────────────────────────────
