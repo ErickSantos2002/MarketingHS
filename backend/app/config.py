@@ -78,6 +78,18 @@ class Settings(BaseSettings):
     FILA_LOTE: int = 20
     WORKER_INTERVALO_SEGUNDOS: float = 2.0
 
+    # Controle de volume (R1, 02/10/2026) — ver app/ritmo.py. O valor que vale
+    # é o de `integration_secrets` (mesmo nome), editável sem deploy; estes são
+    # o padrão seguro. Teto por hora em janela móvel, por dia no dia civil de
+    # Brasília; a rampa começa em ENVIO_AQUECIMENTO_DIA1 (0 desliga) e dobra
+    # por dia a partir de ENVIO_AQUECIMENTO_INICIO (AAAA-MM-DD; vazio = dia do
+    # primeiro envio real).
+    ENVIO_POR_SEGUNDO: float = 2.0
+    ENVIO_TETO_HORA: int = 500
+    ENVIO_TETO_DIA: int = 2000
+    ENVIO_AQUECIMENTO_DIA1: int = 50
+    ENVIO_AQUECIMENTO_INICIO: str = ""
+
     # DataCore (Tiny ERP), o banco de onde vêm os clientes. SOMENTE LEITURA:
     # a sincronização é de mão única, o ERP manda e o MarketingHS obedece.
     # Vazio = sincronização desligada, e a rota responde 503 em vez de estourar.

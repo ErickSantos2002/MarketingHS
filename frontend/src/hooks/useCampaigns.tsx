@@ -61,6 +61,8 @@ export interface CampaignLiveStats {
   failed: number;
   unsubscribed: number;
   suppressed: number;
+  // Parte dos `suppressed` que o "Parar" interrompeu (R1).
+  interrompidos?: number;
 }
 
 const ZERO = { sent: 0, delivered: 0, opened: 0, clicked: 0, failed: 0 };

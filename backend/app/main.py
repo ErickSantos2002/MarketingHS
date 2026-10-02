@@ -85,8 +85,16 @@ app.add_middleware(
     # os vários eventos por visita do `ab.js` estourem a cota de
     # `/publico/captura` da MESMA visita; o do redirecionador substitui o que
     # antes era isenção total (ver o comentário no `add_middleware` dele).
+    #
+    # ⚠️ `/publico/descadastro/um-clique` (RFC 8058) também: o POST vem dos
+    # servidores do Gmail e do Yahoo — poucos IPs para milhares de
+    # destinatários. Com 30/min o provedor levaria 429 e o contato ficaria na
+    # lista, que é o que o faz marcar spam. O HMAC do link autentica, como a
+    # assinatura Svix autentica o webhook. Só o um clique: o GET/POST de
+    # `/publico/descadastro` (a página) continua no balde.
     isentos=("/publico/webhook/", "/publico/validar-email",
-             "/publico/ab/go", "/publico/ab/eventos"),
+             "/publico/ab/go", "/publico/ab/eventos",
+             "/publico/descadastro/um-clique"),
 )
 
 # I1: balde próprio do coletor de eventos do A/B — bem mais generoso que o

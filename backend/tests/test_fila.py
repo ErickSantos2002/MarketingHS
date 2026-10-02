@@ -158,3 +158,39 @@ async def test_varredura_nao_fecha_campanha_com_envio_pendente(conexao, semear):
     assert await conexao.fetchval(
         "SELECT status FROM campaigns WHERE id = $1::uuid",
         msg["campaign_id"]) == "sending"
+
+
+# ── Controle de volume e pausa (R1, 02/10/2026) ──────────────────────────────
+
+
+async def test_adiar_nao_gasta_tentativa(conexao, semear):
+    """O 429 do Resend e a campanha pausada devolvem a mensagem SEM contar
+    tentativa — senão um pico de ritmo mandaria e-mail bom para a fila-morta."""
+    [msg] = await semear(quantidade=1)
+    [m] = [x for x in await fila.reivindicar(conexao, limite=50, visibilidade=120)
+           if x.send_id == msg["send_id"]]
+    assert m.tentativas == 1
+    await fila.adiar(conexao, m.fila_id, 30)
+    linha = await conexao.fetchrow(
+        "SELECT tentativas, visivel_em - now() AS espera FROM email_send_queue "
+        "WHERE id = $1", m.fila_id)
+    assert linha["tentativas"] == 0
+    assert 25 < linha["espera"].total_seconds() <= 30
+
+
+async def test_campanha_pausada_nao_e_reivindicada(conexao, semear):
+    [msg] = await semear(quantidade=1)
+    await conexao.execute(
+        "UPDATE campaigns SET status = 'paused' WHERE id = $1::uuid",
+        msg["campaign_id"])
+    pegas = await fila.reivindicar(conexao, limite=500, visibilidade=120)
+    assert all(x.send_id != msg["send_id"] for x in pegas)
+    # E a mensagem continua lá, intocada: retomar é só voltar o status.
+    assert await conexao.fetchval(
+        "SELECT tentativas FROM email_send_queue WHERE send_id = $1::uuid",
+        msg["send_id"]) == 0
+    await conexao.execute(
+        "UPDATE campaigns SET status = 'sending' WHERE id = $1::uuid",
+        msg["campaign_id"])
+    pegas = await fila.reivindicar(conexao, limite=500, visibilidade=120)
+    assert any(x.send_id == msg["send_id"] for x in pegas)

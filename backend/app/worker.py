@@ -15,7 +15,7 @@ import asyncio
 import logging
 import signal
 
-from app import fila, integracoes
+from app import fila, integracoes, ritmo
 from app.config import settings
 from app.crm import entrega
 from app.database import close_db, init_db, sessao
@@ -55,6 +55,31 @@ _growthhs_avisado = False
 # na volta, e avisa de novo se faltar outra vez — nunca a cada 2 s.
 _ausentes: set[str] = set()
 
+# O ritmo das chamadas ao Resend (ver app/ritmo.py). Um por processo: o
+# espaçamento e o `retry-after` de um 429 valem entre uma passada e outra.
+_compasso = ritmo.Compasso()
+# Mesma ideia do `_ausentes`: avisa quando o teto é atingido e quando libera,
+# não a cada passada.
+_no_teto = False
+
+# Campanha pausada entre a reivindicação e o processamento: a mensagem volta
+# para a fila sem gastar tentativa e é revisitada depois disto. Enquanto a
+# campanha seguir pausada, `fila.reivindicar` nem a enxerga.
+PAUSA_REVISITA = 30
+
+
+def _registrar_teto(atingido: bool, uso: "ritmo.Uso", r: "ritmo.Ritmo") -> None:
+    global _no_teto
+    if atingido and not _no_teto:
+        _no_teto = True
+        logger.warning(
+            "teto de envio atingido (hora %s/%s, dia %s/%s) — o resto espera "
+            "na fila", uso.enviados_hora, r.teto_hora, uso.enviados_dia,
+            ritmo.teto_de_hoje(r, uso.hoje, uso.primeiro_dia))
+    elif not atingido and _no_teto:
+        _no_teto = False
+        logger.info("teto de envio liberado — a fila volta a andar")
+
 
 def _registrar_presenca(nome: str, presente: bool, dica: str = "") -> None:
     """Loga só a MUDANÇA de estado do segredo `nome`. Não decide nada sobre a
@@ -76,8 +101,10 @@ async def _remetente() -> str:
 
 
 async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
-                     segredo_descadastro: str) -> None:
-    """Processa uma mensagem. Levanta se o envio falhar — quem chama devolve."""
+                     segredo_descadastro: str, por_segundo: float) -> None:
+    """Processa uma mensagem. Levanta se o envio falhar — quem chama devolve.
+    `resend.LimiteDoResend` (429) também sobe: quem chama adia sem contar
+    tentativa."""
     # (a) A linha ainda está 'pending'? Se não, outra passagem já enviou.
     # É o que torna o reprocessamento inofensivo.
     # `campaigns.body` guarda o HTML exportado do Unlayer (o `design` é o JSON
@@ -107,6 +134,13 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
 
     # (b) Se HÁ campanha, ela tem de estar enviando — cancelada não continua
     # saindo. Se não há, é e-mail de fluxo e segue.
+    #
+    # ⚠️ Pausada NÃO é cancelada: a mensagem foi reivindicada antes do clique
+    # em "Pausar" e volta para a fila sem gastar tentativa. Tratá-la como as
+    # outras a marcaria 'failed' e "retomar" não teria o que retomar.
+    if envio["campanha"] == "paused":
+        await fila.adiar(conn, m.fila_id, PAUSA_REVISITA)
+        return
     if envio["campanha"] is not None and envio["campanha"] != "sending":
         await conn.execute(
             """UPDATE campaign_sends SET status = 'failed', sent_at = now(),
@@ -164,6 +198,9 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
     # contato recebe um e-mail com "Oi {{nome}}" na caixa de entrada — o
     # esqueleto do template, no lugar mais visível que existe.
     assunto = aplicar_merge_tags(assunto_bruto or "(sem assunto)", contato, url)
+    # O ritmo vale só para o que vai ao Resend: supressão e falha local acima
+    # não gastam a vez de ninguém.
+    await _compasso.esperar_vez(por_segundo)
     resend_id = await resend.enviar(
         chave=chave, de=de, para=email,
         assunto=assunto,
@@ -206,22 +243,52 @@ async def _tick() -> int:
         # de campanha sem saída é o que queima a reputação do remetente.
         return 0
 
+    if _compasso.segurado():
+        # O Resend devolveu 429 e pediu para esperar. Reivindicar agora só
+        # prenderia mensagens enquanto o compasso dorme.
+        return 0
+
     de = await _remetente()
+    r = await ritmo.ler()
 
     async with sessao(role="service_role") as conn:
+        if not await fila.ha_pronta(conn):
+            return 0
+        # ⚠️ O teto limita o que se REIVINDICA. O que passa dele continua na
+        # fila, intocado, e sai na hora ou no dia seguinte — nunca 'failed'.
+        uso = await ritmo.medir(conn)
+        limite = ritmo.cota(
+            r, uso.hoje, uso.primeiro_dia,
+            enviados_hora=uso.enviados_hora, enviados_dia=uso.enviados_dia,
+            lote=settings.FILA_LOTE,
+            visibilidade=settings.FILA_VISIBILIDADE_SEGUNDOS)
+        _registrar_teto(limite <= 0, uso, r)
+        if limite <= 0:
+            return 0
         mensagens = await fila.reivindicar(
-            conn, limite=settings.FILA_LOTE,
+            conn, limite=limite,
             visibilidade=settings.FILA_VISIBILIDADE_SEGUNDOS)
 
     if not mensagens:
         return 0
 
     campanhas = set()
-    for m in mensagens:
+    for i, m in enumerate(mensagens):
         campanhas.add(m.campaign_id)
         try:
             async with sessao(role="service_role") as conn:
-                await _processar(conn, m, chave, de, segredo)
+                await _processar(conn, m, chave, de, segredo, r.por_segundo)
+        except resend.LimiteDoResend as e:
+            # 429: não é falha do envio. Esta mensagem e as que vinham atrás
+            # voltam para a fila SEM gastar tentativa, e ninguém envia até o
+            # `retry-after` passar.
+            logger.warning("Resend pediu para esperar %ss (429) — %s mensagens "
+                           "de volta à fila", e.espera, len(mensagens) - i)
+            _compasso.segurar(e.espera)
+            async with sessao(role="service_role") as conn:
+                for resto in mensagens[i:]:
+                    await fila.adiar(conn, resto.fila_id, e.espera)
+            break
         except Exception as e:  # noqa: BLE001 — uma falha não derruba o lote
             logger.warning("envio %s falhou: %s", m.send_id, e)
             async with sessao(role="service_role") as conn:

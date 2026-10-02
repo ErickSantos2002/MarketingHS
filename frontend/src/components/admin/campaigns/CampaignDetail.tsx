@@ -6,11 +6,44 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Mail, MessageCircle, Send, Eye, MousePointerClick, AlertCircle, Loader2, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Mail, MessageCircle, Send, Eye, MousePointerClick, AlertCircle, Loader2, ChevronLeft, ChevronRight, ArrowRight, Pause, Play, Square } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Campaign, CampaignSend, CampaignLiveStats } from '@/hooks/useCampaigns';
 import { useCampaigns } from '@/hooks/useCampaigns';
-import { lerCampanha } from '@/lib/campanhas';
+import { lerCampanha, pausarCampanha, retomarCampanha, pararCampanha } from '@/lib/campanhas';
 import { STATUS_DE_CAMPANHA } from './statusDeCampanha';
+
+// Controle do envio em curso (R1). Cada ação passa por confirmação: pausar e
+// retomar não perdem nada, mas parar não tem volta.
+type AcaoDeEnvio = 'pausar' | 'retomar' | 'parar';
+
+const ACOES: Record<AcaoDeEnvio, { titulo: string; texto: string; botao: string; sucesso: string }> = {
+  pausar: {
+    titulo: 'Pausar o envio?',
+    texto: 'Os e-mails que ainda estão na fila param de sair. Nada é perdido: ao retomar, o envio continua de onde parou. Um e-mail que já estava saindo no instante do clique ainda pode ser entregue.',
+    botao: 'Pausar envio',
+    sucesso: 'Envio pausado',
+  },
+  retomar: {
+    titulo: 'Retomar o envio?',
+    texto: 'Os e-mails que ficaram na fila voltam a sair, no ritmo e dentro dos limites diários de envio.',
+    botao: 'Retomar envio',
+    sucesso: 'Envio retomado',
+  },
+  parar: {
+    titulo: 'Parar a campanha de vez?',
+    texto: 'Quem ainda não recebeu não vai receber: os envios pendentes são cancelados e a campanha é encerrada com o que já saiu. Esta ação não pode ser desfeita — para enviar ao restante, duplique a campanha.',
+    botao: 'Parar de vez',
+    sucesso: 'Campanha encerrada',
+  },
+};
+
+const CHAMADA: Record<AcaoDeEnvio, (id: string) => Promise<{ status: string }>> = {
+  pausar: pausarCampanha,
+  retomar: retomarCampanha,
+  parar: pararCampanha,
+};
 
 interface CampaignDetailProps {
   campaign: Campaign;
@@ -52,6 +85,8 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
   // (banco lento, audiência grande), o tick seguinte é descartado em vez de somar
   // mais 11 queries por cima das que já estão rodando.
   const runningRef = useRef(false);
+  const [acao, setAcao] = useState<AcaoDeEnvio | null>(null);
+  const [executando, setExecutando] = useState(false);
 
   // Carga única: sends + stats + o status REAL no banco. O status não pode vir da
   // prop `campaign` (é um snapshot da lista, congelado enquanto o Sheet está aberto):
@@ -136,12 +171,33 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, campaign.id, liveStatus]);
 
+  const executarAcao = async () => {
+    if (!acao) return;
+    setExecutando(true);
+    try {
+      const r = await CHAMADA[acao](campaign.id);
+      toast.success(ACOES[acao].sucesso);
+      setLiveStatus(r.status);
+      load(() => false);
+    } catch (e) {
+      // 409: a campanha mudou de estado entre a tela e o clique (a fila pode
+      // ter drenado). Recarrega para mostrar o estado real.
+      toast.error(e instanceof Error ? e.message : 'Não foi possível alterar o envio');
+      load(() => false);
+    } finally {
+      setExecutando(false);
+      setAcao(null);
+    }
+  };
+
   const sc = STATUS_DE_CAMPANHA[liveStatus] || STATUS_DE_CAMPANHA.draft;
   // Prefere as stats ao vivo (campaign_sends); cai no JSONB legado enquanto carrega
   const stats: CampaignLiveStats = liveStats ?? {
     total: 0, pending: 0, bounced: 0, complained: 0, unsubscribed: 0, suppressed: 0, ...campaign.stats,
   };
   const isEmail = campaign.channel === 'email';
+  const interrompidos = stats.interrompidos ?? 0;
+  const suprimidos = Math.max(0, stats.suppressed - interrompidos);
 
   const filtered = statusFilter === 'all' ? sends : sends.filter(s => s.status === statusFilter);
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
@@ -152,12 +208,18 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
   const clickedPct = stats.sent > 0 ? Math.round((stats.clicked / stats.sent) * 100) : 0;
 
   return (
+    <>
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent aria-describedby={undefined} className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 flex-wrap">
             {campaign.name}
             <Badge variant="outline" className={sc.className}>{sc.label}</Badge>
+            {liveStatus === 'sent' && interrompidos > 0 && (
+              <Badge variant="outline" className="bg-[--tint-warning] text-[--on-tint-warning] border-warning/30">
+                Interrompida
+              </Badge>
+            )}
             <Badge variant="outline" className="gap-1">
               {isEmail ? <><Mail className="h-3 w-3" /> Email</> : <><MessageCircle className="h-3 w-3" /> WhatsApp</>}
             </Badge>
@@ -166,6 +228,42 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
             Enviada em {formatDate(campaign.sent_at)}
           </p>
         </SheetHeader>
+
+        {isEmail && (liveStatus === 'sending' || liveStatus === 'paused') && (
+          <div className="flex items-center gap-2 flex-wrap mt-4">
+            {liveStatus === 'sending' ? (
+              <Button variant="outline" size="sm" disabled={executando} onClick={() => setAcao('pausar')}>
+                <Pause /> Pausar envio
+              </Button>
+            ) : (
+              <Button size="sm" disabled={executando} onClick={() => setAcao('retomar')}>
+                <Play /> Retomar envio
+              </Button>
+            )}
+            <Button variant="outline" size="sm" disabled={executando} className="text-[--on-tint-danger]" onClick={() => setAcao('parar')}>
+              <Square /> Parar de vez
+            </Button>
+          </div>
+        )}
+
+        {liveStatus === 'paused' && stats.total > 0 && (
+          <Card className="border-warning/30 bg-[--tint-warning] mt-4">
+            <CardContent className="py-4 px-5 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 font-medium text-[--on-tint-warning]">
+                  <Pause className="h-4 w-4" /> Envio pausado
+                </span>
+                <span className="text-muted-foreground">
+                  {stats.total - stats.pending} de {stats.total} processados
+                </span>
+              </div>
+              <Progress value={Math.round(((stats.total - stats.pending) / stats.total) * 100)} />
+              <p className="text-xs text-muted-foreground">
+                {stats.pending} esperando na fila. Nada sai até retomar.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {liveStatus === 'sending' && stats.total > 0 && (
           <Card className="border-info/30 bg-[--tint-info] mt-4">
@@ -215,7 +313,7 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
                 <p className="text-xs text-muted-foreground">Clicados ({clickedPct}%)</p>
               </CardContent></Card>
             </div>
-            {(stats.bounced > 0 || stats.complained > 0 || stats.suppressed > 0) && (
+            {(stats.bounced > 0 || stats.complained > 0 || suprimidos > 0 || interrompidos > 0) && (
               <div className="flex items-center gap-2 flex-wrap">
                 {stats.bounced > 0 && (
                   <Badge variant="outline" className="bg-[--tint-danger] text-[--on-tint-danger] border-danger/30">
@@ -227,9 +325,14 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
                     Marcou spam: {stats.complained}
                   </Badge>
                 )}
-                {stats.suppressed > 0 && (
+                {suprimidos > 0 && (
                   <Badge variant="outline" className="bg-[--tint-neutral] text-conteudo-muted border-borda">
-                    Suprimidos: {stats.suppressed}
+                    Suprimidos: {suprimidos}
+                  </Badge>
+                )}
+                {interrompidos > 0 && (
+                  <Badge variant="outline" className="bg-[--tint-warning] text-[--on-tint-warning] border-warning/30">
+                    Não enviados (campanha parada): {interrompidos}
                   </Badge>
                 )}
               </div>
@@ -320,5 +423,28 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
         </div>
       </SheetContent>
     </Sheet>
+
+    <AlertDialog open={!!acao} onOpenChange={(o) => !o && !executando && setAcao(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{acao ? ACOES[acao].titulo : ''}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {acao ? ACOES[acao].texto : ''}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={executando}>Voltar</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={executando}
+            onClick={(e) => { e.preventDefault(); executarAcao(); }}
+            className={acao === 'parar' ? 'bg-danger text-destructive-foreground border border-danger hover:bg-danger/90' : undefined}
+          >
+            {executando && <Loader2 className="h-4 w-4 animate-spin" />}
+            {acao ? ACOES[acao].botao : ''}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

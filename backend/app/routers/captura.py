@@ -36,6 +36,13 @@ router = APIRouter(prefix="/publico", tags=["captura"])
 EMAIL_TAMANHO_MAXIMO = 320
 SESSION_ID_TAMANHO_MAXIMO = 100
 
+# O nome do campo-isca. "website" porque robô de formulário reconhece e
+# preenche; não é coluna de `leads` nem está na lista branca de `higienizar`.
+CAMPO_ISCA = "website"
+
+# A origem do primeiro toque anda em BLOCO (ver `_atualizar`).
+UTMS = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
+
 # ⚠️ Constante, não literal inline, só para o teste da rodada 1 de correção
 # conseguir forçar uma falha DE BANCO real dentro da transação (trocando o
 # nome da function por um que não existe) e provar que o SAVEPOINT de
@@ -55,6 +62,9 @@ class CapturaIn(BaseModel):
     page_slug: str = Field(min_length=1, max_length=200)
     session_id: str | None = None
     fields: dict = Field(default_factory=dict)
+    # Honeypot (R1): campo escondido no formulário. Gente não vê e não
+    # preenche; robô preenche tudo. Aceito aqui ou dentro de `fields`.
+    website: str | None = None
 
     @field_validator("session_id", mode="before")
     @classmethod
@@ -88,8 +98,36 @@ async def validar_email(dados: EmailIn):
     return {"valido": valido, "motivo": motivo}
 
 
+def _caiu_no_honeypot(dados: CapturaIn) -> bool:
+    for valor in (dados.website, (dados.fields or {}).get(CAMPO_ISCA)):
+        if isinstance(valor, str) and valor.strip():
+            return True
+        if valor not in (None, "") and not isinstance(valor, str):
+            return True
+    return False
+
+
+async def _resposta_de_sucesso(page_slug: str) -> dict:
+    """A mesma resposta do caminho que grava — só lendo, sem escrever."""
+    async with sessao(role="service_role") as conn:
+        config = await conn.fetchval(
+            "SELECT config FROM pages WHERE slug = $1 AND status = 'active'",
+            page_slug)
+    if config is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Página não encontrada.")
+    return {"ok": True, "redirect_url": (config or {}).get("redirect_url") or None}
+
+
 @router.post("/captura")
 async def capturar(dados: CapturaIn):
+    # ⚠️ Honeypot ANTES de tudo, e a resposta é a de sucesso: dizer "recusado"
+    # ensinaria o robô qual campo evitar. Nada é gravado — nem conversão, nem
+    # evento de A/B.
+    if _caiu_no_honeypot(dados):
+        logger.info("captura: honeypot preenchido na página %s — descartada",
+                    dados.page_slug)
+        return await _resposta_de_sucesso(dados.page_slug)
+
     email = dados.email.strip().lower()
     if len(email) > EMAIL_TAMANHO_MAXIMO:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "E-mail inválido.")
@@ -196,7 +234,8 @@ async def _inserir(conn, email: str, session_id: str | None, campos: dict) -> st
 
 
 async def _atualizar(conn, existente, session_id: str | None, campos: dict) -> None:
-    """Atualiza o que veio, adota o `session_id` se ainda não havia, e REATIVA
+    """Preenche o que estava vazio (nunca sobrescreve — ver abaixo), adota o
+    `session_id` se ainda não havia, e REATIVA
     contato excluído — reconverter é sinal de que a pessoa voltou.
 
     ⚠️ A exclusão aqui é lógica (`deleted_at`), e o índice `leads_email_unique`
@@ -212,22 +251,46 @@ async def _atualizar(conn, existente, session_id: str | None, campos: dict) -> N
     A assimetria entre os dois caminhos é DELIBERADA — não "harmonize" isto
     achando que é uma inconsistência a consertar.
     """
+    # ⚠️ NÃO DESTRUTIVA (R1, 02/10/2026). Esta rota é anônima: quem soubesse o
+    # e-mail de um contato real trocava nome, cargo, empresa, WhatsApp e origem
+    # dele mandando o formulário. Agora só se PREENCHE o que está vazio (NULL
+    # ou ''), como `/publico/identidade`. O que a pessoa digitou de diferente
+    # continua registrado onde é histórico: `lead_conversions`.
+    #
+    # ⚠️ Os UTMs andam em BLOCO, e é isso que congela o primeiro toque: se o
+    # contato já tem QUALQUER utm_*, nenhum é tocado — misturar o
+    # `utm_source` de um toque com o `utm_campaign` de outro inventaria uma
+    # origem que nunca existiu. Sem nenhum, entra o bloco desta conversão.
     atribuicoes = {chave: valor for chave, valor in campos.items()
                    if chave not in ("status", "tipo")}
     if session_id and not existente["session_id"]:
         atribuicoes["session_id"] = session_id
 
+    expressoes: dict[str, str] = {}
+    valores: list = []
+    sem_origem = " AND ".join(f"coalesce({u}, '') = ''" for u in UTMS)
+    for nome, valor in atribuicoes.items():
+        valores.append(valor)
+        marca = f"${len(valores) + 1}"
+        if nome in UTMS:
+            expressoes[nome] = f"CASE WHEN {sem_origem} THEN {marca} ELSE {nome} END"
+        elif isinstance(valor, str) and nome != "data_interesse":
+            expressoes[nome] = f"COALESCE(NULLIF({nome}, ''), {marca})"
+        else:
+            expressoes[nome] = f"COALESCE({nome}, {marca})"
+
     estava_excluido = existente["deleted_at"] is not None
     if estava_excluido:
-        atribuicoes["deleted_at"] = None
-        atribuicoes["deleted_by"] = None
+        expressoes["deleted_at"] = "NULL"
+        expressoes["deleted_by"] = "NULL"
 
-    if atribuicoes:
-        nomes = list(atribuicoes)
-        sets = ", ".join(f"{nome} = ${i}" for i, nome in enumerate(nomes, start=2))
+    if expressoes:
+        # As expressões do SET leem a linha ANTIGA: o CASE do bloco de UTMs
+        # decide sobre a origem que existia antes desta conversão.
+        sets = ", ".join(f"{nome} = {expr}" for nome, expr in expressoes.items())
         await conn.execute(
             f"UPDATE leads SET {sets} WHERE id = $1::uuid",
-            existente["id"], *[atribuicoes[n] for n in nomes])
+            existente["id"], *valores)
 
     if estava_excluido:
         # ⚠️ `deleted_by` é `uuid` na tabela — asyncpg devolve um `uuid.UUID`,
