@@ -152,27 +152,27 @@ export function useLeadAnalytics(leads: Lead[] | EnrichedLead[]) {
       .sort((a, b) => b.count - a.count);
   }, [leads]);
 
-  // Data completeness
+  // Data completeness — cargo, empresa e WhatsApp, o que o comercial da H&S usa
+  // para abordar. Faturamento e desafios saíram em 02/10/2026 (raio-x RD, R6):
+  // eram as perguntas de qualificação da dn.ia e puxavam a média para baixo.
   const dataCompleteness = useMemo(() => {
     const total = leads.length;
-    if (total === 0) return { cargo: 0, empresa: 0, faturamento: 0, desafios: 0, average: 0 };
-    
+    if (total === 0) return { cargo: 0, empresa: 0, whatsapp: 0, average: 0 };
+
     const filled = {
       cargo: leads.filter(l => l.cargo && l.cargo.trim()).length,
       empresa: leads.filter(l => l.empresa && l.empresa.trim()).length,
-      faturamento: leads.filter(l => l.faturamento && l.faturamento.trim()).length,
-      desafios: leads.filter(l => l.desafios && l.desafios.trim()).length,
+      whatsapp: leads.filter(l => l.whatsapp && l.whatsapp.trim()).length,
     };
-    
+
     const percentages = {
       cargo: (filled.cargo / total) * 100,
       empresa: (filled.empresa / total) * 100,
-      faturamento: (filled.faturamento / total) * 100,
-      desafios: (filled.desafios / total) * 100,
+      whatsapp: (filled.whatsapp / total) * 100,
     };
-    
-    const average = (percentages.cargo + percentages.empresa + percentages.faturamento + percentages.desafios) / 4;
-    
+
+    const average = (percentages.cargo + percentages.empresa + percentages.whatsapp) / 3;
+
     return { ...percentages, average };
   }, [leads]);
 
