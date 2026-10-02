@@ -386,8 +386,10 @@ async def test_cancelar_depois_do_2xx_ainda_grava_entregue(lead_8d, monkeypatch)
     desistindo de esperar na parada) no meio da gravação não pode deixar o
     pedido pendente — seria o segundo card."""
     original = entrega._marcar_entregue
+    entrou = asyncio.Event()
 
     async def lento(*args):
+        entrou.set()
         await asyncio.sleep(0.3)
         await original(*args)
     monkeypatch.setattr(entrega, "_marcar_entregue", lento)
@@ -398,9 +400,13 @@ async def test_cancelar_depois_do_2xx_ainda_grava_entregue(lead_8d, monkeypatch)
     tarefa = asyncio.create_task(entrega.rodar_entregas(
         somente_lead=lead_8d["lead_id"], cfg=CFG,
         transporte=_transporte(201, {"id": 4821}, chamadas)))
-    while not chamadas:
-        await asyncio.sleep(0.01)
-    await asyncio.sleep(0.1)
+    # O cancelamento tem de cair DENTRO da gravação blindada — é ela que o
+    # teste prova. Até a rodada 6 isto era "esperar a chamada HTTP e mais
+    # `sleep(0.1)` fixo", uma aposta de tempo contra o banco remoto (a busca do
+    # pedido e do lead vem antes do POST). Agora espera o `lento` começar, com
+    # teto: estourar o teto é vermelho de verdade, não espera curta.
+    await asyncio.wait_for(entrou.wait(), timeout=30)
+    assert chamadas, "a gravação começou sem o POST ao GrowthHS"
     tarefa.cancel()
     with pytest.raises(asyncio.CancelledError):
         await tarefa
