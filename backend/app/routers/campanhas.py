@@ -10,6 +10,7 @@ levaria lista vazia, sem erro. Teste: `tests/test_conversao_authenticated.py`.
 """
 
 import logging
+import uuid
 from datetime import datetime, timezone
 
 import asyncpg
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual
+from app.dominio import controle_campanha
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campanhas", tags=["campanhas"])
@@ -78,11 +80,15 @@ ESTATISTICAS_AO_VIVO = """
             'bounced',      count(*) FILTER (WHERE cs.status = 'bounced'),
             'complained',   count(*) FILTER (WHERE cs.status = 'complained'),
             'unsubscribed', count(*) FILTER (WHERE cs.status = 'unsubscribed'),
+            -- Parte dos 'suppressed': os que o "Parar" interrompeu (R1).
+            -- É o que diz à tela que a campanha 'sent' foi interrompida.
+            'interrompidos', count(*) FILTER (WHERE cs.status = 'suppressed'
+                                                AND cs.error = '{interrompido}'),
             'total',        count(*)
         ) AS numeros
           FROM campaign_sends cs WHERE cs.campaign_id = c.id
     ) v ON true
-"""
+""".replace("{interrompido}", controle_campanha.ERRO_INTERROMPIDO)
 
 AMOSTRA_ENVIOS = 50
 
@@ -381,6 +387,59 @@ async def envios(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
                 ORDER BY cs.sent_at DESC NULLS LAST, cs.created_at DESC""",
             campanha_id)
     return [dict(l) for l in linhas]
+
+
+# ── Pausar / retomar / parar (R1, 02/10/2026) ────────────────────────────────
+# A lógica está em app/dominio/controle_campanha.py.
+#
+# ⚠️ `service_role`, como o `/enviar` (envio.py): `authenticated` só tem
+# SELECT/UPDATE em `email_send_queue`, e retomar republica (INSERT) e parar
+# esvazia (DELETE) a fila — na MESMA transação da troca de status, senão
+# alguém vê o meio. Quem autoriza é o `admin_atual`.
+
+
+async def _controlar(acao, campanha_id: str) -> dict:
+    try:
+        uuid.UUID(campanha_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+    try:
+        async with sessao(role="service_role") as conn:
+            resultado = await acao(conn, campanha_id)
+    except controle_campanha.NaoEncontrada:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+    except controle_campanha.EstadoInvalido as e:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Esta campanha está em {e.atual!r} e não pode ser alterada assim.")
+    if isinstance(resultado, str):
+        resultado = {"status": resultado}
+    return {"id": campanha_id, **resultado}
+
+
+@router.post("/{campanha_id}/pausar")
+async def pausar(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
+    """O worker deixa de reivindicar mensagens dela. Nada sai da fila."""
+    resultado = await _controlar(controle_campanha.pausar, campanha_id)
+    logger.info("campanha %s pausada por %s", campanha_id, usuario.id)
+    return resultado
+
+
+@router.post("/{campanha_id}/retomar")
+async def retomar(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
+    resultado = await _controlar(controle_campanha.retomar, campanha_id)
+    logger.info("campanha %s retomada por %s", campanha_id, usuario.id)
+    return resultado
+
+
+@router.post("/{campanha_id}/parar")
+async def parar(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
+    """Cancela o que falta: os pendentes viram `suppressed` (envio
+    interrompido) e a campanha fecha. Não tem volta."""
+    resultado = await _controlar(controle_campanha.parar, campanha_id)
+    logger.warning("campanha %s PARADA por %s: %s envios interrompidos",
+                   campanha_id, usuario.id, resultado.get("interrompidos"))
+    return resultado
 
 
 @router.post("/{campanha_id}/cancelar-agendamento")

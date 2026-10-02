@@ -16,6 +16,9 @@ export interface CampaignStatsNumbers {
   bounced: number;
   complained: number;
   unsubscribed: number;
+  // Parte dos `suppressed`: os que o "Parar" interrompeu. Maior que zero numa
+  // campanha `sent` = campanha interrompida.
+  interrompidos?: number;
   total: number;
 }
 
@@ -102,6 +105,18 @@ export const enviosDaCampanha = (id: string) =>
 
 export const cancelarAgendamento = (id: string) =>
   api.post<{ id: string; status: string }>(`/campanhas/${id}/cancelar-agendamento`);
+
+// Controle do envio em curso (R1). Pausar e retomar não perdem nada; parar
+// cancela o que falta (os pendentes viram "suprimidos" por interrupção) e fecha
+// a campanha — não tem volta.
+export const pausarCampanha = (id: string) =>
+  api.post<{ id: string; status: string }>(`/campanhas/${id}/pausar`);
+
+export const retomarCampanha = (id: string) =>
+  api.post<{ id: string; status: string }>(`/campanhas/${id}/retomar`);
+
+export const pararCampanha = (id: string) =>
+  api.post<{ id: string; status: string; interrompidos: number }>(`/campanhas/${id}/parar`);
 
 export interface AudienciaCampanha {
   total: number;

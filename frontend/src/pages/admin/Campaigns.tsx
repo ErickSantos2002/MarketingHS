@@ -195,7 +195,9 @@ export default function Campaigns() {
                               <CalendarX className="h-4 w-4 mr-2" /> Cancelar agendamento
                             </DropdownMenuItem>
                           )}
-                          {c.status !== 'sending' && (
+                          {/* Pausada ainda tem envio pendente: o banco recusa
+                              apagar (guard_campaign_delete). Parar antes. */}
+                          {c.status !== 'sending' && c.status !== 'paused' && (
                             <DropdownMenuItem className="text-[--on-tint-danger]" onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}>
                               <Trash2 className="h-4 w-4 mr-2" /> Excluir
                             </DropdownMenuItem>
