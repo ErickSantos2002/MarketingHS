@@ -65,6 +65,17 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
      o mesmo peso das outras (dividir igual), em vez de 0. Guarda 0, `tsc` 0,
      `vite build`.
 
+### Rodada 6 (02/10)
+
+- [ ] **#38 (a)** Eventos órfãos: cada fixture que comita e apaga lead passa a
+  apagar antes os `contact_events` e `journey_events` daquele lead. Medir
+  `count(*) WHERE lead_id IS NULL` nas duas tabelas antes e depois de uma
+  suíte inteira: **não pode crescer**. Não apagar órfão existente (fica para o
+  reset).
+- [ ] Trocar o `sleep` fixo de
+  `test_crm_entrega.py::test_cancelar_depois_do_2xx_ainda_grava_entregue`
+  por espera com prazo (instável contra o banco remoto).
+
 ## Estado
 
 **01/10/2026 — rodada 5.** Branch `worktree-agent-a28feaefa626c683f`.

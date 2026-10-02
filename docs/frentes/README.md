@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 02/10:** rodada 6 aberta — `decisoes-0210` (front: itens 28+29, 30, 39) e `backend` rodada 6 (item 38 + teste instável).
+
 **Estado em 01/10:** `g6-integracoes`, `g6-cartoes` e `residuos-visuais` ✅ mergeadas (Fase 2 do visual fechada, guarda 0, `tsc` 0). `backend` rodadas 1 e 2 ✅ mergeadas; rodada 3 e `ui-primitivos` em andamento (01/10). Antes: rodada 1 ✅ mergeada (`c019839`); a rodada 2 (`escrita_contatos`, `contatos`) espera a migration 021.
 
 | Frente | n | Vite | Backend | Território (escreve só aqui + `docs/frentes/<frente>.md`) | Quando abrir |
@@ -26,6 +28,7 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 | `cores-decisoes` | 6 | 8086 | usa a 8100 | ver `cores-decisoes.md` | 01/10, rodada 4 |
 | `contatos-decisoes` | 7 | 8087 | usa a 8100 | `components/admin/contacts/` e a ficha | 01/10, rodada 4 |
 | `primitivos-cta` | 8 | 8088 | usa a 8100 | `ui/button`, `ui/input`, `h-9` manual, CTA das landings | 01/10, rodada 4 |
+| `decisoes-0210` | 9 | 8089 | usa a 8100 | ver `decisoes-0210.md` (ficha, modal, filtros do painel, `Experiments.tsx`) | 02/10, rodada 6 |
 
 Os números entre parênteses são o guarda de 01/10 (`npm run guarda:visual -- <arquivo>`).
 `settings/` = `frontend/src/components/admin/settings/`.

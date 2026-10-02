@@ -4,6 +4,10 @@
 >
 > 1. **Responder as perguntas abertas** de `docs/perguntas-abertas.md` (28–33,
 >    36, 38, 39) com o `AskUserQuestion`, opções + recomendação, como em 01/10.
+> ✅ **Item 1 feito (02/10, manhã):** perguntas respondidas — tabela em
+> `docs/perguntas-abertas.md`. Viram a rodada 6: `decisoes-0210` (28+29, 30,
+> 39) e `backend` rodada 6 (38).
+>
 > 2. **Subir em produção** (projeto `erick` do EasyPanel), no molde do Homo
 >    (memória `marketinghs-no-homo`): API + front + **worker de fila** (nunca
 >    rodou fora daqui) + domínio; reset do banco (decidir o que fica — os 2.083
