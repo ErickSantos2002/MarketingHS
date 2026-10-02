@@ -1,4 +1,3 @@
-import { RevenueDistribution } from './RevenueDistribution';
 import { RoleDistribution } from './RoleDistribution';
 import { SectorDistribution } from './SectorDistribution';
 import { DataCompletenessGauges } from './DataCompletenessGauges';
@@ -7,9 +6,10 @@ import { useDashboardCardSettings, type CardConfig } from '@/hooks/useDashboardC
 import type { Lead } from '@/hooks/useLeads';
 import { useLeadAnalytics } from '@/hooks/useLeadAnalytics';
 
+// "Faturamento" (revenue) saiu em 02/10/2026 (raio-x RD, R6): é a pergunta de
+// qualificação da dn.ia; o formulário da H&S não pede faturamento.
 const PROFILE_CARDS: CardConfig[] = [
   { key: 'data_completeness', label: 'Completude de Dados', defaultVisible: true },
-  { key: 'revenue', label: 'Faturamento', defaultVisible: true },
   { key: 'role', label: 'Cargo', defaultVisible: true },
   { key: 'sector', label: 'Setor', defaultVisible: true },
   { key: 'company_size', label: 'Tamanho Empresas', defaultVisible: true },
@@ -34,19 +34,16 @@ export function ProfileTab({ leads }: ProfileTabProps) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {isVisible('revenue') && (
-          <RevenueDistribution data={analytics.distributionByFaturamento} />
-        )}
         {isVisible('role') && (
           <RoleDistribution data={analytics.distributionByCargo} />
+        )}
+
+        {isVisible('sector') && (
+          <SectorDistribution data={analytics.distributionBySector} />
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {isVisible('sector') && (
-          <SectorDistribution data={analytics.distributionBySector} />
-        )}
-
         {isVisible('company_size') && (
           <div className="bg-card border border-border rounded-lg p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">

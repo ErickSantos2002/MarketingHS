@@ -5,16 +5,17 @@ import { SourceQualificationChart } from './SourceQualificationChart';
 import { CampaignPerformanceTable } from './CampaignPerformanceTable';
 import { MediumDistributionChart } from './MediumDistributionChart';
 import { ChannelInsights } from './ChannelInsights';
-import { HourlyConversionChart } from './HourlyConversionChart';
-import { CampaignTimeAnalysis } from './CampaignTimeAnalysis';
 import { LeadsListSheet } from '@/components/admin/dashboard/LeadsListSheet';
 import { DashboardCardSelector } from '@/components/admin/dashboard/DashboardCardSelector';
 import { useDashboardCardSettings, type CardConfig } from '@/hooks/useDashboardCardSettings';
 import type { EnrichedLead } from '@/hooks/useLeadQualification';
 
+// "Conversão Horária / Tempo Campanha" (time_analysis) saiu em 02/10/2026
+// (raio-x RD, R6): "Análise por Horário" e "Melhor Horário por Campanha UTM",
+// com o insight de horário de lançamento, eram régua de lançamento de evento
+// da dn.ia — hot rate por hora do dia não decide nada numa venda B2B.
 const OPERATIONAL_CARDS: CardConfig[] = [
   { key: 'kpi_channels', label: 'KPI Canais', defaultVisible: true },
-  { key: 'time_analysis', label: 'Conversão Horária / Tempo Campanha', defaultVisible: true },
   { key: 'source_table', label: 'Performance Source', defaultVisible: true },
   { key: 'source_charts', label: 'Qualificação Source / Medium', defaultVisible: true },
   { key: 'campaign_table', label: 'Campanhas', defaultVisible: true },
@@ -148,13 +149,6 @@ export function OperationalTab({ leads }: OperationalTabProps) {
           sourcePerformance={sourcePerformance}
           campaignPerformance={campaignPerformance}
         />
-      )}
-
-      {isVisible('time_analysis') && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <HourlyConversionChart leads={leads} />
-          <CampaignTimeAnalysis leads={leads} />
-        </div>
       )}
 
       {isVisible('source_table') && (

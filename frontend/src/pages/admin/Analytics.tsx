@@ -2,7 +2,6 @@ import { AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAdminData } from '@/hooks/useAdminData';
 import { ProfileTab } from '@/components/admin/dashboard/profile';
-import { ChallengesTab } from '@/components/admin/dashboard/challenges';
 import { TacticalTab } from '@/components/admin/dashboard/tactical';
 import { OperationalTab } from '@/components/admin/dashboard/operational';
 import { InsightsTab } from '@/components/admin/dashboard/insights';
@@ -10,7 +9,6 @@ import { cn } from '@/lib/utils';
 
 const TABS = [
   { key: 'profile', label: 'Perfil' },
-  { key: 'challenges', label: 'Desafios' },
   { key: 'tactical', label: 'Tático' },
   { key: 'operational', label: 'Operacional' },
   { key: 'insights', label: 'Insights' },
@@ -18,9 +16,17 @@ const TABS = [
 
 type TabKey = typeof TABS[number]['key'];
 
+// A aba Desafios saiu em 02/10/2026 (raio-x RD, R6): media o campo desafio do
+// funil de evento da dn.ia, que a H&S não coleta. Link antigo com
+// `?tab=challenges` (ou qualquer aba que não existe) cai em Perfil, em vez de
+// abrir uma página em branco.
+function abaValida(valor: string | null): TabKey {
+  return TABS.some(t => t.key === valor) ? (valor as TabKey) : 'profile';
+}
+
 export default function Analytics() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as TabKey) || 'profile';
+  const activeTab = abaValida(searchParams.get('tab'));
   const { filteredLeads, truncado, teto } = useAdminData();
 
   return (
@@ -58,7 +64,6 @@ export default function Analytics() {
       {/* Tab content */}
       <div className="space-y-6">
         {activeTab === 'profile' && <ProfileTab leads={filteredLeads} />}
-        {activeTab === 'challenges' && <ChallengesTab leads={filteredLeads} />}
         {activeTab === 'tactical' && <TacticalTab leads={filteredLeads} />}
         {activeTab === 'operational' && <OperationalTab leads={filteredLeads} />}
         {activeTab === 'insights' && <InsightsTab leads={filteredLeads} />}
