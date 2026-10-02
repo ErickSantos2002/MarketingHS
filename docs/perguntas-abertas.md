@@ -56,3 +56,9 @@ dia no `CONTINUAR-AQUI.md`.
 
 ## Novas
 
+40. **Fusão de contatos deixa `journey_events` do descartado apontando para
+    lead apagado** (achado na rodada 6 da `backend`). Se o worker de jornada
+    pegar um desses ainda pendente, roda para lead que não existe. Opções:
+    (a) a fusão apaga esses eventos; (b) move para o contato mantido (risco de
+    disparar automação de novo); (c) deixar. **Assumido: (c)**, só o teste
+    limpa. Recomendação: (a), a mais segura.
