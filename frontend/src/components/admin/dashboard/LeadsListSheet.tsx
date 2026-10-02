@@ -4,7 +4,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Building2, User, Flame } from 'lucide-react';
 import type { EnrichedLead } from '@/hooks/useLeadQualification';
-import { getPriorityColor, getQualificationColor } from '@/hooks/useLeadQualification';
+import { getQualificationColor } from '@/hooks/useLeadQualification';
+import { pontuacaoDoBanco, corDaEtiqueta } from './pontuacao';
 import { LeadDetailModal } from './LeadDetailModal';
 
 interface LeadsListSheetProps {
@@ -71,11 +72,12 @@ export function LeadsListSheet({ leads, title, open, onOpenChange }: LeadsListSh
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <Badge 
-                          variant="outline" 
-                          className={`${getPriorityColor(lead.priorityLevel)} text-xs font-bold`}
+                        <Badge
+                          variant="outline"
+                          className={`${corDaEtiqueta(lead.etiqueta)} text-xs font-bold tabular-nums`}
+                          title="Score de Lead Scoring"
                         >
-                          {lead.priorityLevel}
+                          {pontuacaoDoBanco(lead)}
                         </Badge>
                         <Badge 
                           variant="outline" 

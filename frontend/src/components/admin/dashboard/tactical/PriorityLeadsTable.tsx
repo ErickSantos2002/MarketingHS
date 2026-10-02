@@ -6,20 +6,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Target, Copy, Check, ChevronLeft, ChevronRight, ArrowUpDown, Flame, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import type { EnrichedLead } from '@/hooks/useLeadQualification';
-import { getPriorityColor, getQualificationColor } from '@/hooks/useLeadQualification';
+import { getQualificationColor } from '@/hooks/useLeadQualification';
 import { LeadDetailModal } from '../LeadDetailModal';
+import { pontuacaoDoBanco, corDaEtiqueta } from '../pontuacao';
 
 interface PriorityLeadsTableProps {
   leads: EnrichedLead[];
 }
 
-type SortKey = 'priorityScore' | 'nome' | 'empresa' | 'created_at';
+// Ordena pelo `lead_score` do banco, não pelo P1–P4 da dn.ia (ver ../pontuacao).
+type SortKey = 'lead_score' | 'nome' | 'empresa' | 'created_at';
 type SortDirection = 'asc' | 'desc';
 
 export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortKey, setSortKey] = useState<SortKey>('priorityScore');
+  const [sortKey, setSortKey] = useState<SortKey>('lead_score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedLead, setSelectedLead] = useState<EnrichedLead | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -31,8 +33,8 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
       let comparison = 0;
       
       switch (sortKey) {
-        case 'priorityScore':
-          comparison = a.priorityScore - b.priorityScore;
+        case 'lead_score':
+          comparison = pontuacaoDoBanco(a) - pontuacaoDoBanco(b);
           break;
         case 'nome':
           comparison = (a.nome || '').localeCompare(b.nome || '');
@@ -111,9 +113,9 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
                     variant="ghost"
                     size="sm"
                     className="h-8 text-xs font-medium"
-                    onClick={() => handleSort('priorityScore')}
+                    onClick={() => handleSort('lead_score')}
                   >
-                    Prio
+                    Score
                     <ArrowUpDown className="ml-1 h-3 w-3" />
                   </Button>
                 </TableHead>
@@ -152,11 +154,11 @@ export function PriorityLeadsTable({ leads }: PriorityLeadsTableProps) {
                   onClick={() => handleRowClick(lead)}
                 >
                   <TableCell>
-                    <Badge 
-                      variant="outline" 
-                      className={`${getPriorityColor(lead.priorityLevel)} text-xs font-bold`}
+                    <Badge
+                      variant="outline"
+                      className={`${corDaEtiqueta(lead.etiqueta)} text-xs font-bold tabular-nums`}
                     >
-                      {lead.priorityLevel}
+                      {pontuacaoDoBanco(lead)}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-medium">

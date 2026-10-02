@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, Info, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { CampaignScore } from "@/hooks/useInsightsAnalytics";
 import {
   Table,
@@ -9,25 +9,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface CampaignRankingTableProps {
   campaigns: CampaignScore[];
 }
 
-type SortKey = 'campaign' | 'totalLeads' | 'responseRate' | 'hotRate' | 'score';
-
-const gradeColors = {
-  A: 'bg-[--tint-success] text-[--on-tint-success] border-success/30',
-  B: 'bg-[--tint-info] text-[--on-tint-info] border-info/30',
-  C: 'bg-[--tint-warning] text-[--on-tint-warning] border-warning/30',
-  D: 'bg-[--tint-danger] text-[--on-tint-danger] border-danger/30',
-  F: 'bg-[--tint-danger] text-[--on-tint-danger] border-danger/30'
-};
+// As colunas Resposta, Score e Grade (A–F) saíram em 02/10/2026 (raio-x RD,
+// R6): as três vinham do preenchimento do campo `desafios`, da dn.ia. O
+// ranking agora é por volume, com a fatia hot pela etiqueta do banco.
+type SortKey = 'campaign' | 'totalLeads' | 'hotLeads' | 'hotRate';
 
 export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey>('score');
-  const [legendOpen, setLegendOpen] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('totalLeads');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const handleSort = (key: SortKey) => {
@@ -69,53 +62,6 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
         Ranking de Campanhas ({campaigns.length})
       </h3>
 
-      {/* Legenda Explicativa */}
-      <Collapsible open={legendOpen} onOpenChange={setLegendOpen}>
-        <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full p-3 bg-muted/30 rounded-lg border border-border/50">
-          <Info className="h-4 w-4" />
-          <span>Como interpretar este ranking?</span>
-          {legendOpen ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2 p-3 bg-muted/20 rounded-lg border border-border/50 text-xs text-muted-foreground space-y-2">
-          <p><strong className="text-foreground">Score</strong> = (Taxa Resposta × 0.4) + (Hot Rate × 1.5) + Bônus de Volume</p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[--tint-success] text-[--on-tint-success] font-medium">A</span>
-              <span>80+ Excelente</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[--tint-info] text-[--on-tint-info] font-medium">B</span>
-              <span>60-79 Bom</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[--tint-warning] text-[--on-tint-warning] font-medium">C</span>
-              <span>40-59 Regular</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[--tint-danger] text-[--on-tint-danger] font-medium">D</span>
-              <span>20-39 Ruim</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[--tint-danger] text-[--on-tint-danger] font-medium">F</span>
-              <span>&lt;20 Crítico</span>
-            </div>
-          </div>
-          <div className="pt-2 border-t border-border/50 mt-2 space-y-1">
-            <p><span className="text-[--on-tint-danger]"><AlertTriangle className="inline h-3.5 w-3.5" /> Vermelho na Resposta:</span> &lt;50% — leads não estão completando o formulário</p>
-            <p><span className="text-[--on-tint-warning]"><AlertTriangle className="inline h-3.5 w-3.5" /> Amarelo no Hot Rate:</span> &lt;15% — leads fora do perfil ideal (ICP)</p>
-          </div>
-          <div className="pt-2 border-t border-border/50 mt-2">
-            <p><strong className="text-foreground">O que fazer:</strong></p>
-            <ul className="list-disc list-inside mt-1 space-y-0.5">
-              <li><strong>Grade A:</strong> Aumentar investimento nesta campanha</li>
-              <li><strong>Grade B:</strong> Manter e buscar otimizações incrementais</li>
-              <li><strong>Grade C:</strong> Revisar segmentação e criativos</li>
-              <li><strong>Grade D/F:</strong> Considerar pausar e realocar budget</li>
-            </ul>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-      
       <div className="rounded-lg border border-border/50 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -141,11 +87,11 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
                 </TableHead>
                 <TableHead 
                   className="cursor-pointer select-none text-right"
-                  onClick={() => handleSort('responseRate')}
+                  onClick={() => handleSort('hotLeads')}
                 >
                   <div className="flex items-center justify-end gap-1.5">
-                    Resposta
-                    <SortIcon columnKey="responseRate" />
+                    Hot
+                    <SortIcon columnKey="hotLeads" />
                   </div>
                 </TableHead>
                 <TableHead 
@@ -157,20 +103,10 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
                     <SortIcon columnKey="hotRate" />
                   </div>
                 </TableHead>
-                <TableHead 
-                  className="cursor-pointer select-none text-right"
-                  onClick={() => handleSort('score')}
-                >
-                  <div className="flex items-center justify-end gap-1.5">
-                    Score
-                    <SortIcon columnKey="score" />
-                  </div>
-                </TableHead>
-                <TableHead className="text-center">Grade</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedCampaigns.slice(0, 15).map((campaign, index) => (
+              {sortedCampaigns.slice(0, 15).map((campaign) => (
                 <TableRow key={campaign.campaign} className="border-border/30">
                   <TableCell className="font-medium max-w-[200px]">
                     <span 
@@ -184,22 +120,10 @@ export function CampaignRankingTable({ campaigns }: CampaignRankingTableProps) {
                     {campaign.totalLeads}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    <span className={campaign.responseRate < 50 ? 'text-[--on-tint-danger]' : campaign.responseRate > 70 ? 'text-[--on-tint-success]' : ''}>
-                      {campaign.responseRate.toFixed(1)}%
-                    </span>
+                    {campaign.hotLeads}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    <span className={campaign.hotRate < 15 ? 'text-[--on-tint-warning]' : campaign.hotRate > 25 ? 'text-[--on-tint-success]' : ''}>
-                      {campaign.hotRate.toFixed(1)}%
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums font-semibold">
-                    {campaign.score}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border ${gradeColors[campaign.grade]}`}>
-                      {campaign.grade}
-                    </span>
+                    {campaign.hotRate.toFixed(1)}%
                   </TableCell>
                 </TableRow>
               ))}

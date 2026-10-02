@@ -5,12 +5,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   User, Building2, Briefcase, DollarSign, Users, MessageSquare, 
   Globe, Link, Calendar, Copy, Check, Mail, Phone,
-  Target, Flame, TrendingUp
+  Target, Flame, Tag
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { EnrichedLead } from '@/hooks/useLeadQualification';
-import { getPriorityColor, getQualificationColor } from '@/hooks/useLeadQualification';
+import { getQualificationColor } from '@/hooks/useLeadQualification';
+import { pontuacaoDoBanco, corDaEtiqueta, rotuloDaEtiqueta } from './pontuacao';
 
 interface LeadDetailModalProps {
   lead: EnrichedLead | null;
@@ -59,11 +60,11 @@ export function LeadDetailModal({ lead, open, onOpenChange }: LeadDetailModalPro
               )}
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              <Badge 
-                variant="outline" 
-                className={`${getPriorityColor(lead.priorityLevel)} text-sm font-bold px-3 py-1`}
+              <Badge
+                variant="outline"
+                className={`${corDaEtiqueta(lead.etiqueta)} text-sm font-bold px-3 py-1 tabular-nums`}
               >
-                {lead.priorityLevel}
+                Score {pontuacaoDoBanco(lead)}
               </Badge>
               <Badge 
                 variant="outline" 
@@ -133,21 +134,19 @@ export function LeadDetailModal({ lead, open, onOpenChange }: LeadDetailModalPro
                 <Target className="h-4 w-4" />
                 Qualificação
               </h3>
-              <div className="grid grid-cols-3 gap-3">
+              {/* Score e etiqueta do banco (Lead Scoring). Prioridade P1–P4 e
+                  "Decisão" saíram em 02/10/2026: eram o perfil da dn.ia
+                  calculado no navegador (ver ./pontuacao). */}
+              <div className="grid grid-cols-2 gap-3">
                 <div className="p-4 rounded-lg bg-[--tint-success] border border-success/30 text-center">
                   <Flame className="h-5 w-5 text-[--on-tint-success] mx-auto mb-1" />
-                  <div className="text-2xl font-bold text-foreground">{Math.round(lead.priorityScore)}</div>
+                  <div className="text-2xl font-bold text-foreground tabular-nums">{pontuacaoDoBanco(lead)}</div>
                   <div className="text-xs text-muted-foreground">Score</div>
                 </div>
                 <div className="p-4 rounded-lg bg-[--tint-info] border border-info/30 text-center">
-                  <TrendingUp className="h-5 w-5 text-[--on-tint-info] mx-auto mb-1" />
-                  <div className="text-lg font-bold text-foreground">{lead.priorityLevel}</div>
-                  <div className="text-xs text-muted-foreground">Prioridade</div>
-                </div>
-                <div className="p-4 rounded-lg bg-[--tint-primary] border border-primary/30 text-center">
-                  <Users className="h-5 w-5 text-[--on-tint-primary] mx-auto mb-1" />
-                  <div className="text-sm font-bold text-foreground truncate">{lead.decisionPower}</div>
-                  <div className="text-xs text-muted-foreground">Decisão</div>
+                  <Tag className="h-5 w-5 text-[--on-tint-info] mx-auto mb-1" />
+                  <div className="text-lg font-bold text-foreground">{rotuloDaEtiqueta(lead.etiqueta)}</div>
+                  <div className="text-xs text-muted-foreground">Etiqueta</div>
                 </div>
               </div>
             </section>

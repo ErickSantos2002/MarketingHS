@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock, Users, TrendingDown, Check } from "lucide-react";
+import { AlertTriangle, Users, Check } from "lucide-react";
 import { Alert } from "@/hooks/useInsightsAnalytics";
 
 interface AlertsSectionProps {
@@ -6,10 +6,8 @@ interface AlertsSectionProps {
 }
 
 const alertIcons = {
-  abandonment: TrendingDown,
   quality: Users,
   duplicate: Users,
-  critical_hour: Clock
 };
 
 const severityColors = {
@@ -32,9 +30,7 @@ export function AlertsSection({ alerts }: AlertsSectionProps) {
         <div className="text-xs text-muted-foreground space-y-1">
           <p className="font-medium text-foreground">Como interpretar os alertas:</p>
           <ul className="list-disc list-inside space-y-0.5">
-            <li><strong>Alto Abandono:</strong> Campanha com &gt;50% dos leads não completando o formulário</li>
-            <li><strong>Baixa Qualidade:</strong> Campanha trazendo volume mas poucos leads qualificados (ICP)</li>
-            <li><strong>Horário Crítico:</strong> Período do dia com abandono acima da média</li>
+            <li><strong>Poucos leads hot:</strong> Campanha com 20+ leads e menos de 10% com etiqueta hot</li>
             <li><strong>Leads Duplicados:</strong> Possível problema de tracking ou remarketing</li>
           </ul>
         </div>
@@ -44,7 +40,7 @@ export function AlertsSection({ alerts }: AlertsSectionProps) {
         <div className="bg-[--tint-success] border border-success/30 rounded-lg p-4 text-center">
           <div className="flex items-center justify-center gap-2 text-[--on-tint-success]">
             <Check className="inline h-3.5 w-3.5" />
-            <span className="font-medium">Nenhum alerta crítico no momento</span>
+            <span className="font-medium">Nenhum alerta no momento</span>
           </div>
         </div>
       ) : (

@@ -1,8 +1,5 @@
-import { useState } from 'react';
-import { Users, UserCheck, Calendar, CalendarCheck, ChevronRight, MessageCircle, Pencil, Check, X, Loader2, RefreshCw, Info } from 'lucide-react';
+import { UserPlus, UserCheck, Calendar, CalendarCheck, ChevronRight, RefreshCw, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { EnrichedLead } from '@/hooks/useLeadQualification';
 
@@ -11,7 +8,6 @@ export type KPICardType = 'total' | 'today' | 'conversions' | 'week' | 'agendame
 
 export interface KPIVisibility {
   total: boolean;
-  whatsapp: boolean;
   conversions: boolean;
   today: boolean;
   week: boolean;
@@ -19,7 +15,10 @@ export interface KPIVisibility {
 }
 
 interface KPICardsProps {
-  totalLeads: EnrichedLead[];
+  /** Leads novos: `created_at` dentro do período (ou a base inteira, sem filtro de data). */
+  newLeads: EnrichedLead[];
+  /** Reconversões do mesmo recorte: contato antigo que voltou a converter. Não é lead novo. */
+  reconversionsInScope: number;
   leadsToday: EnrichedLead[];
   conversionsToday: EnrichedLead[];
   reconversionsCount: number;
@@ -29,13 +28,8 @@ interface KPICardsProps {
   agendamentosLeads?: EnrichedLead[];
   agendamentosTodayLeads?: EnrichedLead[];
   onCardClick: (type: KPICardType, leads: EnrichedLead[], title: string) => void;
-  whatsappGroupCount: number;
-  onUpdateWhatsappGroup: (count: number) => Promise<void>;
-  isSavingWhatsapp?: boolean;
   showTemporalKPIs?: boolean;
   hasDateFilter?: boolean;
-  periodReconversions?: number;
-  periodConversions?: number;
   isSingleDayFilter?: boolean;
   filterDateLabel?: string;
   visibleKPIs?: KPIVisibility;
@@ -89,119 +83,9 @@ function KPICard({ title, value, icon, gradient, glowColor, delay = '0ms', onCli
   );
 }
 
-interface WhatsAppKPICardProps {
-  value: number;
-  periodConversionsCount: number;
-  onUpdate: (count: number) => Promise<void>;
-  isSaving?: boolean;
-  delay?: string;
-}
-
-function WhatsAppKPICard({ value, periodConversionsCount, onUpdate, isSaving, delay = '0ms' }: WhatsAppKPICardProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value.toString());
-
-  const percentage = periodConversionsCount > 0 
-    ? ((value / periodConversionsCount) * 100).toFixed(1) 
-    : '0.0';
-
-  const handleSave = async () => {
-    const newCount = parseInt(editValue) || 0;
-    if (newCount >= 0) {
-      await onUpdate(newCount);
-    }
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setEditValue(value.toString());
-    setIsEditing(false);
-  };
-
-  const handleStartEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditValue(value.toString());
-    setIsEditing(true);
-  };
-
-  return (
-    <div
-      className={cn(
-        "bg-card border rounded-xl p-6 relative overflow-hidden group text-left w-full",
-        "hover:border-primary/30 transition-all duration-300"
-      )}
-      style={{ animationDelay: delay }}
-    >
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm text-muted-foreground font-medium">Grupo WhatsApp</span>
-          <div className="flex items-center gap-1">
-            {!isEditing && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 opacity-50 hover:opacity-100"
-                onClick={handleStartEdit}
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-            )}
-            <div className="p-2 rounded-lg bg-[--tint-success]">
-              <MessageCircle className="h-5 w-5 text-[--on-tint-success]" />
-            </div>
-          </div>
-        </div>
-
-        {isEditing ? (
-          <div className="flex items-center gap-2 animate-fade-in">
-            <Input
-              type="number"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="h-10 text-lg font-bold"
-              placeholder="Quantidade..."
-              autoFocus
-              min={0}
-              onClick={(e) => e.stopPropagation()}
-            />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-10 w-10 text-success hover:text-success/80"
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-10 w-10 text-[--on-tint-danger] hover:opacity-80"
-              onClick={handleCancel}
-              disabled={isSaving}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex flex-col">
-              <span className="text-4xl font-bold text-foreground tracking-tight">
-                {value.toLocaleString('pt-BR')}
-              </span>
-              <span className="text-xs text-[--on-tint-success] font-medium mt-1">
-                {percentage}% dos leads
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function KPICards({ 
-  totalLeads, 
+export function KPICards({
+  newLeads,
+  reconversionsInScope,
   leadsToday, 
   conversionsToday,
   reconversionsCount,
@@ -211,28 +95,22 @@ export function KPICards({
   agendamentosLeads = [],
   agendamentosTodayLeads = [],
   onCardClick,
-  whatsappGroupCount,
-  onUpdateWhatsappGroup,
-  isSavingWhatsapp,
   showTemporalKPIs = true,
   hasDateFilter = false,
-  periodReconversions = 0,
-  periodConversions = 0,
   isSingleDayFilter = false,
   filterDateLabel = '',
-  visibleKPIs = { total: true, whatsapp: true, conversions: true, today: true, week: true, agendamentos: true }
+  visibleKPIs = { total: true, conversions: true, today: true, week: true, agendamentos: true }
 }: KPICardsProps) {
-  // Determine title and subtitle for the Total Leads card
-  const showReconversionInfo = hasDateFilter && periodReconversions > 0;
-  const totalLeadsTitle = hasDateFilter ? 'Conversões no Período' : 'Total de Leads';
-  const totalLeadsSubtitle = showReconversionInfo 
-    ? `(${periodReconversions} reconversões)`
+  // O número principal é lead NOVO (cadastro no período). Reconversão — contato
+  // antigo que preencheu de novo — aparece à parte e não soma (raio-x RD, R6).
+  const newLeadsTitle = hasDateFilter ? 'Leads novos no período' : 'Leads novos (todo o período)';
+  const newLeadsSubtitle = reconversionsInScope > 0
+    ? `+ ${reconversionsInScope.toLocaleString('pt-BR')} reconversões à parte`
     : undefined;
 
   // Count visible cards to determine grid
   const visibleCount = [
     visibleKPIs.total,
-    visibleKPIs.whatsapp,
     showTemporalKPIs ? visibleKPIs.conversions : (isSingleDayFilter ? visibleKPIs.conversions : false),
     showTemporalKPIs ? visibleKPIs.today : false,
     showTemporalKPIs ? visibleKPIs.week : false,
@@ -266,17 +144,17 @@ export function KPICards({
         {visibleKPIs.total && (
         <div className="relative">
           <KPICard
-            title={totalLeadsTitle}
-            value={hasDateFilter ? periodConversions : totalLeads.length}
-            icon={<Users className="h-5 w-5 text-primary-foreground" />}
+            title={newLeadsTitle}
+            value={newLeads.length}
+            icon={<UserPlus className="h-5 w-5 text-primary-foreground" />}
             gradient="bg-info"
             glowColor="primary"
             delay="0ms"
-            onClick={() => onCardClick('total', totalLeads, totalLeadsTitle)}
-            subtitle={totalLeadsSubtitle}
+            onClick={() => onCardClick('total', newLeads, newLeadsTitle)}
+            subtitle={newLeadsSubtitle}
             subtitleColor="text-muted-foreground"
           />
-          {showReconversionInfo && (
+          {reconversionsInScope > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button className="absolute top-2 right-2 p-1 rounded-full bg-background/50 hover:bg-background/80 transition-colors z-20">
@@ -285,27 +163,18 @@ export function KPICards({
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[280px]">
                 <p className="text-xs">
-                  <strong>{periodConversions}</strong> conversões totais no período.
+                  <strong>{newLeads.length.toLocaleString('pt-BR')}</strong> leads novos: o cadastro
+                  {hasDateFilter ? ' caiu no período' : ' é o primeiro contato'}.
                   <br />
-                  <strong>{totalLeads.length}</strong> são leads novos criados no período.
-                  <br />
-                  <strong>{periodReconversions}</strong> são reconversões de leads anteriores.
+                  <strong>{reconversionsInScope.toLocaleString('pt-BR')}</strong> reconversões: contatos
+                  que já existiam e converteram de novo{hasDateFilter ? ' no período' : ''}. Não contam
+                  como lead novo.
                 </p>
               </TooltipContent>
             </Tooltip>
           )}
         </div>
         )}
-
-      {visibleKPIs.whatsapp && (
-      <WhatsAppKPICard
-        value={whatsappGroupCount}
-        periodConversionsCount={hasDateFilter ? periodConversions : totalLeads.length}
-        onUpdate={onUpdateWhatsappGroup}
-        isSaving={isSavingWhatsapp}
-        delay="50ms"
-      />
-      )}
 
       {showTemporalKPIs ? (
         <>

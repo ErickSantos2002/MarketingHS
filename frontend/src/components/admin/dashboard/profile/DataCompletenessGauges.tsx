@@ -1,12 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Database, Briefcase, Building, DollarSign, MessageSquare } from 'lucide-react';
+import { Database, Briefcase, Building, Phone } from 'lucide-react';
 
 interface DataCompletenessGaugesProps {
   data: {
     cargo: number;
     empresa: number;
-    faturamento: number;
-    desafios: number;
+    whatsapp: number;
     average: number;
   };
 }
@@ -77,8 +76,7 @@ export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
   const gauges = [
     { value: data.cargo, label: 'Cargo', icon: Briefcase, color: 'var(--primary)' },
     { value: data.empresa, label: 'Empresa', icon: Building, color: 'var(--color-info-500)' },
-    { value: data.faturamento, label: 'Faturamento', icon: DollarSign, color: 'var(--color-success-500)' },
-    { value: data.desafios, label: 'Desafios', icon: MessageSquare, color: 'var(--primary)' },
+    { value: data.whatsapp, label: 'WhatsApp', icon: Phone, color: 'var(--color-success-500)' },
   ];
 
   return (
@@ -99,7 +97,7 @@ export function DataCompletenessGauges({ data }: DataCompletenessGaugesProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4">
+        <div className="grid grid-cols-3 gap-4 py-4">
           {gauges.map((gauge) => (
             <MiniGauge key={gauge.label} {...gauge} />
           ))}

@@ -113,9 +113,7 @@ function AdminLayoutInner() {
               onSetDatePreset={dashboardFilters.setDatePreset}
               onSetCustomDateRange={dashboardFilters.setCustomDateRange}
               activeFiltersCount={dashboardFilters.activeFiltersCount}
-              availableTipos={[...new Set(allLeads.map(l => l.tipo).filter(Boolean))]}
               availableCampaigns={[...new Set(allLeads.map(l => l.utm_campaign || 'Sem campanha').filter(Boolean))]}
-              availableFaturamentos={[...new Set(allLeads.map(l => l.faturamento).filter(Boolean) as string[])]}
               availableCargos={[...new Set(allLeads.map(l => l.cargo).filter(Boolean) as string[])]}
               availableSources={[...new Set(allLeads.map(l => l.utm_source || 'Sem origem').filter(Boolean))]}
               filteredCount={filteredLeads.length}

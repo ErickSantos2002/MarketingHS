@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { KPICards, KPICardType } from './KPICards';
 import { LeadsLineChart } from './LeadsLineChart';
-import { DistributionPieChart } from './DistributionPieChart';
 import { SourceBarChart } from './SourceBarChart';
 import { QualificationGauge } from './QualificationGauge';
 import { LeadGoalGauge } from './LeadGoalGauge';
@@ -15,13 +14,11 @@ import { useLeadQualification, type EnrichedLead, enrichLeadWithQualification } 
 import { useLeadAnalytics, BRASILIA_TIMEZONE } from '@/hooks/useLeadAnalytics';
 import { useGoalSettings } from '@/hooks/useGoalSettings';
 import { useAgendamentos, useAgendamentosByDay, countAgendamentos, getAgendamentoLeadIds, useMqlReuniaoAgendadaToday } from '@/hooks/useAgendamentos';
-import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { parseISO, format, startOfWeek, endOfWeek, startOfDay, endOfDay, isWithinInterval, addDays, subDays } from 'date-fns';
 import { formatInTimeZone, toZonedTime, format as formatTz } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
-import type { DashboardFilters } from '@/hooks/useDashboardFilters';
-import { classifyChallengeThemes } from '@/hooks/useLeadAnalytics';
+import { applyFilters, ehRecorrente, type DashboardFilters } from '@/hooks/useDashboardFilters';
 
 interface OverviewTabProps {
   leads: Lead[];
@@ -68,13 +65,6 @@ function applyNonDateFilters(leads: Lead[], filters?: DashboardFilters): Lead[] 
       if (!filters.cargos.includes(leadCargo)) return false;
     }
 
-    // Challenge themes filter
-    if ((filters.challengeThemes?.length ?? 0) > 0) {
-      const leadThemes = classifyChallengeThemes(lead.desafios);
-      const hasMatchingTheme = filters.challengeThemes.some(theme => leadThemes.includes(theme));
-      if (!hasMatchingTheme) return false;
-    }
-
     // Hide incomplete leads filter
     if (filters.hideIncomplete) {
       const hasCompleteFaturamento = lead.faturamento && lead.faturamento.trim() !== '' && lead.faturamento.toLowerCase() !== 'não informado';
@@ -92,28 +82,25 @@ function applyNonDateFilters(leads: Lead[], filters?: DashboardFilters): Lead[] 
       if (!matchesName && !matchesEmail && !matchesCompany && !matchesWhatsapp) return false;
     }
 
-    // Only reconversions filter
-    if (filters.onlyReconversions) {
-      if (!lead.last_conversion_date || !lead.created_at) return false;
-      const created = new Date(lead.created_at).getTime();
-      const lastConversion = new Date(lead.last_conversion_date).getTime();
-      if (Math.abs(lastConversion - created) <= 60000) return false;
-    }
+    // Novos / Recorrentes / Todos
+    if (filters.recorrencia === 'recorrentes' && !ehRecorrente(lead)) return false;
+    if (filters.recorrencia === 'novos' && ehRecorrente(lead)) return false;
 
     return true;
   });
 }
+// "Grupo WhatsApp" (kpi_whatsapp) e "Distribuição por Modal" (distribution_pie)
+// saíram em 02/10/2026 (raio-x RD, R6): eram do funil de evento da dn.ia. Uma
+// preferência salva com essas chaves só deixa de ter efeito.
 const OVERVIEW_CARDS: CardConfig[] = [
-  { key: 'kpi_total', label: 'Conversões / Total Leads', defaultVisible: true },
-  { key: 'kpi_whatsapp', label: 'Grupo WhatsApp', defaultVisible: true },
+  { key: 'kpi_total', label: 'Leads novos', defaultVisible: true },
   { key: 'kpi_conversions', label: 'Conversões Hoje', defaultVisible: true },
   { key: 'kpi_today', label: 'Leads Novos Hoje', defaultVisible: true },
   { key: 'kpi_week', label: 'Leads na Semana', defaultVisible: true },
   { key: 'kpi_agendamentos', label: 'Agendamentos', defaultVisible: true },
   { key: 'line_chart', label: 'Gráfico de Linha', defaultVisible: true },
-  { key: 'distribution_pie', label: 'Distribuição por Modal', defaultVisible: true },
-  { key: 'source_bar', label: 'Fontes', defaultVisible: true },
-  { key: 'qualification_gauge', label: 'Qualification Gauge', defaultVisible: true },
+  { key: 'source_bar', label: 'Por landing page', defaultVisible: true },
+  { key: 'qualification_gauge', label: 'Qualificação', defaultVisible: true },
   { key: 'lead_goal', label: 'Meta de Leads', defaultVisible: true },
   { key: 'forecast', label: 'Forecast', defaultVisible: true },
   { key: 'daily_volume', label: 'Volume Diário', defaultVisible: true },
@@ -122,7 +109,7 @@ const OVERVIEW_CARDS: CardConfig[] = [
 export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsChange, datePreset = 'all', dateFrom, dateTo, filters }: OverviewTabProps) {
   const { enrichedLeads, qualificationCounts, qualificationRate } = useLeadQualification(leads);
   const analytics = useLeadAnalytics(leads);
-  const { settings, updateGoal, updateDates, updateWhatsappGroup, isSaving } = useGoalSettings();
+  const { settings, updateGoal, updateDates, isSaving } = useGoalSettings();
   const { visibleCards, toggleCard, resetCards, isVisible } = useDashboardCardSettings('overview', OVERVIEW_CARDS);
 
   // Sheet state
@@ -286,30 +273,33 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
      }).length;
    }, [conversionsToday]);
  
-  // Conversões no período selecionado (usando last_conversion_date) - agora respeitando filtros globais
-  const conversionsInPeriod = useMemo(() => {
-    if (!dateFrom && !dateTo) return filteredAllLeads.length;
-    
-    return filteredAllLeads.filter(lead => {
-      const conversionDate = lead.last_conversion_date;
-      if (!conversionDate) return false;
-      
-      const conversionDateParsed = toZonedTime(parseISO(conversionDate), BRASILIA_TIMEZONE);
-      
-      if (dateFrom && conversionDateParsed < startOfDay(dateFrom)) return false;
-      if (dateTo) {
-        const endDate = endOfDay(dateTo);
-        if (conversionDateParsed > endDate) return false;
-      }
-      
-      return true;
-    }).length;
-  }, [filteredAllLeads, dateFrom, dateTo]);
+  // Leads NOVOS do recorte — o número principal do painel. Conta `created_at`:
+  // sem filtro de data, é o mesmo conjunto filtrado de sempre (todo contato foi
+  // lead novo uma vez); com filtro de data, o cadastro tem de cair no período —
+  // o filtro global de data olha a última conversão, que traria reconversões.
+  // Os demais filtros valem nos dois casos (applyFilters sem a data).
+  const newLeadsInScope = useMemo(() => {
+    if (!dateFrom && !dateTo) return enrichedLeads;
+    const semData = filters
+      ? applyFilters(allLeads, { ...filters, datePreset: 'all', dateFrom: null, dateTo: null })
+      : allLeads;
+    return semData
+      .filter(lead => {
+        if (!lead.created_at) return false;
+        const day = formatInTimeZone(parseISO(lead.created_at), BRASILIA_TIMEZONE, 'yyyy-MM-dd');
+        if (dateFrom && day < format(dateFrom, 'yyyy-MM-dd')) return false;
+        if (dateTo && day > format(dateTo, 'yyyy-MM-dd')) return false;
+        return true;
+      })
+      .map(lead => enrichLeadWithQualification(lead));
+  }, [enrichedLeads, allLeads, filters, dateFrom, dateTo]);
 
-  // Reconversões no período = conversões totais - leads criados no período
-  const periodReconversions = useMemo(() => {
-    return Math.max(0, conversionsInPeriod - enrichedLeads.length);
-  }, [conversionsInPeriod, enrichedLeads.length]);
+  // Reconversões à parte: com filtro de data, quem converteu no período mas
+  // tinha sido cadastrado antes dele; sem filtro, quem já voltou a converter.
+  const reconversionsInScope = useMemo(() => {
+    if (dateFrom || dateTo) return reconversionsCountInPeriod;
+    return enrichedLeads.filter(ehRecorrente).length;
+  }, [dateFrom, dateTo, reconversionsCountInPeriod, enrichedLeads]);
 
   // Conversões por dia usando allLeads (filtrado pelo período selecionado)
   const allConversionsByDay = useMemo(() => {
@@ -380,17 +370,18 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
   }, [mqlReuniaoTodayIds, enrichedLeads]);
 
 
-  // Calculate conversions within the goal period (using last_conversion_date, same logic as "Conversões no Período")
+  // Leads NOVOS dentro do período da meta (`created_at`). Até 02/10/2026 a
+  // meta e a projeção contavam `last_conversion_date`, e uma reconversão
+  // contava como lead da meta; o objetivo nº 1 da H&S é lead novo.
   const leadsInGoalPeriod = useMemo(() => {
     if (!settings.start_date || !settings.end_date) return allLeads.length;
-    
+
     const goalStart = startOfDay(parseISO(settings.start_date));
     const goalEnd = endOfDay(parseISO(settings.end_date));
-    
+
     return allLeads.filter(lead => {
-      const conversionDate = lead.last_conversion_date;
-      if (!conversionDate) return false;
-      const dateInBrasilia = toZonedTime(parseISO(conversionDate), BRASILIA_TIMEZONE);
+      if (!lead.created_at) return false;
+      const dateInBrasilia = toZonedTime(parseISO(lead.created_at), BRASILIA_TIMEZONE);
       return dateInBrasilia >= goalStart && dateInBrasilia <= goalEnd;
     }).length;
   }, [allLeads, settings.start_date, settings.end_date]);
@@ -414,8 +405,6 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
     return isDateFromValid && isDateToValid;
   }, [datePreset, dateFrom, dateTo]);
 
-  const [showExtraCards, setShowExtraCards] = useState(false);
-
   const handleCardClick = (type: KPICardType, leads: EnrichedLead[], title: string) => {
     setSelectedLeads(leads);
     setSelectedTitle(title);
@@ -438,7 +427,8 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
 
       {/* KPI Cards */}
       <KPICards
-        totalLeads={enrichedLeads}
+        newLeads={newLeadsInScope}
+        reconversionsInScope={reconversionsInScope}
         leadsToday={leadsToday}
         conversionsToday={showTemporalKPIs ? conversionsToday : conversionsInFilteredPeriod}
         reconversionsCount={showTemporalKPIs ? reconversionsCountToday : reconversionsCountInPeriod}
@@ -448,18 +438,12 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
         agendamentosLeads={agendamentosLeads}
         agendamentosTodayLeads={agendamentosTodayLeads}
         onCardClick={handleCardClick}
-        whatsappGroupCount={settings.whatsapp_group}
-        onUpdateWhatsappGroup={updateWhatsappGroup}
-        isSavingWhatsapp={isSaving}
         showTemporalKPIs={showTemporalKPIs}
         hasDateFilter={datePreset !== 'all'}
-        periodReconversions={periodReconversions}
-        periodConversions={conversionsInPeriod}
         isSingleDayFilter={isSingleDayFilter}
         filterDateLabel={filterDateLabel}
         visibleKPIs={{
           total: isVisible('kpi_total'),
-          whatsapp: isVisible('kpi_whatsapp'),
           conversions: isVisible('kpi_conversions'),
           today: isVisible('kpi_today'),
           week: isVisible('kpi_week'),
@@ -482,81 +466,52 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
         />
       )}
 
-      {/* Toggle for extra details */}
-      <div className="flex justify-center">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowExtraCards(v => !v)}
-          className="gap-2"
-        >
-          {showExtraCards ? (
-            <>
-              <ChevronUp className="h-4 w-4" />
-              Ocultar detalhes
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-4 w-4" />
-              Mostrar mais detalhes
-            </>
+      {/* Origem, meta e qualificação ficam à vista: o "Mostrar mais detalhes"
+          que os escondia saiu em 02/10/2026 (raio-x RD, R6). */}
+      <div className="space-y-6">
+        {isVisible('source_bar') && (
+          <SourceBarChart data={analytics.distributionBySource} />
+        )}
+
+        {/* Goal & Forecast Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {isVisible('qualification_gauge') && (
+            <QualificationGauge rate={qualificationRate} />
           )}
-        </Button>
-      </div>
 
-      {showExtraCards && (
-        <div className="space-y-6 animate-fade-in">
-          {/* Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {isVisible('distribution_pie') && (
-              <DistributionPieChart data={analytics.distributionByTipo} title="Distribuição por Modal" />
-            )}
+          {isVisible('lead_goal') && (
+            <LeadGoalGauge
+              currentLeads={leadsInGoalPeriod}
+              goal={settings.goal}
+              startDate={settings.start_date}
+              endDate={settings.end_date}
+              onUpdateGoal={updateGoal}
+              onUpdateDates={updateDates}
+              isSaving={isSaving}
+            />
+          )}
 
-            {isVisible('source_bar') && (
-              <SourceBarChart data={analytics.distributionBySource} />
-            )}
-          </div>
+          {isVisible('forecast') && (
+            <ForecastCard
+              currentLeads={leadsInGoalPeriod}
+              goal={settings.goal}
+              startDate={settings.start_date}
+              endDate={settings.end_date}
+              onUpdateDates={updateDates}
+              isSaving={isSaving}
+            />
+          )}
 
-          {/* Goal & Forecast Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {isVisible('qualification_gauge') && (
-              <QualificationGauge rate={qualificationRate} />
-            )}
-
-            {isVisible('lead_goal') && (
-              <LeadGoalGauge
-                currentLeads={leadsInGoalPeriod}
-                goal={settings.goal}
-                startDate={settings.start_date}
-                endDate={settings.end_date}
-                onUpdateGoal={updateGoal}
-                onUpdateDates={updateDates}
-                isSaving={isSaving}
-              />
-            )}
-
-            {isVisible('forecast') && (
-              <ForecastCard
-                currentLeads={leadsInGoalPeriod}
-                goal={settings.goal}
-                startDate={settings.start_date}
-                endDate={settings.end_date}
-                onUpdateDates={updateDates}
-                isSaving={isSaving}
-              />
-            )}
-
-            {isVisible('daily_volume') && (
-              <DailyVolumeCard
-                currentLeads={leadsInGoalPeriod}
-                goal={settings.goal}
-                startDate={settings.start_date}
-                endDate={settings.end_date}
-              />
-            )}
-          </div>
+          {isVisible('daily_volume') && (
+            <DailyVolumeCard
+              currentLeads={leadsInGoalPeriod}
+              goal={settings.goal}
+              startDate={settings.start_date}
+              endDate={settings.end_date}
+            />
+          )}
         </div>
-      )}
+      </div>
 
       {/* Leads List Sheet */}
       <LeadsListSheet
