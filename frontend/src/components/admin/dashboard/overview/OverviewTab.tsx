@@ -92,27 +92,6 @@ function applyNonDateFilters(leads: Lead[], filters?: DashboardFilters): Lead[] 
       if (!matchesName && !matchesEmail && !matchesCompany && !matchesWhatsapp) return false;
     }
 
-    // Interesse Ecossistema filter
-    if (filters.interesseEcossistema) {
-      const preencheuFormulario = lead.data_interesse !== null && lead.data_interesse !== undefined;
-      if (!preencheuFormulario) return false;
-      
-      const temMTIA = lead.interesse_mtia === true;
-      const temFormacao = lead.interesse_formacao === true;
-      
-      switch (filters.interesseEcossistema) {
-        case 'mtia_e_formacao':
-          if (!(temMTIA && temFormacao)) return false;
-          break;
-        case 'apenas_mtia':
-          if (!(temMTIA && !temFormacao)) return false;
-          break;
-        case 'apenas_formacao':
-          if (!(!temMTIA && temFormacao)) return false;
-          break;
-      }
-    }
-
     // Only reconversions filter
     if (filters.onlyReconversions) {
       if (!lead.last_conversion_date || !lead.created_at) return false;

@@ -36,15 +36,49 @@ import { useAbConfig } from "@/hooks/useAbConfig";
 const VARIANT_KEYS = ["A", "B", "C", "D", "E", "F"];
 
 /**
- * Pesos iguais para `n` variantes, somando 100 — o resto vai para as
- * primeiras (3 → 34/33/33). Decisão do Erick (01/10, pergunta 34): a
- * variante nova DIVIDE IGUAL com as outras. Desde a rodada 4 do backend,
- * peso 0 quer dizer "sem tráfego" (o sorteio a pula), então nascer com 0
- * deixaria a variante criada e calada.
+ * Pesos ao adicionar a `n`-ésima variante. Decisão do Erick (02/10,
+ * pergunta 39, que refina a 34): a nova entra com a parte igual
+ * (`100/n`, arredondada) e as existentes ENCOLHEM NA PROPORÇÃO entre si
+ * para caber no resto — 70/30 → 47/20/33. O arredondamento é por maior
+ * resto, então a soma fecha em 100.
+ *
+ * Peso 0 quer dizer "sem tráfego" (o sorteio a pula, rodada 4 do backend)
+ * e continua 0 (decisão 7). O contrário também vale: variante que tinha
+ * tráfego nunca é arredondada para 0 — isso a calaria sem ninguém pedir.
+ * Se nenhuma existente tem peso, não há proporção a manter: a nova fica
+ * com os 100.
  */
-function dividirIgual(n: number): number[] {
-  const base = Math.floor(100 / n);
-  return Array.from({ length: n }, (_, i) => base + (i < 100 % n ? 1 : 0));
+function pesosComVariantNova(existentes: number[]): number[] {
+  const n = existentes.length + 1;
+  const atuais = existentes.map((w) => (Number.isFinite(w) && w > 0 ? w : 0));
+  const soma = atuais.reduce((a, b) => a + b, 0);
+  if (soma === 0) return [...atuais, 100];
+
+  const nova = Math.round(100 / n);
+  const resto = 100 - nova;
+  const exatos = atuais.map((w) => (w * resto) / soma);
+  const pesos = exatos.map(Math.floor);
+  let faltam = resto - pesos.reduce((a, b) => a + b, 0);
+  const porFracao = exatos
+    .map((x, i) => ({ i, fracao: x - Math.floor(x) }))
+    .filter(({ i }) => atuais[i] > 0)
+    .sort((a, b) => b.fracao - a.fracao);
+  for (const { i } of porFracao) {
+    if (faltam <= 0) break;
+    pesos[i] += 1;
+    faltam -= 1;
+  }
+  // Quem tinha tráfego fica com pelo menos 1, tirado da maior.
+  for (let i = 0; i < pesos.length; i++) {
+    if (atuais[i] > 0 && pesos[i] === 0) {
+      const maior = pesos.indexOf(Math.max(...pesos));
+      if (pesos[maior] > 1) {
+        pesos[maior] -= 1;
+        pesos[i] = 1;
+      }
+    }
+  }
+  return [...pesos, nova];
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -125,8 +159,8 @@ export default function Experiments() {
     setForm((f) => {
       if (f.variants.length >= VARIANT_KEYS.length) return f;
       const key = VARIANT_KEYS[f.variants.length];
+      const pesos = pesosComVariantNova(f.variants.map((v) => Number(v.weight) || 0));
       const variants = [...f.variants, { key, url: "", weight: 0, label: `Variante ${key}` }];
-      const pesos = dividirIgual(variants.length);
       return { ...f, variants: variants.map((v, i) => ({ ...v, weight: pesos[i] })) };
     });
   };

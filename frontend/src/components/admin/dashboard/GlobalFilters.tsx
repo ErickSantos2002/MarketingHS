@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon, X, Filter, RotateCcw, UserCheck, Search, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import type { DashboardFilters, DatePreset, InteresseFilter } from '@/hooks/useDashboardFilters';
+import type { DashboardFilters, DatePreset } from '@/hooks/useDashboardFilters';
 import { CHALLENGE_THEMES } from '@/hooks/useLeadAnalytics';
 import type { QualificationSegment } from '@/hooks/useLeadQualification';
 
@@ -26,7 +26,6 @@ interface GlobalFiltersProps {
   availableFaturamentos: string[];
   availableCargos: string[];
   availableSources: string[];
-  availablePresencas: string[];
   filteredCount?: number;
   totalCount?: number;
 }
@@ -45,12 +44,6 @@ const QUALIFICATION_OPTIONS: { value: QualificationSegment; label: string }[] = 
   { value: 'hot', label: 'Hot Lead' },
   { value: 'warm', label: 'Warm Lead' },
   { value: 'raw', label: 'Raw Lead' },
-];
-
-const INTERESSE_OPTIONS: { value: InteresseFilter; label: string }[] = [
-  { value: 'mtia_e_formacao', label: 'MTIA + Formação' },
-  { value: 'apenas_mtia', label: 'Apenas MTIA' },
-  { value: 'apenas_formacao', label: 'Apenas Formação' },
 ];
 
 interface MultiSelectDropdownProps {
@@ -125,7 +118,6 @@ export function GlobalFilters({
   availableFaturamentos,
   availableCargos,
   availableSources,
-  availablePresencas,
   filteredCount,
   totalCount,
 }: GlobalFiltersProps) {
@@ -323,57 +315,6 @@ export function GlobalFilters({
           onChange={(challengeThemes) => onUpdateFilters({ challengeThemes })}
         />
 
-        {/* Presença Filter */}
-        <MultiSelectDropdown
-          label="Presença"
-          options={availablePresencas}
-          selected={filters.presencas || []}
-          onChange={(presencas) => onUpdateFilters({ presencas })}
-        />
-
-        {/* Interesse Ecossistema Filter */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn(
-                "h-9 border-border/50 bg-card/50 hover:bg-card hover:border-primary/30 transition-all duration-200",
-                filters.interesseEcossistema && "border-primary/50 bg-primary/5"
-              )}
-            >
-              Interesse
-              {filters.interesseEcossistema && (
-                <Badge className="ml-2 bg-primary/20 text-primary hover:bg-primary/30 text-xs px-1.5">
-                  1
-                </Badge>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-2 bg-card border-border/50" align="start">
-            <div className="space-y-1">
-              {INTERESSE_OPTIONS.map(option => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    onUpdateFilters({ 
-                      interesseEcossistema: filters.interesseEcossistema === option.value ? null : option.value 
-                    });
-                  }}
-                  className={cn(
-                    "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
-                    filters.interesseEcossistema === option.value
-                      ? "bg-primary/20 text-primary"
-                      : "hover:bg-muted text-foreground"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-
         {/* Hide Incomplete Leads Toggle */}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/50 bg-card/50">
           <Switch
@@ -500,31 +441,6 @@ export function GlobalFilters({
               <X className="ml-1 h-3 w-3" />
             </Badge>
           ))}
-          {(filters.presencas || []).map(presenca => (
-            <Badge
-              key={`presenca-${presenca}`}
-              variant="success"
-              className="cursor-pointer hover:bg-success/20"
-              onClick={() => onUpdateFilters({ presencas: (filters.presencas || []).filter(p => p !== presenca) })}
-            >
-              {presenca}
-              <X className="ml-1 h-3 w-3" />
-            </Badge>
-          ))}
-          {filters.interesseEcossistema && (
-            <Badge
-              variant="default"
-              className="cursor-pointer hover:bg-primary/20"
-              onClick={() => onUpdateFilters({ interesseEcossistema: null })}
-            >
-              {filters.interesseEcossistema === 'mtia_e_formacao'
-                ? 'MTIA + Formação'
-                : filters.interesseEcossistema === 'apenas_mtia'
-                  ? 'Apenas MTIA'
-                  : 'Apenas Formação'}
-              <X className="ml-1 h-3 w-3" />
-            </Badge>
-          )}
           {filters.onlyReconversions && (
             <Badge
               variant="info"

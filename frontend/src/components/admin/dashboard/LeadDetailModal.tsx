@@ -205,7 +205,6 @@ export function LeadDetailModal({ lead, open, onOpenChange }: LeadDetailModalPro
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <InfoCard icon={Calendar} label="Criado em" value={formatDate(lead.created_at)} />
-                <InfoCard icon={User} label="Tipo Participante" value={lead.tipo_participante} />
               </div>
             </section>
           </div>
