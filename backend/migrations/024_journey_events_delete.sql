@@ -1,0 +1,21 @@
+-- 024 — DELETE em `journey_events` para `authenticated` (frente backend, rodada 7, 02/10/2026)
+--
+-- Por quê: a fusão de contatos (`POST /contatos/fundir`, sob
+-- `sessao(role="authenticated", user_id=admin.id)`) apaga a fila de jornada do
+-- contato descartado na mesma transação — pergunta 40 (a). `journey_events` é
+-- fila de trânsito sem FK para `leads`: sem isso a linha ficava apontando para
+-- um lead que não existe mais. Até aqui `authenticated` só tinha INSERT
+-- (migration 010, para o gatilho de `contact_events`), e o DELETE falhava com
+-- permissão negada.
+--
+-- A tabela não tem RLS (nunca teve): o GRANT vale para qualquer
+-- `authenticated`. Quem decide é a rota — a fusão exige `admin_atual` — e o
+-- DELETE filtra pelo id exato do descartado. Não ligar RLS aqui: o gatilho
+-- grava sob `anon` e `authenticated`, e política faltando derrubaria a captura.
+--
+-- O ERICK RODA (`~/marketinghs-migration-024.sh`). Tolera reaplicação: GRANT é
+-- idempotente no Postgres (conceder um privilégio que o papel já tem não é
+-- erro nem duplica nada). Só ACRESCENTA permissão; nada muda para
+-- `service_role` nem para `anon`.
+
+GRANT DELETE ON public.journey_events TO authenticated;

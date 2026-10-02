@@ -253,6 +253,15 @@ async def test_fusao_sem_colisao_nao_encerra_nem_apaga_nada(conexao, marca, pape
         m) == 2
 
 
+async def test_authenticated_pode_apagar_a_fila_de_jornada(conexao):
+    """A 024. Enquanto ela não estiver aplicada, os testes da fusão sob
+    `authenticated` ficam vermelhos com permissão negada em `journey_events` —
+    este diz o porquê numa linha."""
+    assert await conexao.fetchval(
+        "SELECT has_table_privilege('authenticated', 'public.journey_events', 'DELETE')"), \
+        "migration 024 não aplicada: rode ~/marketinghs-migration-024.sh"
+
+
 async def test_fusao_apaga_a_fila_de_jornada_do_descartado(conexao, marca, papel):
     """Pergunta 40 (a), 02/10/2026: `journey_events` é fila de trânsito, sem FK
     e fora de `_TABELAS_FILHAS`. Sem limpeza, o evento do descartado ficava
