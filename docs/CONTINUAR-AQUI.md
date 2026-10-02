@@ -8,6 +8,23 @@
 > `docs/perguntas-abertas.md`. Viram a rodada 6: `decisoes-0210` (28+29, 30,
 > 39) e `backend` rodada 6 (38).
 >
+> ✅ **Rodada 6 na `main`** (`10c3bcf` front, `1381575` backend): funil dn.ia
+> fora da ficha/modal/filtros, `LeadsExport` apagado, pesos A/B na proporção;
+> fixtures limpam eventos (órfãos pararam de crescer), I5 sem `sleep` fixo.
+> Suíte 414 passed. Pergunta 40 nova (fusão × `journey_events`).
+>
+> ✅ **Produção no ar (02/10):** https://marketinghs.healthsafetytech.com —
+> projeto `erick`: `marketinghs-api`, `marketinghs-sistema` (domínio),
+> `marketinghs-worker` (`python -m app.worker`, mesmo `Dockerfile.api`).
+> `.env` por `~/gerar-env-marketinghs-producao.sh` (segredos em
+> `~/.config/marketinghs/producao-segredos.env`, gerados uma vez). Banco
+> **zerado** por `~/zerar-marketinghs-producao.sh` (backup em
+> `~/backups/marketinghs-antes-do-reset-20261002-0909.dump`); ficaram 2
+> usuários, `lead_statuses` e as configs. Worker no ar, sem Resend (avisa a
+> cada 2 s — log barulhento, a corrigir). **Falta:** sync do DataCore
+> (`POST /datacore/sincronizar`, manual), Resend (domínio + chave), primeiro
+> envio interno, apagar `claude.dev@example.com`.
+>
 > 2. **Subir em produção** (projeto `erick` do EasyPanel), no molde do Homo
 >    (memória `marketinghs-no-homo`): API + front + **worker de fila** (nunca
 >    rodou fora daqui) + domínio; reset do banco (decidir o que fica — os 2.083
