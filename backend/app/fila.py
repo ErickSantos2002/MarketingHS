@@ -41,6 +41,14 @@ async def publicar(conn, mensagens: list[dict]) -> int:
     return len(linhas)
 
 
+async def ha_pronta(conn) -> bool:
+    """Existe mensagem visível? Consulta barata, para o worker não medir o
+    volume enviado (que varre `campaign_sends`) a cada 2 s com a fila vazia.
+    Não olha pausa: errar para "sim" só custa uma medição."""
+    return bool(await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM email_send_queue WHERE visivel_em <= now())"))
+
+
 async def reivindicar(conn, limite: int, visibilidade: int) -> list[Mensagem]:
     """Pega até `limite` mensagens prontas e as esconde por `visibilidade` s.
 
@@ -53,9 +61,15 @@ async def reivindicar(conn, limite: int, visibilidade: int) -> list[Mensagem]:
               SET visivel_em = now() + make_interval(secs => $2::double precision),
                   tentativas = q.tentativas + 1
             WHERE q.id IN (
-                SELECT id FROM email_send_queue
-                 WHERE visivel_em <= now()
-                 ORDER BY id
+                SELECT f.id FROM email_send_queue f
+                 WHERE f.visivel_em <= now()
+                   -- Campanha pausada fica na fila, intocada (nem tentativa
+                   -- gasta): retomar é só voltar o status para 'sending'.
+                   -- E-mail de jornada não tem campanha e passa direto.
+                   AND NOT EXISTS (SELECT 1 FROM campaigns c
+                                    WHERE c.id = f.campaign_id
+                                      AND c.status = 'paused')
+                 ORDER BY f.id
                  LIMIT $1
                  FOR UPDATE SKIP LOCKED
             )
@@ -71,6 +85,23 @@ async def reivindicar(conn, limite: int, visibilidade: int) -> list[Mensagem]:
 async def concluir(conn, fila_id: int) -> None:
     """Tira a mensagem da fila. Só depois do envio confirmado."""
     await conn.execute("DELETE FROM email_send_queue WHERE id = $1", fila_id)
+
+
+async def adiar(conn, fila_id: int, segundos: float) -> None:
+    """Devolve a mensagem à fila por `segundos` SEM gastar a tentativa que a
+    reivindicação contou.
+
+    É o caminho do que não é falha do envio: o 429 do Resend (o ritmo passou
+    do limite por um instante) e a campanha pausada entre a reivindicação e o
+    processamento. Pelo `devolver`, cinco 429 seguidos mandariam um e-mail bom
+    para a fila-morta.
+    """
+    await conn.execute(
+        """UPDATE email_send_queue
+              SET visivel_em = now() + make_interval(secs => $2::double precision),
+                  tentativas = greatest(tentativas - 1, 0)
+            WHERE id = $1""",
+        fila_id, float(segundos))
 
 
 async def devolver(conn, fila_id: int, erro: str, max_tentativas: int) -> str:

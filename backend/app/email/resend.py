@@ -10,6 +10,37 @@ import json
 API = "https://api.resend.com/emails"
 TIMEOUT = 30
 
+# Um `retry-after` absurdo (ou o de uma cota diária estourada) não pode
+# congelar o worker para sempre; uma hora é o bastante para voltar a olhar.
+ESPERA_MAXIMA = 3600
+
+
+class LimiteDoResend(Exception):
+    """429: o Resend pediu para esperar `espera` segundos.
+
+    ⚠️ Não é falha do envio. Quem chama devolve a mensagem à fila SEM gastar
+    tentativa — tratar como erro comum mandaria e-mail bom para a fila-morta
+    só porque o ritmo passou do limite por um instante.
+    """
+
+    def __init__(self, espera: float):
+        super().__init__(f"limite de taxa do Resend — esperar {espera:g}s")
+        self.espera = espera
+
+
+def interpretar_envio(resposta: httpx.Response) -> str:
+    """O id do e-mail, `LimiteDoResend` no 429, `HTTPStatusError` no resto."""
+    if resposta.status_code == 429:
+        try:
+            espera = float(resposta.headers.get("retry-after", ""))
+        except ValueError:
+            espera = 1.0
+        if not espera > 0:
+            espera = 1.0
+        raise LimiteDoResend(min(espera, ESPERA_MAXIMA))
+    resposta.raise_for_status()
+    return resposta.json().get("id", "")
+
 
 async def enviar(chave: str, de: str, para: str, assunto: str,
                  html: str, texto: str, cabecalhos: dict,
@@ -37,8 +68,7 @@ async def enviar(chave: str, de: str, para: str, assunto: str,
     async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
         resposta = await cliente.post(
             API, headers={"Authorization": f"Bearer {chave}"}, json=corpo)
-    resposta.raise_for_status()
-    return resposta.json().get("id", "")
+    return interpretar_envio(resposta)
 
 
 # ── Domínios ─────────────────────────────────────────────────────────────────
