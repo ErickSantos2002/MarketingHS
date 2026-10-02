@@ -25,6 +25,18 @@
 > (`POST /datacore/sincronizar`, manual), Resend (domínio + chave), primeiro
 > envio interno, apagar `claude.dev@example.com`.
 >
+> ✅ **Resend e primeiro envio (02/10):** domínio próprio `mkt.healthsafetytech.com`
+> (o `mail.` é do HelpHS — reputação separada), tracking em
+> `links.mkt.healthsafetytech.com`; chave, remetente e segredo do webhook em
+> `integration_secrets` por `~/marketinghs-ligar-resend.sh`. Sync com e-mail das
+> notas: **295 contatos com e-mail** (346 no DataCore, 52 colisões). Campanha
+> "Teste interno — 1º envio" para 3 endereços pela fila: entregue, clique e
+> descadastro registrados pelo webhook; `ti@healthsafetytech.com` (M365) caiu
+> em **quarentena** — o Erick decidiu deixar (não se envia para nós mesmos).
+> `healthsafetyti@gmail.com` está suprimido (teste do descadastro).
+> **Falta:** apagar `claude.dev@example.com` depois que a rodada 7 da backend
+> fechar; migration 024 (Erick roda) antes do merge da rodada 7.
+>
 > 2. **Subir em produção** (projeto `erick` do EasyPanel), no molde do Homo
 >    (memória `marketinghs-no-homo`): API + front + **worker de fila** (nunca
 >    rodou fora daqui) + domínio; reset do banco (decidir o que fica — os 2.083
