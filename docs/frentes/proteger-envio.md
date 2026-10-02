@@ -35,7 +35,7 @@ idempotente, NÃO aplicar; montar `~/marketinghs-migration-0NN.sh` no molde do
   (ex.: `website`); se vier preenchido, responde `ok` e não grava nada. O
   campo no formulário da landing fica para depois que a `consertos-urgentes`
   fechar (anotar no Estado).
-- [ ] Portão: pytest inteiro uma vez no fim, sozinho (~33 min; banco é
+- [x] Portão: pytest inteiro uma vez no fim, sozinho (~33 min; banco é
   PRODUÇÃO — só apagar o que o teste criou, por id; `count(*) FROM leads`
   igual antes e depois); `tsc` 0, guarda 0, `vite build` se tocar front.
 
@@ -86,7 +86,29 @@ idempotente, NÃO aplicar; montar `~/marketinghs-migration-0NN.sh` no molde do
    da `consertos-urgentes`): `<input name="website">` escondido por CSS (não
    `type=hidden`), `tabindex=-1`, `autocomplete=off`, mandado em `fields.website`.
 
-**Portão:** ver o fim do relatório (pytest, `tsc`, guarda, `vite build`).
+6. **Item novo da coordenadora (02/10, depois do merge de `2071f0d`):**
+   `POST /publico/descadastro/um-clique` saiu do balde de 30/min em `main.py`
+   (`isentos`, como o webhook — o HMAC autentica). Teste:
+   `tests/test_limite_descadastro.py` (10 POSTs do mesmo IP com o balde
+   baixado para 3: nenhum 429; e o balde segue valendo para
+   `/publico/descadastro`, sem nada gasto pelo um clique).
+
+**Incidente da 1ª suíte (02/10, 12:22):** a rodada parou em 41%, no setup de
+`test_conversao.py::test_post_conversao_recalcula…` (fixture `chamador`), e a
+coordenadora a encerrou. Os arquivos desta frente rodaram depois com `-x` e
+teto de tempo, sem travar (48 testes, 72 s); `test_conversao.py` sozinho
+passou em 42 s. Nenhum teste desta frente usa relógio real: `Compasso` recebe
+relógio e sleep injetados, e o `_tick` é testado com `_compasso` trocado.
+Causa provável: espera na trava entre rodadas / pool, não no código do ritmo.
+O lead que a fixture deixou (`a4ca8076-…`, `conversao-e2e-a5723bf4788c@
+exemplo.invalid`) e a chave de API dela foram apagados por id, no mesmo molde
+do teardown — `leads` voltou a 2.107.
+
+**Portão (02/10, depois do merge da `main` `2071f0d`):** pytest inteiro,
+sozinho e com `timeout 3600`: **474 passed** em 35 min. `leads` = 2.107 antes
+e depois. `tsc` 0, guarda 0 em `src`, `vite build` ok.
+
+**✅ Pronto para merge.**
 
 **Telas a conferir** (sem conta admin do Claude): detalhe de uma campanha em
 `sending` (botões Pausar/Parar), em `paused` (cartão + Retomar/Parar) e uma
