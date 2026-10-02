@@ -18,7 +18,7 @@ import { AlertTriangle } from 'lucide-react';
 import { parseISO, format, startOfWeek, endOfWeek, startOfDay, endOfDay, isWithinInterval, addDays, subDays } from 'date-fns';
 import { formatInTimeZone, toZonedTime, format as formatTz } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
-import { ehRecorrente, type DashboardFilters } from '@/hooks/useDashboardFilters';
+import { applyFilters, ehRecorrente, type DashboardFilters } from '@/hooks/useDashboardFilters';
 
 interface OverviewTabProps {
   leads: Lead[];
@@ -274,27 +274,32 @@ export function OverviewTab({ leads, allLeads, showHotMetrics, onShowHotMetricsC
    }, [conversionsToday]);
  
   // Leads NOVOS do recorte — o número principal do painel. Conta `created_at`:
-  // com filtro de data, cadastro dentro do período; sem filtro, a base inteira
-  // (todo contato foi lead novo uma vez). Respeita os demais filtros.
+  // sem filtro de data, é o mesmo conjunto filtrado de sempre (todo contato foi
+  // lead novo uma vez); com filtro de data, o cadastro tem de cair no período —
+  // o filtro global de data olha a última conversão, que traria reconversões.
+  // Os demais filtros valem nos dois casos (applyFilters sem a data).
   const newLeadsInScope = useMemo(() => {
-    const base = (dateFrom || dateTo)
-      ? filteredAllLeads.filter(lead => {
-          if (!lead.created_at) return false;
-          const day = formatInTimeZone(parseISO(lead.created_at), BRASILIA_TIMEZONE, 'yyyy-MM-dd');
-          if (dateFrom && day < format(dateFrom, 'yyyy-MM-dd')) return false;
-          if (dateTo && day > format(dateTo, 'yyyy-MM-dd')) return false;
-          return true;
-        })
-      : filteredAllLeads;
-    return base.map(lead => enrichLeadWithQualification(lead));
-  }, [filteredAllLeads, dateFrom, dateTo]);
+    if (!dateFrom && !dateTo) return enrichedLeads;
+    const semData = filters
+      ? applyFilters(allLeads, { ...filters, datePreset: 'all', dateFrom: null, dateTo: null })
+      : allLeads;
+    return semData
+      .filter(lead => {
+        if (!lead.created_at) return false;
+        const day = formatInTimeZone(parseISO(lead.created_at), BRASILIA_TIMEZONE, 'yyyy-MM-dd');
+        if (dateFrom && day < format(dateFrom, 'yyyy-MM-dd')) return false;
+        if (dateTo && day > format(dateTo, 'yyyy-MM-dd')) return false;
+        return true;
+      })
+      .map(lead => enrichLeadWithQualification(lead));
+  }, [enrichedLeads, allLeads, filters, dateFrom, dateTo]);
 
   // Reconversões à parte: com filtro de data, quem converteu no período mas
   // tinha sido cadastrado antes dele; sem filtro, quem já voltou a converter.
   const reconversionsInScope = useMemo(() => {
     if (dateFrom || dateTo) return reconversionsCountInPeriod;
-    return filteredAllLeads.filter(ehRecorrente).length;
-  }, [dateFrom, dateTo, reconversionsCountInPeriod, filteredAllLeads]);
+    return enrichedLeads.filter(ehRecorrente).length;
+  }, [dateFrom, dateTo, reconversionsCountInPeriod, enrichedLeads]);
 
   // Conversões por dia usando allLeads (filtrado pelo período selecionado)
   const allConversionsByDay = useMemo(() => {
