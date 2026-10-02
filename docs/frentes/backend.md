@@ -78,15 +78,48 @@ Não encosta em `frontend/`. Backend próprio na **8104**; o worker de fila
 
 ### Rodada 7 (02/10)
 
-- [ ] **#40 (a)** A fusão de contatos apaga os `journey_events` do contato
+- [x] **#40 (a)** A fusão de contatos apaga os `journey_events` do contato
   descartado (na mesma transação da fusão). Teste que prova: depois da fusão
   pela rota, nenhum `journey_events` aponta para o `lead_id` descartado. O
   `finally` de limpeza do teste da rodada 6 pode sair.
-- [ ] Worker sem Resend loga `RESEND_API_KEY ausente` a cada 2 s (produção
+- [x] Worker sem Resend loga `RESEND_API_KEY ausente` a cada 2 s (produção
   desde 02/10). Logar uma vez ao perceber a falta e de novo só quando mudar
   (ausente → presente → ausente), sem mudar o comportamento da fila.
 
 ## Estado
+
+**02/10/2026 — rodada 7.** Branch `worktree-agent-a649561e9d9a3df09`
+(sobre a `main` `1429eca`). **Pronto para merge** — dois commits, só em
+`backend/`; nenhuma migration, nenhuma escrita no banco fora do pytest.
+
+- [x] **#40 (a)** `fundir_leads` chama `_apagar_fila_de_jornada` antes do
+  DELETE do descartado, na mesma transação. ⚠️ `authenticated` só tem INSERT
+  em `journey_events` (migration 010), então o DELETE desce a `service_role`
+  por **uma** instrução (`SET LOCAL ROLE`) e volta ao papel lido de
+  `current_user` (conferido em `PAPEIS`); `app.current_user_id` não muda. O
+  resultado ganha `fila_de_jornada_apagada`. Testes:
+  `test_fusao_apaga_a_fila_de_jornada_do_descartado` (transação revertida,
+  os dois papéis: fila do descartado zera, a do mantido fica, o papel volta a
+  `authenticated`) e o teste da rota perdeu o `finally` — agora semeia um
+  `journey_events` do descartado e exige 0 depois da fusão. Ver a pergunta 11 (fim do arquivo).
+- [x] **Worker sem Resend.** `_registrar_presenca` guarda em `_ausentes` o
+  segredo cuja falta já foi avisada: avisa (WARNING) na falta, avisa (INFO) na
+  volta, avisa de novo se sumir — vale para `RESEND_API_KEY` e
+  `UNSUBSCRIBE_SECRET`. A fila continua sem ser reivindicada sem as chaves.
+  Teste `test_worker_aviso.py` (sem banco: `ler_segredo` falso e
+  `fila.reivindicar` que explode se chamado).
+
+Suíte inteira (sozinha, 32 min 04 s): **411 passed, 6 failed**. Os 6 são de
+`test_conversao_authenticated.py` e falham na **pré-condição**, não na
+comparação — dependem do dado antigo que o reset de 02/10 apagou (`leads`
+com `created_at < 2026-09-30`: 0; nenhum segmento, segmento dinâmico, fluxo
+com execução nem `lead_tags`): `test_automacoes_previa_*`,
+`test_segmentos_lista_*`, `test_segmentos_contatos_*`,
+`test_jornadas_execucoes_*`, `test_contatos_lista_*`,
+`test_contatos_ficha_*`. Nada nesta rodada toca essas rotas. Ver a pergunta 12 (fim do arquivo).
+
+Contagens (leitura, `bancos`): `leads` **2.104 → 2.104**; `journey_events`
+sem lead **0 → 0**; leads `@exemplo.invalid` depois: 0.
 
 **02/10/2026 — rodada 6.** Branch `worktree-agent-ae7504f99435361e6`
 (sobre a `main` `f59e55c`). **Pronto para merge** — três commits, só em
@@ -568,3 +601,15 @@ Testes: 360 antes → 387 depois (2 em `test_fila.py`, 25 em
     outro (ex.: `form_submitted` de novo); (c) deixar. **Assumido: (c), só o
     teste limpa** — mudar a fusão é decisão de produto, e (a) é a mais
     segura se o Erick quiser.
+11. **(rodada 7) Fusão desce a `service_role` por uma instrução.** Foi o jeito de apagar
+    `journey_events` na mesma transação sem migration. A alternativa limpa é a
+    migration 024: `GRANT DELETE ON journey_events TO authenticated` (a tabela
+    não tem RLS; quem chega lá já passou por `admin_atual`) ou uma função
+    SECURITY DEFINER `apagar_fila_jornada(lead uuid)`. Assumi a elevação
+    (reversível, sem DDL); se preferir a migration, é um item de backend.
+12. **(rodada 7) 6 testes de conversão dependem de produção ter dado antigo.** Opções:
+    (a) trocar o corte fixo `2026-09-30` por "antes do início do teste" e
+    semear o que falta (segmento, fluxo com execução, tag) dentro da fixture,
+    limpando por id; (b) `skip` com o motivo quando a pré-condição não vale;
+    (c) deixar vermelho até a produção ter esse dado. Não mexi (fora dos dois
+    itens); a mais segura parece (b) agora e (a) como item da próxima rodada.
