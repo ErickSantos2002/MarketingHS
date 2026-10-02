@@ -720,7 +720,17 @@ async def test_fusao_pela_rota_sob_authenticated_leva_o_historico(
             "INSERT INTO crm_handoffs (lead_id, acao, origem, status, card_id) "
             "VALUES ($1::uuid, 'criar', 'manual', 'entregue', 1)", b)
 
-    r = await cliente.post("/contatos/fundir", headers=h, json={"manter": a, "descartar": b})
+    try:
+        r = await cliente.post("/contatos/fundir", headers=h,
+                               json={"manter": a, "descartar": b})
+    finally:
+        # ⚠️ A fusão move os `contact_events` do descartado, mas NÃO a cópia
+        # em `journey_events` (sem FK, fora de `_TABELAS_FILHAS`): depois do
+        # DELETE do descartado ela ficava apontando para lead nenhum, e a
+        # limpeza da fixture (por e-mail) já não a acha. Medido na suíte
+        # inteira da rodada 6: era o único evento que a suíte ainda deixava.
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM journey_events WHERE lead_id = $1::uuid", b)
     assert r.status_code == 200, r.text
     corpo = r.json()
     assert corpo["caso"] == "leads", corpo
