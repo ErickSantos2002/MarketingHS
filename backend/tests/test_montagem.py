@@ -91,6 +91,27 @@ def test_rodape_so_entra_quando_o_link_nao_existe():
 def test_cabecalhos_rfc8058():
     """⚠️ O List-Unsubscribe-Post é o que faz Gmail e Yahoo mostrarem o botão
     nativo — e é por isso que o endpoint precisa aceitar POST."""
-    c = cabecalhos_rfc8058("https://x.test/u")
-    assert c["List-Unsubscribe"] == "<https://x.test/u>"
+    c = cabecalhos_rfc8058("https://x.test", "abc-123", "a@b.c", "s")
     assert c["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
+def test_list_unsubscribe_aponta_para_a_api_nao_para_a_pagina():
+    """U2 (raio-x de 02/10): o cabeçalho apontava para a PÁGINA
+    `/descadastrar` do SPA, e o POST one-click do Gmail/Yahoo levava 405 do
+    nginx. Ele vai para a rota da API, com os mesmos lid/e/t assinados."""
+    c = cabecalhos_rfc8058("https://x.test/", "abc-123", "Joao@Empresa.com", "s3cr3t")
+    valor = c["List-Unsubscribe"]
+    assert valor.startswith("<") and valor.endswith(">")
+    url = urlparse(valor[1:-1])
+    assert (url.scheme, url.netloc) == ("https", "x.test")
+    assert url.path == "/api/publico/descadastro/um-clique"
+    q = parse_qs(url.query)
+    assert set(q) == {"lid", "e", "t"}
+    assert q["t"][0] == _token_como_o_verificador_calcula(
+        "abc-123", "joao@empresa.com", "s3cr3t")
+
+
+def test_o_link_do_rodape_continua_na_pagina():
+    """O link do corpo do e-mail é para gente: abre a página de confirmação."""
+    url = urlparse(url_de_descadastro("https://x.test", "abc-123", "a@b.c", "s"))
+    assert url.path == "/descadastrar"

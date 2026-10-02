@@ -686,8 +686,31 @@ async def descadastro_conferir(lid: str = Query(...), e: str = Query(...),
 
 @router.post("/descadastro")
 async def descadastro_efetivar(dados: DescadastroIn):
-    """Descadastra de fato. É o que o botão nativo do Gmail/Yahoo chama."""
+    """Descadastra de fato. É o que o botão da página `/descadastrar` chama."""
     email = await _conferir_token(dados.lid, dados.e, dados.t)
+    return await _efetivar_descadastro(dados.lid, email)
+
+
+@router.post("/descadastro/um-clique")
+async def descadastro_um_clique(lid: str = Query(...), e: str = Query(...),
+                                t: str = Query(...)):
+    """O POST one-click da RFC 8058 — o botão nativo do Gmail/Yahoo.
+
+    É a URL do cabeçalho `List-Unsubscribe` (`cabecalhos_rfc8058`). O provedor
+    manda `lid/e/t` na QUERY (a URL é a do cabeçalho, como foi assinada) e o
+    corpo form-encoded `List-Unsubscribe=One-Click`. O corpo não é conferido:
+    quem autoriza é o HMAC, e recusar por variação de corpo (multipart, por
+    exemplo) deixaria o contato na lista.
+
+    ⚠️ Só POST. Um GET aqui seria pré-carregado por cliente de e-mail e
+    descadastraria sem ninguém clicar (RFC 8058, seção 3.1).
+    """
+    email = await _conferir_token(lid, e, t)
+    return await _efetivar_descadastro(lid, email)
+
+
+async def _efetivar_descadastro(lid: str, email: str) -> dict:
+    """Supressão + último envio + evento. Comum à página e ao um clique."""
 
     # 1. A supressão é o ÚNICO efeito que precisa dar certo. Se falhar,
     #    respondemos 500 para que o provedor re-tente o POST one-click — a lista
@@ -698,7 +721,7 @@ async def descadastro_efetivar(dados: DescadastroIn):
             """INSERT INTO email_suppressions (email, reason, source, lead_id)
                VALUES ($1, 'unsubscribe', 'descadastro', $2::uuid)
                ON CONFLICT (email) DO NOTHING""",
-            email, dados.lid)
+            email, lid)
 
     # 2. Marcar o último envio como 'unsubscribed' — best-effort, nunca derruba
     #    a resposta: a supressão acima já impede envios futuros.
@@ -720,7 +743,7 @@ async def descadastro_efetivar(dados: DescadastroIn):
                                               'failed','unsubscribed','suppressed')
                          ORDER BY sent_at DESC NULLS LAST
                          LIMIT 1)""",
-                dados.lid)
+                lid)
     except Exception:  # noqa: BLE001
         logger.exception("descadastro: falha ao marcar o último envio")
 
@@ -735,7 +758,7 @@ async def descadastro_efetivar(dados: DescadastroIn):
                           'Descadastrou-se de e-mails',
                           jsonb_build_object('email', $2::text), now()
                      FROM leads l WHERE l.id = $1::uuid""",
-                dados.lid, email)
+                lid, email)
     except Exception:  # noqa: BLE001
         logger.exception("descadastro: falha ao registrar o evento")
 
