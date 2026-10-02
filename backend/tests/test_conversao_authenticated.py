@@ -720,17 +720,20 @@ async def test_fusao_pela_rota_sob_authenticated_leva_o_historico(
             "INSERT INTO crm_handoffs (lead_id, acao, origem, status, card_id) "
             "VALUES ($1::uuid, 'criar', 'manual', 'entregue', 1)", b)
 
-    try:
-        r = await cliente.post("/contatos/fundir", headers=h,
-                               json={"manter": a, "descartar": b})
-    finally:
-        # ⚠️ A fusão move os `contact_events` do descartado, mas NÃO a cópia
-        # em `journey_events` (sem FK, fora de `_TABELAS_FILHAS`): depois do
-        # DELETE do descartado ela ficava apontando para lead nenhum, e a
-        # limpeza da fixture (por e-mail) já não a acha. Medido na suíte
-        # inteira da rodada 6: era o único evento que a suíte ainda deixava.
-        async with db.sessao(role="service_role") as conn:
-            await conn.execute("DELETE FROM journey_events WHERE lead_id = $1::uuid", b)
+        # A cópia em `journey_events` que o gatilho faz de cada evento: é ela
+        # que a fusão tem de levar (pergunta 40). Garante que há o que levar.
+        await conn.execute(
+            "INSERT INTO journey_events (lead_id, event_type) "
+            "VALUES ($1::uuid, 'teste_fusao_rota')", b)
+
+    r = await cliente.post("/contatos/fundir", headers=h,
+                           json={"manter": a, "descartar": b})
+    # ⚠️ Sem `finally` de limpeza desde a rodada 7 (pergunta 40 (a)): a fusão
+    # apaga a fila de jornada do descartado na própria transação. Até a
+    # rodada 6 a cópia ficava apontando para lead nenhum, e a limpeza da
+    # fixture (por e-mail) já não a achava — era o +1 da suíte.
+    assert await _contar(
+        "SELECT count(*) FROM journey_events WHERE lead_id = $1::uuid", b) == 0
     assert r.status_code == 200, r.text
     corpo = r.json()
     assert corpo["caso"] == "leads", corpo

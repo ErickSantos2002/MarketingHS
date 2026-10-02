@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status as http
 from pydantic import BaseModel, Field
 
-from app.database import sessao
+from app.database import PAPEIS, sessao
 from app.dependencies import Usuario, admin_atual
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,8 @@ _CAMPOS_EDITAVEIS = ("nome", "email", "whatsapp", "empresa", "cargo",
 # Três delas têm índice único que envolve `lead_id` e pedem regra antes do
 # UPDATE — ver `_preparar_unicos`. Fora da lista, de propósito:
 # `journey_events` (fila de trânsito, consumida a cada tick; sem GRANT para
-# `authenticated`, ver a migration 022).
+# `authenticated`, ver a migration 022) — essa não se move, se APAGA: ver
+# `_apagar_fila_de_jornada` (pergunta 40, rodada 7).
 _TABELAS_FILHAS = ("lead_tags", "segment_contacts", "campaign_sends",
                    "lead_notes", "contact_events", "lead_conversions",
                    "journey_runs", "journey_step_log", "crm_handoffs",
@@ -445,6 +446,7 @@ async def fundir_leads(conn, manter: str, descartar: str) -> dict:
     origem = await conn.fetchrow(
         f"SELECT {', '.join(_CAMPOS_HERDAVEIS)} FROM leads WHERE id = $1::uuid",
         descartar)
+    fila_apagada = await _apagar_fila_de_jornada(conn, descartar)
     await conn.execute("DELETE FROM leads WHERE id = $1::uuid", descartar)
 
     atribuicoes = ", ".join(
@@ -452,7 +454,41 @@ async def fundir_leads(conn, manter: str, descartar: str) -> dict:
     await conn.execute(
         f"UPDATE leads SET {atribuicoes} WHERE id = $1::uuid",
         manter, *[origem[c] for c in _CAMPOS_HERDAVEIS])
-    return {"movidos": movidos, "resolvidos": resolvidos}
+    return {"movidos": movidos, "resolvidos": resolvidos,
+            "fila_de_jornada_apagada": fila_apagada}
+
+
+async def _apagar_fila_de_jornada(conn, descartar: str) -> int:
+    """Apaga o que o descartado tem em `journey_events` (pergunta 40 (a),
+    02/10/2026), na transação da fusão.
+
+    `journey_events` é fila de trânsito (o gatilho copia cada `contact_event`
+    para lá e o worker consome), sem FK para `leads`. Movê-la para o mantido
+    reprocessaria eventos já vistos — matrícula em fluxo de novo; deixá-la
+    deixava a linha apontando para um lead que não existe mais. Apagar é a
+    decisão.
+
+    ⚠️ `authenticated` só tem INSERT em `journey_events` (migration 010: é o
+    gatilho que grava). O DELETE desce a `service_role` por UMA instrução e
+    volta ao papel de quem chamou, na mesma transação — `SET LOCAL` reverte
+    sozinho no fim dela, e `app.current_user_id` não é tocado. A rota já
+    autorizou (`admin_atual`) antes de chegar aqui, e o filtro é o id exato do
+    descartado: não há o que o RLS protegeria. A alternativa sem elevação é
+    uma migration (GRANT DELETE + política admin, ou função SECURITY DEFINER)
+    — ver o arquivo da frente.
+    """
+    papel = await conn.fetchval("SELECT current_user")
+    if papel not in PAPEIS:
+        raise RuntimeError(f"fusão fora de sessao(): papel {papel!r}")
+    await conn.execute("SET LOCAL ROLE service_role")
+    # Sem try/finally de propósito: se o DELETE falhar a transação já está
+    # abortada, o SET da volta falharia também e esconderia o erro de verdade.
+    r = await conn.execute(
+        "DELETE FROM journey_events WHERE lead_id = $1::uuid", descartar)
+    # Nome vindo de `current_user` e conferido em PAPEIS acima: nunca de
+    # entrada do usuário (SET ROLE não aceita parâmetro).
+    await conn.execute(f"SET LOCAL ROLE {papel}")
+    return int(r.rsplit(" ", 1)[-1])
 
 
 @router.patch("/{lead_id}")

@@ -251,3 +251,49 @@ async def test_fusao_sem_colisao_nao_encerra_nem_apaga_nada(conexao, marca, pape
     assert await conexao.fetchval(
         "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1::uuid AND status = 'pendente'",
         m) == 2
+
+
+async def test_fusao_apaga_a_fila_de_jornada_do_descartado(conexao, marca, papel):
+    """Pergunta 40 (a), 02/10/2026: `journey_events` é fila de trânsito, sem FK
+    e fora de `_TABELAS_FILHAS`. Sem limpeza, o evento do descartado ficava
+    apontando para um lead que não existe mais. A fusão o apaga na mesma
+    transação — sob `authenticated` também, que não tem DELETE na tabela — e
+    devolve o papel de quem chamou, sem mexer na fila do mantido."""
+    m = await _lead(conexao, "mantido")
+    d = await _lead(conexao, "descartado")
+    for lead in (m, d, d):
+        await conexao.execute(
+            "INSERT INTO journey_events (lead_id, event_type, metadata) "
+            "VALUES ($1::uuid, 'teste_fusao', jsonb_build_object('marca', $2::text))",
+            lead, marca)
+    fila_m = await conexao.fetchval(
+        "SELECT count(*) FROM journey_events WHERE lead_id = $1::uuid", m)
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM journey_events WHERE lead_id = $1::uuid", d) >= 2
+
+    if papel == "service_role":
+        resultado = await fundir_leads(conexao, m, d)
+        assert await conexao.fetchval("SELECT current_user") == "service_role"
+    else:
+        admin = await conexao.fetchval(
+            "SELECT user_id::text FROM user_roles WHERE role = 'admin' LIMIT 1")
+        if admin is None:
+            pytest.skip("nenhum admin em user_roles")
+        await conexao.execute("SELECT set_config('app.current_user_id', $1, true)", admin)
+        await conexao.execute("SET LOCAL ROLE authenticated")
+        try:
+            resultado = await fundir_leads(conexao, m, d)
+            # A elevação para apagar a fila não pode vazar para o resto da
+            # transação de quem chamou.
+            assert await conexao.fetchval("SELECT current_user") == "authenticated"
+            assert await conexao.fetchval(
+                "SELECT current_setting('app.current_user_id', true)") == admin
+        finally:
+            await conexao.execute("SET LOCAL ROLE service_role")
+            await conexao.execute("SELECT set_config('app.current_user_id', '', true)")
+
+    assert resultado["fila_de_jornada_apagada"] >= 2
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM journey_events WHERE lead_id = $1::uuid", d) == 0
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM journey_events WHERE lead_id = $1::uuid", m) == fila_m
