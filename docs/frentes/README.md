@@ -13,7 +13,9 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
-**Estado em 02/10:** rodada 6 aberta — `decisoes-0210` (front: itens 28+29, 30, 39) e `backend` rodada 6 (item 38 + teste instável).
+**Estado em 02/10 (fim do dia):** rodadas 6 e 7 mergeadas e em produção; nenhuma frente aberta. ⚠️ Sem conta admin do Claude — `conferir-telas.mjs` não loga até criar outra.
+
+**Estado em 02/10 (manhã):** rodada 6 aberta — `decisoes-0210` (front: itens 28+29, 30, 39) e `backend` rodada 6 (item 38 + teste instável).
 
 **Estado em 01/10:** `g6-integracoes`, `g6-cartoes` e `residuos-visuais` ✅ mergeadas (Fase 2 do visual fechada, guarda 0, `tsc` 0). `backend` rodadas 1 e 2 ✅ mergeadas; rodada 3 e `ui-primitivos` em andamento (01/10). Antes: rodada 1 ✅ mergeada (`c019839`); a rodada 2 (`escrita_contatos`, `contatos`) espera a migration 021.
 

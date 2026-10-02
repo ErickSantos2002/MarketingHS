@@ -37,6 +37,17 @@
 > **Falta:** apagar `claude.dev@example.com` depois que a rodada 7 da backend
 > fechar; migration 024 (Erick roda) antes do merge da rodada 7.
 >
+> ✅ **Dia fechado (02/10):** rodada 7 na `main` (`64e7cb4`) e em produção —
+> fusão apaga a fila de jornada do descartado; worker avisa só quando a chave
+> muda; testes de conversão com semente própria (não dependem mais de dado de
+> produção). Migrations **024** (DELETE) e **025** (SELECT em `lead_id` — a 024
+> sozinha não bastava, o filtro do DELETE lê a coluna) aplicadas pelo Erick;
+> testes da fusão 9/9. **Conta `claude.dev@example.com` apagada** (só sobrou
+> `ti@healthsafetytech.com`), credencial local e tokens removidos — para
+> conferir tela de novo, criar conta nova. ⚠️ Os 3 contatos "Equipe TI"
+> (`source = teste-interno`) e a campanha/segmento/template de teste ficam na
+> base de produção de propósito.
+>
 > 2. **Subir em produção** (projeto `erick` do EasyPanel), no molde do Homo
 >    (memória `marketinghs-no-homo`): API + front + **worker de fila** (nunca
 >    rodou fora daqui) + domínio; reset do banco (decidir o que fica — os 2.083
