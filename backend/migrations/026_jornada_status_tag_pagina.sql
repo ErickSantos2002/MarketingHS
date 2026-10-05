@@ -22,7 +22,10 @@
 --      `page_slug: null`.
 --   3. `journey_enroll_event(uuid, text, jsonb)` (NOVA, sobrecarga): igual à
 --      de 2 argumentos (001) mais o filtro `entry_config.page_slug`. Sem
---      filtro = qualquer página (o comportamento de antes). A de 2 argumentos
+--      filtro = qualquer página (o comportamento de antes). Evento de
+--      RECONVERSÃO (`reconversao: true`, contato que já existia) só entra em
+--      fluxo filtrado — o fluxo sem filtro segue só com lead novo, como antes
+--      do R5. A de 2 argumentos
 --      passa a chamar a nova com metadata vazio — fluxo FILTRADO não casa com
 --      evento sem página, que é o lado seguro para um worker antigo.
 
@@ -216,6 +219,12 @@ BEGIN
       -- sem página nunca casa com fluxo filtrado.
       AND (coalesce(entry_config->>'page_slug', '') = ''
            OR entry_config->>'page_slug' = v_pagina)
+      -- 026: a RECONVERSÃO (contato que já existia converte de novo) só
+      -- matricula em fluxo FILTRADO por página. Fluxo sem filtro continua
+      -- como antes do R5: só o lead novo entra — um "boas-vindas" não pode
+      -- passar a disparar para a base inteira que reconverter.
+      AND (coalesce(entry_config->>'page_slug', '') <> ''
+           OR NOT coalesce((p_metadata->>'reconversao')::boolean, false))
   ), cand AS (
     SELECT j.id AS journey_id, j.entry_node_id
     FROM j

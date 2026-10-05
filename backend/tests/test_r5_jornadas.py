@@ -154,6 +154,22 @@ async def test_remover_tag_que_o_contato_nao_tem_nao_e_erro(conexao, passos, tag
     assert passos[-1][2]["removida"] is False
 
 
+async def test_remover_tag_criada_com_maiuscula_no_painel(conexao, passos):
+    """O painel guarda "R5-VIP" como digitado; o construtor salva "r5-vip"."""
+    lead = await _lead(conexao)
+    tag = await conexao.fetchval(
+        "INSERT INTO tags (name) VALUES ('R5-VIP') RETURNING id")
+    await conexao.execute(
+        "INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2)", lead, tag)
+    no = {"id": "n1", "type": "remove_tag", "config": {"tag_name": "r5-vip"}, "next": None}
+
+    await executor.executar_no(conexao, _run(lead), no)
+
+    assert passos[-1][2]["removida"] is True
+    assert await conexao.fetchval(
+        "SELECT count(*) FROM lead_tags WHERE lead_id = $1::uuid", lead) == 0
+
+
 async def test_remover_tag_vazia_levanta(conexao, passos):
     lead = await _lead(conexao)
     no = {"id": "n1", "type": "remove_tag", "config": {"tag_name": "// "}, "next": None}
@@ -221,6 +237,22 @@ async def test_conversao_na_pagina_a_dispara_a_jornada_de_a_e_nao_a_de_b(conexao
     assert set(runs) == {a, qualquer}
     ctx = runs[a] if isinstance(runs[a], dict) else json.loads(runs[a])
     assert ctx["page_slug"] == "r5-pagina-a"
+
+
+async def test_reconversao_so_entra_em_jornada_filtrada(conexao):
+    """Contato que já existia e converte de novo: entra no fluxo da página
+    dele, mas NÃO no fluxo sem filtro — esse continua só para lead novo, como
+    antes do R5 (um "boas-vindas" não pode disparar para quem reconverte)."""
+    await _exigir_026(conexao)
+    a = await _jornada(conexao, "r5 — demo A", "r5-pagina-a")
+    qualquer = await _jornada(conexao, "r5 — qualquer página")
+    lead = await _lead(conexao)
+
+    await conexao.fetchval(
+        "SELECT journey_enroll_event($1::uuid, 'form_submitted', $2::jsonb)",
+        lead, {"page_slug": "r5-pagina-a", "reconversao": True})
+
+    assert set(await _matriculas(conexao, lead, [a, qualquer])) == {a}
 
 
 async def test_evento_sem_pagina_nao_entra_em_jornada_filtrada(conexao):

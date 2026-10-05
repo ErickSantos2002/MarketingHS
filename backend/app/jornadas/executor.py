@@ -106,6 +106,10 @@ async def _remover_tag(conn, lead_id: str, bruta: str) -> bool:
     ⚠️ Contato sem a tag (ou tag que nem existe) NÃO é erro: o fluxo pode
     passar duas vezes pelo nó, ou a tag ter sido tirada à mão no meio do
     caminho. A tag em si fica em `tags` — outros contatos podem usá-la.
+
+    ⚠️ `lower(name)`: `tags.name` guarda a caixa digitada no painel ("VIP"),
+    e o construtor salva o nome em minúsculas. Comparar cru faria o nó não
+    achar nada e seguir calado.
     """
     nome = (bruta or "").lstrip("/").strip().lower()
     if not nome:
@@ -113,7 +117,7 @@ async def _remover_tag(conn, lead_id: str, bruta: str) -> bool:
     resultado = await conn.execute(
         """DELETE FROM lead_tags
             WHERE lead_id = $1::uuid
-              AND tag_id = (SELECT id FROM tags WHERE name = $2)""",
+              AND tag_id IN (SELECT id FROM tags WHERE lower(name) = $2)""",
         lead_id, nome)
     return not resultado.endswith(" 0")
 

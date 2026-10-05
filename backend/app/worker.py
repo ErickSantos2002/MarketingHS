@@ -368,7 +368,11 @@ async def _matricular_por_evento(conn, e) -> int:
                     e["lead_id"], e["event_type"], e["metadata"] or {})
             _ENROLL_COM_METADATA = True
             return int(n or 0)
-        except asyncpg.UndefinedFunctionError:
+        except asyncpg.UndefinedFunctionError as exc:
+            # Só a AUSÊNCIA da própria função desliga o filtro. Outra função
+            # inexistente lá dentro é defeito, e sobe como erro do evento.
+            if "journey_enroll_event" not in str(exc):
+                raise
             _ENROLL_COM_METADATA = False
             logger.warning("journey_enroll_event(uuid, text, jsonb) não existe — "
                            "a migration 026 não foi aplicada; o filtro de página "

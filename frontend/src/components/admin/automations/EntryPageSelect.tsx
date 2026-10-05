@@ -13,8 +13,9 @@ interface Props {
 }
 
 export function EntryPageSelect({ value, onChange }: Props) {
-  const { pages } = usePages();
-  const conhecida = !value || pages.some((p) => p.slug === value);
+  const { pages, isLoading } = usePages();
+  // Enquanto a lista carrega, nenhum slug salvo é "desconhecido".
+  const conhecida = !value || isLoading || pages.some((p) => p.slug === value);
 
   return (
     <div className="space-y-1.5">

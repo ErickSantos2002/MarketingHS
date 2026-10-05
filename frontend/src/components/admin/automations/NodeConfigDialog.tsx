@@ -509,6 +509,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                 <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {statusName && statusOptions.length > 0 && !statusOptions.includes(statusName) && (
+                    <SelectItem value={statusName}>{statusName} (status não encontrado)</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
