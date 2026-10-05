@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 05/10:** abertas `r5-jornadas` (backend + automações: nós mudar status/remover tag, conversão por página, `/publico/conversao` sem sobrescrever UTMs) e `r5-contatos` (pontuação única, enviar ao comercial para qualquer etiqueta, seletor Novos/Recorrentes, campo-isca da landing). Acesso ao RD e conversa com o Nicholson ainda pendentes.
+
 **Estado em 02/10 (fim da tarde):** `consertos-urgentes` (R0), `proteger-envio` (R1) e `painel-limpeza` (R6 parte 1) mergeadas e em produção; **nenhuma frente aberta**. Próxima: "R5 sem decisão" (ver topo do `CONTINUAR-AQUI.md`).
 
 **Estado em 02/10 (tarde) — raio-x RD:** abertas `consertos-urgentes` (R0, front+back nos arquivos dela), `proteger-envio` (R1, backend + tela de campanha; dona de migration a partir da 026), `painel-limpeza` (R6 parte 1, só painel/analytics). Plano em `docs/raio-x-rd.md`.
@@ -37,6 +39,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 | `consertos-urgentes` | 10 | 8090 | usa a 8100 | ver `consertos-urgentes.md` | 02/10, R0 |
 | `proteger-envio` | 11 | 8091 | **8111** | ver `proteger-envio.md` | 02/10, R1 |
 | `painel-limpeza` | 12 | 8092 | usa a 8100 | ver `painel-limpeza.md` | 02/10, R6 |
+| `r5-jornadas` | 13 | 8093 | **8113** | ver `r5-jornadas.md` (`backend/**`, automações) | 05/10, R5 |
+| `r5-contatos` | 14 | 8094 | usa a 8100 | ver `r5-contatos.md` (contatos, ficha, landing) | 05/10, R5 |
 | `decisoes-0210` | 9 | 8089 | usa a 8100 | ver `decisoes-0210.md` (ficha, modal, filtros do painel, `Experiments.tsx`) | 02/10, rodada 6 |
 
 Os números entre parênteses são o guarda de 01/10 (`npm run guarda:visual -- <arquivo>`).
