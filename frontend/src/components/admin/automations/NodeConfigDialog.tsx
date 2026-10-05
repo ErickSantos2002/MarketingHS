@@ -9,6 +9,7 @@ import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSegments } from '@/hooks/useSegments';
+import { useLeadStatuses } from '@/hooks/useLeadStatuses';
 import { NODE_LABELS, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
 import { GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 
@@ -88,6 +89,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   const { templates } = useTemplates();
   const { segments } = useSegments();
   const { configurado: crmConfigurado } = useCrmEstado();
+  const { options: statusOptions } = useLeadStatuses();
 
   // send_email
   const [templateId, setTemplateId] = useState('');
@@ -119,8 +121,11 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   const [condType, setCondType] = useState<JourneyNodeType>('branch_attribute');
   const effType: JourneyNodeType | null = type && isBranch(type) ? condType : type;
 
-  // apply_tag
+  // apply_tag / remove_tag
   const [tagName, setTagName] = useState('');
+
+  // change_status
+  const [statusName, setStatusName] = useState('');
 
   // Etiquetas vinculadas aos contatos (tabela `tags`, ligada por lead_tags) —
   // as mesmas do filtro ETIQUETA de /contacts e do campo Etiqueta dos segmentos.
@@ -145,6 +150,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
     setEmailCheck(cfg.check || '');
     if (type && isBranch(type)) setCondType(type);
     setTagName(cfg.tag_name || '');
+    setStatusName(cfg.status || '');
   }, [open, type, initialConfig]);
 
   useEffect(() => {
@@ -180,6 +186,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       case 'branch_segment': return !!segmentId;
       case 'branch_email_event': return !!sourceNodeId && ['delivered', 'opened', 'clicked'].includes(emailCheck);
       case 'apply_tag': return !!normalizedTag;
+      case 'remove_tag': return !!normalizedTag;
+      case 'change_status': return !!statusName;
       // Sem configuração: o card entra na etapa de entrada do funil
       // configurado em Configurações → GrowthHS (decisão 7 do plano).
       case 'handoff_growthhs': return true;
@@ -214,7 +222,11 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
         config = { check: emailCheck, source_node_id: sourceNodeId };
         break;
       case 'apply_tag':
+      case 'remove_tag':
         config = { tag_name: normalizedTag };
+        break;
+      case 'change_status':
+        config = { status: statusName };
         break;
       case 'handoff_growthhs':
         config = {};
@@ -465,13 +477,44 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
             </>
           )}
 
-          {type === 'apply_tag' && (
+          {(type === 'apply_tag' || type === 'remove_tag') && (
             <div className="space-y-1.5">
               <Label>Nome da tag</Label>
-              <Input value={tagName} onChange={(e) => setTagName(e.target.value)} placeholder="ex: frio" />
+              <Input
+                value={tagName}
+                onChange={(e) => setTagName(e.target.value)}
+                placeholder="ex: frio"
+                list={type === 'remove_tag' ? 'tags-existentes' : undefined}
+              />
+              {type === 'remove_tag' && (
+                <datalist id="tags-existentes">
+                  {tags.map((t) => <option key={t.id} value={t.name} />)}
+                </datalist>
+              )}
               {normalizedTag && normalizedTag !== tagName && (
                 <p className="text-xs text-muted-foreground">Será salva como "{normalizedTag}"</p>
               )}
+              {type === 'remove_tag' && (
+                <p className="text-xs text-muted-foreground">
+                  Contato sem essa tag segue o fluxo normalmente. A tag continua existindo para os outros contatos.
+                </p>
+              )}
+            </div>
+          )}
+
+          {type === 'change_status' && (
+            <div className="space-y-1.5">
+              <Label>Novo status</Label>
+              <Select value={statusName} onValueChange={setStatusName}>
+                <SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Fica registrado na linha do tempo do contato, como a mudança feita pelo painel. Quem já está nesse
+                status segue sem registro novo.
+              </p>
             </div>
           )}
 

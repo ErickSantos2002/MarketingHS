@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Mail, Clock, Hourglass, GitBranch, Users, Tag, Building2, MailCheck, Eye, Pencil, Trash2 } from 'lucide-react';
+import { Mail, Clock, Hourglass, GitBranch, Users, Tag, Eraser, Flag, Building2, MailCheck, Eye, Pencil, Trash2 } from 'lucide-react';
 import { NODE_LABELS, type JourneyNode, type JourneyNodeMetrics, type JourneyNodeType } from '@/lib/journeys';
 
 const NODE_ICONS: Record<JourneyNodeType, typeof Mail> = {
@@ -11,6 +11,8 @@ const NODE_ICONS: Record<JourneyNodeType, typeof Mail> = {
   branch_segment: Users,
   branch_email_event: MailCheck,
   apply_tag: Tag,
+  remove_tag: Eraser,
+  change_status: Flag,
   handoff_growthhs: Building2,
 };
 

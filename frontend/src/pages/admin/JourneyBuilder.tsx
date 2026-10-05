@@ -27,11 +27,13 @@ import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 import { useSegments } from '@/hooks/useSegments';
 import { useTemplates } from '@/hooks/useTemplates';
 import {
-  NODE_LABELS, NODE_NAO_LIGADO, STATUS_LABELS, EVENT_OPTIONS, isBranch, newNodeId, readEntrySegments,
+  NODE_LABELS, NODE_NAO_LIGADO, STATUS_LABELS, EVENT_OPTIONS, EVENTO_COM_PAGINA, entryEventConfig,
+  isBranch, newNodeId, readEntrySegments,
   type Journey, type JourneyNode, type JourneyNodeType,
 } from '@/lib/journeys';
 import { JourneyNodeCard } from '@/components/admin/automations/JourneyNodeCard';
 import { NodeConfigDialog } from '@/components/admin/automations/NodeConfigDialog';
+import { EntryPageSelect } from '@/components/admin/automations/EntryPageSelect';
 import { EmailTemplatePreviewDialog } from '@/components/admin/campaigns/EmailTemplatePreviewDialog';
 
 type BranchKey = 'next' | 'next_false' | 'next_timeout';
@@ -45,6 +47,8 @@ const ADD_MENU: { label: string; type: JourneyNodeType }[] = [
   { label: NODE_LABELS.wait_for_event, type: 'wait_for_event' },
   { label: 'Condição', type: 'branch_attribute' },
   { label: NODE_LABELS.apply_tag, type: 'apply_tag' },
+  { label: NODE_LABELS.remove_tag, type: 'remove_tag' },
+  { label: NODE_LABELS.change_status, type: 'change_status' },
   { label: NODE_LABELS.handoff_growthhs, type: 'handoff_growthhs' },
 ];
 
@@ -73,6 +77,7 @@ export default function JourneyBuilder() {
   const [entrySegmentIds, setEntrySegmentIds] = useState<string[]>([]);
   const [entryExcludedSegmentIds, setEntryExcludedSegmentIds] = useState<string[]>([]);
   const [entryEventType, setEntryEventType] = useState('');
+  const [entryPageSlug, setEntryPageSlug] = useState('');
   const [reentry, setReentry] = useState<'once' | 'allowed'>('once');
   // C1: exibido em dias na UI, convertido para reentry_cooldown_hours no PATCH.
   const [reentryCooldownDays, setReentryCooldownDays] = useState(7);
@@ -102,6 +107,7 @@ export default function JourneyBuilder() {
     setEntrySegmentIds(journey.entry_type === 'segment' ? entrySegs.include : []);
     setEntryExcludedSegmentIds(journey.entry_type === 'segment' ? entrySegs.exclude : []);
     setEntryEventType(journey.entry_type === 'event' ? (journey.entry_config?.event_type || '') : '');
+    setEntryPageSlug(journey.entry_type === 'event' ? (journey.entry_config?.page_slug || '') : '');
     setReentry(journey.reentry);
     setReentryCooldownDays(Math.max(1, Math.round((journey.reentry_cooldown_hours ?? 168) / 24)));
     setOriginalNodeIds(new Set((journey.nodes || []).map((n) => n.id)));
@@ -166,6 +172,10 @@ export default function JourneyBuilder() {
       }
       case 'apply_tag':
         return `Tag "${node.config.tag_name}"`;
+      case 'remove_tag':
+        return `Tira a tag "${node.config.tag_name}"`;
+      case 'change_status':
+        return `Status → ${node.config.status}`;
       case 'handoff_growthhs':
         return 'Etapa de entrada do funil configurado';
       default:
@@ -283,7 +293,7 @@ export default function JourneyBuilder() {
       entry_type: entryType,
       entry_config: entryType === 'segment'
         ? { segment_ids: entrySegmentIds, excluded_segment_ids: entryExcludedSegmentIds }
-        : { event_type: entryEventType },
+        : entryEventConfig(entryEventType, entryPageSlug),
       reentry,
       reentry_cooldown_hours: Math.max(1, Math.round(reentryCooldownDays * 24)),
     });
@@ -519,7 +529,7 @@ export default function JourneyBuilder() {
             <p className="text-sm font-medium truncate">
               {entryType === 'segment'
                 ? `Segmentos: ${entrySegmentIds.length === 0 ? '(selecione)' : entrySegmentIds.length}${entryExcludedSegmentIds.length > 0 ? ` — exceto ${entryExcludedSegmentIds.length}` : ''}`
-                : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}`}
+                : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}${entryEventType === EVENTO_COM_PAGINA && entryPageSlug ? ` — página ${entryPageSlug}` : ''}`}
             </p>
             <p className="text-xs text-muted-foreground">
               Reentrada: {reentry === 'once' ? 'uma vez por contato' : `pode entrar de novo (mín. ${reentryCooldownDays}d)`}
@@ -597,12 +607,17 @@ export default function JourneyBuilder() {
                 />
               </div>
             ) : (
-              <Select value={entryEventType} onValueChange={(v) => { setEntryEventType(v); setDirty(true); }}>
-                <SelectTrigger><SelectValue placeholder="Evento" /></SelectTrigger>
-                <SelectContent>
-                  {EVENT_OPTIONS.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="space-y-3">
+                <Select value={entryEventType} onValueChange={(v) => { setEntryEventType(v); setDirty(true); }}>
+                  <SelectTrigger><SelectValue placeholder="Evento" /></SelectTrigger>
+                  <SelectContent>
+                    {EVENT_OPTIONS.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {entryEventType === EVENTO_COM_PAGINA && (
+                  <EntryPageSelect value={entryPageSlug} onChange={(v) => { setEntryPageSlug(v); setDirty(true); }} />
+                )}
+              </div>
             )}
             <Select value={reentry} onValueChange={(v) => { setReentry(v as 'once' | 'allowed'); setDirty(true); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>

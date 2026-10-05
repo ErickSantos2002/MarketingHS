@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.ab.costura import Ab, registrar_conversao_ab
 from app.captura.campos import higienizar
 from app.captura.email import validar_dominio
+from app.captura.evento import marcar_pagina, publicar_conversao
 from app.database import sessao
 from app.routers.publico import _aplicar_tag_do_slug
 
@@ -162,7 +163,9 @@ async def capturar(dados: CapturaIn):
             "AS dnia_id FROM leads WHERE lower(email) = $1", email)
 
         if existente is None:
-            lead_id = await _inserir(conn, email, dados.session_id, campos)
+            # O `form_submitted` do gatilho de INSERT leva a página (026).
+            lead_id = await _inserir(conn, email, dados.session_id, campos,
+                                     dados.page_slug)
             if lead_id is None:
                 # ⚠️ `ON CONFLICT (email) DO NOTHING` não gravou: outra
                 # requisição para o MESMO e-mail venceu a corrida entre o
@@ -177,9 +180,15 @@ async def capturar(dados: CapturaIn):
                     email)
                 lead_id = existente["id"]
                 await _atualizar(conn, existente, dados.session_id, campos)
+                # ⚠️ Sem `publicar_conversao` aqui: quem venceu a corrida já
+                # publicou o `form_submitted` desta página (duplo clique).
         else:
             lead_id = existente["id"]
             await _atualizar(conn, existente, dados.session_id, campos)
+            # R5: contato que volta e converte de novo (o caso de "pediu
+            # demonstração") também publica o evento, com a página.
+            await publicar_conversao(conn, lead_id, dados.page_slug,
+                                     origem="captura")
 
         await _resolver_identidade(conn, lead_id, email, campos)
 
@@ -207,7 +216,8 @@ async def capturar(dados: CapturaIn):
     return {"ok": True, "redirect_url": config.get("redirect_url") or None}
 
 
-async def _inserir(conn, email: str, session_id: str | None, campos: dict) -> str | None:
+async def _inserir(conn, email: str, session_id: str | None, campos: dict,
+                   page_slug: str | None = None) -> str | None:
     """⚠️ `tipo` é NOT NULL sem default em `leads`; o padrão da origem é 'lead'.
 
     As colunas saem das chaves de `campos`, que vêm da lista branca — nunca do
@@ -227,10 +237,17 @@ async def _inserir(conn, email: str, session_id: str | None, campos: dict) -> st
         colunas.append(chave)
         valores.append(valor)
     marcas = ", ".join(f"${i}" for i in range(1, len(valores) + 1))
-    return await conn.fetchval(
+    # ⚠️ A marca da página vale só para ESTE INSERT: o `fn_lead_insert_event`
+    # a lê (migration 026) e ela é desfeita logo depois. Sem `finally`: se o
+    # INSERT falha, a transação já está abortada (e a marca morre com ela) —
+    # desmarcar ali levantaria outro erro por cima do verdadeiro.
+    await marcar_pagina(conn, page_slug)
+    lead_id = await conn.fetchval(
         f"INSERT INTO leads ({', '.join(colunas)}) VALUES ({marcas}) "
         f"ON CONFLICT (email) DO NOTHING RETURNING id::text",
         *valores)
+    await marcar_pagina(conn, None)
+    return lead_id
 
 
 async def _atualizar(conn, existente, session_id: str | None, campos: dict) -> None:

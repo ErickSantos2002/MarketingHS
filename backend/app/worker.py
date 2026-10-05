@@ -344,6 +344,40 @@ async def _promover_agendadas() -> int:
     return promovidas
 
 
+# None = ainda não sabemos se o banco tem a `journey_enroll_event` de 3
+# argumentos (migration 026); False = não tem, usar a de 2 até reiniciar.
+_ENROLL_COM_METADATA: bool | None = None
+
+
+async def _matricular_por_evento(conn, e) -> int:
+    """Matrícula por evento, passando o metadata (é nele que vem a página).
+
+    ⚠️ Sem a 026 aplicada a função de 3 argumentos não existe: cai na de 2,
+    que é a de antes — e IGNORA o filtro de página (por isso a 026 vai antes
+    do deploy). A tentativa roda num SAVEPOINT próprio: a função inexistente
+    aborta só ele, não o SAVEPOINT do evento nem o lote.
+    """
+    global _ENROLL_COM_METADATA
+    import asyncpg
+
+    if _ENROLL_COM_METADATA is not False:
+        try:
+            async with conn.transaction():
+                n = await conn.fetchval(
+                    "SELECT journey_enroll_event($1::uuid, $2, $3::jsonb)",
+                    e["lead_id"], e["event_type"], e["metadata"] or {})
+            _ENROLL_COM_METADATA = True
+            return int(n or 0)
+        except asyncpg.UndefinedFunctionError:
+            _ENROLL_COM_METADATA = False
+            logger.warning("journey_enroll_event(uuid, text, jsonb) não existe — "
+                           "a migration 026 não foi aplicada; o filtro de página "
+                           "das jornadas está DESLIGADO até aplicar e reiniciar")
+    return int(await conn.fetchval(
+        "SELECT journey_enroll_event($1::uuid, $2)",
+        e["lead_id"], e["event_type"]) or 0)
+
+
 async def _rodar_jornadas() -> dict:
     """Uma passada das jornadas, em três blocos — a mesma ordem do original.
 
@@ -404,9 +438,7 @@ async def _rodar_jornadas() -> dict:
                         import json as _json
                         acordados = _json.loads(acordados)
                     resumo["acordados"] += int((acordados or {}).get("woken") or 0)
-                    n = await conn.fetchval(
-                        "SELECT journey_enroll_event($1::uuid, $2)",
-                        e["lead_id"], e["event_type"])
+                    n = await _matricular_por_evento(conn, e)
                     resumo["matriculados"] += int(n or 0)
             except Exception as exc:  # noqa: BLE001
                 # ⚠️ O evento já saiu da fila (o DELETE ... RETURNING é o claim),

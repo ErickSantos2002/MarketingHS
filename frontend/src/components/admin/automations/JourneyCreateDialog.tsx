@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle } from 'lucide-react';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
-import { EVENT_OPTIONS, type Journey } from '@/lib/journeys';
+import { EVENT_OPTIONS, EVENTO_COM_PAGINA, entryEventConfig, type Journey } from '@/lib/journeys';
+import { EntryPageSelect } from './EntryPageSelect';
 
 interface Props {
   open: boolean;
@@ -21,6 +22,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
   const [segmentIds, setSegmentIds] = useState<string[]>([]);
   const [excludedSegmentIds, setExcludedSegmentIds] = useState<string[]>([]);
   const [eventType, setEventType] = useState('');
+  const [pageSlug, setPageSlug] = useState('');
   const [reentry, setReentry] = useState<'once' | 'allowed'>('once');
   // C1: cooldown em DIAS na UI (mais legível que horas); convertido para
   // reentry_cooldown_hours no envio. 7 dias casa com o DEFAULT do banco.
@@ -37,7 +39,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
       entry_type: entryType,
       entry_config: entryType === 'segment'
         ? { segment_ids: segmentIds, excluded_segment_ids: excludedSegmentIds }
-        : { event_type: eventType },
+        : entryEventConfig(eventType, pageSlug),
       reentry,
       reentry_cooldown_hours: Math.max(1, Math.round(cooldownDays * 24)),
       nodes: [],
@@ -96,14 +98,17 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
               </p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <Label>Evento</Label>
-              <Select value={eventType} onValueChange={setEventType}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {EVENT_OPTIONS.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Evento</Label>
+                <Select value={eventType} onValueChange={setEventType}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {EVENT_OPTIONS.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {eventType === EVENTO_COM_PAGINA && <EntryPageSelect value={pageSlug} onChange={setPageSlug} />}
             </div>
           )}
 
