@@ -323,7 +323,9 @@ export function ContactsFilterPanel({
               value={dashboardFilters.recorrencia}
               onValueChange={(v) => v && onDashboardUpdate({ recorrencia: v as Recorrencia })}
               aria-label="Novos ou recorrentes"
-              className="justify-start"
+              // A coluna é 1/4 do painel em `md`: sem quebra, os três itens
+              // passam da borda do cartão em telas de notebook.
+              className="justify-start flex-wrap"
             >
               {RECORRENCIA_OPTIONS.map(option => (
                 <ToggleGroupItem key={option.value} value={option.value} className="h-9">

@@ -1,3 +1,5 @@
+import { useAuth } from '@/hooks/useAuth';
+
 interface Props {
   status: string | null;
   /** O contato já tem card no GrowthHS (`ecosystem.growthhs_card_id`). */
@@ -14,6 +16,8 @@ interface Props {
  * o botão.
  */
 export function QualifiedBanner({ status, jaNoGrowthHS = false }: Props) {
+  // O botão do cabeçalho é só de admin: a dica só faz sentido para quem o vê.
+  const { isAdmin } = useAuth();
   if (status !== 'Lead Qualificado') return null;
 
   return (
@@ -21,7 +25,9 @@ export function QualifiedBanner({ status, jaNoGrowthHS = false }: Props) {
       <p className="text-sm text-[--on-tint-info] font-medium">
         {jaNoGrowthHS
           ? 'Este lead está pronto para o comercial e já está no GrowthHS'
-          : 'Este lead está pronto para o comercial — use "Enviar ao comercial" no topo da ficha'}
+          : isAdmin
+          ? 'Este lead está pronto para o comercial — use "Enviar ao comercial" no topo da ficha'
+          : 'Este lead está pronto para o comercial'}
       </p>
     </div>
   );

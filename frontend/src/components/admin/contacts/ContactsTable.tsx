@@ -59,7 +59,7 @@ function asEnriched(lead: Lead | EnrichedLead): EnrichedLead {
 
 // Mesma régua do seletor Novos/Recorrentes (useDashboardFilters.ehRecorrente):
 // o ícone da linha e o filtro não podem discordar.
-const isReconversion = (lead: Lead) => ehRecorrente(lead);
+const isReconversion = ehRecorrente;
 
 const formatRelativeDate = (dateString: string | null) => {
   if (!dateString) return '-';

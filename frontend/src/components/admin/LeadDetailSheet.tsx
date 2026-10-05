@@ -226,7 +226,9 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                     (`!nexus_contact_id`) — `nexus_contact_id` é do PRODUTO de
                     agendamento (dn.nexus) e escondia o botão de quem já tinha
                     marcado reunião mas nunca foi ao CRM. */}
-                {isAdmin && !enrichedLead.ecosystem?.growthhs_card_id && (
+                {/* Apagado não: o backend devolve 404 (`deleted_at IS NULL`). O tipo
+                    `Lead` não declara `deleted_at`, mas a leitura o traz. */}
+                {isAdmin && !(lead as { deleted_at?: string | null }).deleted_at && !enrichedLead.ecosystem?.growthhs_card_id && (
                   <Button
                     variant="outline"
                     size="sm"
