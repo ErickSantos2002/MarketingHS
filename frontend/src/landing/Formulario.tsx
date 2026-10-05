@@ -44,6 +44,10 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
   // tela depois de um envio que já funcionou, e quem enviou não sabe se
   // funcionou: reenvia por engano, ou desiste achando que travou.
   const [enviado, setEnviado] = useState(false);
+  // Campo-isca (pergunta 50). Gente não vê nem alcança pelo Tab; robô de
+  // formulário preenche. O servidor (`_caiu_no_honeypot`, R1) responde
+  // sucesso sem gravar quando `fields.website` vem preenchido.
+  const [isca, setIsca] = useState("");
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -56,7 +60,8 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email, page_slug: slug,
-          fields: { ...resto, ...utmDaUrl(), source: slug },
+          // `website` por último: nenhum campo visível nem UTM pode apagar a isca.
+          fields: { ...resto, ...utmDaUrl(), source: slug, website: isca },
         }),
       });
       if (!r.ok) {
@@ -108,6 +113,21 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
           />
         </label>
       ))}
+      {/* Escondido por CSS, não `type="hidden"`: robô ignora hidden, mas
+          preenche input de texto. Fora da tela, fora do Tab, fora do leitor de
+          tela e do preenchimento automático do navegador. */}
+      <div className="captura-isca" aria-hidden="true">
+        <label htmlFor="captura-website">Site</label>
+        <input
+          id="captura-website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={isca}
+          onChange={(e) => setIsca(e.target.value)}
+        />
+      </div>
       {erro && <p className="erro" role="alert">{erro}</p>}
       <button type="submit" disabled={enviando}
               style={config.cta_color ? { background: config.cta_color } : undefined}>

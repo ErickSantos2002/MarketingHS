@@ -6,13 +6,14 @@ import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { X, CalendarIcon, RefreshCw, UserCheck, CalendarCheck } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { X, CalendarIcon, UserCheck, CalendarCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { STATUS_OPTIONS } from './StatusBadge';
 import type { TagInfo, ContactsFilters } from '@/hooks/useContactsEnriched';
-import type { DashboardFilters, DatePreset } from '@/hooks/useDashboardFilters';
+import type { DashboardFilters, DatePreset, Recorrencia } from '@/hooks/useDashboardFilters';
 import type { QualificationSegment } from '@/hooks/useLeadQualification';
 import type { DeletedView } from '@/hooks/useLeads';
 
@@ -24,6 +25,15 @@ const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: 'last30days', label: 'Últimos 30 dias' },
   { value: 'thisMonth', label: 'Este mês' },
   { value: 'custom', label: 'Personalizado' },
+];
+
+// Mesmo seletor e mesma semântica do painel (GlobalFilters, R6 parte 1):
+// novo = converteu uma vez só; recorrente = voltou a converter (ehRecorrente).
+// Substitui o interruptor "Só reconversões" (pergunta 42).
+const RECORRENCIA_OPTIONS: { value: Recorrencia; label: string }[] = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'novos', label: 'Novos' },
+  { value: 'recorrentes', label: 'Recorrentes' },
 ];
 
 const QUALIFICATION_OPTIONS: { value: QualificationSegment; label: string }[] = [
@@ -306,6 +316,23 @@ export function ContactsFilterPanel({
         <div className="space-y-1.5">
           <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Opções</Label>
           <div className="flex flex-col gap-2 pt-1">
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={dashboardFilters.recorrencia}
+              onValueChange={(v) => v && onDashboardUpdate({ recorrencia: v as Recorrencia })}
+              aria-label="Novos ou recorrentes"
+              // A coluna é 1/4 do painel em `md`: sem quebra, os três itens
+              // passam da borda do cartão em telas de notebook.
+              className="justify-start flex-wrap"
+            >
+              {RECORRENCIA_OPTIONS.map(option => (
+                <ToggleGroupItem key={option.value} value={option.value} className="h-9">
+                  {option.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="hide-incomplete-panel"
@@ -314,16 +341,6 @@ export function ContactsFilterPanel({
               />
               <Label htmlFor="hide-incomplete-panel" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
                 <UserCheck className="h-3 w-3" /> Só completos
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="only-reconversions-panel"
-                checked={!!dashboardFilters.onlyReconversions}
-                onCheckedChange={(checked) => onDashboardUpdate({ onlyReconversions: !!checked })}
-              />
-              <Label htmlFor="only-reconversions-panel" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
-                <RefreshCw className="h-3 w-3" /> Só reconversões
               </Label>
             </div>
           </div>
@@ -595,8 +612,8 @@ export function ActiveFilterChips({
     if (dashboardFilters.hideIncomplete) {
       chips.push({ label: 'Só completos', onRemove: () => onDashboardUpdate({ hideIncomplete: false }) });
     }
-    if (dashboardFilters.onlyReconversions) {
-      chips.push({ label: 'Só reconversões', onRemove: () => onDashboardUpdate({ onlyReconversions: false }) });
+    if (dashboardFilters.recorrencia !== 'todos') {
+      chips.push({ label: dashboardFilters.recorrencia === 'novos' ? 'Só novos' : 'Só recorrentes', onRemove: () => onDashboardUpdate({ recorrencia: 'todos' }) });
     }
   }
 

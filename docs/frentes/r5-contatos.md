@@ -40,8 +40,82 @@ Porta: Vite 8094, usa o backend 8100.
 
 ## Estado
 
-(vazio)
+**05/10 — os 4 itens feitos** (branch `worktree-agent-aba0951463642aeeb`).
+
+Capacidade por capacidade (passo 4 do portão):
+
+- **Uma pontuação só.** `useLeadQualification` perdeu P1–P4, "prioridade
+  (pontos)", ICP por faturamento/cargo e temas do desafio (`getPriority*`,
+  `getQualificationScore`, `getRevenueScore`, `getRelevantThemeScore`,
+  `isICPRevenue`, `isDecisionMaker`, `priorityCounts`, `meetsICP`,
+  `icpScore`). Nenhum consumidor fora da ficha os lia (conferido por grep em
+  `frontend/src` e `backend/app`). Hot/Warm/Raw (`getQualificationSegment`)
+  é só a `etiqueta` do banco — o fallback heurístico para `etiqueta`
+  indefinida saiu (na prática nunca disparava: `etiqueta` está na lista de
+  colunas do `useLeads`). Ficou `getDecisionPowerLevel` (rótulo do cargo, usado
+  pelo `RoleDistribution` e pelo cartão "Decisão" da ficha).
+  - Ficha: sai o badge P1–P4 do cabeçalho; os cartões "Prioridade (pontos)" e
+    "Faixa" viram **"Pontuação"** (`lead_score`) e **"Etiqueta"** (Hot/Warm/Raw
+    do banco), pelos helpers de `dashboard/pontuacao.ts`. A bolinha e o badge
+    Hot/Warm/Raw já eram do banco e ficam.
+  - Contatos: o filtro de qualificação já usava `etiqueta` (`applyFilters`);
+    coluna e ordenação por `lead_score` já existiam. Nada dependia do P1–P4.
+    Tooltip da chama "Hot Lead (ICP + Decisor)" → "(pela pontuação do banco)".
+- **Enviar ao comercial para qualquer etiqueta.** O botão do cabeçalho da ficha
+  aparece para todo contato (admin, sem card no GrowthHS) — antes só `hotlead`.
+  O `QualifiedBanner` virou destaque sem botão (o mesmo botão duas vezes na
+  mesma tela seria ruído); o texto aponta para o botão do topo, ou diz que já
+  está no GrowthHS. Capacidade de enviar não some: está no cabeçalho.
+- **Novos/Recorrentes em Contatos.** "Só reconversões" (checkbox) → seletor
+  Todos/Novos/Recorrentes, igual ao `GlobalFilters`, gravando `recorrencia`
+  (o `alinharRecorrencia` mantém `onlyReconversions` em espelho). O chip
+  ativo mostra "Só novos"/"Só recorrentes". O ícone de recorrente da linha da
+  tabela passou a usar `ehRecorrente` (mesma régua, agora uma função só).
+  Ganho de capacidade: dá para filtrar só os novos.
+- **Campo-isca.** `<input name="website">` dentro de `div.captura-isca`
+  (`aria-hidden`, fora da tela por CSS, `tabIndex=-1`, `autoComplete=off`),
+  mandado como `fields.website` por último no objeto (nada sobrescreve).
+
+**Revisão final (requesting-code-review):** nenhum crítico. Corrigidos os dois
+importantes — seletor com `flex-wrap` (a coluna "Opções" é 1/4 do painel e os
+três itens passariam da borda em notebook) e a dica do banner só para admin (o
+botão é admin-only) — e dois menores: botão escondido para contato apagado (o
+backend dá 404), regra `.captura` única no CSS. Ficou de fora, por escolha: a
+ficha mostra `lead_score` na bolinha e no cartão "Pontuação" (mesmo número,
+mesma fonte — redundante, não contraditório).
+
+**Fora do território (para a coordenadora):**
+- `components/admin/dashboard/pontuacao.ts`, linhas 8–9: o comentário diz que
+  a ficha e o `useLeadQualification` "ainda carregam o P1–P4" — deixou de ser
+  verdade. Não editei (não importa o hook).
+- `hooks/useDashboardFilters.tsx` (linhas ~38–44 e ~229–241): o espelho
+  `onlyReconversions` diz que Contatos ainda o escreve; nenhuma tela escreve
+  mais. Pode sair (mantendo a migração do localStorage antigo em
+  `deserializeFilters`) ou só ter o comentário atualizado.
+- `hooks/useLeads.tsx`: o tipo `Lead` não declara `deleted_at`, embora a coluna
+  venha na leitura — a ficha usa um cast local.
+- Backend (anotação, não pedido): isca preenchida por gerenciador de senha
+  descarta lead real com resposta de sucesso e só um log `info`.
+
+**Portão (05/10):** `tsc --noEmit -p tsconfig.app.json` **0 erros**; guarda
+**0** em `src`; `vite build` ✅; `build:landing` ✅;
+`node --test scripts/landing-caminhos.test.mjs` 3/3. pytest não rodado (regra
+da frente).
+
+✅ **Pronto para merge.**
+
+**Telas a conferir** (sem conta admin do Claude, não conferidas no navegador):
+- `/admin/contacts`: painel de filtros (seletor no bloco "Opções", largura em
+  `md`), chip "Só novos"/"Só recorrentes", ícone de recorrente na linha.
+- Ficha do contato (abrir um contato não `hotlead`): botão "Enviar ao
+  comercial" no cabeçalho; sem badge P1–P4; cartões Pontuação/Etiqueta/Decisão;
+  contato com status "Lead Qualificado" mostra o banner sem botão.
+- Landing pública `/p/<slug>`: formulário sem campo visível novo, Tab pula a
+  isca, envio normal grava; envio com `website` preenchido não grava.
 
 ## Perguntas
 
-(dúvida de produto: opções + a assumida, a mais segura e reversível)
+- **R5-C1 — Banner do qualificado sem botão.** Opções: (a) banner só destaque,
+  botão só no cabeçalho; (b) manter o botão nos dois lugares; (c) esconder o
+  do cabeçalho quando o banner aparece. **Assumida: (a)** — um botão, um lugar;
+  reverter é devolver o bloco do botão ao `QualifiedBanner`.
