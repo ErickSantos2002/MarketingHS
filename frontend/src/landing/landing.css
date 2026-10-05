@@ -105,6 +105,22 @@ body {
   outline-offset: 1px;
 }
 
+/* Campo-isca (Formulario.tsx). Fora da tela em vez de display:none — alguns
+   robôs pulam campo com display:none ou visibility:hidden. Absoluto, então não
+   entra no flex nem abre espaço no gap. */
+.captura {
+  position: relative;
+}
+
+.captura .captura-isca {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 .captura .erro {
   margin: 0;
   padding: 10px 12px;

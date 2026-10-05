@@ -18,9 +18,9 @@ import type { Lead } from '@/hooks/useLeads';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import {
   enrichLeadWithQualification,
-  getPriorityColor,
   getQualificationColor,
 } from '@/hooks/useLeadQualification';
+import { pontuacaoDoBanco, rotuloDaEtiqueta } from './dashboard/pontuacao';
 import { conversoesDoContato } from '@/lib/leitura';
 import { DniaIdChip, GrowthHSLink, StatusTagsSection, NotesSection } from './contacts/DetailSections';
 import { EventsTimeline } from './contacts/EventsTimeline';
@@ -213,7 +213,11 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                 />
                 <GrowthHSLink growthhsCardUrl={enrichedLead.ecosystem?.growthhs_card_url ?? null} />
                 {/* Botão manual, admin-only (POST /crm/enviar/{lead_id} — a
-                    rota é `Depends(admin_atual)`). Entra na mesma fila que a
+                    rota é `Depends(admin_atual)`). Vale para QUALQUER contato,
+                    seja qual for a etiqueta (R5, 05/10/2026): antes só aparecia
+                    para `hotlead`, mas o backend nunca restringiu e o comercial
+                    pode querer um lead que a pontuação ainda não marcou. O
+                    `QualifiedBanner` continua como destaque do qualificado. Entra na mesma fila que a
                     regra e a jornada usam (crm_handoffs); o backend responde
                     `ja_na_fila` quando o lead já está lá, e a entrega
                     acontece em segundo plano pelo worker.
@@ -222,7 +226,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
                     (`!nexus_contact_id`) — `nexus_contact_id` é do PRODUTO de
                     agendamento (dn.nexus) e escondia o botão de quem já tinha
                     marcado reunião mas nunca foi ao CRM. */}
-                {isAdmin && enrichedLead.etiqueta === 'hotlead' && !enrichedLead.ecosystem?.growthhs_card_id && (
+                {isAdmin && !enrichedLead.ecosystem?.growthhs_card_id && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -311,12 +315,6 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               )}
               <Badge
                 variant="outline"
-                className={`${getPriorityColor(enriched.priorityLevel)} text-sm font-bold px-3 py-1`}
-              >
-                {enriched.priorityLevel}
-              </Badge>
-              <Badge
-                variant="outline"
                 className={`${getQualificationColor(enriched.qualification)} text-sm capitalize px-3 py-1`}
               >
                 {enriched.qualification}
@@ -327,9 +325,7 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
 
         <QualifiedBanner
           status={enrichedLead.status}
-          leadId={lead.id}
           jaNoGrowthHS={!!enrichedLead.ecosystem?.growthhs_card_id}
-          onSent={onDataChanged}
         />
 
         <ScrollArea className="max-h-[calc(90vh-120px)]">
@@ -349,13 +345,14 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
             {/* Qualification */}
             <Section icon={Target} title="Qualificação">
               <div className="grid grid-cols-3 gap-3">
-                {/* ⚠️ Isto NÃO é o lead_score. É `priorityScore`, uma
-                    heurística de prioridade do useLeadQualification, com escala
-                    própria. Estava rotulado "Score" ao lado do lead_score do
-                    banco, e a ficha da Carla mostrava 60 na bolinha e 22 aqui —
-                    parecendo contradição, quando são coisas diferentes. */}
-                <MetricCard icon={Flame} value={String(Math.round(enriched.priorityScore))} label="Prioridade (pontos)" color="emerald" />
-                <MetricCard icon={TrendingUp} value={enriched.priorityLevel} label="Faixa" color="blue" />
+                {/* Uma pontuação só (R5, 05/10/2026): aqui ficavam a
+                    "Prioridade (pontos)" e a faixa P1–P4, calculadas no
+                    navegador com o perfil da dn.ia — um segundo número que
+                    discordava do `lead_score` (a ficha da Carla mostrava 60 na
+                    bolinha e 22 aqui). Agora os dois cartões são o que o
+                    banco grava pela pontuação de Configurações → Lead Scoring. */}
+                <MetricCard icon={Flame} value={String(pontuacaoDoBanco(lead))} label="Pontuação" color="emerald" />
+                <MetricCard icon={TrendingUp} value={rotuloDaEtiqueta(lead.etiqueta)} label="Etiqueta" color="blue" />
                 <MetricCard icon={Users} value={enriched.decisionPower} label="Decisão" color="purple" small />
               </div>
             </Section>

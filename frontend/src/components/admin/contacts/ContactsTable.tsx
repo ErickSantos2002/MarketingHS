@@ -18,6 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { Lead } from '@/hooks/useLeads';
+import { ehRecorrente } from '@/hooks/useDashboardFilters';
 import { ALL_COLUMNS } from '@/components/admin/ColumnSelector';
 import { LeadDetailSheet } from '@/components/admin/LeadDetailSheet';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
@@ -56,12 +57,9 @@ function asEnriched(lead: Lead | EnrichedLead): EnrichedLead {
   };
 }
 
-const isReconversion = (lead: Lead) => {
-  if (!lead.last_conversion_date || !lead.created_at) return false;
-  const created = new Date(lead.created_at).getTime();
-  const lastConversion = new Date(lead.last_conversion_date).getTime();
-  return Math.abs(lastConversion - created) > 60000;
-};
+// Mesma régua do seletor Novos/Recorrentes (useDashboardFilters.ehRecorrente):
+// o ícone da linha e o filtro não podem discordar.
+const isReconversion = (lead: Lead) => ehRecorrente(lead);
 
 const formatRelativeDate = (dateString: string | null) => {
   if (!dateString) return '-';
@@ -494,7 +492,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
                   <TooltipTrigger asChild>
                     <Flame className="h-3.5 w-3.5 text-success flex-shrink-0" />
                   </TooltipTrigger>
-                  <TooltipContent>Hot Lead (ICP + Decisor)</TooltipContent>
+                  <TooltipContent>Hot Lead (pela pontuação do banco)</TooltipContent>
                 </Tooltip>
               )}
               {lead.dnia_id && lead.ecosystem?.hasScheduledMeeting && (
@@ -511,7 +509,7 @@ function CellRenderer({ colKey, lead }: { colKey: string; lead: EnrichedLead }) 
                   <TooltipTrigger asChild>
                     <RefreshCw className="h-3.5 w-3.5 text-info flex-shrink-0" />
                   </TooltipTrigger>
-                  <TooltipContent>Lead Reconvertido</TooltipContent>
+                  <TooltipContent>Recorrente (voltou a converter)</TooltipContent>
                 </Tooltip>
               )}
               <span className="font-medium text-sm truncate">{lead.nome || '-'}</span>
