@@ -79,3 +79,12 @@ dia no `CONTINUAR-AQUI.md`.
     Fica na conversão lote a lote; alternativa: migration com GRANT.
 50. **Pendentes do R1:** `POST /publico/conversao` ainda sobrescreve UTMs com o
     último toque; campo-isca `website` falta no formulário da landing.
+51. **Botão "Enviar ao comercial" do qualificado** (R5, `r5-contatos`): o
+    botão vale para qualquer etiqueta e ficou só no cabeçalho da ficha; o
+    `QualifiedBanner` virou destaque sem botão. **Assumido:** (a) só no
+    cabeçalho. Alternativas: (b) nos dois lugares; (c) esconder o do cabeçalho
+    quando o banner aparece. Reverter = devolver o botão ao banner.
+52. **Campo-isca × gerenciador de senha** (R5): se um preenchimento automático
+    encher o `website` escondido, o lead real é descartado com resposta de
+    sucesso e só um log `info`. **Assumido:** manter (`autocomplete=off`,
+    fora da tela); se aparecer reclamação, logar em `warning` com o e-mail.

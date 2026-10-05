@@ -1,5 +1,24 @@
 # Continuar aqui
 
+> ## 🌅 05/10/2026 — R5 sem decisão (coordenadora)
+>
+> Erick fez o deploy do `marketinghs-sistema` e rodou o teto de envio. Sem
+> acesso ao RD nem conversa com o Nicholson ainda. Abertas `r5-jornadas`
+> (backend + automações) e `r5-contatos` (contatos, ficha, landing).
+>
+> ✅ **`r5-contatos` na `main`:** P1–P4 do navegador fora (Hot/Warm/Raw só da
+> `etiqueta` do banco; ficha mostra Pontuação e Etiqueta do banco), "Enviar
+> ao comercial" para qualquer contato (só no cabeçalho — pergunta 51),
+> seletor Todos/Novos/Recorrentes em Contatos, campo-isca `website` na
+> landing. Portão depois do merge: guarda 0, `tsc` 0, `vite build` e
+> `build:landing` ok. **Precisa deploy do `marketinghs-sistema`.**
+> Sobras pequenas: comentário velho em `dashboard/pontuacao.ts` (linhas 8–9);
+> `onlyReconversions` sem quem escreva em `useDashboardFilters`; tipo `Lead`
+> sem `deleted_at` (`useLeads.tsx`, cast na ficha).
+> Telas a conferir: `/admin/contacts` (seletor em 1024/1280/1440), ficha de
+> não-hotlead (botão no cabeçalho, sem P1–P4), `/p/<slug>` (isca invisível,
+> Tab pula, envio grava).
+
 > ## 🌅 Comece por aqui — próxima sessão (fechado em 02/10/2026, fim da tarde)
 >
 > **Onde estamos.** MarketingHS **em produção** desde 02/10 em

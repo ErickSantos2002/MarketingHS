@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 05/10 (tarde):** `r5-contatos` ✅ mergeada; `r5-jornadas` em andamento.
+
 **Estado em 05/10:** abertas `r5-jornadas` (backend + automações: nós mudar status/remover tag, conversão por página, `/publico/conversao` sem sobrescrever UTMs) e `r5-contatos` (pontuação única, enviar ao comercial para qualquer etiqueta, seletor Novos/Recorrentes, campo-isca da landing). Acesso ao RD e conversa com o Nicholson ainda pendentes.
 
 **Estado em 02/10 (fim da tarde):** `consertos-urgentes` (R0), `proteger-envio` (R1) e `painel-limpeza` (R6 parte 1) mergeadas e em produção; **nenhuma frente aberta**. Próxima: "R5 sem decisão" (ver topo do `CONTINUAR-AQUI.md`).
