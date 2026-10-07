@@ -54,6 +54,8 @@
 > estourar, `conferir-telas.mjs` com `--abrir "<painel>"` (lista permitida,
 > recusa ação, bloqueia todo não-GET da API) e `--clicar-linha` (ficha).
 > **Precisa deploy de `marketinghs-api` e `-sistema`** (junto com a faxina).
+> ✅ **CT-1 na `main`:** ficha abre com foco no título (`onOpenAutoFocus`), não
+> no "Enviar ao comercial". Depois do deploy: conferir em produção.
 >
 > **Perguntas abertas:** 41–61 em `docs/perguntas-abertas.md`, todas com
 > opção assumida — boa pauta para a conversa com o Nicholson junto do D1–D8.
