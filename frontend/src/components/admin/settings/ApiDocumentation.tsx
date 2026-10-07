@@ -497,7 +497,7 @@ const ENDPOINTS = [
         created_at: "2026-03-29T20:00:00Z"
       }
     }, null, 2),
-    notes: 'Pelo menos um identificador (lead_id, dnia_id, email ou phone) é obrigatório. Primeiro toque: os UTMs e o source do contato são os da primeira conversão que trouxe origem, e as seguintes não os trocam. O histórico completo, com o último toque, fica nas conversões. Só a conversão sem converted_at publica o evento form_submitted, com o page_slug. Ele só dispara automação de "Formulário enviado" filtrada por página, porque o contato já existia e a automação sem filtro é só para contato novo. O tipo do contato continua sendo atualizado pelo tipo da conversão.',
+    notes: 'Pelo menos um identificador (lead_id, dnia_id, email ou phone) é obrigatório. Primeiro toque: os UTMs e o source do contato são os do primeiro toque que trouxe origem (captura, importação ou conversão), e as conversões seguintes não os trocam. O histórico completo, com o último toque, fica nas conversões. Só a conversão sem converted_at publica o evento form_submitted, com o page_slug. Ele acorda fluxos que aguardam esse evento e só dispara automação de "Formulário enviado" filtrada por página, porque o contato já existia e a automação sem filtro é só para contato novo. O tipo do contato continua sendo atualizado pelo tipo da conversão.',
   },
   {
     id: 'unregister-conversion',

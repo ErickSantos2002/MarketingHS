@@ -76,14 +76,26 @@ function erroDe(campo: Campo, texto: string): string | null {
     return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t ? 'Data inválida.' : null;
   }
   if (t === '') return 'Informe um número.';
-  const n = Number(t.replace(',', '.'));
-  if (!Number.isFinite(n)) return 'Informe um número.';
-  if (campo === 'por_segundo') return n > 0 && n <= 100 ? null : 'Entre 0 (exclusive) e 100.';
-  if (!Number.isInteger(n)) return 'Número inteiro.';
-  if (campo === 'aquecimento_dia1') return n >= 0 ? null : '0 ou mais.';
+  if (campo === 'por_segundo') {
+    if (!/^\d+([.,]\d+)?$/.test(t)) return 'Informe um número (ex.: 2 ou 1,5).';
+    const n = Number(t.replace(',', '.'));
+    return n > 0 && n <= 100 ? null : 'Maior que 0 e até 100.';
+  }
+  if (!/^\d+$/.test(t)) return 'Número inteiro, sem ponto nem vírgula.';
+  const n = Number(t);
+  const teto = MAXIMO[campo];
+  if (teto !== undefined && n > teto) return `No máximo ${teto.toLocaleString('pt-BR')}.`;
+  if (campo === 'aquecimento_dia1') return null;
   // Teto 0 o worker ignora e volta ao padrão: recusado aqui também.
   return n >= 1 ? null : '1 ou mais. Para parar uma campanha, use "Pausar envio".';
 }
+
+// Os mesmos `le=` do RitmoIn: acima disso o backend devolve 422.
+const MAXIMO: Partial<Record<Campo, number>> = {
+  teto_hora: 1_000_000,
+  teto_dia: 10_000_000,
+  aquecimento_dia1: 10_000_000,
+};
 
 export default function RitmoEnvio() {
   const [ritmo, setRitmo] = useState<Ritmo | null>(null);

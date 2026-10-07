@@ -84,6 +84,16 @@ async def test_leitura_ve_o_ambiente_quando_o_banco_nao_tem(conexao, monkeypatch
     assert (campo["valor"], campo["origem"]) == (300, "ambiente")
 
 
+async def test_linha_so_de_espacos_fica_no_padrao_como_no_worker(conexao, monkeypatch):
+    await _limpar(conexao)
+    await _gravar_cru(conexao, "ENVIO_TETO_HORA", "   ")
+    monkeypatch.setattr(ritmo_envio, "_do_ambiente", lambda nome: "300")
+
+    campo = (await ritmo_envio.ler_detalhado(conexao))["campos"]["teto_hora"]
+
+    assert (campo["valor"], campo["origem"]) == (500, "padrao")
+
+
 async def test_teto_de_hoje_aplica_a_rampa(conexao, sem_ambiente):
     await _limpar(conexao)
     hoje = await _hoje(conexao)

@@ -67,10 +67,13 @@ async def ler_detalhado(conn) -> dict:
     for nome, campo in CHAVES.items():
         padrao = getattr(ritmo.PADRAO, campo)
         bruto, origem = gravados.get(nome), "banco"
-        if bruto is None or not str(bruto).strip():
+        # ⚠️ Igual ao `ler_segredo`: só a string VAZIA cai para o ambiente.
+        # Uma linha só de espaços é "verdadeira" lá, e o `montar` a ignora —
+        # o worker fica no padrão, sem olhar o ambiente.
+        if not bruto:
             bruto, origem = _do_ambiente(nome), "ambiente"
         valor, invalido = padrao, None
-        if bruto is None:
+        if bruto is None or not str(bruto).strip():
             origem = "padrao"
         else:
             convertido = ritmo._converter(campo, bruto)
