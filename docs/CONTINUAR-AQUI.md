@@ -55,7 +55,14 @@
 > recusa ação, bloqueia todo não-GET da API) e `--clicar-linha` (ficha).
 > **Precisa deploy de `marketinghs-api` e `-sistema`** (junto com a faxina).
 > ✅ **CT-1 na `main`:** ficha abre com foco no título (`onOpenAutoFocus`), não
-> no "Enviar ao comercial". Depois do deploy: conferir em produção.
+> no "Enviar ao comercial".
+> ✅ **Deploy de 07/10 conferido em produção** (conta do Claude, `conferir-telas`):
+> Ritmo de envio mostra 90/dia e 90/h "gravado" (padrão nos outros), URL do
+> webhook com `https` e `/api`, Contatos em 390 px sem estourar, seletor
+> Todos/Novos/Recorrentes em Filtros, ficha sem P1–P4 e sem anel de foco no
+> "Enviar ao comercial" (antes do deploy, aberta igual, tinha), diálogo "Novo
+> fluxo" ok. ⚠️ Filtros de Contatos ainda têm Modal, Faturamento e
+> Qualificação da dn.ia — entra no R4 (D2).
 >
 > **Perguntas abertas:** 41–61 em `docs/perguntas-abertas.md`, todas com
 > opção assumida — boa pauta para a conversa com o Nicholson junto do D1–D8.
