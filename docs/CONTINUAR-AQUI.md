@@ -28,7 +28,17 @@
 > grava); `/automations` → "Formulário enviado" com seletor de página;
 > construtor "+" → "Remover tag"/"Mudar status".
 >
-> **O que dá para fazer sem ninguém — "faxina R5"** (pequena, uma frente):
+> ✅ **`faxina-r5` na `main` (07/10, `c269872`), sem migration:** jornada
+> robusta (`change_status` ignora excluído; erro que não se cura falha na
+> hora — `ErroDefinitivo`), tag sem caixa (também a do slug), tela
+> **Configurações → Resend → Ritmo de envio** (`/config/envio/ritmo`), texto
+> da API sobre a origem, sobras do front. Suíte na branch 527 passed, leads
+> 2.107 antes e depois; portão depois do merge ok. **Precisa deploy de
+> `marketinghs-api`, `-worker` e `-sistema`.** Perguntas 58–60. Tela a
+> conferir (só leitura — salvar grava em produção): o ritmo mostrando 90/dia e
+> 90/h "gravado".
+>
+> ~~**O que dá para fazer sem ninguém — "faxina R5"**~~ (feito, acima):
 > `ApiDocumentation.tsx` descrever a regra da origem e o `form_submitted` da
 > conversão pela API (só texto, nunca URL/payload); `change_status` olhar
 > `deleted_at`; status inexistente falhar na hora em vez de 3 tentativas;

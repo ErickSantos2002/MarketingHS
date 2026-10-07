@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 07/10 (fim):** `faxina-r5` ✅ mergeada; nenhuma frente aberta.
+
 **Estado em 07/10 (tarde):** aberta `faxina-r5` (sobras de R1/R5: jornada, tag sem caixa, tela do ritmo de envio, texto da documentação da API, pequenos do front).
 
 **Estado em 07/10:** `r5-contatos` e `r5-jornadas` ✅ mergeadas; nenhuma frente aberta. Migration 026 pendente de aplicar.

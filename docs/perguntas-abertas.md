@@ -98,3 +98,10 @@ dia no `CONTINUAR-AQUI.md`.
     desliga o fluxo até escolher a página de novo (a tela avisa).
 57. **"Aguardar evento" de formulário** (R5J-5): quem está esperando agora
     segue também quando reconverte.
+58. **Teto de envio 0** (faxina-r5, FR5-1): recusado na tela e na rota — o
+    worker trata 0 como inválido e cairia no padrão de 2.000/dia. Para parar,
+    "Pausar envio" na campanha. A rampa aceita 0 (desliga).
+59. **Voltar ao padrão no ritmo** (FR5-2): digita-se o padrão (a tela mostra);
+    sem botão "restaurar". Alternativa: botão por campo.
+60. **Tag do slug sem caixa** (FR5-3): `/webinar` usa a tag "Webinar" existente
+    em vez de criar outra.
