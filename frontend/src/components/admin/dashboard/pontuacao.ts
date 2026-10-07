@@ -5,8 +5,9 @@
 // decisor, temas do campo desafio). Agora valem `lead_score` e `etiqueta`, que
 // o banco grava pela pontuação configurada em Configurações → Lead Scoring.
 //
-// ⚠️ A ficha do contato (LeadDetailSheet) e o `useLeadQualification` ainda
-// carregam o P1–P4 antigo: são de outra frente, ficaram anotados.
+// A ficha do contato (LeadDetailSheet) e o `useLeadQualification` deixaram o
+// P1–P4 no R5 (05/10/2026): a ficha mostra os mesmos `lead_score` e
+// `etiqueta`, por estas funções.
 
 import type { Lead } from '@/hooks/useLeads';
 

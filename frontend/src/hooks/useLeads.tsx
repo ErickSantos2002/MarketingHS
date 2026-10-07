@@ -48,6 +48,8 @@ export interface Lead {
   last_conversion_date: string | null;
   indicacao: string | null;
   updated_at: string;
+  /** Exclusão lógica: preenchido = contato na lixeira. A leitura sempre traz. */
+  deleted_at: string | null;
 }
 
 export type DeletedView = 'active' | 'deleted' | 'all';
