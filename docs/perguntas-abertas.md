@@ -105,3 +105,7 @@ dia no `CONTINUAR-AQUI.md`.
     sem botão "restaurar". Alternativa: botão por campo.
 60. **Tag do slug sem caixa** (FR5-3): `/webinar` usa a tag "Webinar" existente
     em vez de criar outra.
+61. **Foco inicial da ficha** (CT-1): caía no "Enviar ao comercial" (sem
+    confirmação) — um Enter mandava o contato à fila. **Assumido:** foco no
+    título/fechar (consertado em 07/10). Alternativa extra: pedir confirmação
+    no botão.

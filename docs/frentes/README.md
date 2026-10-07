@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 07/10 (noite, depois):** `conferencia-telas` ✅ mergeada; aberto conserto pequeno do foco da ficha (CT-1).
+
 **Estado em 07/10 (noite):** aberta `conferencia-telas` (URL do webhook do Resend na tela, Contatos no celular, `conferir-telas.mjs` abrindo painéis de leitura). Conta do Claude recriada, permanente.
 
 **Estado em 07/10 (fim):** `faxina-r5` ✅ mergeada; nenhuma frente aberta.

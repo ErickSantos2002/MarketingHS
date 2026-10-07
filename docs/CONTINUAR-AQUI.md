@@ -47,7 +47,15 @@
 > `useDashboardFilters`; `deleted_at` no tipo `Lead` (`useLeads.tsx`); tela
 > para editar o ritmo de envio (Configurações → Resend).
 >
-> **Perguntas abertas:** 41–57 em `docs/perguntas-abertas.md`, todas com
+> ✅ **Conta do Claude permanente (07/10)** — `~/criar-conta-claude-marketinghs.sh`
+> (senha só em `claude-admin.env`, o Claude não lê; reexecutar troca a senha).
+> ✅ **`conferencia-telas` na `main`:** URL do webhook do Resend certa na tela
+> (`FRONTEND_URL` + `/api/publico/webhook/resend`), Contatos em 390 px sem
+> estourar, `conferir-telas.mjs` com `--abrir "<painel>"` (lista permitida,
+> recusa ação, bloqueia todo não-GET da API) e `--clicar-linha` (ficha).
+> **Precisa deploy de `marketinghs-api` e `-sistema`** (junto com a faxina).
+>
+> **Perguntas abertas:** 41–61 em `docs/perguntas-abertas.md`, todas com
 > opção assumida — boa pauta para a conversa com o Nicholson junto do D1–D8.
 > ⚠️ Suíte pytest: ~36 min no banco de **produção**, sozinha, `timeout -s
 > KILL 3600`, máquina acordada (a de 05/10 "travou" 47 h por suspensão);
