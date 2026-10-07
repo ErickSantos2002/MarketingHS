@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -168,6 +168,12 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
 
   const isReconverted = timelineEvents.length > 1;
 
+  // CT-1 (07/10/2026): foco inicial no título, não no primeiro botão. O
+  // Radix foca o primeiro focável da ficha, que é o "Enviar ao comercial"
+  // — sem confirmação desde o R5 —, e um Enter sem querer mandava o
+  // contato para a fila do comercial. Hook antes do `return null`.
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+
   if (!lead || !enrichedLead) return null;
 
   const enriched = enrichLeadWithQualification(lead);
@@ -193,12 +199,19 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[90vh] p-0 gap-0">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-2xl max-h-[90vh] p-0 gap-0"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          (tituloRef.current ?? (event.currentTarget as HTMLElement)).focus();
+        }}
+      >
         {/* Header */}
         <DialogHeader className="p-6 pb-4 border-b border-border/50">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-xl font-bold truncate">
+              <DialogTitle ref={tituloRef} tabIndex={-1} className="text-xl font-bold truncate outline-none">
                 {lead.nome || 'Sem nome'}
               </DialogTitle>
               {lead.empresa && (
