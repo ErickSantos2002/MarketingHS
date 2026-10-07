@@ -33,6 +33,7 @@ from app.routers.leitura_contatos import router as leitura_contatos_router
 from app.routers.paginas import router as paginas_router
 from app.routers.painel import router as painel_router
 from app.routers.publico import router as publico_router
+from app.routers.ritmo_envio import router as ritmo_envio_router
 from app.routers.webhook import router as webhook_router
 from app.routers.segmentos import router as segmentos_router
 from app.routers.templates import router as templates_router
@@ -144,6 +145,7 @@ app.include_router(auth_router)
 app.include_router(usuarios_router)
 app.include_router(contatos_router)
 app.include_router(configuracao_router)
+app.include_router(ritmo_envio_router)
 app.include_router(leitura_contatos_router)
 app.include_router(escrita_contatos_router)
 app.include_router(chaves_router)
