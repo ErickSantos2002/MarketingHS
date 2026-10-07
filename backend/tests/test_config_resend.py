@@ -13,7 +13,7 @@ import pytest
 from app import integracoes
 from app.config import settings
 from app.email import resend as cliente_resend
-from app.routers.configuracao import partes_do_remetente
+from app.routers.configuracao import partes_do_remetente, url_do_webhook_resend
 
 ROTA = "/config/resend"
 
@@ -109,8 +109,28 @@ async def test_leitura_devolve_escopo_dominios_e_webhook_url_e_nunca_o_segredo(
     assert corpo["remetente"] == {"nome": "HS", "prefixo": "contato",
                                   "dominio": "hs.com.br"}
     assert corpo["dominios"][0]["id"] == "d1"
-    assert corpo["webhook_url"].endswith("/publico/webhook/resend")
+    assert corpo["webhook_url"] == (
+        f"{settings.FRONTEND_URL.rstrip('/')}/api/publico/webhook/resend")
     assert "re_segredo_de_teste" not in r.text
+
+
+def test_url_do_webhook_resend_sai_do_front_com_o_prefixo_da_api():
+    """Atrás do proxy, `request.url_for` dava `http://…/publico/webhook/resend`:
+    sem https e sem o `/api/` que o nginx repassa ao backend. A URL pública
+    sai do `FRONTEND_URL`, como o link de descadastro do worker."""
+    esperado = ("https://marketinghs.healthsafetytech.com"
+                "/api/publico/webhook/resend")
+    assert url_do_webhook_resend("https://marketinghs.healthsafetytech.com") == esperado
+    assert url_do_webhook_resend("https://marketinghs.healthsafetytech.com/") == esperado
+
+
+async def test_leitura_monta_webhook_url_pelo_front_e_nao_pelo_request(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://mkt.exemplo.com.br")
+    r = await cliente.get(ROTA, headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    assert r.json()["webhook_url"] == (
+        "https://mkt.exemplo.com.br/api/publico/webhook/resend")
 
 
 async def test_testar_classifica_sem_gravar(cliente, token_admin, segredos_resend,
