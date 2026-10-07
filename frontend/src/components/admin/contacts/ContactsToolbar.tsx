@@ -39,9 +39,13 @@ export function ContactsToolbar({
   leads,
 }: ContactsToolbarProps) {
   return (
-    <div className="flex items-center gap-2">
+    // No celular a busca ocupa a linha inteira e os botões descem para a de
+    // baixo; sem o `flex-wrap` a barra empurrava a página para 542 px em
+    // 390 e o CSV saía da tela. A partir de `sm` fica tudo numa linha só,
+    // como sempre foi.
+    <div className="flex flex-wrap items-center gap-2">
       {/* Search */}
-      <div className="relative flex-1 min-w-[200px]">
+      <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[200px]">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           value={search}
