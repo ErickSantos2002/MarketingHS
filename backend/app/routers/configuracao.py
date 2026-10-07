@@ -4,10 +4,11 @@ e a tags — dois dos 68 pontos que a spec mandou fechar."""
 import re
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 
 from app.chave_api import admin_ou_maquina
+from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual, usuario_atual
 from app.email import resend as cliente_resend
@@ -354,9 +355,19 @@ def _verificado(dominio: dict) -> bool:
     return situacao == "verified" or (situacao.startswith("partially_") and envio_ligado)
 
 
+def url_do_webhook_resend(base: str) -> str:
+    """A URL pública que se cadastra no painel do Resend.
+
+    ⚠️ Não é `request.url_for`: atrás do proxy do EasyPanel o request chega em
+    `http` e sem o `/api/`, que o nginx tira antes de repassar ao backend — a
+    tela mostrava uma URL que não responde. Sai do `FRONTEND_URL`, como o link
+    de descadastro do worker (`url_de_descadastro_um_clique`).
+    """
+    return f"{base.rstrip('/')}/api/publico/webhook/resend"
+
+
 @router.get("/config/resend")
-async def ler_config_resend(request: Request,
-                            _: str = Depends(admin_ou_maquina("read"))):
+async def ler_config_resend(_: str = Depends(admin_ou_maquina("read"))):
     """O que está configurado — NUNCA o valor de um segredo.
 
     ⚠️ Devolver o valor colocaria a RESEND_API_KEY no HTML de qualquer admin
@@ -385,10 +396,7 @@ async def ler_config_resend(request: Request,
         "unsubscribe_secret": {"configurado": bool(valores["unsubscribe_secret"])},
         "webhook_secret": {"configurado": bool(valores["webhook_secret"])},
         "dominios": dominios,
-        # Montado pelo próprio request: o host de produção ainda não foi
-        # decidido (item 11), e cravar um aqui repetiria o link de anúncio que
-        # o subprojeto A pegou apontando para o lugar errado.
-        "webhook_url": str(request.url_for("resend_webhook")),
+        "webhook_url": url_do_webhook_resend(settings.FRONTEND_URL),
     }
 
 
