@@ -13,7 +13,7 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
-**Estado em 05/10 (tarde):** `r5-contatos` ✅ mergeada; `r5-jornadas` em andamento.
+**Estado em 07/10:** `r5-contatos` e `r5-jornadas` ✅ mergeadas; nenhuma frente aberta. Migration 026 pendente de aplicar.
 
 **Estado em 05/10:** abertas `r5-jornadas` (backend + automações: nós mudar status/remover tag, conversão por página, `/publico/conversao` sem sobrescrever UTMs) e `r5-contatos` (pontuação única, enviar ao comercial para qualquer etiqueta, seletor Novos/Recorrentes, campo-isca da landing). Acesso ao RD e conversa com o Nicholson ainda pendentes.
 

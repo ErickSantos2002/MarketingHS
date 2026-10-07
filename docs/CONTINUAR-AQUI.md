@@ -18,6 +18,26 @@
 > Telas a conferir: `/admin/contacts` (seletor em 1024/1280/1440), ficha de
 > não-hotlead (botão no cabeçalho, sem P1–P4), `/p/<slug>` (isca invisível,
 > Tab pula, envio grava).
+>
+> ✅ **`r5-jornadas` na `main` (07/10, `61313ed`):** nós "mudar status" e
+> "remover tag", gatilho "Formulário enviado" com filtro opcional por página
+> (reconversão publica o evento; só entra em fluxo filtrado), `POST
+> /publico/conversao` sem sobrescrever UTMs/`source`. Suíte na branch: 487
+> passed, 7 skipped (os da 026), leads 2.107 antes e depois. Portão depois do
+> merge: guarda 0, `tsc` 0, builds ok, `test_r5_jornadas`+`test_captura` 42
+> passed. ⚠️ **Ordem do deploy:** 1) `bash ~/marketinghs-migration-026.sh`
+> (três `true`); 2) deploy de `marketinghs-api` e `marketinghs-worker`;
+> 3) deploy do `marketinghs-sistema`. Perguntas 53–57. Sobras: status
+> inexistente re-tenta 3×; `change_status` não olha `deleted_at`;
+> `ApiDocumentation.tsx` não descreve a regra nova da origem.
+> ⚠️ A 1ª suíte de 05/10 "travou" 47 h — foi a máquina suspensa no meio, não
+> a trava; rodar suíte longa com a máquina acordada.
+> Telas a conferir: `/automations` → novo fluxo → "Formulário enviado"
+> (seletor de página), construtor "+" → "Remover tag"/"Mudar status", card de
+> entrada com "— página X".
+>
+> **R5 sem decisão: fechado.** Próximo: o que vier do RD/Nicholson (D1–D8);
+> sem isso, o resto do R5 depende de D1.
 
 > ## 🌅 Comece por aqui — próxima sessão (fechado em 02/10/2026, fim da tarde)
 >

@@ -88,3 +88,13 @@ dia no `CONTINUAR-AQUI.md`.
     encher o `website` escondido, o lead real é descartado com resposta de
     sucesso e só um log `info`. **Assumido:** manter (`autocomplete=off`,
     fora da tela); se aparecer reclamação, logar em `warning` com o e-mail.
+53. **Reconversão e jornada** (R5J-1): contato que já existia e converte de
+    novo só entra em fluxo **filtrado por página**; fluxo sem filtro segue só
+    com lead novo. Reverter = uma linha em `journey_enroll_event`.
+54. **`tipo` na conversão pela API** (R5J-2): continua sobrescrito, como antes.
+55. **Conversão com `converted_at`** (R5J-3): carga de histórico não matricula
+    em jornada.
+56. **Filtro de página guarda o slug** (R5J-4): trocar o slug da página
+    desliga o fluxo até escolher a página de novo (a tela avisa).
+57. **"Aguardar evento" de formulário** (R5J-5): quem está esperando agora
+    segue também quando reconverte.
