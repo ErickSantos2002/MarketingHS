@@ -109,7 +109,8 @@ async def test_leitura_devolve_escopo_dominios_e_webhook_url_e_nunca_o_segredo(
     assert corpo["remetente"] == {"nome": "HS", "prefixo": "contato",
                                   "dominio": "hs.com.br"}
     assert corpo["dominios"][0]["id"] == "d1"
-    assert corpo["webhook_url"] == url_do_webhook_resend(settings.FRONTEND_URL)
+    assert corpo["webhook_url"] == (
+        f"{settings.FRONTEND_URL.rstrip('/')}/api/publico/webhook/resend")
     assert "re_segredo_de_teste" not in r.text
 
 

@@ -48,7 +48,15 @@ for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--clicar-linha') opcoes.clicarLinha = true;
   else if (a === '--abrir') opcoes.abrir.push(argv[++i] ?? '');
-  else if (a.startsWith('--')) opcoes[a.slice(2)] = argv[++i];
+  else if (a.startsWith('--')) {
+    const nome = a.slice(2);
+    // Opção desconhecida engoliria o argumento seguinte (às vezes a rota).
+    if (!['porta', 'saida', 'temas', 'larguras', 'base'].includes(nome)) {
+      console.error(`✖ opção desconhecida: ${a}`);
+      process.exit(2);
+    }
+    opcoes[nome] = argv[++i];
+  }
   else rotas.push(a);
 }
 const porta = opcoes.porta ?? '8080';
@@ -60,13 +68,13 @@ if (!rotas.length) rotas.push('/');
 const base = opcoes.base ?? `http://127.0.0.1:${porta}`;
 
 // ---- lista permitida de cliques -------------------------------------------
-const normalizar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+const normalizar = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/\s+/g, ' ').trim().toLowerCase();
 // Só abrem painel/diálogo/aba de leitura. Conferido no código em 07/10:
 // "Novo fluxo" e "Nova campanha" abrem formulário vazio; nada grava ao abrir.
 const ABRIDORES = new Set(['filtros', 'colunas', 'novo fluxo', 'nova campanha', '+']);
 // Tudo que soe a ação. Vale também para abas e para o nome achado na tela.
-const ACAO = /\b(salva|salvar|envia|enviar|exclui|excluir|apaga|apagar|remove|remover|para|parar|pausa|pausar|testa|testar|gera|gerar|importa|importar|sincroniza|sincronizar|confirma|confirmar|publica|publicar|ativa|ativar|desativa|desativar|dispara|disparar|duplica|duplicar|mescla|mesclar|restaura|restaurar|redefine|redefinir|reseta|resetar|cria|criar|adiciona|adicionar|aplica|aplicar|aprova|aprovar|deleta|deletar|limpa|limpar|descadastra|descadastrar|move|mover|conecta|conectar|desconecta|desconectar|copia|copiar|atualiza|atualizar|exporta|exportar|baixa|baixar|retoma|retomar|inicia|iniciar|agenda|agendar|reenvia|reenviar|arquiva|arquivar|edita|editar|grava|gravar|cancela|cancelar|send|save|delete|remove|sync|import|export)\b/;
+const ACAO = /\b(salva|salvar|envia|enviar|exclui|excluir|apaga|apagar|remove|remover|para|parar|pausa|pausar|testa|testar|gera|gerar|importa|importar|sincroniza|sincronizar|confirma|confirmar|publica|publicar|ativa|ativar|desativa|desativar|dispara|disparar|duplica|duplicar|mescla|mesclar|restaura|restaurar|redefine|redefinir|reseta|resetar|cria|criar|adiciona|adicionar|aplica|aplicar|aprova|aprovar|deleta|deletar|limpa|limpar|descadastra|descadastrar|move|mover|conecta|conectar|desconecta|desconectar|copia|copiar|atualiza|atualizar|exporta|exportar|baixa|baixar|retoma|retomar|inicia|iniciar|agenda|agendar|reenvia|reenviar|arquiva|arquivar|edita|editar|grava|gravar|cancela|cancelar|executa|executar|roda|rodar|reprocessa|reprocessar|marca|marcar|qualifica|qualificar|converte|converter|promove|promover|desfaz|desfazer|vincula|vincular|transfere|transferir|send|save|delete|remove|sync|import|export|run|execute)\b/;
 
 function validarAbridor(texto) {
   const n = normalizar(texto);
@@ -230,3 +238,5 @@ for (const r of resumo) {
     ` (url ${r.url}, scrollWidth ${r.scrollWidth}, ${r.console.length} msg de console` +
     `${r.bloqueadas.length ? `, ${r.bloqueadas.length} escrita(s) BLOQUEADA(s)` : ''})`);
 }
+// Passo abortado ou escrita bloqueada: a conferência não passou.
+if (resumo.some((r) => r.abortado || r.bloqueadas?.length)) process.exitCode = 1;
