@@ -1,6 +1,49 @@
 # Continuar aqui
 
-> ## 🌅 05/10/2026 — R5 sem decisão (coordenadora)
+> ## 🌅 Comece por aqui — fechado em 07/10/2026
+>
+> **Em produção** (https://marketinghs.healthsafetytech.com, projeto `erick`):
+> R0, R1, R5 parte 1 e R6 parte 1. Migration **026** aplicada e deploy de
+> api/worker/sistema feitos pelo Erick em 07/10. Teto de envio 90/dia e 90/h
+> (plano gratuito do Resend). Nenhuma frente aberta.
+>
+> **Plano:** `docs/raio-x-rd.md` (lotes R0–R10, decisões D1–D8). Tudo o que
+> sobra no plano depende de alguém de fora:
+>
+> | Espera | Destrava |
+> |---|---|
+> | **Nicholson — D1** (funil) | resto do R5 (funil, régua com decaimento, modelo "pediu demonstração") |
+> | **Nicholson — D2** (campos) | R4 |
+> | **Nicholson — D3** (base legal + URL da política) | R2 → R3 (captura no site, troca o RD) e R10 |
+> | **Nicholson — D4** (e-mail de nota fiscal) | ⚠️ campanha para a base — **não mandar** até decidir |
+> | **Nicholson — D5** (mídia paga: canais) | R10 Google e Meta (estado técnico em `raio-x-rd.md`, seção "Google e Meta") |
+> | **Nicholson — D6, D8** (quem opera; Resend Pro × SES) | papel de operador; R9 |
+> | **Acesso ao RD (D7)** — prometido para 05/10, não veio | inventário → R7 (migração) |
+> | **Conta admin temporária** para o Claude | conferir as telas de R1 e R5 (lista abaixo) |
+>
+> **Telas sem conferir** (nenhuma conta para o Claude desde 02/10): campanha
+> em `sending`/`paused`/parada (R1); `/admin/contacts` com o seletor
+> Novos/Recorrentes em 1024/1280/1440; ficha de não-hotlead (botão "Enviar ao
+> comercial" no cabeçalho, sem P1–P4); `/p/<slug>` (isca invisível, envio
+> grava); `/automations` → "Formulário enviado" com seletor de página;
+> construtor "+" → "Remover tag"/"Mudar status".
+>
+> **O que dá para fazer sem ninguém — "faxina R5"** (pequena, uma frente):
+> `ApiDocumentation.tsx` descrever a regra da origem e o `form_submitted` da
+> conversão pela API (só texto, nunca URL/payload); `change_status` olhar
+> `deleted_at`; status inexistente falhar na hora em vez de 3 tentativas;
+> `_aplicar_tag` comparar sem caixa (como o `remove_tag`); comentário velho em
+> `dashboard/pontuacao.ts` (linhas 8–9); `onlyReconversions` órfão em
+> `useDashboardFilters`; `deleted_at` no tipo `Lead` (`useLeads.tsx`); tela
+> para editar o ritmo de envio (Configurações → Resend).
+>
+> **Perguntas abertas:** 41–57 em `docs/perguntas-abertas.md`, todas com
+> opção assumida — boa pauta para a conversa com o Nicholson junto do D1–D8.
+> ⚠️ Suíte pytest: ~36 min no banco de **produção**, sozinha, `timeout -s
+> KILL 3600`, máquina acordada (a de 05/10 "travou" 47 h por suspensão);
+> `count(*) FROM leads` igual antes e depois (2.107 em 07/10).
+
+> ## ✅ 05–07/10/2026 — R5 sem decisão (coordenadora)
 >
 > Erick fez o deploy do `marketinghs-sistema` e rodou o teto de envio. Sem
 > acesso ao RD nem conversa com o Nicholson ainda. Abertas `r5-jornadas`
@@ -39,7 +82,7 @@
 > **R5 sem decisão: fechado.** Próximo: o que vier do RD/Nicholson (D1–D8);
 > sem isso, o resto do R5 depende de D1.
 
-> ## 🌅 Comece por aqui — próxima sessão (fechado em 02/10/2026, fim da tarde)
+> ## 📜 Fechamento de 02/10/2026 (fim da tarde) — substituído pelo bloco de 07/10
 >
 > **Onde estamos.** MarketingHS **em produção** desde 02/10 em
 > https://marketinghs.healthsafetytech.com (projeto `erick` do EasyPanel:
