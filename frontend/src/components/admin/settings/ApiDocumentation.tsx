@@ -450,7 +450,7 @@ const ENDPOINTS = [
     method: 'POST',
     path: '/publico/conversao',
     title: 'Registrar conversão',
-    description: 'Registra uma nova conversão para um lead existente. Atualiza last_conversion_date e aplica tag automaticamente.',
+    description: 'Registra uma nova conversão para um lead existente. Atualiza last_conversion_date e aplica tag automaticamente. A conversão NÃO troca a origem do contato: o primeiro toque fica. Os UTMs e o source enviados ficam inteiros no registro da conversão, mas no contato só preenchem o que está vazio. Sem converted_at, a conversão publica o evento form_submitted com o page_slug, que dispara as automações de "Formulário enviado" filtradas por aquela página.',
     params: [
       { name: 'lead_id', type: 'uuid', required: 'Condicional', description: 'ID do lead (preferencial)' },
       { name: 'dnia_id', type: 'uuid', required: 'Condicional', description: 'ID da identidade unificada (dnia_id)' },
@@ -459,13 +459,13 @@ const ENDPOINTS = [
       { name: 'tipo', type: 'string', required: 'Sim', description: 'Tipo da conversão (ex: modal_pago)' },
       { name: 'page_slug', type: 'string', required: 'Sim', description: 'Slug da página. Vira tag se apply_tag=true' },
       { name: 'session_id', type: 'string', required: 'Não', description: 'ID da sessão' },
-      { name: 'converted_at', type: 'ISO 8601', required: 'Não', description: 'Data da conversão (default: agora)' },
-      { name: 'utm_source', type: 'string', required: 'Não', description: 'UTM source' },
-      { name: 'utm_medium', type: 'string', required: 'Não', description: 'UTM medium' },
-      { name: 'utm_campaign', type: 'string', required: 'Não', description: 'UTM campaign' },
-      { name: 'utm_term', type: 'string', required: 'Não', description: 'UTM term' },
-      { name: 'utm_content', type: 'string', required: 'Não', description: 'UTM content' },
-      { name: 'source', type: 'string', required: 'Não', description: 'Origem da conversão (ex: landing-exemplo)' },
+      { name: 'converted_at', type: 'ISO 8601', required: 'Não', description: 'Data da conversão (default: agora). Com data informada, a conversão é tratada como histórico: não publica form_submitted e não dispara automação' },
+      { name: 'utm_source', type: 'string', required: 'Não', description: 'UTM source. Os cinco UTMs andam em bloco: só vão para o contato se ele ainda não tiver nenhum UTM' },
+      { name: 'utm_medium', type: 'string', required: 'Não', description: 'UTM medium (ver utm_source)' },
+      { name: 'utm_campaign', type: 'string', required: 'Não', description: 'UTM campaign (ver utm_source)' },
+      { name: 'utm_term', type: 'string', required: 'Não', description: 'UTM term (ver utm_source)' },
+      { name: 'utm_content', type: 'string', required: 'Não', description: 'UTM content (ver utm_source)' },
+      { name: 'source', type: 'string', required: 'Não', description: 'Origem da conversão (ex: landing-exemplo). No contato, só preenche se o source dele estiver vazio' },
       { name: 'apply_tag', type: 'boolean', required: 'Não', description: 'Aplica tag do page_slug (default: true)' },
     ],
     curl: `curl -X POST \\
@@ -497,7 +497,7 @@ const ENDPOINTS = [
         created_at: "2026-03-29T20:00:00Z"
       }
     }, null, 2),
-    notes: 'Pelo menos um identificador (lead_id, dnia_id, email ou phone) é obrigatório.',
+    notes: 'Pelo menos um identificador (lead_id, dnia_id, email ou phone) é obrigatório. Primeiro toque: os UTMs e o source do contato são os da primeira conversão que trouxe origem, e as seguintes não os trocam. O histórico completo, com o último toque, fica nas conversões. Só a conversão sem converted_at publica o evento form_submitted, com o page_slug. Ele só dispara automação de "Formulário enviado" filtrada por página, porque o contato já existia e a automação sem filtro é só para contato novo. O tipo do contato continua sendo atualizado pelo tipo da conversão.',
   },
   {
     id: 'unregister-conversion',
