@@ -29,6 +29,18 @@ RETENTATIVA_MINUTOS = 5
 TIMEOUT_PADRAO_MINUTOS = 1440
 
 
+class ErroDefinitivo(ValueError):
+    """Erro que não se cura sozinho: status que não existe, tag vazia, nó de
+    tipo desconhecido. O `rodar_cadeia` falha o run NA HORA, com o motivo.
+
+    ⚠️ Re-tentar isso 3× (de 5 em 5 minutos) só adiava a falha em 10 minutos
+    e enchia o `journey_step_log` com três linhas iguais. Erro de rede, de
+    banco ou qualquer outra exceção continua transitório e re-tenta.
+
+    É `ValueError` de propósito: quem já esperava `ValueError` segue valendo.
+    """
+
+
 def _agora() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -79,11 +91,16 @@ async def _aplicar_tag(conn, lead_id: str, bruta: str) -> None:
 
     ⚠️ O vínculo tem PK (lead_id, tag_id), então reexecutar o nó é inofensivo
     por construção.
+
+    ⚠️ Busca por `lower(name)`, como o `_remover_tag` e o "tags em lote" do
+    painel: `tags.name` guarda a caixa digitada ("Cliente") e o nó normaliza
+    para minúsculas — comparar cru criava "cliente" ao lado de "Cliente".
+    Havendo as duas grafias (herança de antes), fica a exata.
     """
     nome = (bruta or "").lstrip("/").strip().lower()
     if not nome:
-        raise ValueError("tag vazia após normalização")
-    tag_id = await conn.fetchval("SELECT id FROM tags WHERE name = $1", nome)
+        raise ErroDefinitivo("tag vazia após normalização")
+    tag_id = await _id_da_tag_sem_caixa(conn, nome)
     if tag_id is None:
         # Corrida com outro worker criando a mesma tag (`name` é UNIQUE): o
         # DO NOTHING deixa o SELECT seguinte resolver.
@@ -97,6 +114,13 @@ async def _aplicar_tag(conn, lead_id: str, bruta: str) -> None:
     await conn.execute(
         "INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2) "
         "ON CONFLICT DO NOTHING", lead_id, tag_id)
+
+
+async def _id_da_tag_sem_caixa(conn, nome: str):
+    """O id da tag cujo `lower(name)` é `nome`; a grafia exata primeiro."""
+    return await conn.fetchval(
+        """SELECT id FROM tags WHERE lower(name) = lower($1)
+            ORDER BY (name = $1) DESC, name LIMIT 1""", nome)
 
 
 async def _remover_tag(conn, lead_id: str, bruta: str) -> bool:
@@ -113,7 +137,7 @@ async def _remover_tag(conn, lead_id: str, bruta: str) -> bool:
     """
     nome = (bruta or "").lstrip("/").strip().lower()
     if not nome:
-        raise ValueError("tag vazia após normalização")
+        raise ErroDefinitivo("tag vazia após normalização")
     resultado = await conn.execute(
         """DELETE FROM lead_tags
             WHERE lead_id = $1::uuid
@@ -131,11 +155,14 @@ async def _mudar_status(conn, run: dict, bruto: str) -> dict:
     que ninguém conseguisse dizer quando — o histórico da ficha ficaria com
     buraco. `source: "jornada"` no metadata diz de onde veio.
 
-    ⚠️ Status desconhecido LEVANTA (`ValueError`), e o `rodar_cadeia` põe o
-    run em `failed` com o motivo depois das re-tentativas: o banco aceita
-    salvar o fluxo com qualquer nome (ver a 026), então a recusa é aqui.
+    ⚠️ Status desconhecido LEVANTA (`ErroDefinitivo`), e o `rodar_cadeia`
+    põe o run em `failed` com o motivo NA HORA — sem re-tentar, porque o
+    status não passa a existir sozinho em 5 minutos. O banco aceita salvar o
+    fluxo com qualquer nome (ver a 026), então a recusa é aqui.
 
-    Contato que já está no status: nada é gravado, nem evento.
+    Contato que já está no status, ou excluído (`deleted_at`): nada é gravado,
+    nem evento. Excluído não é erro — o contato pode ter ido para a lixeira
+    enquanto o run esperava num delay; o passo fica `skipped` com o motivo.
     """
     from fastapi import HTTPException
 
@@ -144,9 +171,12 @@ async def _mudar_status(conn, run: dict, bruto: str) -> dict:
     try:
         novo = await _resolver_status(conn, str(bruto or ""))
     except HTTPException as e:
-        raise ValueError(str(e.detail)) from None
-    anterior = await conn.fetchval(
-        "SELECT status FROM leads WHERE id = $1::uuid", run["lead_id"])
+        raise ErroDefinitivo(str(e.detail)) from None
+    linha = await conn.fetchrow(
+        "SELECT status, deleted_at FROM leads WHERE id = $1::uuid", run["lead_id"])
+    if linha is None or linha["deleted_at"] is not None:
+        return {"status": novo, "mudou": False, "motivo": "contato excluído"}
+    anterior = linha["status"]
     if anterior == novo:
         return {"status": novo, "mudou": False}
     await conn.execute(
@@ -284,7 +314,7 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
                               {"handoff_id": pedido, "ja_na_fila": pedido is None})
         return {"tipo": "avancar", "proximo": no.get("next")}
 
-    raise ValueError(f"tipo de nó desconhecido: {tipo}")
+    raise ErroDefinitivo(f"tipo de nó desconhecido: {tipo}")
 
 
 async def _avaliar_condicional(conn, run: dict, no: dict, cfg: dict,
@@ -363,8 +393,9 @@ async def rodar_cadeia(conn, run: dict) -> dict:
             comum = {"current_node_id": run.get("current_node_id"),
                      "waiting_event": run.get("waiting_event"),
                      "lock_token": None, "locked_until": None}
-            if tentativas < MAX_TENTATIVAS_POR_NO:
-                # Erro transitório: reagenda o MESMO nó. Reexecutar send_email é
+            if tentativas < MAX_TENTATIVAS_POR_NO and not isinstance(e, ErroDefinitivo):
+                # Erro transitório (o `ErroDefinitivo` não se cura esperando e
+                # cai direto no `failed` abaixo): reagenda o MESMO nó. Reexecutar send_email é
                 # seguro por construção (o índice único do par run+nó).
                 await gravar_run(conn, run, {
                     **comum, "state": "waiting",

@@ -13,6 +13,7 @@ import {
   type ConfigResend, type DiagnosticoResend, type DominioResend, type InfoDominio,
   type TesteDeChave,
 } from '@/lib/config';
+import RitmoEnvio from './RitmoEnvio';
 
 // Configuração do Resend pela interface — restaurada por inteiro no lote 8A.
 //
@@ -449,6 +450,9 @@ export default function ResendConfigCard() {
             )}
           </div>
         )}
+
+        {/* Ritmo de envio — limites do worker, com a própria gravação */}
+        <RitmoEnvio />
 
         {/* Diagnóstico */}
         <div className="space-y-2 border-t pt-4">

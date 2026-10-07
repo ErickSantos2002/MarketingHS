@@ -1119,10 +1119,17 @@ async def _aplicar_tag_do_slug(conn, lead_id: str, page_slug: str) -> str | None
     tag = page_slug.lstrip("/").strip().lower()
     if not tag or len(tag) > TAG_MAX or not TAG_VALIDA.match(tag):
         return None
+    # ⚠️ Sem caixa, como o nó de jornada e o "tags em lote": a tag "Webinar"
+    # criada no painel serve à página `/webinar` — sem isto nascia "webinar"
+    # ao lado. Havendo as duas grafias, fica a exata.
     tag_id = await conn.fetchval(
-        """INSERT INTO tags (name) VALUES ($1)
-           ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-        RETURNING id""", tag)
+        """SELECT id FROM tags WHERE lower(name) = $1
+            ORDER BY (name = $1) DESC, name LIMIT 1""", tag)
+    if tag_id is None:
+        tag_id = await conn.fetchval(
+            """INSERT INTO tags (name) VALUES ($1)
+               ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id""", tag)
     await conn.execute(
         """INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2)
            ON CONFLICT (lead_id, tag_id) DO NOTHING""", lead_id, tag_id)

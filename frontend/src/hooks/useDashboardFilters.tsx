@@ -36,12 +36,6 @@ export interface DashboardFilters {
   faturamentos: string[];
   cargos: string[];
   hideIncomplete: boolean;
-  /**
-   * Espelho de `recorrencia === 'recorrentes'`, mantido porque o painel de
-   * Contatos ainda liga e desliga "Só reconversões" por ele. Quem manda é
-   * `recorrencia`; `updateFilters` mantém os dois em acordo.
-   */
-  onlyReconversions: boolean;
   recorrencia: Recorrencia;
   search: string;
   sources: string[];
@@ -61,7 +55,6 @@ const initialFilters: DashboardFilters = {
   faturamentos: [],
   cargos: [],
   hideIncomplete: false,
-  onlyReconversions: false,
   recorrencia: 'todos',
   search: '',
   sources: [],
@@ -82,12 +75,17 @@ function serializeFilters(filters: DashboardFilters): string {
 // Deserialize filters from localStorage (convert ISO strings to Dates)
 function deserializeFilters(stored: string): DashboardFilters {
   // `presencas`, `interesseEcossistema` e `challengeThemes` são chaves de
-  // preferência antigas (ver o comentário do topo).
-  const { presencas: _p, interesseEcossistema: _i, challengeThemes: _t, ...parsed } = JSON.parse(stored);
+  // preferência antigas (ver o comentário do topo). `onlyReconversions` era o
+  // interruptor "Só reconversões" de Contatos, trocado pelo seletor
+  // `recorrencia` (R5): a preferência salva com ele ligado vira "recorrentes".
+  const {
+    presencas: _p, interesseEcossistema: _i, challengeThemes: _t,
+    onlyReconversions: antigoSoReconversoes, ...parsed
+  } = JSON.parse(stored);
   const recorrencia: Recorrencia =
     parsed.recorrencia === 'novos' || parsed.recorrencia === 'recorrentes'
       ? parsed.recorrencia
-      : parsed.onlyReconversions ? 'recorrentes' : 'todos';
+      : antigoSoReconversoes ? 'recorrentes' : 'todos';
   return {
     ...initialFilters,
     ...parsed,
@@ -97,7 +95,6 @@ function deserializeFilters(stored: string): DashboardFilters {
     createdDateTo: parsed.createdDateTo ? new Date(parsed.createdDateTo) : null,
     // Ensure booleans are always booleans (not undefined/null from old localStorage)
     hideIncomplete: !!parsed.hideIncomplete,
-    onlyReconversions: recorrencia === 'recorrentes',
     recorrencia,
     // Don't restore search (it's temporary)
     search: '',
@@ -166,7 +163,7 @@ export function useDashboardFilters() {
   }, [filters]);
 
   const updateFilters = useCallback((updates: Partial<DashboardFilters>) => {
-    setFilters(prev => alinharRecorrencia(prev, updates));
+    setFilters(prev => ({ ...prev, ...updates }));
   }, []);
 
   const resetFilters = useCallback(() => {
@@ -224,21 +221,6 @@ export function useDashboardFilters() {
     setCustomCreatedDateRange,
     activeFiltersCount,
   };
-}
-
-// `recorrencia` e `onlyReconversions` dizem a mesma coisa por dois caminhos
-// (o seletor do painel e o interruptor de Contatos). Quem veio na
-// atualização vence, e o outro é recalculado a partir dele.
-function alinharRecorrencia(prev: DashboardFilters, updates: Partial<DashboardFilters>): DashboardFilters {
-  const next = { ...prev, ...updates };
-  if (updates.recorrencia !== undefined) {
-    next.onlyReconversions = next.recorrencia === 'recorrentes';
-  } else if (updates.onlyReconversions !== undefined) {
-    next.recorrencia = updates.onlyReconversions
-      ? 'recorrentes'
-      : prev.recorrencia === 'recorrentes' ? 'todos' : prev.recorrencia;
-  }
-  return next;
 }
 
 /**

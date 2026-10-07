@@ -104,8 +104,8 @@ async def test_mudar_status_para_o_mesmo_nao_grava_evento(conexao, passos):
 
 async def test_mudar_status_desconhecido_falha_a_vista(conexao, passos):
     """Status que não existe em `lead_statuses` levanta: o `rodar_cadeia`
-    re-tenta e depois põe o run em `failed` com o motivo — nunca segue
-    calado como se tivesse mudado."""
+    põe o run em `failed` com o motivo na 1ª vez (`ErroDefinitivo`, ver
+    test_faxina_r5.py) — nunca segue calado como se tivesse mudado."""
     lead = await _lead(conexao)
     no = {"id": "n1", "type": "change_status",
           "config": {"status": "Status Que Não Existe"}, "next": None}
