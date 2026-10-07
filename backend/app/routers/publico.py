@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.ab.costura import Ab, costurar_visitante, extrair_ab, registrar_conversao_ab
+from app.captura.evento import publicar_conversao
 from app.chave_api import ChaveApi, chave_api
 from app.database import sessao
 from app.routers.automacoes import (
@@ -1149,6 +1150,41 @@ async def _recalcular_datas(conn, lead_ids: list[str]) -> None:
             WHERE l.id = ANY($1::uuid[])""", lead_ids)
 
 
+async def _carimbar_lead(conn, lead_id: str, dados: ConversaoIn) -> None:
+    """O que a conversão grava no próprio lead.
+
+    ⚠️ NÃO DESTRUTIVA desde o R5 (pergunta 50), com a mesma regra da captura
+    (`captura._atualizar`, R1): os UTMs andam em BLOCO — com QUALQUER `utm_*`
+    já gravado, nenhum é tocado; sem nenhum, entra o bloco desta conversão.
+    `source` só preenche o vazio. Até aqui o `COALESCE($novo, antigo)`
+    trocava a origem do primeiro toque pela do último a cada conversão, e
+    misturava `utm_source` de um toque com `utm_campaign` de outro. O que
+    cada conversão trouxe continua inteiro em `lead_conversions`.
+
+    ⚠️ `tipo` continua sendo carimbado como antes (ver as perguntas de
+    `docs/frentes/r5-jornadas.md`): esta rota exige chave de API `write` — não
+    é a porta anônima da captura —, e mudar o que ela faz com `tipo` é decisão
+    de produto, não pendência do R1.
+    """
+    utms = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
+    sem_origem = " AND ".join(f"coalesce({u}, '') = ''" for u in utms)
+    blocos = ",\n                   ".join(
+        f"{u} = CASE WHEN {sem_origem} THEN ${i} ELSE {u} END"
+        for i, u in enumerate(utms, start=4))
+    # As expressões do SET leem a linha ANTIGA: o CASE decide sobre a origem
+    # que existia antes desta conversão.
+    await conn.execute(
+        f"""UPDATE leads SET
+                   source = COALESCE(NULLIF(source, ''), $2),
+                   tipo   = COALESCE($3, tipo),
+                   {blocos}
+                 WHERE id = $1::uuid""",
+        lead_id, dados.source or None, dados.tipo or None,
+        dados.utm_source or None, dados.utm_medium or None,
+        dados.utm_campaign or None, dados.utm_term or None,
+        dados.utm_content or None)
+
+
 @router.post("/conversao", status_code=status.HTTP_201_CREATED)
 async def registrar_conversao(dados: ConversaoIn,
                               _: ChaveApi = Depends(chave_api("write"))):
@@ -1207,22 +1243,17 @@ async def registrar_conversao(dados: ConversaoIn,
             dados.utm_term or None, dados.utm_content or None,
             dados.source or None, dados.ab_test, dados.ab_var, dados.ab_vid)
 
-        # As mesmas colunas que a function carimbava no lead — e só quando o
-        # valor veio. `COALESCE` guarda o que já estava lá.
-        await conn.execute(
-            """UPDATE leads SET
-                   source       = COALESCE($2, source),
-                   tipo         = COALESCE($3, tipo),
-                   utm_source   = COALESCE($4, utm_source),
-                   utm_medium   = COALESCE($5, utm_medium),
-                   utm_campaign = COALESCE($6, utm_campaign),
-                   utm_term     = COALESCE($7, utm_term),
-                   utm_content  = COALESCE($8, utm_content)
-                 WHERE id = $1::uuid""",
-            lead_id, dados.source or None, dados.tipo or None,
-            dados.utm_source or None, dados.utm_medium or None,
-            dados.utm_campaign or None, dados.utm_term or None,
-            dados.utm_content or None)
+        await _carimbar_lead(conn, lead_id, dados)
+
+        # R5: a conversão publica `form_submitted` com a página — é o que deixa
+        # "pediu demonstração" disparar a jornada filtrada por página na hora.
+        # Esta rota nunca cria lead (ver `_resolver_lead`), então é sempre o
+        # caminho de quem já existia.
+        # ⚠️ Só a conversão AO VIVO (sem `converted_at`). Quem manda a data
+        # está registrando conversão passada — carga de histórico, migração do
+        # RD — e isso não pode virar matrícula em massa de jornada.
+        if not dados.converted_at:
+            await publicar_conversao(conn, lead_id, dados.page_slug, origem="api")
 
         # `lead_criado` no teste A/B — era o `leadConversion.ts` do cliente,
         # apagado no lote 7 sem que esta rota assumisse.

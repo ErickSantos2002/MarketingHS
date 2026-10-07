@@ -99,6 +99,66 @@ async def _aplicar_tag(conn, lead_id: str, bruta: str) -> None:
         "ON CONFLICT DO NOTHING", lead_id, tag_id)
 
 
+async def _remover_tag(conn, lead_id: str, bruta: str) -> bool:
+    """Espelho do `_aplicar_tag`, com a mesma normalização. Devolve se havia
+    vínculo para tirar.
+
+    ⚠️ Contato sem a tag (ou tag que nem existe) NÃO é erro: o fluxo pode
+    passar duas vezes pelo nó, ou a tag ter sido tirada à mão no meio do
+    caminho. A tag em si fica em `tags` — outros contatos podem usá-la.
+
+    ⚠️ `lower(name)`: `tags.name` guarda a caixa digitada no painel ("VIP"),
+    e o construtor salva o nome em minúsculas. Comparar cru faria o nó não
+    achar nada e seguir calado.
+    """
+    nome = (bruta or "").lstrip("/").strip().lower()
+    if not nome:
+        raise ValueError("tag vazia após normalização")
+    resultado = await conn.execute(
+        """DELETE FROM lead_tags
+            WHERE lead_id = $1::uuid
+              AND tag_id IN (SELECT id FROM tags WHERE lower(name) = $2)""",
+        lead_id, nome)
+    return not resultado.endswith(" 0")
+
+
+async def _mudar_status(conn, run: dict, bruto: str) -> dict:
+    """Grava `leads.status` e os MESMOS eventos que a mudança pelo painel.
+
+    ⚠️ Reusa `_resolver_status` e `_registrar_mudanca` do painel de propósito:
+    a listagem calcula `status_changed_at` e o painel conta "MQL hoje" a
+    partir desses eventos. Um nó que só fizesse o UPDATE mudaria o status sem
+    que ninguém conseguisse dizer quando — o histórico da ficha ficaria com
+    buraco. `source: "jornada"` no metadata diz de onde veio.
+
+    ⚠️ Status desconhecido LEVANTA (`ValueError`), e o `rodar_cadeia` põe o
+    run em `failed` com o motivo depois das re-tentativas: o banco aceita
+    salvar o fluxo com qualquer nome (ver a 026), então a recusa é aqui.
+
+    Contato que já está no status: nada é gravado, nem evento.
+    """
+    from fastapi import HTTPException
+
+    from app.routers.escrita_contatos import _registrar_mudanca, _resolver_status
+
+    try:
+        novo = await _resolver_status(conn, str(bruto or ""))
+    except HTTPException as e:
+        raise ValueError(str(e.detail)) from None
+    anterior = await conn.fetchval(
+        "SELECT status FROM leads WHERE id = $1::uuid", run["lead_id"])
+    if anterior == novo:
+        return {"status": novo, "mudou": False}
+    await conn.execute(
+        "UPDATE leads SET status = $2 WHERE id = $1::uuid", run["lead_id"], novo)
+    await _registrar_mudanca(
+        conn, run["lead_id"], anterior, novo, origem="jornada",
+        descricao="Mudança de status por jornada",
+        metadata_extra={"source": "jornada", "journey_id": str(run["journey_id"]),
+                        "journey_run_id": str(run["run_id"])})
+    return {"status": novo, "anterior": anterior, "mudou": True}
+
+
 def _contexto(run: dict) -> dict:
     ctx = run.get("context")
     if isinstance(ctx, str):
@@ -198,6 +258,18 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
         await _aplicar_tag(conn, run["lead_id"], str(cfg.get("tag_name") or ""))
         await registrar_passo(conn, run, no, "entered",
                               {"tag_name": cfg.get("tag_name")})
+        return {"tipo": "avancar", "proximo": no.get("next")}
+
+    if tipo == "remove_tag":
+        removida = await _remover_tag(conn, run["lead_id"], str(cfg.get("tag_name") or ""))
+        await registrar_passo(conn, run, no, "entered",
+                              {"tag_name": cfg.get("tag_name"), "removida": removida})
+        return {"tipo": "avancar", "proximo": no.get("next")}
+
+    if tipo == "change_status":
+        feito = await _mudar_status(conn, run, cfg.get("status"))
+        await registrar_passo(conn, run, no,
+                              "entered" if feito["mudou"] else "skipped", feito)
         return {"tipo": "avancar", "proximo": no.get("next")}
 
     if tipo == "handoff_growthhs":

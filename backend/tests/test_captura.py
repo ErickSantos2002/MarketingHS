@@ -262,6 +262,28 @@ async def test_captura_nao_devolve_dado_pessoal(cliente, pagina_sonda):
     assert "carla" not in texto and "85999991234" not in texto
 
 
+async def test_reconversao_pela_rota_publica_o_evento_com_a_pagina(cliente, pagina_sonda):
+    """R5, fim a fim: a SEGUNDA captura do mesmo e-mail publica um
+    `form_submitted` com a página — é o que deixa "pediu demonstração"
+    disparar jornada para quem já era contato. (A primeira tem o evento do
+    gatilho de INSERT; a página nele depende da migration 026.)"""
+    for _ in range(2):
+        r = await cliente.post("/publico/captura", json={
+            "email": EMAIL_SONDA, "page_slug": pagina_sonda,
+            "fields": {"nome": "Carla Sonda"}})
+        assert r.status_code == 200, r.text
+    async with db.sessao(role="service_role") as conn:
+        eventos = await conn.fetch(
+            """SELECT ce.metadata FROM contact_events ce JOIN leads l ON l.id = ce.lead_id
+                WHERE l.email = $1 AND ce.event_type = 'form_submitted'""", EMAIL_SONDA)
+    metadados = [e["metadata"] if isinstance(e["metadata"], dict)
+                 else json.loads(e["metadata"]) for e in eventos]
+    assert len(metadados) == 2
+    reconversoes = [m for m in metadados if m.get("reconversao")]
+    assert len(reconversoes) == 1
+    assert reconversoes[0]["page_slug"] == pagina_sonda
+
+
 async def test_captura_recusa_descartavel(cliente, pagina_sonda):
     resposta = await cliente.post("/publico/captura", json={
         "email": "alguem@mailinator.com", "page_slug": pagina_sonda, "fields": {}})

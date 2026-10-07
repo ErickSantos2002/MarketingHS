@@ -15,6 +15,8 @@ export type JourneyNodeType =
   | 'branch_segment'
   | 'branch_email_event'
   | 'apply_tag'
+  | 'remove_tag'
+  | 'change_status'
   | 'handoff_growthhs';
 
 export interface JourneyNode {
@@ -60,6 +62,8 @@ export const NODE_LABELS: Record<JourneyNodeType, string> = {
   branch_segment: 'Condição (segmento)',
   branch_email_event: 'Condição (email)',
   apply_tag: 'Aplicar tag',
+  remove_tag: 'Remover tag',
+  change_status: 'Mudar status',
   handoff_growthhs: 'Enviar ao GrowthHS',
 };
 
@@ -102,6 +106,17 @@ export const EVENT_OPTIONS: { value: string; label: string }[] = [
   { value: 'form_submitted', label: 'Formulário enviado / lead criado' },
   { value: 'contact_updated', label: 'Contato atualizado' },
 ];
+
+// Filtro de página do gatilho (R5, migration 026). Só o `form_submitted`
+// carrega a página — é o evento da captura e de `POST /publico/conversao`.
+// Sem `page_slug` no entry_config = qualquer página (o comportamento de antes).
+export const EVENTO_COM_PAGINA = 'form_submitted';
+
+export function entryEventConfig(eventType: string, pageSlug: string): Record<string, any> {
+  return eventType === EVENTO_COM_PAGINA && pageSlug
+    ? { event_type: eventType, page_slug: pageSlug }
+    : { event_type: eventType };
+}
 
 export function newNodeId(): string {
   return `n${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
