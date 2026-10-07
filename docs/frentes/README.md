@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 07/10 (noite):** aberta `conferencia-telas` (URL do webhook do Resend na tela, Contatos no celular, `conferir-telas.mjs` abrindo painéis de leitura). Conta do Claude recriada, permanente.
+
 **Estado em 07/10 (fim):** `faxina-r5` ✅ mergeada; nenhuma frente aberta.
 
 **Estado em 07/10 (tarde):** aberta `faxina-r5` (sobras de R1/R5: jornada, tag sem caixa, tela do ritmo de envio, texto da documentação da API, pequenos do front).
@@ -45,6 +47,7 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 | `consertos-urgentes` | 10 | 8090 | usa a 8100 | ver `consertos-urgentes.md` | 02/10, R0 |
 | `proteger-envio` | 11 | 8091 | **8111** | ver `proteger-envio.md` | 02/10, R1 |
 | `painel-limpeza` | 12 | 8092 | usa a 8100 | ver `painel-limpeza.md` | 02/10, R6 |
+| `conferencia-telas` | 16 | 8096 | usa a 8100 | ver `conferencia-telas.md` | 07/10 |
 | `faxina-r5` | 15 | 8095 | **8115** | ver `faxina-r5.md` (`backend/**` + arquivos listados) | 07/10 |
 | `r5-jornadas` | 13 | 8093 | **8113** | ver `r5-jornadas.md` (`backend/**`, automações) | 05/10, R5 |
 | `r5-contatos` | 14 | 8094 | usa a 8100 | ver `r5-contatos.md` (contatos, ficha, landing) | 05/10, R5 |
