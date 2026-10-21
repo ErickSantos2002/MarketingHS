@@ -110,21 +110,37 @@ async def lead_do_crm(conn, *, lead_id: str | None, email: str | None,
     Um `lead_id` bem formado que não existe mais (lead fundido, banco
     resetado) cai para o e-mail em vez de dar 404 — o card continua sendo da
     mesma pessoa. `lead_id` que nem é uuid é pulado (nunca 500 de cast).
+
+    ⚠️ Contato EXCLUÍDO (`deleted_at`) não é achado por nenhum dos três: o
+    CRM (ou a API) mudar o estágio de quem foi apagado ressuscitaria o
+    contato no funil sem ninguém ver. Quem chama responde 404.
     """
     colunas = "id::text AS id, dnia_id::text AS dnia_id, status"
     uid = _uuid_ou_none(lead_id) if lead_id else None
     if uid:
-        lead = await conn.fetchrow(f"SELECT {colunas} FROM leads WHERE id = $1::uuid", uid)
+        lead = await conn.fetchrow(
+            f"SELECT {colunas} FROM leads WHERE id = $1::uuid AND deleted_at IS NULL", uid)
         if lead:
             return lead
     if email and email.strip():
         lead = await conn.fetchrow(
             f"SELECT {colunas} FROM leads WHERE lower(email) = lower($1) "
-            "ORDER BY created_at DESC LIMIT 1", email.strip())
+            "AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1", email.strip())
         if lead:
             return lead
-    if dnia_id:
-        return await _lead_por_identificador(conn, dnia_id, None, None)
+    did = _uuid_ou_none(dnia_id) if dnia_id else None
+    if did:
+        # O canônico da identidade primeiro; senão o mais recente com o
+        # `dnia_id` — o critério de `_lead_por_identificador`, sem excluído.
+        return await conn.fetchrow(
+            f"""SELECT {colunas} FROM leads
+                 WHERE deleted_at IS NULL
+                   AND (id = (SELECT dndash_lead_id FROM ecosystem_identities
+                               WHERE dnia_id = $1::uuid) OR dnia_id = $1::uuid)
+                 ORDER BY (id IS NOT DISTINCT FROM (SELECT dndash_lead_id
+                             FROM ecosystem_identities WHERE dnia_id = $1::uuid)) DESC,
+                          created_at DESC
+                 LIMIT 1""", did)
     return None
 
 
@@ -315,7 +331,10 @@ async def atualizar_status(dados: StatusApiIn,
             raise HTTPException(status.HTTP_404_NOT_FOUND,
                                 "Identidade não possui contato vinculado no MarketingHS.")
 
-        linha = await conn.fetchrow("SELECT status FROM leads WHERE id = $1::uuid", lead_id)
+        # ⚠️ Excluído conta como "não existe mais" (prova do RD, 21/10): mudar
+        # o estágio de quem foi apagado o ressuscitaria no funil.
+        linha = await conn.fetchrow(
+            "SELECT status FROM leads WHERE id = $1::uuid AND deleted_at IS NULL", lead_id)
         if linha is None:
             # A origem respondia sucesso sem gravar nada.
             raise HTTPException(status.HTTP_404_NOT_FOUND,

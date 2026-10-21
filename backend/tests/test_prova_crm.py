@@ -246,6 +246,31 @@ async def test_dnia_id_mal_formado_da_400_nos_dois_caminhos(cliente, contato):
         assert "dnia_id" in r.text
 
 
+async def test_lead_excluido_nao_e_achado(cliente, contato):
+    """Contato excluído (`deleted_at`) não recebe estágio do CRM nem da API —
+    nem por `lead_id`, nem por e-mail, nem por `dnia_id`."""
+    outro, dnia = await _identidade_de_outro_lead()
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE leads SET deleted_at = now() WHERE id = ANY($1::uuid[])",
+            [contato["lead_id"], outro])
+    cab = _auth(contato["escrita"])
+    for corpo in (_evento("deal_won", lead_id=contato["lead_id"]),
+                  _evento("deal_won", email=EMAIL),
+                  _evento("deal_won", dnia_id=dnia)):
+        r = await cliente.post("/publico/evento-de-contato", headers=cab, json=corpo)
+        assert r.status_code == 404, (corpo, r.text)
+    for corpo in ({"lead_id": contato["lead_id"], "status": VENDA},
+                  {"email": EMAIL, "status": VENDA},
+                  {"dnia_id": dnia, "status": VENDA}):
+        r = await cliente.post("/publico/contato/status", headers=cab, json=corpo)
+        assert r.status_code == 404, (corpo, r.text)
+    async with db.sessao(role="service_role") as conn:
+        assert await conn.fetchval(
+            "SELECT count(*) FROM leads WHERE id = ANY($1::uuid[]) AND status = $2",
+            [contato["lead_id"], outro], VENDA) == 0
+
+
 # ── Receptor de teste ────────────────────────────────────────────────────────
 
 def _card(external_id=None, **kw):
