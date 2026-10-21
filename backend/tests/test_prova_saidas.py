@@ -280,7 +280,8 @@ async def test_webhook_2xx_marca_enviado(saida):
     r = await saidas.rodar_saidas(transporte=_transporte(204, chamadas), somente=[sid])
     assert r["enviados"] == 1
     assert len(chamadas) == 1
-    assert str(chamadas[0].url) == "https://exemplo.invalid/gancho"
+    assert str(chamadas[0].url) == f"https://{IP_PUBLICO}/gancho"
+    assert chamadas[0].headers["host"] == "exemplo.invalid"
     assert json.loads(chamadas[0].content) == {"evento": "journey.webhook"}
     linha = await _linha(sid)
     assert linha["status"] == "enviado" and linha["enviado_em"] is not None
@@ -491,3 +492,44 @@ async def test_rota_recusa_webhook_para_dentro_na_hora(cliente, token_admin):
               "entry_node_id": "n1", "nodes": nos})
     assert r.status_code == 400
     assert "recusado" in r.json()["detail"]
+
+
+# ── DNS rebinding: o POST vai para o IP conferido, não para o nome ───────────
+
+async def test_webhook_sai_para_o_ip_conferido_com_host_e_sni(saida, monkeypatch):
+    """O resolvedor responde IP público na conferência e IP interno em
+    qualquer consulta seguinte (o truque do rebinding). O pedido sai para o
+    IP da conferência, com Host e SNI do nome — e o nome é resolvido UMA vez."""
+    consultas = []
+
+    async def rebinding(host, porta):
+        consultas.append((host, porta))
+        return [IP_PUBLICO] if len(consultas) == 1 else ["10.0.0.9"]
+    monkeypatch.setattr(saidas, "_resolver", rebinding)
+    sid = await saida("webhook", "https://gancho.exemplo.com:8443/a/b?c=1")
+    chamadas = []
+
+    r = await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
+
+    assert r["enviados"] == 1
+    assert consultas == [("gancho.exemplo.com", 8443)]
+    [pedido] = chamadas
+    assert str(pedido.url) == f"https://{IP_PUBLICO}:8443/a/b?c=1"
+    assert pedido.headers["host"] == "gancho.exemplo.com:8443"
+    assert pedido.extensions["sni_hostname"] == "gancho.exemplo.com"
+
+
+async def test_webhook_ipv6_vai_entre_colchetes(saida, dns_publico):
+    dns_publico["v6.exemplo.com"] = ["2606:2800:220:1:248:1893:25c8:1946"]
+    sid = await saida("webhook", "https://v6.exemplo.com/x")
+    chamadas = []
+    await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
+    assert str(chamadas[0].url) == "https://[2606:2800:220:1:248:1893:25c8:1946]/x"
+    assert chamadas[0].headers["host"] == "v6.exemplo.com"
+    assert chamadas[0].extensions["sni_hostname"] == "v6.exemplo.com"
+
+
+async def test_conferir_destino_devolve_o_ip_permitido(dns_publico):
+    dns_publico["gancho.exemplo.com"] = [IP_PUBLICO, IP_PUBLICO]
+    assert await saidas.conferir_destino("https://gancho.exemplo.com/x") == IP_PUBLICO
+    assert await saidas.conferir_destino(f"https://{IP_PUBLICO}/x") == IP_PUBLICO

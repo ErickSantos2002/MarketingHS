@@ -125,19 +125,16 @@ async def _resolver(host: str, porta: int) -> list[str]:
     return [i[4][0] for i in infos]
 
 
-async def conferir_destino(url: str) -> None:
+async def conferir_destino(url: str) -> str:
     """A forma e, para nome, a resolução: recusa se QUALQUER endereço que o
     nome devolve for interno (um nome público apontado para 10.x é o truque).
+    Devolve o IP conferido — é NELE que o POST conecta (`_url_no_ip`), para o
+    nome não ser resolvido de novo (DNS rebinding).
 
-    `socket.gaierror` (DNS fora do ar) sobe como está — é transitório.
-
-    ⚠️ Limite conhecido: o httpx resolve de novo ao conectar. Um DNS que muda
-    de resposta entre as duas consultas (rebinding) passaria; fechar isso exige
-    conectar no IP conferido, e fica registrado no arquivo da frente."""
+    `socket.gaierror` (DNS fora do ar) sobe como está — é transitório."""
     host, porta = conferir_forma_da_url(url)
     try:
-        ipaddress.ip_address(host)
-        return  # IP literal: a forma já conferiu
+        return str(ipaddress.ip_address(host))  # IP literal: a forma já conferiu
     except ValueError:
         pass
     enderecos = await _resolver(host, porta)
@@ -147,6 +144,23 @@ async def conferir_destino(url: str) -> None:
         if _ip_proibido(ipaddress.ip_address(e.split("%", 1)[0])):
             raise DestinoRecusado(
                 f"webhook recusado: {host} resolve para {e}, endereço de rede interna")
+    return enderecos[0].split("%", 1)[0]
+
+
+def _url_no_ip(url: str, ip: str) -> tuple[str, str, str]:
+    """(URL com o IP no lugar do nome, cabeçalho Host, nome para o SNI).
+
+    ⚠️ O TLS continua validando o certificado do NOME original: o httpx usa
+    a extensão `sni_hostname` como nome do servidor na verificação."""
+    partes = urlsplit(url.strip())
+    host = (partes.hostname or "").rstrip(".").lower()
+    alvo = f"[{ip}]" if ":" in ip else ip
+    if partes.port is not None:
+        alvo += f":{partes.port}"
+        cabecalho_host = f"{host}:{partes.port}"
+    else:
+        cabecalho_host = host
+    return partes._replace(netloc=alvo).geturl(), cabecalho_host, host
 
 
 def espera(tentativas: int) -> timedelta:
@@ -348,7 +362,7 @@ async def _mandar_webhook(s: dict, transporte) -> str:
     try:
         # O nó e a rota já conferem a forma; aqui vai também a resolução — o
         # nome pode ter passado a apontar para dentro depois de salvo.
-        await conferir_destino(url)
+        ip = await conferir_destino(url)
     except DestinoRecusado as e:
         await _falhar(s["id"], str(e))
         return "falhos"
@@ -357,7 +371,13 @@ async def _mandar_webhook(s: dict, transporte) -> str:
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_WEBHOOK, transport=transporte,
                                      follow_redirects=False) as cliente:
-            resposta = await cliente.post(url, json=s["payload"])
+            # ⚠️ Conecta no IP conferido, nunca no nome: o httpx resolveria
+            # de novo, e um DNS que troca de resposta (rebinding) levaria o
+            # pedido para dentro depois da conferência.
+            no_ip, cabecalho_host, sni = _url_no_ip(url, ip)
+            resposta = await cliente.post(
+                no_ip, json=s["payload"], headers={"Host": cabecalho_host},
+                extensions={"sni_hostname": sni})
         resposta.raise_for_status()
     except Exception as e:  # noqa: BLE001 — rede, timeout, status: tudo classificado
         motivo = (f"HTTP {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError)
