@@ -200,8 +200,17 @@ def _card(external_id=None, **kw):
     return corpo
 
 
-@pytest.fixture
-def receptor(monkeypatch):
+async def _limpar_pedidos_da_sonda():
+    """Todo pedido com o e-mail da sonda é desta suíte — inclusive o de uma
+    rodada que morreu no meio (ou de um teste que falhou antes do `finally`)."""
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "DELETE FROM growthhs_receptor_pedidos WHERE corpo->'contact'->>'email' = $1",
+            EMAIL)
+
+
+@pytest_asyncio.fixture
+async def receptor(monkeypatch):
     from app.config import settings
     from app.routers import receptor_growthhs
 
@@ -209,9 +218,15 @@ def receptor(monkeypatch):
         assert nome == "GROWTHHS_API_KEY"
         return CHAVE_DO_RECEPTOR
 
+    await db.init_db()
+    if db._pool is None:
+        pytest.skip("sem DATABASE_URL")
+    await _limpar_pedidos_da_sonda()
     monkeypatch.setattr(settings, "PROVA_RECEPTOR_TESTE", True)
     monkeypatch.setattr(receptor_growthhs, "ler_segredo", segredo)
-    return receptor_growthhs
+    yield receptor_growthhs
+    await db.init_db()
+    await _limpar_pedidos_da_sonda()
 
 
 async def _limpar_pedidos(*ids):
