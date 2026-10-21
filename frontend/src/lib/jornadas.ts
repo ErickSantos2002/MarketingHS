@@ -42,6 +42,10 @@ export interface JornadaEntrada {
   reentry_cooldown_hours?: number | null;
   entry_node_id?: string | null;
   nodes?: Record<string, unknown>[];
+  // Modo teste (prova do RD, migration 027): só os e-mails da lista recebem
+  // os passos com efeito. `null` = sem modo teste; `[]` no PATCH = o admin
+  // desligou de propósito (o servidor grava NULL).
+  allowed_emails?: string[] | null;
 }
 
 export const criarJornada = (dados: JornadaEntrada) =>

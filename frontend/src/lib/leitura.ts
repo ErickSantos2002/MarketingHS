@@ -37,7 +37,34 @@ export interface NotaFicha { id: string; conteudo: string; created_at: string }
 export const lerFicha = <T>(leadId: string) =>
   api.get<{ lead: T; tags: TagFicha[]; notas: NotaFicha[] }>(`/contatos/${leadId}`);
 
-export const eventosDoContato = (leadId: string, limite = 50) =>
+// Prova do RD: o registro de consentimento por conversão (LGPD). O texto e a
+// versão são os que a página tinha NA HORA — o servidor tira da config, nunca
+// do navegador. Mais recente primeiro.
+export interface Consentimento {
+  id: string;
+  base_legal: 'consentimento' | 'legitimo_interesse_pedido_contato' | string;
+  texto: string;
+  versao: string;
+  provisoria: boolean;
+  ip: string | null;
+  user_agent: string | null;
+  origem_tipo: 'pagina' | 'site' | string | null;
+  page_slug: string | null;
+  site_id: string | null;
+  form_id: string | null;
+  page_url: string | null;
+  criado_em: string;
+}
+
+export const listarConsentimentos = (leadId: string) =>
+  api.get<Consentimento[]>(`/contatos/${encodeURIComponent(leadId)}/consentimentos`);
+
+/** Os campos personalizados (`leads.campos_extras`) vêm só na ficha inteira. */
+export const camposExtrasDoContato = (leadId: string) =>
+  lerFicha<{ campos_extras?: Record<string, unknown> | null }>(leadId)
+    .then(r => r.lead?.campos_extras ?? {});
+
+export const eventosDoContato =(leadId: string, limite = 50) =>
   api.get<Record<string, unknown>[]>(`/contatos/${leadId}/eventos?limite=${limite}`);
 
 export const conversoesDoContato = (leadId: string) =>
