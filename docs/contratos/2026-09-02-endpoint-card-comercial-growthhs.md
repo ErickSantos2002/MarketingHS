@@ -5,7 +5,7 @@ Nada aqui se implementa dentro do MarketingHS — o MarketingHS é o *chamador*.
 
 **Data:** 2 de setembro de 2026
 **Origem:** lote 5A do MarketingHS (`docs/superpowers/specs/2026-08-31-marketinghs-design.md`, seção 8.A)
-**Estado:** o lado do MarketingHS está pronto (lote 8D, 22/09/2026); falta o endpoint no GrowthHS
+**Estado:** o lado do MarketingHS está pronto (lote 8D, 22/09/2026; card ampliado e volta do CRM em 21/10/2026, ver "Acréscimos de 21/10"); falta o endpoint no GrowthHS — até lá, o MarketingHS testa o contrato contra um receptor próprio
 
 ---
 
@@ -247,6 +247,121 @@ teste confere a chave e o escopo `cards:create`.
 external_id)` do contrato é a única coisa que fecha de vez o card duplicado
 numa corrida rara (worker desligado entre o 2xx e a gravação). Do nosso lado
 há guarda por lead e por pessoa, mas ela depende de a gravação ter acontecido.
+
+---
+
+## Acréscimos de 21/10 (prova de substituição do RD)
+
+A prova (`docs/superpowers/specs/2026-10-21-prova-substituir-rd-design.md`)
+acrescenta três coisas ao card e pede uma chamada de volta. **Nada do que já
+estava acima muda.**
+
+### (a) Três chaves novas no corpo do card
+
+```json
+{
+  "...": "o corpo de antes, igual",
+  "custom_fields": { "ja_faz_testagem": "sim" },
+  "conversion": {
+    "page_slug": "phoebus-prova",
+    "form_id": null,
+    "site_name": null,
+    "page_url": null,
+    "converted_at": "2026-10-21T13:00:00Z",
+    "canal": "pago"
+  },
+  "consent": {
+    "legal_basis": "consentimento",
+    "version": "provisoria-2026-10",
+    "provisional": true,
+    "recorded_at": "2026-10-21T13:00:00Z"
+  }
+}
+```
+
+- `custom_fields`: as respostas dos campos personalizados do formulário
+  (`leads.campos_extras`). `{}` quando não há.
+- `conversion`: a **última** conversão do lead — página da landing
+  (`page_slug`) ou formulário de outro site (`form_id`, `site_name`,
+  `page_url`), com o canal (`pago`, `social`, `email`, `organico`,
+  `referencia`, `direto`). `null` quando não há.
+- `consent`: o **último** registro de consentimento (LGPD). `legal_basis` é
+  `consentimento` (a pessoa marcou a caixa na landing) ou
+  `legitimo_interesse_pedido_contato` (formulário do site sem caixa: a pessoa
+  pediu contato). `provisional: true` enquanto o texto da política não for o
+  definitivo. `null` quando não há.
+
+**Podem ser ignoradas — o card nasce sem elas.** Se o GrowthHS valida o corpo
+com esquema fechado (`extra = "forbid"`), precisa aceitar as três chaves (ou
+descartá-las) para o card não virar 422.
+
+### (b) A volta: "reunião agendada" e "venda fechada"
+
+Quando o card anda no GrowthHS, o MarketingHS quer saber — é o que muda o
+estágio do lead aqui e para a nutrição de quem já está no comercial.
+
+```
+POST {MarketingHS}/api/publico/evento-de-contato
+Header: Authorization: Bearer <chave de API do MarketingHS, escopo write>
+Content-Type: application/json
+```
+
+⚠️ A chave de API do MarketingHS vai em **`Authorization: Bearer`**, não em
+`X-API-Key` (o `X-API-Key` é o do lado de vocês). Ela é criada em
+Configurações → Chaves de API, com escopo **escrita**; chave só de leitura
+leva 403.
+
+```json
+{
+  "source_app": "growthhs",
+  "event_type": "meeting_scheduled",
+  "title": "Reunião agendada no GrowthHS",
+  "lead_id": "<external_id do card>",
+  "email": "carla@transportadora.com.br",
+  "metadata": { "card_id": 4821 }
+}
+```
+
+- O lead é achado por `lead_id` (o `external_id` que o MarketingHS mandou no
+  card), depois `email`, depois `dnia_id`. Um dos três é obrigatório (400);
+  nenhum casa → **404** (o MarketingHS não cria contato a partir do CRM).
+- `occurred_at` (ISO 8601) e `description` são opcionais.
+
+Resposta `200`:
+
+```json
+{ "evento_id": "…", "lead_id": "…", "dnia_id": "…",
+  "status_anterior": "Lead", "status_atual": "MQL - Reunião agendada",
+  "mudou": true }
+```
+
+**O estágio só avança.** `meeting_scheduled` leva a "MQL - Reunião agendada";
+`deal_won`, a "Venda realizada" — e só se o estágio novo vier depois do atual
+na ordem do funil. Uma reunião agendada que chega depois da venda grava o
+evento e responde `mudou: false`, sem voltar o estágio. Outro `event_type`
+(ex.: `deal_moved`) é só registrado na linha do tempo. Repetir a chamada não
+quebra nada: o evento é gravado de novo, o estágio já está lá.
+
+### (c) Quando chamar
+
+- **Reunião agendada** com o contato do card → `meeting_scheduled`.
+- **Negócio ganho** → `deal_won`.
+
+As duas, uma vez por acontecimento, logo que acontecem. Não há rota para
+"negócio perdido" nesta rodada.
+
+### (d) O receptor de teste do nosso lado
+
+Enquanto o `POST /integration/cards` não existe, o MarketingHS tem um
+receptor próprio que implementa **este** contrato
+(`backend/app/routers/receptor_growthhs.py`, em
+`{MarketingHS}/api/teste/growthhs`): confere `X-API-Key`, valida o corpo
+(`source`, `external_id` uuid, `board_id`, `title`, `contact.email` ou
+`contact.phone`; senão 422), responde 201 na primeira vez e 200 com o mesmo
+`id` na repetição, e guarda o pedido. A fila real de handoff aponta para ele
+durante a prova. Fica desligado fora dela (404). É, também, o teste do
+contrato do nosso lado: se o corpo que mandamos mudar, ele recusa antes de
+vocês.
 
 ---
 

@@ -31,7 +31,8 @@ router = APIRouter(prefix="/publico", tags=["publico"])
 # Os valores que o trigger `validate_contact_event_source_app` aceita. A lista
 # vive nos dois lugares porque o banco precisa dela para validar e a API para
 # recusar cedo, com mensagem melhor que uma exceção de trigger.
-SOURCE_APPS = ("marketinghs", "dnmarketing", "nexus", "mentoria", "website")
+# `growthhs` desde a migration 027 (a volta do CRM, prova do RD).
+SOURCE_APPS = ("marketinghs", "dnmarketing", "nexus", "mentoria", "website", "growthhs")
 
 # Os eventos que contam como a conversão `agendamento` do teste A/B — a lista
 # de `receive-contact-event`.
@@ -56,7 +57,8 @@ class IdentidadeIn(BaseModel):
 
 
 class EventoIn(BaseModel):
-    source_app: str = Field(pattern="^(marketinghs|dnmarketing|nexus|mentoria|website)$")
+    source_app: str = Field(
+        pattern="^(marketinghs|dnmarketing|nexus|mentoria|website|growthhs)$")
     event_type: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
@@ -69,6 +71,8 @@ class EventoIn(BaseModel):
     ab_vid: str | None = None
     ab_test: str | None = None
     ab_var: str | None = None
+    # O `external_id` do card (= id do lead aqui). Só o `growthhs` usa.
+    lead_id: str | None = Field(default=None, max_length=64)
 
 
 async def _achar_identidade(conn, phone, email, dnia_id):
@@ -196,6 +200,8 @@ async def receber_evento(dados: EventoIn, _: ChaveApi = Depends(chave_api("write
     acertou a lista do banco; aqui o pattern do pydantic recusa cedo, com
     mensagem melhor.
     """
+    if dados.source_app == "growthhs":
+        return await _evento_do_growthhs(dados)
     if not any((dados.phone, dados.email, dados.dnia_id)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "Informe phone, email ou dnia_id.")
@@ -248,6 +254,66 @@ async def receber_evento(dados: EventoIn, _: ChaveApi = Depends(chave_api("write
 
     return {"evento_id": str(evento_id), "dnia_id": str(dnia_id),
             "lead_id": str(lead_id) if lead_id else None}
+
+
+async def _evento_do_growthhs(dados: EventoIn) -> dict:
+    """A volta do CRM (prova do RD): o GrowthHS avisa "reunião agendada" e
+    "venda fechada" do card que recebeu (`app/crm/retorno.py`).
+
+    Diferente dos outros `source_app`, aqui o contato TEM que existir — o card
+    nasceu de um lead nosso. Nada de criar identidade nova: o lead é achado
+    por `lead_id` (o `external_id` do card), e-mail ou `dnia_id`, nessa ordem;
+    nenhum → 404. O evento é gravado como veio (`source_app = 'growthhs'`), o
+    estágio só avança, e `meeting_scheduled` continua sendo a conversão
+    `agendamento` do teste A/B.
+    """
+    from app.crm.retorno import ESTAGIO_POR_EVENTO, avancar_status
+    from app.routers.api_contato import _lead_por_identificador
+
+    if not any((dados.lead_id, dados.email, dados.dnia_id)):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Informe lead_id, email ou dnia_id.")
+    async with sessao(role="service_role") as conn:
+        lead = await _lead_por_identificador(
+            conn, dados.dnia_id, dados.email, None, lead_id=dados.lead_id)
+        if lead is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
+        lead_id, dnia_id = lead["id"], lead["dnia_id"]
+
+        evento_id = await conn.fetchval(
+            """INSERT INTO contact_events (dnia_id, lead_id, source_app, event_type,
+                                           title, description, metadata, occurred_at)
+               VALUES ($1::uuid, $2::uuid, 'growthhs', $3, $4, $5, $6::jsonb,
+                       COALESCE($7::timestamptz, now()))
+               RETURNING id""",
+            dnia_id, lead_id, dados.event_type, dados.title, dados.description,
+            dados.metadata or {}, dados.occurred_at)
+
+        estagio = ESTAGIO_POR_EVENTO.get(dados.event_type)
+        if estagio:
+            anterior, atual, mudou = await avancar_status(
+                conn, lead_id, estagio,
+                metadata_extra={"evento_crm": dados.event_type,
+                                "evento_id": str(evento_id)})
+        else:
+            anterior = atual = lead["status"]
+            mudou = False
+
+        if dados.event_type in EVENTOS_DE_AGENDAMENTO:
+            email = await conn.fetchval(
+                "SELECT email FROM leads WHERE id = $1::uuid", lead_id)
+            ab = await costurar_visitante(
+                conn, extrair_ab(dados.model_dump(), dados.metadata),
+                email=email, phone=None, phone_normalized=None,
+                lead_id=lead_id, dnia_id=dnia_id, source_app="growthhs",
+                metadata={"origin": "receive-contact-event",
+                          "event_type": dados.event_type})
+            await registrar_conversao_ab(
+                conn, ab, "agendamento", lead_id=lead_id, dnia_id=dnia_id,
+                metadata={"event_type": dados.event_type})
+
+    return {"evento_id": str(evento_id), "lead_id": lead_id, "dnia_id": dnia_id,
+            "status_anterior": anterior, "status_atual": atual, "mudou": mudou}
 
 
 # ============================================================================
@@ -1502,6 +1568,8 @@ async def criar_pagina_publico(dados: PaginaPublicaIn,
                                _: ChaveApi = Depends(chave_api("write"))):
     """⚠️ Nasce com `status = 'inactive'`, como na origem: página criada de fora
     não entra no ar sozinha."""
+    from app.routers.paginas import recusar_urls_inseguras
+    recusar_urls_inseguras(dados.config)
     async with sessao(role="service_role") as conn:
         try:
             linha = await conn.fetchrow(
@@ -1557,6 +1625,9 @@ async def atualizar_pagina_publico(slug: str, dados: PaginaPublicaPatch,
 
         config = dict(atual["config"] or {})
         if dados.config:
+            # Confere o que chega; o que já estava gravado é descartado ao servir.
+            from app.routers.paginas import recusar_urls_inseguras
+            recusar_urls_inseguras(dados.config)
             config.update(dados.config)
         link_utm = None
         if dados.utm_preset:

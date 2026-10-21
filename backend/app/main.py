@@ -11,6 +11,7 @@ from app.config import settings
 from app.auth.router import router as auth_router
 from app.database import close_datacore, close_db, init_datacore, init_db
 from app.middleware.cors_coletor import CorsDoColetorMiddleware
+from app.middleware.cors_sites import CorsDosSitesMiddleware
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
 from app.routers.ab import router as ab_router
 from app.routers.ab_publico import router as ab_publico_router
@@ -33,9 +34,12 @@ from app.routers.leitura_contatos import router as leitura_contatos_router
 from app.routers.paginas import router as paginas_router
 from app.routers.painel import router as painel_router
 from app.routers.publico import router as publico_router
+from app.routers.rastreio import router as rastreio_router
+from app.routers.receptor_growthhs import router as receptor_growthhs_router
 from app.routers.ritmo_envio import router as ritmo_envio_router
 from app.routers.webhook import router as webhook_router
 from app.routers.segmentos import router as segmentos_router
+from app.routers.sites import router as sites_router
 from app.routers.templates import router as templates_router
 from app.routers.usuarios import router as usuarios_router
 
@@ -93,9 +97,14 @@ app.add_middleware(
     # lista, que é o que o faz marcar spam. O HMAC do link autentica, como a
     # assinatura Svix autentica o webhook. Só o um clique: o GET/POST de
     # `/publico/descadastro` (a página) continua no balde.
+    #
+    # ⚠️ `/publico/site/visita` (prova do RD) tem balde próprio, abaixo: o
+    # `rastreio.js` manda uma por carregamento de página do site inteiro, e
+    # dividir o balde com `/publico/captura` gastaria a cota do formulário.
+    # A CONVERSÃO de site (`/publico/site/conversao`) fica no balde comum.
     isentos=("/publico/webhook/", "/publico/validar-email",
              "/publico/ab/go", "/publico/ab/eventos",
-             "/publico/descadastro/um-clique"),
+             "/publico/descadastro/um-clique", "/publico/site/visita"),
 )
 
 # I1: balde próprio do coletor de eventos do A/B — bem mais generoso que o
@@ -121,9 +130,21 @@ app.add_middleware(
     prefixos=("/publico/ab/go",),
 )
 
+# Balde próprio da visita do `rastreio.js` (prova do RD).
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=settings.LIMITE_VISITA_POR_MINUTO,
+    prefixos=("/publico/site/visita",),
+)
+
 # ⚠️ Por último de propósito: é o mais de fora, e responde o preflight do
 # coletor antes do CORSMiddleware global recusá-lo (ver o módulo).
 app.add_middleware(CorsDoColetorMiddleware, caminho="/publico/ab/eventos")
+
+# ⚠️ E este depois dele — o MAIS de fora de todos: o preflight do
+# `rastreio.js` vem de domínio cadastrado em `sites`, que o CORSMiddleware
+# global recusaria; e o 429 do balde da visita também leva o cabeçalho.
+app.add_middleware(CorsDosSitesMiddleware, prefixo="/publico/site/")
 
 
 @app.exception_handler(RuntimeError)
@@ -166,6 +187,10 @@ app.include_router(api_contato_router)
 app.include_router(ab_router)
 app.include_router(ab_publico_router)
 app.include_router(publico_router)
+app.include_router(rastreio_router)
+app.include_router(sites_router)
+# Sempre incluído; 404 em tudo enquanto `PROVA_RECEPTOR_TESTE` for falso.
+app.include_router(receptor_growthhs_router)
 app.include_router(webhook_router)
 app.include_router(landing_router)
 

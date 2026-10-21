@@ -110,13 +110,34 @@ def _ou_traco(valor) -> str:
     return texto or "—"
 
 
-def montar_card(lead: dict, board_id: int) -> dict:
+def _conversao_do_card(c: dict | None) -> dict | None:
+    if not c:
+        return None
+    return {"page_slug": c.get("page_slug"), "form_id": c.get("form_id"),
+            "site_name": c.get("site_nome"), "page_url": c.get("page_url"),
+            "converted_at": c.get("converted_at"), "canal": c.get("canal")}
+
+
+def _consentimento_do_card(c: dict | None) -> dict | None:
+    if not c:
+        return None
+    return {"legal_basis": c.get("base_legal"), "version": c.get("versao"),
+            "provisional": c.get("provisoria"), "recorded_at": c.get("criado_em")}
+
+
+def montar_card(lead: dict, board_id: int, *, conversao: dict | None = None,
+                consentimento: dict | None = None) -> dict:
     """O corpo do contrato. `list_id` nulo = etapa de entrada do funil —
     qual é a entrada é decisão do CRM (decisão 7 do plano do 8D).
 
     Origem: "Tráfego pago" se houver QUALQUER UTM, senão "Orgânico" — regra
     global da origem; o `source` do lead é ignorado de propósito, para não
     haver dois dialetos de origem.
+
+    Prova do RD (21/10): `custom_fields` (= `leads.campos_extras`),
+    `conversion` (a última conversão: página ou formulário de site, canal) e
+    `consent` (o último registro de consentimento). Sem dado, `{}`/`null`.
+    São chaves NOVAS: o contrato diz ao GrowthHS que pode ignorá-las.
     """
     utms = {c: lead.get(c) for c in UTMS if lead.get(c)}
     nome = lead.get("nome") or lead.get("email") or "Sem nome"
@@ -143,6 +164,9 @@ def montar_card(lead: dict, board_id: int) -> dict:
                           "funcionarios": normalizar_funcionarios(lead.get("funcionarios")),
                           "lead_score": lead.get("lead_score"),
                           "etiqueta": lead.get("etiqueta")},
+        "custom_fields": dict(lead.get("campos_extras") or {}),
+        "conversion": _conversao_do_card(conversao),
+        "consent": _consentimento_do_card(consentimento),
     }
 
 

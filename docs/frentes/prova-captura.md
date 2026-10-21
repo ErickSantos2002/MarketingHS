@@ -7,7 +7,10 @@ Plano: `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` — Tarefas
 ## Estado
 - [x] Fase 0 — Tarefa 1 (migration 027 + `~/marketinghs-migration-027.sh`) — **pronto para merge** (21/10)
 - [x] Fase 0 mergeada na `main` (`b80b9de`)
-- [ ] Fase 1 — Tarefas 2–6
+- [x] Migration 027 aplicada em produção pelo Erick (21/10) — conferido
+  `to_regclass('public.journey_saidas')` e `lead_consents` pelo perfil de
+  leitura; os testes da Fase 1 rodaram de verdade, sem pular
+- [x] Fase 1 — Tarefas 2–6 (branch `prova-captura-f1`) — ver "Fase 1" abaixo
 
 **Para o Erick, depois do merge:** `bash ~/marketinghs-migration-027.sh`
 (aditiva; pode ir antes de qualquer deploy). Aplica duas vezes e imprime três
@@ -87,3 +90,85 @@ As três provas do script deram `true` no local. Container derrubado no fim.
 - `count(*) FROM leads` no banco de produção: **2107 antes, 2107 depois**.
 - `git diff --stat`: só os três arquivos da Tarefa 1; nenhum `.env` nem
   credencial no diff. Sem mudança de front (tsc/guarda/build não se aplicam).
+
+## Fase 1 — Tarefas 2–6 (21/10, branch `prova-captura-f1`)
+
+A 027 já estava aplicada em produção quando a Fase 1 rodou: **nenhum teste
+pulou** por falta dela (os guardas `_exigir_027` continuam nos arquivos).
+
+| Commit | O que entregou |
+|---|---|
+| `7369198` T2 | `campos.py`: `TIPOS_DE_CAMPO`, `CHAVE_EXTRA`, `DefinicaoCampo`, `ler_definicoes` (descarta igual a `camposDaConfig`: chave inválida/reservada/repetida, tipo desconhecido, lista sem opção; e-mail sempre e-mail+obrigatório; sem `campos` cai em `visible_fields` → `legado`, sem validação), `validar`, `normalizar_celular_br` (igual a `normalizarCelular`). 22 testes puros. |
+| `944a311` T3 | `captura/registro.py` (o corpo de `capturar()` movido sem mudar + extras, colunas novas da conversão, consentimento, tags), `captura/canal.py`, `captura/urls.py`; `evento.py` com `form_id`/`site_id`; `CapturaIn` com `consentimento`, `visitor_id`, `referrer`, `gclid`, `fbclid`; erro `400 {mensagem, campos}`; `GET /contatos/{id}/consentimentos` e `campos_extras` na ficha. URLs da config (`redirect_url`, `imagem_url`, `consentimento.link`) recusadas ao salvar (400 em `paginas.py` e nas rotas de página da chave de API) e descartadas ao servir. |
+| `d1e7cb7` extensão | `segmentos.py`: `RegraIn.key` (o pydantic descartava a chave e o segmento por `campo_extra` contava zero calado). |
+| `4a996d8` T4 | `mapa.py`, `routers/rastreio.py` (visita, conversão, `/publico/prova/recebido`), `middleware/cors_sites.py`, `routers/sites.py`, `Settings` (`LIMITE_VISITA_POR_MINUTO`, `PROVA_RECEPTOR_TESTE`), `main.py` (balde da visita, CORS dos sites por último), `limpeza.apagar_visitas`. |
+| `c512706` T5 | `GET /paginas/numeros` (duas queries, agregação no SQL), casca com `noindex` opcional, `rastreio.js` e config com URLs seguras. |
+| `5158efb` T6 | `crm/retorno.py`, `growthhs` no `evento-de-contato`, `contato/status` por `lead_id`/e-mail, card com `custom_fields`/`conversion`/`consent`, `routers/receptor_growthhs.py`, contrato com "Acréscimos de 21/10". |
+| `963cdd1` segurança | cache do token: formato exato (`fullmatch`), sem negativo, teto 256 com despejo do mais antigo. |
+| `cbb84c9` teste | fixture do receptor limpa os pedidos da sonda nos dois lados (um teste que falhou deixou 1 pedido; removido pela própria fixture). |
+
+**Testes por arquivo (produção, 027 aplicada):** `test_prova_campos` 22 ·
+`test_prova_captura` 23 · `test_prova_segmento` 3 · `test_prova_site` 25 ·
+`test_prova_numeros` 13 · `test_prova_crm` 19 — todos passando. Regressões
+pedidas pelo plano: T3 (`test_captura`, `test_r5_jornadas`, `test_conversao`,
+`test_migracao_027`) 80 passed; T4 (+ `test_ab_publico`, `test_security`)
+72 passed; T5 (`-k casca`) 19 passed; T6 (`test_api_contato`,
+`test_crm_entrega`, `test_growthhs_cliente`, `test_handoff_banco`) 110 com o
+de `test_prova_crm` corrigido depois.
+
+### Costura com o front (conferida contra a `main` em 21/10)
+`lib/sites.ts` (`Site`: lista crua, objeto inteiro nas escritas — o backend
+devolve também `atualizado_em`), `lib/numeros.ts`, `lib/leitura.ts`
+(`Consentimento`, `campos_extras` na ficha), `SegmentFormModal` (`key`) e o
+corpo de `Formulario.tsx`/`rastreio.js` — casam.
+
+### Decisões tomadas (a mais segura e reversível)
+1. **Um evento de reunião, não dois.** O plano mandava gravar a mudança do
+   CRM com `_registrar_mudanca`, que grava também o evento específico do
+   estágio (`meeting_scheduled`/`deal_won`). Como o evento do GrowthHS JÁ é
+   esse, o painel contaria cada reunião em dobro. `retorno.avancar_status`
+   grava só o `contact_updated` (mesmas chaves de metadata, `source: crm`).
+2. **A volta do CRM se autentica com `Authorization: Bearer`**, não
+   `X-API-Key` como o plano escreveu: é o que `chave_api` aceita. Contrato
+   corrigido nesse ponto.
+3. **Formulário de site: só campo mapeado entra.** Campo sem destino no mapa
+   (padrão ou do site) é descartado; mapa não escreve `status`, `tipo`,
+   `source`, UTMs nem `ab_*`. Telefone que não normaliza fica como digitado.
+   A regra de campo proibido é a do `rastreio.js` (mais larga que a do plano).
+4. **UTMs da conversão de site:** primeiro toque → contato (bloco
+   congelado), toque atual → `lead_conversions`.
+5. **Landing:** `page_url` da conversão fica nulo (o front não manda a URL);
+   canal pelo host do `FRONTEND_URL`. Consentimento com `versao` vazia grava
+   `sem-versao`; `obrigatorio: false` sem aceite não grava registro.
+6. **`contato/status` por e-mail/`lead_id` pode voltar o estágio** (é a rota
+   de "pôr neste status", como a do `dnia_id`); só a volta automática do CRM
+   é "só avança".
+7. **`/sites` sem DELETE** — desligar é `ativo = false` (ver pergunta 1).
+
+## Perguntas da Fase 1
+1. **Apagar site com visita falha.** `visitas.site_id` é `ON DELETE SET
+   NULL`, mas o CHECK `visitas_com_origem` exige site ou página: o DELETE
+   de um site com visitas de site estoura. Hoje não há rota de DELETE (só
+   desligar). Se um dia houver: `ON DELETE CASCADE` ou apagar as visitas
+   antes — migration nova.
+2. **Token negativo não é guardado** (correção de segurança): token bem
+   formado e inexistente custa uma consulta por pedido, dentro do balde da
+   rota (visita 120/min/IP; conversão 30/min/IP).
+3. O achado da Fase 0 (`branch_attribute` sem `coalesce`) continua aberto.
+
+## Portão (Fase 1, 21/10)
+
+- `git merge origin/main` antes do portão (trouxe só front/docs das outras
+  frentes; nenhum conflito).
+- Suíte inteira no banco de produção (sozinha, `timeout -s KILL 3600`,
+  `-rs`): **653 passed, 0 skipped**, 47 min 38 s, exit 0 (antes: 530 passed /
+  18 skipped — os 18 da 027 agora rodam, mais os 105 novos).
+- `count(*) FROM leads`: **2107 antes, 2107 depois**. `sites`, `visitas`,
+  `lead_consents`, `growthhs_receptor_pedidos`: 0 depois.
+- `git diff --stat origin/main...HEAD`: 30 arquivos, todos de `backend/` no
+  território da frente (+ `segmentos.py`, extensão da coordenadora) e o
+  contrato; nenhum `.env` nem credencial. Sem mudança de front
+  (`tsc`/guarda/build não se aplicam).
+
+**Pronto para merge** (`prova-captura-f1`). Ao Erick, para a prova:
+`PROVA_RECEPTOR_TESTE=true` no ambiente da API só durante o roteiro.

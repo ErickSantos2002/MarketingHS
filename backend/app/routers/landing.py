@@ -25,6 +25,7 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
+from app.captura.urls import config_com_urls_seguras
 from app.database import sessao
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,15 @@ def montar_casca(slug: str, config: dict) -> str:
                              or config.get("nome_da_pagina") or "Health & Safety"),
                          quote=True)
     descricao = html.escape(str(config.get("meta_description") or ""), quote=True)
+    slug_seguro = html.escape(slug, quote=True)
+    # Prova do RD: a página pode sair dos buscadores (`noindex`) — só quando
+    # a config manda; página antiga continua indexável (Review Focus 5).
+    robots = ('<meta name="robots" content="noindex,nofollow">\n'
+              if config.get("noindex") else "")
+    # ⚠️ A config vai para a página PÚBLICA: URL que não é http(s) nem
+    # caminho do site (`javascript:` no link da política) sai aqui, mesmo
+    # se já estava gravada antes da regra de `paginas.py`.
+    config = config_com_urls_seguras(config)
 
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -148,12 +158,13 @@ def montar_casca(slug: str, config: dict) -> str:
 <meta property="og:title" content="{titulo}">
 <meta property="og:description" content="{descricao}">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="/landing/main.css">
+{robots}<link rel="stylesheet" href="/landing/main.css">
 </head>
 <body>
-<div id="landing" data-slug="{html.escape(slug, quote=True)}"></div>
+<div id="landing" data-slug="{slug_seguro}"></div>
 <script type="application/json" id="config-da-pagina">{_json_seguro(config)}</script>
 <script type="module" src="/landing/main.js"></script>
+<script src="/rastreio.js" defer data-pagina="{slug_seguro}" data-api="/api" data-captura="off"></script>
 </body>
 </html>"""
 
