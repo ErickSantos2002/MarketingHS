@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Activity } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Activity, ImageUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -23,21 +22,88 @@ import { usePages } from '@/hooks/usePages';
 import { caminhoDaLanding } from '@/lib/landing';
 import { toast } from 'sonner';
 import { COR_CTA_PADRAO } from '@/landing/padroes';
+import {
+  camposDaConfig, camposParaGravar, textoDoConsentimentoParaGravar,
+  type CampoDaPagina, type ConsentimentoDaPagina,
+} from '@/landing/campos';
+import { BASE, ErroApi } from '@/lib/api';
+import { subirImagemDeEmail } from '@/lib/config';
+import { CamposEditor } from './CamposEditor';
 
-const FORM_FIELDS = [
-  { key: 'nome', label: 'Nome', required: false },
-  { key: 'email', label: 'Email', required: true },
-  { key: 'whatsapp', label: 'WhatsApp', required: false },
-  { key: 'cargo', label: 'Cargo', required: false },
-  { key: 'faturamento', label: 'Faturamento', required: false },
-  { key: 'funcionarios', label: 'Funcionários', required: false },
-];
-
+// ⚠️ O chip "Obrigado padrão" (/obrigado) saiu em 21/10: essa rota não
+// existe, e a página caía no 404 depois de captar. Sem redirect, a landing
+// mostra a mensagem de obrigado na própria página (bloco abaixo).
 const REDIRECT_CHIPS = [
   { label: 'WhatsApp', value: 'https://wa.me/5531...' },
-  { label: 'Obrigado padrão', value: '/obrigado' },
   { label: 'Hotmart', value: 'https://hotmart.com/...' },
 ];
+
+// O bloco que nasce quando se liga o consentimento — os valores da prova de
+// substituição do RD (plano, Global Constraints). Versão provisória enquanto
+// o D3 (texto jurídico) não fecha.
+const CONSENTIMENTO_PADRAO: ConsentimentoDaPagina = {
+  texto: 'Concordo em receber contato da Health & Safety sobre este pedido e com o tratamento dos meus dados conforme a Política de Privacidade.',
+  link: 'https://www.healthsafety.com.br/privacidade.cfm',
+  versao: 'provisoria-2026-10',
+  provisoria: true,
+  obrigatorio: true,
+};
+
+// O upload devolve o caminho do backend (/publico/imagem/<id>); no navegador
+// do admin ele só existe atrás de /api, como na landing.
+const enderecoDaImagem = (url: string) => (url.startsWith('/publico/') ? `${BASE}${url}` : url);
+
+// O texto do consentimento nunca é gravado vazio: com a caixa apagada, a
+// config fica com o texto anterior (ou o padrão) até a pessoa digitar outro.
+// O rascunho fica local para a caixa poder ficar vazia enquanto se digita.
+function TextoDoConsentimento({ texto, onChange }: { texto: string; onChange: (t: string) => void }) {
+  const [rascunho, setRascunho] = useState(texto);
+  useEffect(() => {
+    if (rascunho.trim() && rascunho !== texto) setRascunho(texto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texto]);
+  return (
+    <>
+      <Textarea
+        id="consentimento-texto"
+        rows={3}
+        value={rascunho}
+        onChange={(e) => {
+          setRascunho(e.target.value);
+          const gravar = textoDoConsentimentoParaGravar(e.target.value, texto);
+          if (gravar !== texto) onChange(gravar);
+        }}
+      />
+      {!rascunho.trim() && (
+        <p className="text-xs text-[--on-tint-danger]">
+          Texto vazio não é gravado: a página segue com “{texto}”.
+        </p>
+      )}
+    </>
+  );
+}
+
+// Tags separadas por vírgula. O texto cru fica local para a vírgula recém
+// digitada não sumir; o que vai para a config é a lista aparada.
+function CampoDeTags({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+  const [texto, setTexto] = useState(tags.join(', '));
+  useEffect(() => {
+    const atual = texto.split(',').map((t) => t.trim()).filter(Boolean);
+    if (atual.join(',') !== tags.join(',')) setTexto(tags.join(', '));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tags.join(',')]);
+  return (
+    <Input
+      id="pagina-tags"
+      value={texto}
+      onChange={(e) => {
+        setTexto(e.target.value);
+        onChange(Array.from(new Set(e.target.value.split(',').map((t) => t.trim()).filter(Boolean))));
+      }}
+      placeholder="prova-rd, phoebus"
+    />
+  );
+}
 
 export default function PageConfigEditor() {
   const { slug } = useParams<{ slug: string }>();
@@ -127,7 +193,36 @@ export default function PageConfigEditor() {
     updateField('clarity', next);
   };
 
-  const visibleFields = config.visible_fields || ['nome', 'email', 'whatsapp', 'cargo', 'faturamento'];
+  // Página antiga (só `visible_fields`) aparece convertida; a conversão só é
+  // gravada na primeira edição dos campos. Com `campos` gravado, o editor
+  // mostra a lista crua — inclusive a linha que ainda está sendo preenchida,
+  // que `camposDaConfig` descartaria.
+  const campos: CampoDaPagina[] = Array.isArray(config.campos) && config.campos.length
+    ? config.campos
+    : camposDaConfig(config);
+  // Bloco gravado com texto vazio (de antes desta regra) aparece com o padrão,
+  // que é o que a landing mostra nesse caso.
+  const consentimento: ConsentimentoDaPagina | null = config.consentimento
+    ? { ...config.consentimento, texto: textoDoConsentimentoParaGravar(config.consentimento.texto, '') }
+    : null;
+  const updateConsentimento = (parcial: Partial<ConsentimentoDaPagina>) =>
+    updateField('consentimento', { ...CONSENTIMENTO_PADRAO, ...(consentimento ?? {}), ...parcial });
+  const whatsapp = config.whatsapp || { numero: '', mensagem: '' };
+  const [subindoImagem, setSubindoImagem] = useState(false);
+  const arquivoRef = useRef<HTMLInputElement>(null);
+
+  const subirImagem = async (arquivo: File) => {
+    setSubindoImagem(true);
+    try {
+      const { url } = await subirImagemDeEmail(arquivo, 'campaigns');
+      updateField('imagem_url', url);
+    } catch (e) {
+      toast.error(e instanceof ErroApi ? e.message : 'Erro ao subir a imagem');
+    } finally {
+      setSubindoImagem(false);
+      if (arquivoRef.current) arquivoRef.current.value = '';
+    }
+  };
 
   if (!page && pages.length > 0) {
     return (
@@ -220,26 +315,154 @@ export default function PageConfigEditor() {
             </div>
           </section>
 
+          {/* Corpo e imagem */}
+          <section className="border rounded-lg p-4 space-y-4">
+            <h3 className="font-medium text-sm">Texto e imagem</h3>
+            <div className="space-y-2">
+              <Label htmlFor="pagina-corpo">Texto da página</Label>
+              <Textarea
+                id="pagina-corpo"
+                rows={6}
+                value={config.corpo || ''}
+                onChange={(e) => updateField('corpo', e.target.value)}
+                placeholder={'Um parágrafo por bloco, separados por linha em branco.\n\n- Linha começando com "- " vira item de lista'}
+              />
+              <p className="text-xs text-muted-foreground">
+                Texto puro: parágrafos separados por linha em branco; linha que começa com
+                “- ” vira item de lista. HTML não é interpretado.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pagina-imagem">Imagem de destaque</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  id="pagina-imagem"
+                  value={config.imagem_url || ''}
+                  onChange={(e) => updateField('imagem_url', e.target.value)}
+                  placeholder="https://… ou suba um arquivo"
+                  className="flex-1 min-w-48"
+                />
+                <input
+                  ref={arquivoRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) subirImagem(f); }}
+                />
+                <Button type="button" variant="outline" size="sm" disabled={subindoImagem}
+                        onClick={() => arquivoRef.current?.click()}>
+                  {subindoImagem ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ImageUp className="h-4 w-4 mr-1" />}
+                  Subir imagem
+                </Button>
+                {config.imagem_url && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => updateField('imagem_url', '')}>
+                    Tirar
+                  </Button>
+                )}
+              </div>
+              {config.imagem_url && (
+                <img
+                  src={enderecoDaImagem(config.imagem_url)}
+                  alt="Prévia da imagem de destaque"
+                  className="max-h-40 rounded-lg border border-borda object-contain"
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                O texto alternativo da imagem é a headline. PNG, JPEG, GIF ou WebP.
+              </p>
+            </div>
+          </section>
+
           {/* Formulário */}
           <section className="border rounded-lg p-4 space-y-4">
-            <h3 className="font-medium text-sm">Campos do formulário</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {FORM_FIELDS.map((f) => (
-                <label key={f.key} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={visibleFields.includes(f.key)}
-                    disabled={f.required}
-                    onCheckedChange={(checked) => {
-                      const next = checked
-                        ? [...visibleFields, f.key]
-                        : visibleFields.filter((k: string) => k !== f.key);
-                      updateField('visible_fields', next);
-                    }}
+            <div>
+              <h3 className="font-medium text-sm">Campos do formulário</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Campo personalizado vai para os dados personalizados do contato e pode ser usado
+                em segmento e em condição de jornada. O servidor valida obrigatório e formato.
+              </p>
+            </div>
+            <CamposEditor campos={campos} onChange={(c) => updateField('campos', camposParaGravar(c))} />
+          </section>
+
+          {/* Consentimento */}
+          <section className="border rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium text-sm">Consentimento (LGPD)</h3>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="consentimento-ligado" className="text-xs text-muted-foreground">
+                  {consentimento ? 'Pedido no formulário' : 'Não pedido'}
+                </Label>
+                <Switch
+                  id="consentimento-ligado"
+                  checked={!!consentimento}
+                  onCheckedChange={(v) => updateField('consentimento', v ? { ...CONSENTIMENTO_PADRAO } : undefined)}
+                />
+              </div>
+            </div>
+            {consentimento ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="consentimento-texto">Texto ao lado da caixa</Label>
+                  <TextoDoConsentimento
+                    texto={consentimento.texto}
+                    onChange={(t) => updateConsentimento({ texto: t })}
                   />
-                  {f.label}
-                  {f.required && <span className="text-xs text-muted-foreground">(obrigatório)</span>}
-                </label>
-              ))}
+                  <p className="text-xs text-muted-foreground">
+                    A caixa nasce desmarcada. É este texto, com a versão, que fica gravado em cada
+                    conversão — o navegador só diz se a pessoa aceitou.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="consentimento-link">Link da política</Label>
+                    <Input id="consentimento-link" value={consentimento.link}
+                           onChange={(e) => updateConsentimento({ link: e.target.value })}
+                           placeholder="https://…" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="consentimento-versao">Versão do texto</Label>
+                    <Input id="consentimento-versao" value={consentimento.versao}
+                           onChange={(e) => updateConsentimento({ versao: e.target.value })}
+                           className="font-mono text-xs" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <div className="flex items-center gap-2">
+                    <Switch id="consentimento-obrigatorio" checked={consentimento.obrigatorio !== false}
+                            onCheckedChange={(v) => updateConsentimento({ obrigatorio: v })} />
+                    <Label htmlFor="consentimento-obrigatorio" className="text-xs">Obrigatório para enviar</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch id="consentimento-provisoria" checked={!!consentimento.provisoria}
+                            onCheckedChange={(v) => updateConsentimento({ provisoria: v })} />
+                    <Label htmlFor="consentimento-provisoria" className="text-xs">Texto provisório</Label>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Sem consentimento, o formulário capta sem caixa de aceite e nada é registrado como
+                consentimento.
+              </p>
+            )}
+          </section>
+
+          {/* Depois do envio */}
+          <section className="border rounded-lg p-4 space-y-4">
+            <h3 className="font-medium text-sm">Depois do envio</h3>
+            <div className="space-y-2">
+              <Label htmlFor="pagina-obrigado">Mensagem de obrigado</Label>
+              <Textarea
+                id="pagina-obrigado"
+                rows={3}
+                value={config.mensagem_obrigado || ''}
+                onChange={(e) => updateField('mensagem_obrigado', e.target.value)}
+                placeholder="Recebemos seus dados. Em breve alguém da Health & Safety entra em contato."
+              />
+              <p className="text-xs text-muted-foreground">
+                Mostrada na própria página quando não há URL de redirect.
+              </p>
             </div>
           </section>
 
@@ -334,6 +557,57 @@ export default function PageConfigEditor() {
             <div className="space-y-2">
               <Label>Meta description</Label>
               <Textarea rows={2} value={config.meta_description || ''} onChange={(e) => updateField('meta_description', e.target.value)} placeholder="Descrição para SEO" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="pagina-noindex" checked={!!config.noindex}
+                      onCheckedChange={(v) => updateField('noindex', v)} />
+              <Label htmlFor="pagina-noindex" className="text-sm">Esconder dos buscadores (noindex)</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              noindex tira a página do Google, mas não impede acesso: quem tem o link abre.
+            </p>
+          </section>
+
+          {/* WhatsApp */}
+          <section className="border rounded-lg p-4 space-y-4">
+            <h3 className="font-medium text-sm">Botão de WhatsApp</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp-numero">Número (com DDI e DDD)</Label>
+                <Input
+                  id="whatsapp-numero"
+                  inputMode="tel"
+                  value={whatsapp.numero || ''}
+                  onChange={(e) => updateField('whatsapp', { ...whatsapp, numero: e.target.value.replace(/\D/g, '') })}
+                  placeholder="5531999999999"
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp-mensagem">Mensagem inicial</Label>
+                <Input
+                  id="whatsapp-mensagem"
+                  value={whatsapp.mensagem || ''}
+                  onChange={(e) => updateField('whatsapp', { ...whatsapp, mensagem: e.target.value })}
+                  placeholder="Olá! Quero saber do Phoebus."
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sem número, o botão flutuante não aparece.
+            </p>
+          </section>
+
+          {/* Tags */}
+          <section className="border rounded-lg p-4 space-y-4">
+            <h3 className="font-medium text-sm">Tags na captura</h3>
+            <div className="space-y-2">
+              <Label htmlFor="pagina-tags">Tags aplicadas a quem converte (separadas por vírgula)</Label>
+              <CampoDeTags tags={Array.isArray(config.tags) ? config.tags : []}
+                           onChange={(t) => updateField('tags', t)} />
+              <p className="text-xs text-muted-foreground">
+                Além da tag do slug, que toda captura já recebe.
+              </p>
             </div>
           </section>
         </div>
