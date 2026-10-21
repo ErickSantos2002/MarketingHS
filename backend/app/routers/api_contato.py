@@ -59,26 +59,15 @@ async def _id_da_tag(conn, nome: str) -> tuple[str, bool]:
     return await conn.fetchval("SELECT id::text FROM tags WHERE name = $1", nome), False
 
 
-async def _lead_por_identificador(conn, dnia_id: UUID | str | None, email: str | None,
-                                  phone: str | None, lead_id: str | None = None):
+async def _lead_por_identificador(conn, dnia_id: UUID | None, email: str | None,
+                                  phone: str | None):
     """A ordem da origem: dnia_id, depois e-mail, depois telefone.
 
     Diferente da origem, que fazia `limit(1)` sem ordem: pelo `dnia_id` vence o
     lead CANÔNICO da identidade (`dndash_lead_id`, lote 5C), e nos outros o
     mais recente — o mesmo critério de `_resolver_lead` em `publico.py`.
-
-    `lead_id` (prova do RD: o `external_id` do card no GrowthHS) vem antes de
-    todos — é o exato. Texto que não é uuid não acha nada (404 de quem chama,
-    nunca 500 de cast).
     """
     colunas = "id::text AS id, dnia_id::text AS dnia_id, status"
-    if lead_id:
-        try:
-            UUID(str(lead_id))
-        except ValueError:
-            return None
-        return await conn.fetchrow(
-            f"SELECT {colunas} FROM leads WHERE id = $1::uuid", str(lead_id))
     if dnia_id:
         canonico = await conn.fetchrow(
             f"""SELECT {colunas} FROM leads WHERE id =
@@ -100,6 +89,43 @@ async def _lead_por_identificador(conn, dnia_id: UUID | str | None, email: str |
         f"""SELECT {colunas} FROM leads
              WHERE ($1::text IS NOT NULL AND phone_normalized = $1) OR whatsapp = $2
              ORDER BY created_at DESC LIMIT 1""", normalizado, phone.strip())
+
+
+def _uuid_ou_none(valor) -> str | None:
+    try:
+        return str(UUID(str(valor)))
+    except ValueError:
+        return None
+
+
+async def lead_do_crm(conn, *, lead_id: str | None, email: str | None,
+                      dnia_id: str | None):
+    """O lead de quem fala do CRM (prova do RD): na ORDEM do contrato
+    (`docs/contratos/...-growthhs.md`, "Acréscimos de 21/10"), `lead_id` →
+    e-mail → `dnia_id`, cada um tentado só se o anterior não achou nada.
+
+    É a ordem do mais exato para o mais frágil do ponto de vista do GrowthHS:
+    o `lead_id` é o `external_id` do card que NÓS mandamos; o e-mail é o do
+    contato do card; o `dnia_id` só existe se alguém o copiou de algum lugar.
+    Um `lead_id` bem formado que não existe mais (lead fundido, banco
+    resetado) cai para o e-mail em vez de dar 404 — o card continua sendo da
+    mesma pessoa. `lead_id` que nem é uuid é pulado (nunca 500 de cast).
+    """
+    colunas = "id::text AS id, dnia_id::text AS dnia_id, status"
+    uid = _uuid_ou_none(lead_id) if lead_id else None
+    if uid:
+        lead = await conn.fetchrow(f"SELECT {colunas} FROM leads WHERE id = $1::uuid", uid)
+        if lead:
+            return lead
+    if email and email.strip():
+        lead = await conn.fetchrow(
+            f"SELECT {colunas} FROM leads WHERE lower(email) = lower($1) "
+            "ORDER BY created_at DESC LIMIT 1", email.strip())
+        if lead:
+            return lead
+    if dnia_id:
+        return await _lead_por_identificador(conn, dnia_id, None, None)
+    return None
 
 
 class AtualizacaoIn(BaseModel):
@@ -321,8 +347,8 @@ async def _status_por_lead(dados: StatusApiIn) -> dict:
                             "Informe dnia_id, lead_id ou email.")
     async with sessao(role="service_role") as conn:
         novo = await _resolver_status(conn, dados.status)
-        lead = await _lead_por_identificador(conn, None, dados.email, None,
-                                             lead_id=dados.lead_id)
+        lead = await lead_do_crm(conn, lead_id=dados.lead_id, email=dados.email,
+                                 dnia_id=None)
         if lead is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
         anterior = lead["status"]

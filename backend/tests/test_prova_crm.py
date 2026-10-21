@@ -17,6 +17,7 @@ from app.crm import growthhs
 from limpeza import apagar_leads
 
 EMAIL = "sonda-prova-crm@exemplo.invalid"
+EMAIL_OUTRO = "sonda-prova-crm-outro@exemplo.invalid"
 CHAVE_DO_RECEPTOR = "chave-de-teste-do-receptor"
 MQL = "MQL - Reunião agendada"
 VENDA = "Venda realizada"
@@ -27,8 +28,10 @@ def _auth(chave):
 
 
 async def _limpar(conn, hashes=()):
-    leads = [r["id"] for r in await conn.fetch("SELECT id FROM leads WHERE email = $1", EMAIL)]
+    leads = [r["id"] for r in await conn.fetch(
+        "SELECT id FROM leads WHERE email = ANY($1::text[])", [EMAIL, EMAIL_OUTRO])]
     await apagar_leads(conn, leads)
+    await conn.execute("DELETE FROM ecosystem_identities WHERE email = $1", EMAIL_OUTRO)
     await conn.execute("DELETE FROM api_keys WHERE key_hash = ANY($1::text[])", list(hashes))
 
 
@@ -188,6 +191,48 @@ async def test_status_sem_identificador_400(cliente, contato):
     r = await cliente.post("/publico/contato/status", headers=_auth(contato["escrita"]),
                            json={"lead_id": str(uuid.uuid4()), "status": "Lead"})
     assert r.status_code == 404
+
+
+# ── Ordem da busca do lead (contrato: lead_id → e-mail → dnia_id) ──────────
+
+async def _identidade_de_outro_lead():
+    """Um SEGUNDO lead, com identidade própria — para provar que o `dnia_id`
+    só é usado depois do e-mail."""
+    async with db.sessao(role="service_role") as conn:
+        outro = await conn.fetchval(
+            "INSERT INTO leads (nome, email, tipo, status) "
+            "VALUES ('Outro', $1, 'teste', 'Lead') RETURNING id::text", EMAIL_OUTRO)
+        dnia = await conn.fetchval(
+            "INSERT INTO ecosystem_identities (email, dndash_lead_id) "
+            "VALUES ($1, $2::uuid) RETURNING dnia_id::text", EMAIL_OUTRO, outro)
+        await conn.execute("UPDATE leads SET dnia_id = $2::uuid WHERE id = $1::uuid",
+                           outro, dnia)
+    return outro, dnia
+
+
+async def test_busca_email_vem_antes_do_dnia_id(cliente, contato):
+    outro, dnia = await _identidade_de_outro_lead()
+    r = await cliente.post("/publico/evento-de-contato", headers=_auth(contato["escrita"]),
+                           json=_evento("deal_moved", email=EMAIL, dnia_id=dnia))
+    assert r.status_code == 200, r.text
+    assert r.json()["lead_id"] == contato["lead_id"]
+
+
+async def test_lead_id_inexistente_cai_para_o_email(cliente, contato):
+    r = await cliente.post("/publico/evento-de-contato", headers=_auth(contato["escrita"]),
+                           json=_evento("deal_moved", lead_id=str(uuid.uuid4()), email=EMAIL))
+    assert r.status_code == 200, r.text
+    assert r.json()["lead_id"] == contato["lead_id"]
+
+
+async def test_lead_id_e_email_inexistentes_caem_para_o_dnia_id(cliente, contato):
+    outro, dnia = await _identidade_de_outro_lead()
+    r = await cliente.post("/publico/evento-de-contato", headers=_auth(contato["escrita"]),
+                           json=_evento("deal_moved", lead_id=str(uuid.uuid4()),
+                                        email="ninguem-prova-crm@exemplo.invalid",
+                                        dnia_id=dnia))
+    assert r.status_code == 200, r.text
+    assert r.json()["lead_id"] == outro
 
 
 # ── Receptor de teste ────────────────────────────────────────────────────────
