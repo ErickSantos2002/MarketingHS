@@ -20,10 +20,12 @@ o estado correto do sistema, não sintoma de permissão errada — as landings d
 dn.ia saíram no lote 0 e a landing da HS é de outro lote.
 """
 
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import asyncpg
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.captura.urls import urls_invalidas
@@ -132,6 +134,112 @@ async def estatisticas(usuario: Usuario = Depends(admin_atual)):
                  FROM page_stats
                 ORDER BY created_at ASC""")
     return [dict(l) for l in linhas]
+
+
+# ── Números da página (prova do RD, Tarefa 5) ────────────────────────────────
+# Visitas (`visitas`, gravadas pelo `rastreio.js`), visitantes únicos (por
+# `visitor_id`), conversões (`lead_conversions` de lead NÃO excluído) e taxa =
+# conversões ÷ visitantes únicos, por página e por canal; e o mesmo por
+# formulário de site (visitantes do mesmo site + caminho). Dias civis de
+# Brasília, `ate` inclusivo. Agregação no SQL; a tela não soma nem divide.
+#
+# ⚠️ `taxa` é `null` sem visitante — "sem medição", diferente de 0%. Conversão
+# sem canal (de antes da 027, ou integrador) conta como "desconhecido".
+
+FUSO = ZoneInfo("America/Sao_Paulo")
+DIAS_PADRAO = 30
+
+# A lista por canal de um bloco: as duas fontes empilhadas e somadas.
+_POR_CANAL = """
+    coalesce((SELECT jsonb_agg(jsonb_build_object(
+                  'canal', canal, 'visitas', visitas, 'visitantes', visitantes,
+                  'conversoes', conversoes,
+                  'taxa', CASE WHEN visitantes = 0 THEN NULL
+                               ELSE round(conversoes::numeric / visitantes, 4) END)
+                  ORDER BY canal)
+                FROM (SELECT canal, sum(visitas)::int AS visitas,
+                             sum(visitantes)::int AS visitantes,
+                             sum(conversoes)::int AS conversoes
+                        FROM ({fontes}) x GROUP BY canal) y), '[]'::jsonb)"""
+
+_SQL_PAGINAS = """
+WITH v AS (SELECT page_slug, canal, visitor_id FROM visitas
+            WHERE page_slug IS NOT NULL AND criado_em >= $1 AND criado_em < $2),
+     c AS (SELECT lc.page_slug, coalesce(lc.canal, 'desconhecido') AS canal
+             FROM lead_conversions lc JOIN leads l ON l.id = lc.lead_id
+            WHERE l.deleted_at IS NULL AND lc.page_slug IS NOT NULL
+              AND lc.converted_at >= $1 AND lc.converted_at < $2)
+SELECT p.slug, p.name AS nome,
+       (SELECT count(*) FROM v WHERE v.page_slug = p.slug)::int AS visitas,
+       (SELECT count(DISTINCT visitor_id) FROM v WHERE v.page_slug = p.slug)::int AS visitantes,
+       (SELECT count(*) FROM c WHERE c.page_slug = p.slug)::int AS conversoes,
+       """ + _POR_CANAL.format(fontes="""
+            SELECT canal, count(*) AS visitas, count(DISTINCT visitor_id) AS visitantes,
+                   0 AS conversoes FROM v WHERE v.page_slug = p.slug GROUP BY canal
+            UNION ALL
+            SELECT canal, 0, 0, count(*) FROM c WHERE c.page_slug = p.slug GROUP BY canal""") + """
+         AS por_canal
+  FROM pages p
+ ORDER BY p.created_at"""
+
+_SQL_FORMULARIOS = """
+WITH c AS (SELECT lc.site_id, lc.form_id, coalesce(lc.page_path, '') AS page_path,
+                  coalesce(lc.canal, 'desconhecido') AS canal
+             FROM lead_conversions lc JOIN leads l ON l.id = lc.lead_id
+            WHERE l.deleted_at IS NULL AND lc.site_id IS NOT NULL
+              AND lc.converted_at >= $1 AND lc.converted_at < $2),
+     v AS (SELECT site_id, coalesce(path, '') AS path, canal, visitor_id FROM visitas
+            WHERE site_id IS NOT NULL AND criado_em >= $1 AND criado_em < $2),
+     f AS (SELECT DISTINCT site_id, form_id, page_path FROM c)
+SELECT f.site_id::text, s.nome AS site_nome, f.form_id, f.page_path,
+       (SELECT count(DISTINCT visitor_id) FROM v
+         WHERE v.site_id = f.site_id AND v.path = f.page_path)::int AS visitantes,
+       (SELECT count(*) FROM c WHERE c.site_id = f.site_id AND c.page_path = f.page_path
+           AND c.form_id IS NOT DISTINCT FROM f.form_id)::int AS conversoes,
+       """ + _POR_CANAL.format(fontes="""
+            SELECT canal, count(*) AS visitas, count(DISTINCT visitor_id) AS visitantes,
+                   0 AS conversoes FROM v
+             WHERE v.site_id = f.site_id AND v.path = f.page_path GROUP BY canal
+            UNION ALL
+            SELECT canal, 0, 0, count(*) FROM c
+             WHERE c.site_id = f.site_id AND c.page_path = f.page_path
+               AND c.form_id IS NOT DISTINCT FROM f.form_id GROUP BY canal""") + """
+         AS por_canal
+  FROM f JOIN sites s ON s.id = f.site_id
+ ORDER BY s.nome, f.page_path, f.form_id"""
+
+
+def _taxa(conversoes: int, visitantes: int) -> float | None:
+    return None if not visitantes else round(conversoes / visitantes, 4)
+
+
+def _linha(linha) -> dict:
+    d = dict(linha)
+    d["taxa"] = _taxa(d["conversoes"], d["visitantes"])
+    d["por_canal"] = [{**c, "taxa": float(c["taxa"]) if c["taxa"] is not None else None}
+                      for c in (d["por_canal"] or [])]
+    return d
+
+
+@router.get("/numeros")
+async def numeros(de: date | None = Query(None), ate: date | None = Query(None),
+                  usuario: Usuario = Depends(admin_atual)):
+    """⚠️ Declarada ANTES de qualquer `GET /{algo}` deste router (ver
+    `estatisticas`). Padrão: os últimos 30 dias, hoje incluído."""
+    hoje = datetime.now(FUSO).date()
+    ate = ate or hoje
+    de = de or (ate - timedelta(days=DIAS_PADRAO - 1))
+    if de > ate:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "O início do período vem depois do fim.")
+    inicio = datetime.combine(de, datetime.min.time(), FUSO)
+    fim = datetime.combine(ate + timedelta(days=1), datetime.min.time(), FUSO)
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        paginas = await conn.fetch(_SQL_PAGINAS, inicio, fim)
+        formularios = await conn.fetch(_SQL_FORMULARIOS, inicio, fim)
+    return {"de": de.isoformat(), "ate": ate.isoformat(),
+            "paginas": [_linha(l) for l in paginas],
+            "formularios": [_linha(l) for l in formularios]}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
