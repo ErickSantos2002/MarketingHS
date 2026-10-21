@@ -131,5 +131,7 @@ lote **R10** assim que o D5 disser em quais canais a H&S vai anunciar.
   Resend Pro US$ 20/mês até 50 mil). Spam se evita com domínio autenticado
   (feito), aquecimento (R1), descadastro de um clique (R0), base com permissão
   (D4) e consentimento (R2). Opções: Resend Pro (zero trabalho) ou SES (R9).
-- **D7 Acesso de leitura ao RD.** (Nicholson ia ver em 05/10; em 07/10 ainda sem acesso.) Para o inventário (leads, formulários, LPs,
-  automações, volume mensal) e a migração.
+- ~~**D7 Acesso de leitura ao RD.**~~ ✅ 21/10 — inventário em
+  `docs/inventario-rd.md` (o que o RD faz para a H&S, o que vem, o que não
+  vem, ordem para desligar, perguntas novas: Pipedrive × GrowthHS, Horus,
+  agência).
