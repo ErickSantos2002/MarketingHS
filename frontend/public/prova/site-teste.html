@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+  Página de teste da prova de substituição do RD (Tarefa 11 do plano
+  docs/superpowers/plans/2026-10-21-prova-substituir-rd.md).
+
+  Faz o papel do site da H&S (www.healthsafety.com.br/phoebus.cfm) numa
+  ORIGEM DIFERENTE da API: é aberta pelo segundo domínio do serviço
+  marketinghs-sistema, para provar o CORS por domínio de verdade. Uso:
+
+    https://<segundo domínio>/prova/site-teste.html?token=pub_…
+
+  O token vem da URL, nunca daqui: não se versiona token.
+
+  ⚠️ O formulário é cópia do de cotação do Phoebus (mesmos `name`s), mas com
+  id prova_cap_phoebus — NUNCA o id do site real (cap_phoebus). Os fluxos do RD que mandam ao
+  Pipedrive, ao Horus e às boas-vindas escutam identificadores listados um a
+  um; este não está em nenhum (spec, seção 9, item 1).
+
+  O `action` aponta para /api/publico/prova/recebido, que só responde
+  "Recebido." com PROVA_RECEPTOR_TESTE ligado (404 fora da prova). O reCAPTCHA
+  do site real ficou de fora: a chave dele é presa ao domínio da H&S.
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Página de teste da prova — Phoebus</title>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1f; background: #f7f7f8; }
+    .faixa { background: #b3261e; color: #fff; font-weight: 700; text-align: center; padding: 12px 16px; }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    h2 { font-size: 1.2rem; margin: 32px 0 8px; }
+    p { line-height: 1.5; }
+    form { background: #fff; border: 1px solid #d4d4d8; border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+    label { display: grid; gap: 4px; font-weight: 600; font-size: 0.9rem; }
+    input, textarea { font: inherit; padding: 10px; border: 1px solid #d4d4d8; border-radius: 6px; min-height: 44px; }
+    button { font: inherit; font-weight: 700; padding: 12px 16px; border: 0; border-radius: 6px; background: #1a71a8; color: #fff; min-height: 44px; cursor: pointer; }
+    code { background: #eee; padding: 0 4px; border-radius: 4px; }
+    .aviso { font-size: 0.9rem; color: #52525b; }
+  </style>
+</head>
+<body>
+  <div class="faixa" role="note">Página de teste da prova — não é o site da H&amp;S</div>
+  <main>
+    <h1>Bafômetro Phoebus</h1>
+    <p class="aviso" id="estado-token">Sem <code>?token=</code> na URL: o nosso script não foi carregado.</p>
+
+    <h2>Ainda tem alguma dúvida sobre o aparelho?</h2>
+    <!-- Cópia do form cap_phoebus de phoebus.cfm (lido em 21/10/2026). -->
+    <form id="prova_cap_phoebus" class="" action="/api/publico/prova/recebido" role="form" method="post">
+      <input type="hidden" name="passunto" value="Captura pelo site [PHOEBUS]">
+      <label>Nome
+        <input type="text" aria-required="true" name="pnome" placeholder="Informe o seu nome" required maxlength="50">
+      </label>
+      <label>E-mail
+        <input type="email" aria-required="true" name="pemail" placeholder="Informe o seu e-mail" required maxlength="200">
+      </label>
+      <label>WhatsApp (Apenas números - DDD e celular)
+        <input type="text" name="pwhatsapp" placeholder="Informe o seu WhatsApp" maxlength="11" pattern="[0-9]{10,12}" title="Apenas os números de DDD e celular sem traços ou espaços">
+      </label>
+      <label>Mensagem
+        <textarea name="pmensagem" rows="5" placeholder="Digite a sua mensagem" required></textarea>
+      </label>
+      <button type="submit" id="form-submit">Enviar sua Mensagem</button>
+    </form>
+
+    <h2>Baixe a ficha técnica do Phoebus</h2>
+    <!-- Segundo formulário da prova (decisão 2 do plano): o da ficha técnica. -->
+    <form id="prova_ficha_phoebus" action="/api/publico/prova/recebido" method="post">
+      <input type="hidden" name="passunto" value="Ficha técnica Phoebus">
+      <label>Nome
+        <input type="text" name="pnome" placeholder="Informe o seu nome" required maxlength="50">
+      </label>
+      <label>E-mail
+        <input type="email" name="pemail" placeholder="Informe o seu e-mail" required maxlength="200">
+      </label>
+      <button type="submit">Quero a ficha técnica</button>
+    </form>
+  </main>
+
+  <!-- O nosso rastreio.js, com o token lido de ?token= (nunca versionado). -->
+  <script>
+    (function () {
+      try {
+        var token = new URLSearchParams(window.location.search).get('token');
+        if (!token || !/^pub_[A-Za-z0-9_-]{8,}$/.test(token)) return;
+        // A API é sempre a do próprio serviço — nunca lida da URL, para a
+        // página não virar um formulário que manda dado para outro lugar.
+        var api = window.location.origin + '/api';
+        var s = document.createElement('script');
+        s.src = '/rastreio.js';
+        s.async = true;
+        s.setAttribute('data-token', token);
+        s.setAttribute('data-api', api);
+        if (new URLSearchParams(window.location.search).get('debug') === 'true') s.setAttribute('data-debug', 'true');
+        document.head.appendChild(s);
+        document.getElementById('estado-token').textContent = 'Script de rastreio carregado (token da URL).';
+      } catch (e) { /* página de teste: sem script, o form segue */ }
+    })();
+  </script>
+
+  <!-- Script do RD Station, copiado exatamente do HTML público de
+       https://www.healthsafety.com.br/phoebus.cfm (curl só de leitura, 21/10/2026).
+       Fica aqui para provar que os dois scripts convivem no mesmo envio. -->
+  <script type="text/javascript" async src="https://d335luupugsy2.cloudfront.net/js/loader-scripts/46bacd8c-1415-4afb-8def-463d24133281-loader.js" ></script>
+</body>
+</html>
