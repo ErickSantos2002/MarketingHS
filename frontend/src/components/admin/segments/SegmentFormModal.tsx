@@ -30,7 +30,16 @@ const FIELD_OPTIONS = [
   { value: 'page_slug', label: 'Página' },
   { value: 'created_at', label: 'Criado nos últimos' },
   { value: 'last_conversion_date', label: 'Data de conversão' },
+  // Prova do RD (migration 027): `leads.campos_extras ->> key`.
+  { value: 'campo_extra', label: 'Campo personalizado' },
 ];
+
+// Mesmo formato de chave que build_segment_condition aceita.
+const CHAVE_EXTRA = /^[a-z][a-z0-9_]{0,39}$/;
+
+// `key` só existe na regra de campo personalizado. O tipo compartilhado
+// (`SegmentRule`, em lib/segmentos) não a conhece; a regra viaja inteira.
+type Regra = SegmentRule & { key?: string };
 
 // Campo antigo `etiqueta` = coluna leads.etiqueta (hotlead/warm/raw), que é o
 // MESMO dado do campo 'qualificacao'. Foi tirado da lista de campos novos (o
@@ -100,6 +109,10 @@ const OPERATORS: Record<string, { value: string; label: string }[]> = {
   utm_content: [{ value: 'contains', label: 'contém' }, { value: 'exact', label: 'é exatamente' }],
   utm_term: [{ value: 'contains', label: 'contém' }, { value: 'exact', label: 'é exatamente' }],
   page_slug: [{ value: 'exact', label: 'é exatamente' }],
+  campo_extra: [
+    { value: 'is', label: 'é' }, { value: 'is_not', label: 'não é' },
+    { value: 'contains', label: 'contém' }, { value: 'not_contains', label: 'não contém' },
+  ],
   created_at: [],
   last_conversion_date: [],
   // Sem seletor de operador: build_segment_condition sempre gera um EXISTS
@@ -227,8 +240,9 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
     return () => clearTimeout(timer);
   }, [searchQuery, type]);
 
-  const isValidRule = (r: SegmentRule) => {
+  const isValidRule = (r: Regra) => {
     if (!r.field || !r.value) return false;
+    if (r.field === 'campo_extra' && !CHAVE_EXTRA.test(r.key ?? '')) return false;
     // Range parcial (ex.: "..2026-01-01" ou "2026-01-01..") não deve ser
     // enviado ao backend — build_segment_condition regeneraria SQL inválido.
     if ((r.field === 'created_at' || r.field === 'last_conversion_date') && r.value.includes('..')) {
@@ -280,12 +294,14 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
 
   const addRule = () => setRules([...rules, { field: '', operator: '', value: '' }]);
   const removeRule = (i: number) => setRules(rules.filter((_, idx) => idx !== i));
-  const updateRule = (i: number, patch: Partial<SegmentRule>) => {
-    const updated = [...rules];
+  const updateRule = (i: number, patch: Partial<Regra>) => {
+    const updated: Regra[] = [...rules];
     updated[i] = { ...updated[i], ...patch };
     if (patch.field) {
       updated[i].operator = OPERATORS[patch.field]?.[0]?.value || '';
       updated[i].value = '';
+      if (patch.field === 'campo_extra') updated[i].key = '';
+      else delete updated[i].key;
     }
     setRules(updated);
   };
@@ -316,7 +332,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
     onSaved?.();
   };
 
-  const renderValueInput = (rule: SegmentRule, index: number) => {
+  const renderValueInput = (rule: Regra, index: number) => {
     if (rule.field === 'tag') {
       // Guarda o id da tag (não o nome): renomear a etiqueta não quebra o
       // segmento. build_segment_condition aceita id ou nome no ramo 'tag'.
@@ -490,7 +506,7 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
       <Input
         value={rule.value}
         onChange={e => updateRule(index, { value: e.target.value })}
-        placeholder="Valor"
+        placeholder={rule.field === 'campo_extra' ? 'Valor (ex.: sim)' : 'Valor'}
         className="flex-1 min-w-[120px] "
       />
     );
@@ -627,6 +643,16 @@ export function SegmentFormModal({ open, onOpenChange, segment, onSaved }: Props
                         </SelectContent>
                       </Select>
 
+                      {rule.field === 'campo_extra' && (
+                        <Input
+                          value={(rule as Regra).key ?? ''}
+                          onChange={e => updateRule(i, { key: e.target.value.trim().toLowerCase() })}
+                          placeholder="chave"
+                          aria-label="Chave do campo personalizado"
+                          aria-invalid={!!(rule as Regra).key && !CHAVE_EXTRA.test((rule as Regra).key ?? '')}
+                          className="w-[120px] text-xs h-8 font-mono"
+                        />
+                      )}
                       {rule.field && OPERATORS[rule.field]?.length > 0 && (
                         <Select value={rule.operator} onValueChange={v => updateRule(i, { operator: v })}>
                           <SelectTrigger className="w-[100px] text-xs h-8">

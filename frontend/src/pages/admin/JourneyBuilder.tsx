@@ -173,7 +173,7 @@ export default function JourneyBuilder() {
       case 'branch_attribute': {
         const rules = node.config.rules || [];
         const sep = node.config.logic === 'or' ? ' OU ' : ' E ';
-        return rules.map((r: any) => `${r.field} ${r.operator} ${r.value}`).join(sep) || 'sem condições';
+        return rules.map((r: any) => `${r.field === 'campo_extra' ? `campo ${r.key}` : r.field} ${r.operator} ${r.value}`).join(sep) || 'sem condições';
       }
       case 'branch_segment': {
         const s = segments.find((s: any) => s.id === node.config.segment_id);

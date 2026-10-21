@@ -9,8 +9,9 @@ import {
   User, Building2, Briefcase, DollarSign, Users, MessageSquare,
   Globe, Link, Calendar, Copy, Check, Mail, Phone,
   Target, Flame, TrendingUp, Clock, ArrowDownCircle, Tag, RefreshCw,
-  StickyNote, History, Send, Loader2,
+  StickyNote, History, Send, Loader2, ListPlus, ShieldCheck,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { enviarAoComercial, GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +22,7 @@ import {
   getQualificationColor,
 } from '@/hooks/useLeadQualification';
 import { pontuacaoDoBanco, rotuloDaEtiqueta } from './dashboard/pontuacao';
-import { conversoesDoContato } from '@/lib/leitura';
+import { conversoesDoContato, listarConsentimentos, camposExtrasDoContato, type Consentimento } from '@/lib/leitura';
 import { DniaIdChip, GrowthHSLink, StatusTagsSection, NotesSection } from './contacts/DetailSections';
 import { EventsTimeline } from './contacts/EventsTimeline';
 import { EcosystemPills } from './contacts/EcosystemPills';
@@ -394,6 +395,9 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               </div>
             </Section>
 
+            {/* Campos personalizados da landing/site (leads.campos_extras) */}
+            <CamposPersonalizados leadId={lead.id} />
+
             {/* Challenges */}
             {lead.desafios && (
               <Section icon={MessageSquare} title="Desafios">
@@ -481,6 +485,11 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
               </div>
             </Section>
 
+            {/* Consentimento (LGPD) -- um registro por conversão */}
+            <Section icon={ShieldCheck} title="Consentimento">
+              <Consentimentos leadId={lead.id} formatDate={formatDate} />
+            </Section>
+
             {/* Metadata */}
             <Section icon={Calendar} title="Metadados">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -496,6 +505,83 @@ export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onData
 }
 
 /* ─── Sub-components ─── */
+
+// "ja_faz_testagem" → "Ja faz testagem". O rótulo bonito mora na config da
+// página que captou; a ficha não sabe de qual página veio cada chave.
+const rotuloDaChave = (chave: string) =>
+  chave.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+
+const valorDoExtra = (v: unknown): string => {
+  if (v === null || v === undefined) return '';
+  if (v === 'sim') return 'Sim';
+  if (v === 'nao') return 'Não';
+  return typeof v === 'string' ? v : JSON.stringify(v);
+};
+
+function CamposPersonalizados({ leadId }: { leadId: string }) {
+  const { data } = useQuery({
+    queryKey: ['ficha-campos-extras', leadId],
+    queryFn: () => camposExtrasDoContato(leadId),
+    retry: false,
+  });
+  const itens = Object.entries(data ?? {}).filter(([, v]) => valorDoExtra(v) !== '');
+  if (itens.length === 0) return null;
+  return (
+    <Section icon={ListPlus} title="Campos personalizados">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {itens.map(([chave, valor]) => (
+          <div key={chave} className="p-3 rounded-lg bg-muted/20 border border-border/20">
+            <div className="text-xs text-muted-foreground mb-1" title={chave}>{rotuloDaChave(chave)}</div>
+            <div className="text-sm font-medium text-foreground whitespace-pre-wrap break-words">{valorDoExtra(valor)}</div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+const BASE_LEGAL: Record<string, string> = {
+  consentimento: 'Consentimento',
+  legitimo_interesse_pedido_contato: 'Legítimo interesse (pediu contato)',
+};
+
+function origemDoConsentimento(c: Consentimento): string {
+  if (c.origem_tipo === 'pagina') return c.page_slug ? `Página /${c.page_slug}` : 'Página';
+  if (c.origem_tipo === 'site') return c.form_id ? `Site · formulário ${c.form_id}` : 'Site';
+  return c.page_url || '—';
+}
+
+function Consentimentos({ leadId, formatDate }: { leadId: string; formatDate: (d: string | null) => string }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['ficha-consentimentos', leadId],
+    queryFn: () => listarConsentimentos(leadId),
+    retry: false,
+  });
+  if (isLoading) return <Skeleton className="h-16 w-full" />;
+  if (error) {
+    return <p className="text-xs text-muted-foreground">Não foi possível carregar o consentimento.</p>;
+  }
+  if (!data || data.length === 0) {
+    return <p className="text-xs text-muted-foreground">Nenhum registro de consentimento.</p>;
+  }
+  return (
+    <ul className="space-y-2">
+      {data.map((c) => (
+        <li key={c.id} className="p-3 rounded-lg bg-muted/20 border border-border/20 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">{BASE_LEGAL[c.base_legal] ?? c.base_legal}</span>
+            <Badge variant="outline" className="text-xs">versão {c.versao}</Badge>
+            {c.provisoria && <Badge variant="warning" className="text-xs">provisória</Badge>}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {formatDate(c.criado_em)} · {origemDoConsentimento(c)}{c.ip ? ` · IP ${c.ip}` : ''}
+          </p>
+          <p className="text-xs text-foreground whitespace-pre-wrap">{c.texto}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Section({
   icon: Icon,
