@@ -4,24 +4,32 @@
   docs/superpowers/plans/2026-10-21-prova-substituir-rd.md).
 
   Faz o papel do site da H&S (www.healthsafety.com.br/phoebus.cfm) numa
-  ORIGEM DIFERENTE da API: é aberta pelo segundo domínio do serviço
-  marketinghs-sistema, para provar o CORS por domínio de verdade. Uso:
+  ORIGEM DIFERENTE da do sistema, para provar o CORS por domínio de verdade.
+  Servida por um serviço estático próprio (ver prova-site/LEIAME.md), NUNCA
+  pelo domínio do admin: o script do RD é de terceiro e, na origem do admin,
+  leria a sessão guardada no localStorage. Por isso não mora em
+  frontend/public/ (tudo lá vai para o dist/ do admin). Uso:
 
-    https://<segundo domínio>/prova/site-teste.html?token=pub_…
+    https://<domínio da página de teste>/site-teste.html?token=pub_…
 
-  O token vem da URL, nunca daqui: não se versiona token.
+  O token vem da URL, nunca daqui: não se versiona token. O endereço do
+  sistema (de onde vêm o rastreio.js e a API) é a constante MHS_SISTEMA, no
+  topo do <head> — o único lugar a trocar.
 
   ⚠️ O formulário é cópia do de cotação do Phoebus (mesmos `name`s), mas com
   id prova_cap_phoebus — NUNCA o id do site real (cap_phoebus). Os fluxos do RD que mandam ao
   Pipedrive, ao Horus e às boas-vindas escutam identificadores listados um a
   um; este não está em nenhum (spec, seção 9, item 1).
 
-  O `action` aponta para /api/publico/prova/recebido, que só responde
+  O `action` dos dois forms é MHS_SISTEMA + data-acao
+  (/api/publico/prova/recebido), posto pelo script do fim da página; ele só responde
   "Recebido." com PROVA_RECEPTOR_TESTE ligado (404 fora da prova). O reCAPTCHA
   do site real ficou de fora: a chave dele é presa ao domínio da H&S.
 -->
 <html lang="pt-BR">
 <head>
+  <!-- O ÚNICO lugar com o endereço do sistema MarketingHS. -->
+  <script>window.MHS_SISTEMA = 'https://marketinghs.healthsafetytech.com';</script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
@@ -49,7 +57,7 @@
 
     <h2>Ainda tem alguma dúvida sobre o aparelho?</h2>
     <!-- Cópia do form cap_phoebus de phoebus.cfm (lido em 21/10/2026). -->
-    <form id="prova_cap_phoebus" class="" action="/api/publico/prova/recebido" role="form" method="post">
+    <form id="prova_cap_phoebus" class="" data-acao="/api/publico/prova/recebido" role="form" method="post">
       <input type="hidden" name="passunto" value="Captura pelo site [PHOEBUS]">
       <label>Nome
         <input type="text" aria-required="true" name="pnome" placeholder="Informe o seu nome" required maxlength="50">
@@ -68,7 +76,7 @@
 
     <h2>Baixe a ficha técnica do Phoebus</h2>
     <!-- Segundo formulário da prova (decisão 2 do plano): o da ficha técnica. -->
-    <form id="prova_ficha_phoebus" action="/api/publico/prova/recebido" method="post">
+    <form id="prova_ficha_phoebus" data-acao="/api/publico/prova/recebido" method="post">
       <input type="hidden" name="passunto" value="Ficha técnica Phoebus">
       <label>Nome
         <input type="text" name="pnome" placeholder="Informe o seu nome" required maxlength="50">
@@ -80,17 +88,24 @@
     </form>
   </main>
 
-  <!-- O nosso rastreio.js, com o token lido de ?token= (nunca versionado). -->
+  <!-- O action dos forms e o nosso rastreio.js, ambos do MHS_SISTEMA; o
+       token é lido de ?token= (nunca versionado). -->
   <script>
     (function () {
+      // O envio original vai ao receptor do sistema (outra origem): é
+      // navegação comum de formulário, sem CORS.
+      var forms = document.querySelectorAll('form[data-acao]');
+      for (var i = 0; i < forms.length; i++) {
+        forms[i].setAttribute('action', window.MHS_SISTEMA + forms[i].getAttribute('data-acao'));
+      }
       try {
         var token = new URLSearchParams(window.location.search).get('token');
         if (!token || !/^pub_[A-Za-z0-9_-]{8,}$/.test(token)) return;
-        // A API é sempre a do próprio serviço — nunca lida da URL, para a
+        // Script e API sempre do MHS_SISTEMA — nunca lidos da URL, para a
         // página não virar um formulário que manda dado para outro lugar.
-        var api = window.location.origin + '/api';
+        var api = window.MHS_SISTEMA + '/api';
         var s = document.createElement('script');
-        s.src = '/rastreio.js';
+        s.src = window.MHS_SISTEMA + '/rastreio.js';
         s.async = true;
         s.setAttribute('data-token', token);
         s.setAttribute('data-api', api);

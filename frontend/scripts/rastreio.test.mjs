@@ -17,7 +17,9 @@ import { fileURLToPath } from "node:url";
 
 const front = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CODIGO = readFileSync(path.join(front, "public", "rastreio.js"), "utf8");
-const SITE_TESTE = path.join(front, "public", "prova", "site-teste.html");
+// Fora de `public/` de propósito: lá ela seria servida no domínio do admin,
+// com o script do RD (terceiro) na mesma origem da sessão.
+const SITE_TESTE = path.join(front, "..", "prova-site", "site-teste.html");
 
 // ---- o navegador de mentira ------------------------------------------------
 
@@ -370,11 +372,15 @@ test("site-teste tem prova_cap_phoebus com os names do site", () => {
   for (const nome of ["pnome", "pemail", "pwhatsapp", "pmensagem", "passunto"]) {
     assert.match(cap[1], new RegExp(`name="${nome}"`), nome);
   }
-  assert.match(cap[0], /action="\/api\/publico\/prova\/recebido"/);
+  assert.match(cap[0], /data-acao="\/api\/publico\/prova\/recebido"/);
   assert.match(cap[0], /method="post"/);
   const ficha = /<form[^>]*id="prova_ficha_phoebus"[^>]*>([\s\S]*?)<\/form>/.exec(html);
   assert.ok(ficha, "form prova_ficha_phoebus");
-  assert.match(ficha[0], /action="\/api\/publico\/prova\/recebido"/);
+  assert.match(ficha[0], /data-acao="\/api\/publico\/prova\/recebido"/);
+  // Um só ponto com o host do sistema; script e action saem dele.
+  assert.equal(html.match(/https:\/\/marketinghs\.healthsafetytech\.com/g)?.length, 1);
+  assert.match(html, /MHS_SISTEMA \+ '\/rastreio\.js'/);
+  assert.doesNotMatch(html, /s\.src = '\/rastreio\.js'/, "nunca o rastreio.js da própria origem");
   assert.match(ficha[1], /name="passunto"[^>]*value="Ficha técnica Phoebus"|value="Ficha técnica Phoebus"[^>]*name="passunto"/);
   assert.doesNotMatch(html, /id="cap_phoebus"/, "nunca o id do site real: os fluxos do RD escutam esse");
   assert.match(html, /Página de teste da prova — não é o site da H&amp;S/);
