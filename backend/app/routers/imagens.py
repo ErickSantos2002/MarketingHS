@@ -14,7 +14,7 @@ objeto (registrado no ROADMAP).
 PDF (prova do RD, Tarefa 9 — a ficha técnica): mesma tabela, `pasta =
 'arquivos'`, rota pública PRÓPRIA (`/publico/arquivo/<id>`). As duas rotas
 públicas não se cruzam: a de imagem não serve PDF, a de arquivo não serve
-imagem — o PDF só sai com `nosniff` e `Content-Security-Policy: sandbox`.
+imagem — o PDF só sai como anexo e com `nosniff`.
 """
 
 import logging
@@ -176,8 +176,10 @@ async def servir_arquivo(arquivo_id: str):
     """Os bytes do PDF. **Sem autenticação, de propósito** — quem abre é o
     lead, pelo link do e-mail.
 
-    ⚠️ `nosniff` + `sandbox`: o arquivo é do usuário e sai do NOSSO domínio. Um
-    PDF com script embutido, aberto aqui, não roda com a origem do sistema.
+    ⚠️ `attachment` + `nosniff`: o arquivo é do usuário e sai do NOSSO
+    domínio. Baixado como anexo, um PDF com script embutido não abre na
+    origem do sistema; o `nosniff` impede o navegador de lê-lo como outra
+    coisa. (A `CSP: sandbox` de antes deixava o PDF em branco no Chrome.)
     """
     try:
         uuid.UUID(arquivo_id)
@@ -195,9 +197,8 @@ async def servir_arquivo(arquivo_id: str):
         content=linha["bytes"],
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{_nome_seguro(linha["nome"])}"',
+            "Content-Disposition": f'attachment; filename="{_nome_seguro(linha["nome"])}"',
             "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "sandbox",
             "Cache-Control": "public, max-age=31536000, immutable",
         },
     )

@@ -38,7 +38,7 @@ async def _subir(cliente, token, dados, tipo="application/pdf",
                               files={"arquivo": (nome, dados, tipo)})
 
 
-async def test_sobe_pdf_e_serve_inline_com_cabecalhos(cliente, token_admin, assets):
+async def test_sobe_pdf_e_serve_como_anexo_com_cabecalhos(cliente, token_admin, assets):
     r = await _subir(cliente, token_admin, PDF)
     assert r.status_code == 201, r.text
     corpo = r.json()
@@ -52,11 +52,11 @@ async def test_sobe_pdf_e_serve_inline_com_cabecalhos(cliente, token_admin, asse
     assert s.status_code == 200
     assert s.content == PDF
     assert s.headers["content-type"] == "application/pdf"
-    assert s.headers["content-disposition"].startswith("inline; filename=\"")
-    assert s.headers["content-disposition"].endswith(".pdf\"")
-    assert s.headers["content-disposition"] == 'inline; filename="Ficha-Tecnica-Phoebus.pdf"'
+    assert s.headers["content-disposition"] == 'attachment; filename="Ficha-Tecnica-Phoebus.pdf"'
     assert s.headers["x-content-type-options"] == "nosniff"
-    assert s.headers["content-security-policy"] == "sandbox"
+    # Sem CSP sandbox: no Chrome ela deixa o PDF em branco. O anexo não abre
+    # na origem do sistema, e o nosniff impede outra leitura do tipo.
+    assert "content-security-policy" not in s.headers
     assert s.headers["cache-control"] == "public, max-age=31536000, immutable"
 
     lista = await cliente.get("/arquivos", headers=_auth(token_admin))
@@ -115,7 +115,7 @@ async def test_rota_de_arquivo_nao_serve_imagem(cliente, token_admin, assets):
 
 async def test_rota_de_imagem_nao_serve_pdf(cliente, token_admin, assets):
     """Sem isto o PDF sairia pela rota de imagem, sem `nosniff` nem
-    `sandbox` — os cabeçalhos que a rota de arquivo põe de propósito."""
+    `attachment` — os cabeçalhos que a rota de arquivo põe de propósito."""
     r = await _subir(cliente, token_admin, PDF)
     assets.append(r.json()["id"])
     assert (await cliente.get(f"/publico/imagem/{r.json()['id']}")).status_code == 404
