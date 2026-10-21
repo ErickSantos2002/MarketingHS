@@ -22,7 +22,10 @@ import { usePages } from '@/hooks/usePages';
 import { caminhoDaLanding } from '@/lib/landing';
 import { toast } from 'sonner';
 import { COR_CTA_PADRAO } from '@/landing/padroes';
-import { camposDaConfig, type CampoDaPagina, type ConsentimentoDaPagina } from '@/landing/campos';
+import {
+  camposDaConfig, camposParaGravar, textoDoConsentimentoParaGravar,
+  type CampoDaPagina, type ConsentimentoDaPagina,
+} from '@/landing/campos';
 import { BASE, ErroApi } from '@/lib/api';
 import { subirImagemDeEmail } from '@/lib/config';
 import { CamposEditor } from './CamposEditor';
@@ -49,6 +52,36 @@ const CONSENTIMENTO_PADRAO: ConsentimentoDaPagina = {
 // O upload devolve o caminho do backend (/publico/imagem/<id>); no navegador
 // do admin ele só existe atrás de /api, como na landing.
 const enderecoDaImagem = (url: string) => (url.startsWith('/publico/') ? `${BASE}${url}` : url);
+
+// O texto do consentimento nunca é gravado vazio: com a caixa apagada, a
+// config fica com o texto anterior (ou o padrão) até a pessoa digitar outro.
+// O rascunho fica local para a caixa poder ficar vazia enquanto se digita.
+function TextoDoConsentimento({ texto, onChange }: { texto: string; onChange: (t: string) => void }) {
+  const [rascunho, setRascunho] = useState(texto);
+  useEffect(() => {
+    if (rascunho.trim() && rascunho !== texto) setRascunho(texto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texto]);
+  return (
+    <>
+      <Textarea
+        id="consentimento-texto"
+        rows={3}
+        value={rascunho}
+        onChange={(e) => {
+          setRascunho(e.target.value);
+          const gravar = textoDoConsentimentoParaGravar(e.target.value, texto);
+          if (gravar !== texto) onChange(gravar);
+        }}
+      />
+      {!rascunho.trim() && (
+        <p className="text-xs text-[--on-tint-danger]">
+          Texto vazio não é gravado: a página segue com “{texto}”.
+        </p>
+      )}
+    </>
+  );
+}
 
 // Tags separadas por vírgula. O texto cru fica local para a vírgula recém
 // digitada não sumir; o que vai para a config é a lista aparada.
@@ -167,7 +200,11 @@ export default function PageConfigEditor() {
   const campos: CampoDaPagina[] = Array.isArray(config.campos) && config.campos.length
     ? config.campos
     : camposDaConfig(config);
-  const consentimento: ConsentimentoDaPagina | null = config.consentimento ?? null;
+  // Bloco gravado com texto vazio (de antes desta regra) aparece com o padrão,
+  // que é o que a landing mostra nesse caso.
+  const consentimento: ConsentimentoDaPagina | null = config.consentimento
+    ? { ...config.consentimento, texto: textoDoConsentimentoParaGravar(config.consentimento.texto, '') }
+    : null;
   const updateConsentimento = (parcial: Partial<ConsentimentoDaPagina>) =>
     updateField('consentimento', { ...CONSENTIMENTO_PADRAO, ...(consentimento ?? {}), ...parcial });
   const whatsapp = config.whatsapp || { numero: '', mensagem: '' };
@@ -345,7 +382,7 @@ export default function PageConfigEditor() {
                 em segmento e em condição de jornada. O servidor valida obrigatório e formato.
               </p>
             </div>
-            <CamposEditor campos={campos} onChange={(c) => updateField('campos', c)} />
+            <CamposEditor campos={campos} onChange={(c) => updateField('campos', camposParaGravar(c))} />
           </section>
 
           {/* Consentimento */}
@@ -367,8 +404,10 @@ export default function PageConfigEditor() {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="consentimento-texto">Texto ao lado da caixa</Label>
-                  <Textarea id="consentimento-texto" rows={3} value={consentimento.texto}
-                            onChange={(e) => updateConsentimento({ texto: e.target.value })} />
+                  <TextoDoConsentimento
+                    texto={consentimento.texto}
+                    onChange={(t) => updateConsentimento({ texto: t })}
+                  />
                   <p className="text-xs text-muted-foreground">
                     A caixa nasce desmarcada. É este texto, com a versão, que fica gravado em cada
                     conversão — o navegador só diz se a pessoa aceitou.

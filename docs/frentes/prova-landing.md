@@ -17,6 +17,21 @@ n 19 · Vite 8099 · usa o backend da 8100. Branch `prova-landing`.
   `prova-site/LEIAME.md` diz como servir. `npx vite build` conferido: `dist/`
   sem `prova/`.
 - [x] Tarefa 12 — editor da página (`CamposEditor.tsx` novo, `PageConfigEditor.tsx`)
+- [x] Ajustes da revisão da coordenadora (21/10), com teste para cada um:
+  1. Consentimento vale pela **presença** do bloco (`consentimentoDaConfig`);
+     texto vazio usa "Li e aceito a política de privacidade.". O editor nunca
+     grava texto vazio (`textoDoConsentimentoParaGravar`: fica o anterior ou o
+     padrão; o rascunho vazio fica só na tela, com aviso).
+  2. Página antiga (`visible_fields`): `desafios` vira `texto_longo` e o limite
+     do texto é 2000 (`TAMANHO_MAXIMO` do servidor), marcado por `legado`, que
+     só existe no cliente — `camposParaGravar` o tira antes de gravar.
+  3. `POST /publico/captura` manda também `referrer`, `gclid` e `fbclid`
+     (`toqueDaCaptura`), no topo do corpo, só quando existem. **Para a
+     `prova-captura`:** o `CapturaIn` precisa aceitar esses três campos.
+  4. `rastreio.js`: o PROIBIDO ganhou `^cc[_-]?(num|number|exp|cvv|cvc)`,
+     `turnstile`, `csrf`, `_token`, `authenticity_token`.
+  5. `textoDaConfig` antes de `.trim()`/`.replace()` em `imagem_url`,
+     `whatsapp.numero`/`mensagem`, `mensagem_obrigado` e `corpo`.
 
 ## Decisões tomadas (a mais segura e reversível)
 - **Contrato do erro da captura:** a landing trata `detail` string, `detail =

@@ -49,7 +49,9 @@
   }
 
   var UTM = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
-  var PROIBIDO = /senha|password|card|cartao|cvv|cvc|captcha/i;
+  // Senha, cartão (inclusive cc_num/ccexp…), captcha (reCAPTCHA, Turnstile) e
+  // token anti-CSRF (csrf, _token do Laravel, authenticity_token do Rails).
+  var PROIBIDO = /senha|password|card|cartao|cvv|cvc|captcha|^cc[_-]?(num|number|exp|cvv|cvc)|turnstile|csrf|_token|authenticity_token/i;
   var JANELA_REPETICAO = 10000;
   var MAX_CAMPOS = 60;
   var MAX_VALOR = 2000;

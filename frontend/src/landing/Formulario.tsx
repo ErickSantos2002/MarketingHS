@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
-  camposDaConfig, lerVisitante, urlSegura, validarNoCliente,
+  camposDaConfig, consentimentoDaConfig, lerVisitante, textoDaConfig, toqueDaCaptura,
+  urlSegura, validarNoCliente,
   type CampoDaPagina, type ConfigDaPagina,
 } from "./campos";
 
@@ -112,7 +113,7 @@ function Controle({ campo, valor, erro, aoMudar }: {
              inputMode={campo.tipo === "telefone" ? "tel" : campo.tipo === "email" ? "email" : undefined}
              autoComplete={campo.tipo === "email" ? "email" : campo.tipo === "telefone" ? "tel"
                : campo.chave === "nome" ? "name" : campo.chave === "empresa" ? "organization" : undefined}
-             maxLength={campo.tipo === "texto" ? 200 : undefined}
+             maxLength={campo.tipo === "texto" ? (campo.legado ? 2000 : 200) : undefined}
              value={valor} onChange={(e) => aoMudar(e.target.value)} />
     );
   }
@@ -127,9 +128,10 @@ function Controle({ campo, valor, erro, aoMudar }: {
 
 export function Formulario({ slug, config }: { slug: string; config: ConfigDaPagina }) {
   const campos = camposDaConfig(config);
-  const consentimento = config.consentimento?.texto ? config.consentimento : null;
-  // `obrigatorio` ausente vale `true` — a mesma regra do servidor.
-  const consentimentoObrigatorio = !!consentimento && consentimento.obrigatorio !== false;
+  // Vale a presença do bloco (texto vazio usa o padrão); `obrigatorio`
+  // ausente vale `true` — a mesma regra do servidor.
+  const consentimento = consentimentoDaConfig(config);
+  const consentimentoObrigatorio = !!consentimento && consentimento.obrigatorio;
   // Só http(s): `javascript:` vindo da config viraria script no clique.
   const linkDaPolitica = consentimento ? urlSegura(consentimento.link, window.location.origin) : null;
 
@@ -187,6 +189,8 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
           // da página, no servidor (decisão 5 do plano da prova).
           ...(consentimento ? { consentimento: aceitou } : {}),
           visitor_id: lerVisitante(document.cookie),
+          // Referrer e clids para o servidor calcular o canal da conversão.
+          ...toqueDaCaptura(window.location.search, document.referrer),
           // `website` por último: nenhum campo visível nem UTM pode apagar a isca.
           fields: { ...resto, ...utmDaUrl(), source: slug, website: isca },
         }),
@@ -217,7 +221,7 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
     // Texto puro: `mensagem_obrigado` nunca vira HTML.
     return (
       <div className="captura-sucesso" role="status">
-        {(config.mensagem_obrigado?.trim() || OBRIGADO_PADRAO).split(/\n\s*\n/).map((p, i) => (
+        {(textoDaConfig(config.mensagem_obrigado) || OBRIGADO_PADRAO).split(/\n\s*\n/).map((p, i) => (
           <p key={i}>{p}</p>
         ))}
       </div>

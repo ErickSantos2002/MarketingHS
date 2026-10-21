@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { Formulario } from "./Formulario";
 import { COR_CTA_PADRAO } from "./padroes";
-import { linkDoWhatsapp, paragrafosDoCorpo, urlSegura, type ConfigDaPagina } from "./campos";
+import { linkDoWhatsapp, paragrafosDoCorpo, textoDaConfig, urlSegura, type ConfigDaPagina } from "./campos";
 
 export type { ConfigDaPagina } from "./campos";
 
@@ -34,15 +34,20 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
     "Bafômetro conectado para indústria e logística — o teste vira registro auditável.";
   // Texto puro em blocos — nunca `dangerouslySetInnerHTML`: a config é
   // editada no admin, mas a página é pública, e HTML colado viraria script.
-  const corpo = config.corpo ? paragrafosDoCorpo(config.corpo) : [];
+  const corpo = textoDaConfig(config.corpo) ? paragrafosDoCorpo(config.corpo as string) : [];
   // Toda URL da config passa por `urlSegura` (só http/https) antes de virar
   // src/href. O link do WhatsApp é montado por nós sobre https://wa.me, mas
   // passa pela mesma régua.
-  const imagem = config.imagem_url?.trim()
-    ? urlSegura(enderecoDaImagem(config.imagem_url.trim()), window.location.origin)
+  // `textoDaConfig` antes de qualquer .trim()/.replace(): a config é JSON
+  // editável, e um número ou objeto no lugar do texto derrubaria a página
+  // inteira (o bundle da landing não tem ErrorBoundary).
+  const imagemDaConfig = textoDaConfig(config.imagem_url);
+  const imagem = imagemDaConfig
+    ? urlSegura(enderecoDaImagem(imagemDaConfig), window.location.origin)
     : null;
-  const whatsapp = config.whatsapp?.numero?.replace(/\D/g, "")
-    ? urlSegura(linkDoWhatsapp(config.whatsapp.numero, config.whatsapp.mensagem ?? ""), window.location.origin)
+  const numeroDoWhatsapp = textoDaConfig(config.whatsapp?.numero).replace(/\D/g, "");
+  const whatsapp = numeroDoWhatsapp
+    ? urlSegura(linkDoWhatsapp(numeroDoWhatsapp, textoDaConfig(config.whatsapp?.mensagem)), window.location.origin)
     : null;
   // Página antiga (sem imagem nem corpo) fica no cartão único de antes.
   const completa = !!imagem || corpo.length > 0;

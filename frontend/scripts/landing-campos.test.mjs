@@ -21,7 +21,67 @@ import {
   linkDoWhatsapp,
   lerVisitante,
   urlSegura,
+  consentimentoDaConfig,
+  textoDoConsentimentoParaGravar,
+  TEXTO_CONSENTIMENTO_PADRAO,
+  textoDaConfig,
+  toqueDaCaptura,
+  camposParaGravar,
 } from "../src/landing/campos.ts";
+
+test("consentimento vale pela presença do bloco, não pelo texto", () => {
+  assert.equal(consentimentoDaConfig({}), null);
+  assert.equal(consentimentoDaConfig({ consentimento: null }), null);
+  assert.equal(consentimentoDaConfig({ consentimento: "sim" }), null);
+  const vazio = consentimentoDaConfig({ consentimento: { texto: "  ", link: "https://x.com/p" } });
+  assert.ok(vazio, "bloco com texto vazio continua pedindo consentimento");
+  assert.equal(vazio.texto, TEXTO_CONSENTIMENTO_PADRAO);
+  assert.equal(TEXTO_CONSENTIMENTO_PADRAO, "Li e aceito a política de privacidade.");
+  assert.equal(vazio.obrigatorio, true, "obrigatorio ausente vale true");
+  assert.equal(consentimentoDaConfig({ consentimento: { texto: 42 } }).texto, TEXTO_CONSENTIMENTO_PADRAO);
+  const cheio = consentimentoDaConfig({ consentimento: { texto: "Aceito.", obrigatorio: false } });
+  assert.equal(cheio.texto, "Aceito.");
+  assert.equal(cheio.obrigatorio, false);
+});
+
+test("o editor não grava texto de consentimento vazio", () => {
+  assert.equal(textoDoConsentimentoParaGravar("Novo texto", "Antigo"), "Novo texto");
+  assert.equal(textoDoConsentimentoParaGravar("   ", "Antigo"), "Antigo");
+  assert.equal(textoDoConsentimentoParaGravar("", ""), TEXTO_CONSENTIMENTO_PADRAO);
+  assert.equal(textoDoConsentimentoParaGravar("", undefined), TEXTO_CONSENTIMENTO_PADRAO);
+});
+
+test("página antiga: desafios é texto longo e o limite é o do servidor (2000)", () => {
+  const campos = camposDaConfig({ visible_fields: ["nome", "email", "desafios"] });
+  assert.equal(campos.find((c) => c.chave === "desafios").tipo, "texto_longo");
+  const erros = validarNoCliente(campos, { email: "a@x.com", nome: "x".repeat(1500), desafios: "y".repeat(2000) });
+  assert.deepEqual(erros, {}, "no caminho antigo 1500 caracteres em texto passam");
+  assert.ok(validarNoCliente(campos, { email: "a@x.com", nome: "x".repeat(2001) }).nome);
+  // Página nova continua com 200 no texto.
+  const novos = camposDaConfig({ campos: [{ chave: "nome", rotulo: "Nome", tipo: "texto", obrigatorio: false }] });
+  assert.ok(validarNoCliente(novos, { email: "a@x.com", nome: "x".repeat(201) }).nome);
+});
+
+test("a conversão do editor grava os campos sem a marca do caminho antigo", () => {
+  const antigos = camposDaConfig({ visible_fields: ["nome", "email"] });
+  for (const c of camposParaGravar(antigos)) assert.equal("legado" in c, false);
+});
+
+test("toqueDaCaptura leva referrer, gclid e fbclid", () => {
+  assert.deepEqual(
+    toqueDaCaptura("?utm_source=x&gclid=G1&fbclid=F1", "https://www.google.com/"),
+    { referrer: "https://www.google.com/", gclid: "G1", fbclid: "F1" },
+  );
+  assert.deepEqual(toqueDaCaptura("", ""), {});
+});
+
+test("textoDaConfig não quebra com valor que não é texto", () => {
+  assert.equal(textoDaConfig("  oi  "), "oi");
+  for (const ruim of [42, null, undefined, { a: 1 }, ["x"], true]) {
+    assert.equal(textoDaConfig(ruim), "", String(ruim));
+  }
+  assert.equal(linkDoWhatsapp(5531999999999, ""), "https://wa.me/5531999999999");
+});
 
 test("urlSegura só aceita http e https", () => {
   const origem = "https://marketinghs.exemplo.com";

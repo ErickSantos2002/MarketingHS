@@ -217,6 +217,13 @@ test("ignora senha, cartão e captcha", () => {
   const t = nav.window.__mhsTeste;
   assert.equal(t.campoProibido(campo("cartao_numero", "")), true);
   assert.equal(t.campoProibido(campo("pnome", "")), false);
+  for (const nome of ["cc_num", "cc-number", "ccexp", "cc_cvv", "CCCVC", "cf-turnstile-response",
+                      "csrf", "csrfmiddlewaretoken", "_token", "authenticity_token"]) {
+    assert.equal(t.campoProibido(campo(nome, "")), true, nome);
+  }
+  for (const nome of ["pemail", "empresa", "accept", "ccusto"]) {
+    assert.equal(t.campoProibido(campo(nome, "")), false, nome);
+  }
   const lidos = t.lerCampos(form);
   for (const fora of ["senha", "qualquer", "numero", "card_cvv", "g-recaptcha-response"]) {
     assert.equal(lidos[fora], undefined, fora);

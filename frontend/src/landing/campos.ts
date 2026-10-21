@@ -19,6 +19,10 @@ export type CampoDaPagina = {
   tipo: TipoDeCampo;
   obrigatorio: boolean;
   opcoes?: string[];
+  // Só no cliente: campo que veio de `visible_fields` (página antiga). Lá o
+  // limite é o `TAMANHO_MAXIMO` do servidor (2000), não o 200 do tipo texto.
+  // Nunca gravado na config — ver `camposParaGravar`.
+  legado?: boolean;
 };
 
 export type ConsentimentoDaPagina = {
@@ -138,11 +142,63 @@ export function camposDaConfig(config: ConfigDaPagina): CampoDaPagina[] {
     const chave = texto(bruto);
     if (!chave || vistos.has(chave) || CHAVES_RESERVADAS.has(chave)) continue;
     vistos.add(chave);
+    // `desafios` é a pergunta aberta das páginas antigas: caixa de texto longo.
     saida.push(chave === "email"
       ? campoDoEmail()
-      : { chave, rotulo: ROTULOS_PADRAO[chave] ?? chave, tipo: "texto", obrigatorio: false });
+      : { chave, rotulo: ROTULOS_PADRAO[chave] ?? chave,
+          tipo: chave === "desafios" ? "texto_longo" : "texto", obrigatorio: false, legado: true });
   }
   if (!vistos.has("email")) saida.unshift(campoDoEmail());
+  return saida;
+}
+
+/** Os campos como vão para `config.campos`: sem a marca `legado`, só do cliente. */
+export function camposParaGravar(campos: CampoDaPagina[]): CampoDaPagina[] {
+  return campos.map(({ legado: _legado, ...resto }) => resto);
+}
+
+/** Texto aparado vindo da config; `""` para qualquer coisa que não seja texto. */
+export function textoDaConfig(valor: unknown): string {
+  return typeof valor === "string" ? valor.trim() : "";
+}
+
+export const TEXTO_CONSENTIMENTO_PADRAO = "Li e aceito a política de privacidade.";
+
+/**
+ * O bloco de consentimento da página, ou `null`. Vale a PRESENÇA do bloco,
+ * não o texto: um bloco com texto vazio continua pedindo consentimento, com o
+ * texto padrão — senão uma edição apagando o texto tiraria a caixa da página
+ * sem ninguém perceber. `obrigatorio` ausente vale `true` (regra do servidor).
+ */
+export function consentimentoDaConfig(config: ConfigDaPagina): ConsentimentoDaPagina | null {
+  const bloco = config?.consentimento as unknown;
+  if (!bloco || typeof bloco !== "object" || Array.isArray(bloco)) return null;
+  const b = bloco as Record<string, unknown>;
+  return {
+    texto: textoDaConfig(b.texto) || TEXTO_CONSENTIMENTO_PADRAO,
+    link: textoDaConfig(b.link),
+    versao: textoDaConfig(b.versao),
+    provisoria: b.provisoria === true,
+    obrigatorio: b.obrigatorio !== false,
+  };
+}
+
+/** O editor nunca grava texto de consentimento vazio: fica o anterior, ou o padrão. */
+export function textoDoConsentimentoParaGravar(novo: unknown, anterior: unknown): string {
+  return textoDaConfig(novo) ? String(novo) : (textoDaConfig(anterior) ? String(anterior) : TEXTO_CONSENTIMENTO_PADRAO);
+}
+
+/** O que a captura da landing manda para o servidor calcular o canal. */
+export function toqueDaCaptura(
+  busca: string, referrer: string,
+): { referrer?: string; gclid?: string; fbclid?: string } {
+  const saida: { referrer?: string; gclid?: string; fbclid?: string } = {};
+  const q = new URLSearchParams(typeof busca === "string" ? busca : "");
+  if (textoDaConfig(referrer)) saida.referrer = referrer.slice(0, 2000);
+  const gclid = q.get("gclid");
+  const fbclid = q.get("fbclid");
+  if (gclid) saida.gclid = gclid.slice(0, 500);
+  if (fbclid) saida.fbclid = fbclid.slice(0, 500);
   return saida;
 }
 
@@ -195,8 +251,10 @@ export function validarNoCliente(
       case "texto_longo":
         if (valor.length > LIMITE_TEXTO_LONGO) erros[campo.chave] = `Use até ${LIMITE_TEXTO_LONGO} caracteres.`;
         break;
-      default:
-        if (valor.length > LIMITE_TEXTO) erros[campo.chave] = `Use até ${LIMITE_TEXTO} caracteres.`;
+      default: {
+        const limite = campo.legado ? LIMITE_TEXTO_LONGO : LIMITE_TEXTO;
+        if (valor.length > limite) erros[campo.chave] = `Use até ${limite} caracteres.`;
+      }
     }
   }
   return erros;
