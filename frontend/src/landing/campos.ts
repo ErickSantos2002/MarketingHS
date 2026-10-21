@@ -248,6 +248,22 @@ export function linkDoWhatsapp(numero: string, mensagem: string): string {
   return mensagem ? `${base}?text=${encodeURIComponent(mensagem)}` : base;
 }
 
+/**
+ * A URL vinda da config (link da política, imagem, redirect) só se for
+ * `http:` ou `https:`; senão `null`. A config é editada no admin, mas a página
+ * é pública: um `javascript:` num `href` vira script na mão de quem clica, e
+ * `data:` serve página arbitrária. Relativa resolve contra `origem`.
+ */
+export function urlSegura(url: unknown, origem: string): string | null {
+  if (typeof url !== "string" || !url.trim()) return null;
+  try {
+    const u = new URL(url.trim(), origem);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** O id de visitante que o `rastreio.js` grava no cookie `mhs_vid`. */
 export function lerVisitante(cookie: string): string | null {
   for (const pedaco of String(cookie ?? "").split(";")) {

@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { Formulario } from "./Formulario";
 import { COR_CTA_PADRAO } from "./padroes";
-import { linkDoWhatsapp, paragrafosDoCorpo, type ConfigDaPagina } from "./campos";
+import { linkDoWhatsapp, paragrafosDoCorpo, urlSegura, type ConfigDaPagina } from "./campos";
 
 export type { ConfigDaPagina } from "./campos";
 
@@ -35,9 +35,14 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
   // Texto puro em blocos — nunca `dangerouslySetInnerHTML`: a config é
   // editada no admin, mas a página é pública, e HTML colado viraria script.
   const corpo = config.corpo ? paragrafosDoCorpo(config.corpo) : [];
-  const imagem = config.imagem_url?.trim() ? enderecoDaImagem(config.imagem_url.trim()) : null;
+  // Toda URL da config passa por `urlSegura` (só http/https) antes de virar
+  // src/href. O link do WhatsApp é montado por nós sobre https://wa.me, mas
+  // passa pela mesma régua.
+  const imagem = config.imagem_url?.trim()
+    ? urlSegura(enderecoDaImagem(config.imagem_url.trim()), window.location.origin)
+    : null;
   const whatsapp = config.whatsapp?.numero?.replace(/\D/g, "")
-    ? linkDoWhatsapp(config.whatsapp.numero, config.whatsapp.mensagem ?? "")
+    ? urlSegura(linkDoWhatsapp(config.whatsapp.numero, config.whatsapp.mensagem ?? ""), window.location.origin)
     : null;
   // Página antiga (sem imagem nem corpo) fica no cartão único de antes.
   const completa = !!imagem || corpo.length > 0;

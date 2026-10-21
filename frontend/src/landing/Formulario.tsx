@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import {
-  camposDaConfig, lerVisitante, validarNoCliente,
+  camposDaConfig, lerVisitante, urlSegura, validarNoCliente,
   type CampoDaPagina, type ConfigDaPagina,
 } from "./campos";
 
@@ -130,6 +130,8 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
   const consentimento = config.consentimento?.texto ? config.consentimento : null;
   // `obrigatorio` ausente vale `true` — a mesma regra do servidor.
   const consentimentoObrigatorio = !!consentimento && consentimento.obrigatorio !== false;
+  // Só http(s): `javascript:` vindo da config viraria script no clique.
+  const linkDaPolitica = consentimento ? urlSegura(consentimento.link, window.location.origin) : null;
 
   const [valores, setValores] = useState<Record<string, string>>({});
   const [aceitou, setAceitou] = useState(false);
@@ -197,7 +199,10 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
         return;
       }
       const corpo = await r.json().catch(() => ({}));
-      if (corpo?.redirect_url) window.location.assign(corpo.redirect_url);
+      // O redirect vem da config da página: `javascript:` ou `data:` não saem
+      // daqui — viram a mensagem de obrigado.
+      const destino = urlSegura(corpo?.redirect_url, window.location.origin);
+      if (destino) window.location.assign(destino);
       else setEnviado(true);
     } catch {
       setErro(ERRO_GERAL);
@@ -242,10 +247,10 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
                    }} />
             <span>
               {consentimento.texto}
-              {consentimento.link && (
+              {linkDaPolitica && (
                 <>
                   {" "}
-                  <a href={consentimento.link} target="_blank" rel="noopener noreferrer">
+                  <a href={linkDaPolitica} target="_blank" rel="noopener noreferrer">
                     Política de privacidade
                   </a>
                 </>

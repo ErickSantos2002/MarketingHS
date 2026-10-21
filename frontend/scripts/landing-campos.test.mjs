@@ -20,7 +20,21 @@ import {
   paragrafosDoCorpo,
   linkDoWhatsapp,
   lerVisitante,
+  urlSegura,
 } from "../src/landing/campos.ts";
+
+test("urlSegura só aceita http e https", () => {
+  const origem = "https://marketinghs.exemplo.com";
+  assert.equal(urlSegura("https://www.healthsafety.com.br/privacidade.cfm", origem),
+               "https://www.healthsafety.com.br/privacidade.cfm");
+  assert.equal(urlSegura("/api/publico/imagem/1", origem),
+               "https://marketinghs.exemplo.com/api/publico/imagem/1");
+  for (const ruim of ["javascript:alert(1)", " JavaScript:alert(1)",
+                      "data:text/html,<script>alert(1)</script>", "vbscript:x",
+                      "", null, undefined, 42]) {
+    assert.equal(urlSegura(ruim, origem), null, String(ruim));
+  }
+});
 
 test("camposDaConfig cai em visible_fields", () => {
   const campos = camposDaConfig({ visible_fields: ["nome", "email", "whatsapp"] });
