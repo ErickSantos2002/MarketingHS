@@ -10,13 +10,19 @@ Confira com `\\df` antes de escrever qualquer coisa parecida.
 ⚠️ `authenticated` + `admin_atual` desde 01/10/2026. `journeys` é admin-only
 no RLS e `journey_runs` é SELECT admin — as rotas só LEEM execuções; quem as
 escreve é o worker, como máquina. Teste: `tests/test_conversao_authenticated.py`.
+
+Modo teste (prova do RD, 027): `allowed_emails` é a lista de e-mails para quem
+o fluxo pode agir. Com ela preenchida, nenhum nó com efeito (e-mail, aviso,
+handoff, webhook) age sobre quem está fora — ver `executor.contato_permitido`.
+Teste: `tests/test_prova_jornadas.py`.
 """
 
 import logging
+import re
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual
@@ -27,8 +33,13 @@ router = APIRouter(prefix="/jornadas", tags=["jornadas"])
 COLUNAS = """
     j.id::text, j.name, j.description, j.status, j.entry_type, j.entry_config,
     j.reentry, j.reentry_cooldown_hours, j.entry_node_id, j.nodes,
-    j.created_at::text, j.updated_at::text
+    j.created_at::text, j.updated_at::text,
+    to_jsonb(j)->'allowed_emails' AS allowed_emails
 """
+# ⚠️ `to_jsonb(j)->'allowed_emails'`, e não `j.allowed_emails`: a coluna nasce
+# na 027, e até ela ser aplicada a leitura devolve NULL ("sem modo teste") em
+# vez de derrubar a listagem inteira com coluna inexistente. A escrita usa a
+# coluna de verdade — sem a 027, gravar a lista falha, e é o certo.
 
 # A contagem de execuções por estado, numa subconsulta lateral. A origem buscava
 # TODOS os runs de TODOS os fluxos e agregava no navegador — funciona com
@@ -48,6 +59,27 @@ CONTAGEM_DE_EXECUCOES = """
 
 ESTADOS = ("draft", "active", "paused", "archived")
 
+MAXIMO_DE_PERMITIDOS = 50
+_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _normalizar_permitidos(valor: list[str] | None) -> list[str] | None:
+    """Aparado, minúsculo, sem repetidos (na ordem em que vieram), formato de
+    e-mail, no máximo 50. `[]` vira `None` — o admin apagou a lista de
+    propósito, e só ASSIM ela vira "sem modo teste" (Review Focus 4)."""
+    if valor is None:
+        return None
+    lista: list[str] = []
+    for bruto in valor:
+        email = str(bruto).strip().lower()
+        if not _EMAIL.match(email):
+            raise ValueError(f"e-mail inválido na lista do modo teste: {bruto!r}")
+        if email not in lista:
+            lista.append(email)
+    if len(lista) > MAXIMO_DE_PERMITIDOS:
+        raise ValueError(f"no máximo {MAXIMO_DE_PERMITIDOS} e-mails no modo teste")
+    return lista or None
+
 
 class JornadaIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -58,6 +90,12 @@ class JornadaIn(BaseModel):
     reentry_cooldown_hours: int | None = Field(default=None, gt=0)
     entry_node_id: str | None = None
     nodes: list[dict] = Field(default_factory=list)
+    allowed_emails: list[str] | None = None
+
+    @field_validator("allowed_emails")
+    @classmethod
+    def _permitidos(cls, v):
+        return _normalizar_permitidos(v)
 
 
 class JornadaPatch(BaseModel):
@@ -70,9 +108,15 @@ class JornadaPatch(BaseModel):
     reentry_cooldown_hours: int | None = Field(default=None, gt=0)
     entry_node_id: str | None = None
     nodes: list[dict] | None = None
+    allowed_emails: list[str] | None = None
+
+    @field_validator("allowed_emails")
+    @classmethod
+    def _permitidos(cls, v):
+        return _normalizar_permitidos(v)
 
 
-CASTS = {"entry_config": "::jsonb", "nodes": "::jsonb"}
+CASTS = {"entry_config": "::jsonb", "nodes": "::jsonb", "allowed_emails": "::text[]"}
 
 
 def _sem_execucoes() -> dict:
@@ -122,6 +166,10 @@ async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     onde errou.
     """
     campos = dados.model_dump()
+    if campos["allowed_emails"] is None:
+        # Sem lista, a coluna fica fora do INSERT (o NULL do DEFAULT vale): a
+        # criação de jornada sem modo teste não depende da 027 estar aplicada.
+        campos.pop("allowed_emails")
     if campos.pop("reentry_cooldown_hours") is None:
         # Sem valor explícito, o DEFAULT 168 (7 dias) da coluna assume.
         colunas = list(campos)

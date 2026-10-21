@@ -100,6 +100,24 @@ async def _remetente() -> str:
     return (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
 
+def _na_lista_do_modo_teste(lista, email: str | None) -> bool:
+    """Mesma regra do `executor.contato_permitido`: lista nula = sem modo
+    teste; senão o e-mail, aparado e sem caixa, precisa estar nela. Lista
+    vazia ou de forma inesperada não libera ninguém.
+
+    ⚠️ A lista vem de `to_jsonb(j)->'allowed_emails'` — NULL também quando a
+    027 ainda não foi aplicada (a coluna não existe), que é "sem modo teste"."""
+    if lista is None:
+        return True
+    if isinstance(lista, str):
+        import json as _json
+        lista = _json.loads(lista)
+    if not isinstance(lista, list):
+        return False
+    alvo = (email or "").strip().lower()
+    return bool(alvo) and alvo in {str(e).strip().lower() for e in lista}
+
+
 async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
                      segredo_descadastro: str, por_segundo: float) -> None:
     """Processa uma mensagem. Levanta se o envio falhar — quem chama devolve.
@@ -154,7 +172,8 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
         # E-mail de fluxo: o conteúdo vem do template apontado pelo nó.
         conteudo = await conn.fetchrow(
             """SELECT n->'config'->>'subject' AS subject,
-                      t.html AS body
+                      t.html AS body,
+                      to_jsonb(j)->'allowed_emails' AS allowed_emails
                  FROM journey_runs r
                  JOIN journeys j ON j.id = r.journey_id
                  CROSS JOIN LATERAL jsonb_array_elements(j.nodes) AS n
@@ -162,6 +181,17 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
                         ON t.id = (n->'config'->>'template_id')::uuid
                 WHERE r.id = $1::uuid AND n->>'id' = $2""",
             envio["journey_run_id"], envio["journey_node_id"])
+        if conteudo is not None and not _na_lista_do_modo_teste(
+                conteudo["allowed_emails"], envio["email"]):
+            # A segunda trava do modo teste (a primeira é o executor, que nem
+            # cria a linha). A lista pode ter mudado entre o nó e o envio, ou
+            # a linha ter nascido por outro caminho: o Resend não é chamado.
+            await conn.execute(
+                """UPDATE campaign_sends SET status = 'failed', sent_at = now(),
+                       error = 'modo teste: fora da lista'
+                    WHERE id = $1::uuid AND status = 'pending'""", m.send_id)
+            await fila.concluir(conn, m.fila_id)
+            return
         if conteudo is None or not (conteudo["body"] or "").strip():
             # Sem template resolvido não há o que enviar. Falha visível: um
             # e-mail vazio saindo seria pior que um envio marcado como falho.
