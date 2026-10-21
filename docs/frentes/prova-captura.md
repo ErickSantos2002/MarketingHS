@@ -14,3 +14,10 @@ Plano: `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` — Tarefas
   `http(s)` (ou caminho relativo `/publico/...`) — revisão de segurança achou
   `javascript:` possível no href do consentimento. O front já filtra (frente
   `prova-landing`); o servidor é a segunda linha.
+- **Para as Tarefas 2–3 (vindo da `prova-landing`, 21/10):** o servidor
+  descarta o que `frontend/src/landing/campos.ts::camposDaConfig` descarta
+  (chave inválida, tipo desconhecido, lista sem opção, chave repetida,
+  `website`) e normaliza o celular igual a `normalizarCelular`. O envio da
+  landing manda `visitor_id` (cookie `mhs_vid`) e `consentimento` só quando a
+  página tem o bloco. Erro aceito pelo front: `detail` texto, `{mensagem,
+  campos}` ou a lista do 422.
