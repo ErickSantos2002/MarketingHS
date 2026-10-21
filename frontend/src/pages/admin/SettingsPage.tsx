@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plug, Bell, UserCircle, Copy, Check, Send, Loader2, BookOpen, Target, Key, Users, MailX, Share2 } from 'lucide-react';
+import { Plug, Bell, UserCircle, Copy, Check, Send, Loader2, BookOpen, Target, Key, Users, MailX, Share2, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import ApiDocumentation from '@/components/admin/settings/ApiDocumentation';
 import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings';
@@ -16,6 +16,7 @@ import ApiKeysManagement from '@/components/admin/settings/ApiKeysManagement';
 import UserManagement from '@/components/admin/settings/UserManagement';
 import SuppressionList from '@/components/admin/settings/SuppressionList';
 import SocialLinksSettings from '@/components/admin/settings/SocialLinksSettings';
+import SitesSettings from '@/components/admin/settings/SitesSettings';
 
 // ⚠️ Era a URL das Edge Functions do Supabase. Agora é a nossa API — e o
 // endpoint mudou de nome junto: receive-contact-event virou
@@ -66,7 +67,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <Tabs defaultValue="integrations">
-        {/* 7 abas não cabem a 390 px: a lista rola sozinha, a página não. */}
+        {/* 8 abas não cabem a 390 px: a lista rola sozinha, a página não. */}
         <div className="overflow-x-auto">
           <TabsList className="h-9">
             <TabsTrigger value="integrations" className="text-xs gap-1.5">
@@ -89,6 +90,9 @@ export default function SettingsPage() {
             </TabsTrigger>
             <TabsTrigger value="social" className="text-xs gap-1.5">
               <Share2 className="h-3.5 w-3.5" /> Redes sociais
+            </TabsTrigger>
+            <TabsTrigger value="sites" className="text-xs gap-1.5">
+              <Globe className="h-3.5 w-3.5" /> Sites
             </TabsTrigger>
           </TabsList>
         </div>
@@ -203,6 +207,10 @@ export default function SettingsPage() {
 
         <TabsContent value="social" className="mt-4">
           <SocialLinksSettings />
+        </TabsContent>
+
+        <TabsContent value="sites" className="mt-4">
+          <SitesSettings />
         </TabsContent>
       </Tabs>
     </div>
