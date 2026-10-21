@@ -14,6 +14,8 @@ não-admin veria a base VAZIA, sem erro. Teste:
 `tests/test_conversao_authenticated.py`.
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -332,7 +334,7 @@ async def listar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual
 
 
 @router.get("/{lead_id}/consentimentos")
-async def consentimentos(lead_id: str, usuario: Usuario = Depends(admin_atual)):
+async def consentimentos(lead_id: UUID, usuario: Usuario = Depends(admin_atual)):
     """O histórico de consentimento do contato (prova do RD), mais recente
     primeiro — um registro por aceite, com o texto e a versão que valiam.
 
@@ -346,7 +348,7 @@ async def consentimentos(lead_id: str, usuario: Usuario = Depends(admin_atual)):
                       user_agent, origem_tipo, page_slug, site_id::text,
                       form_id, page_url, criado_em::text
                  FROM lead_consents WHERE lead_id = $1::uuid
-                ORDER BY criado_em DESC, id""", lead_id)
+                ORDER BY criado_em DESC, id""", str(lead_id))
     return [dict(l) for l in linhas]
 
 

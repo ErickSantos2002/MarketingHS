@@ -402,6 +402,12 @@ async def test_ficha_lista_consentimentos_e_nao_admin_leva_403(cliente, pagina, 
     assert ficha.json()["lead"]["campos_extras"] == {"ja_faz_testagem": "sim"}
 
 
+async def test_consentimentos_com_uuid_invalido_nao_e_500(cliente, token_admin):
+    r = await cliente.get("/contatos/nao-e-uuid/consentimentos",
+                          headers={"Authorization": f"Bearer {token_admin}"})
+    assert r.status_code == 422, r.text
+
+
 # ── Config salva com URL insegura ────────────────────────────────────────────
 
 async def test_salvar_config_com_url_insegura_da_400(cliente, pagina, token_admin):

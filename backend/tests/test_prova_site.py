@@ -508,6 +508,16 @@ async def test_token_rotacionado_invalida_o_antigo(cliente, site, token_admin):
     assert (await _postar(cliente, "/publico/site/conversao", _conversao(novo))).status_code == 202
 
 
+async def test_uuid_invalido_na_url_nao_e_500(cliente, token_admin):
+    cab = {"Authorization": f"Bearer {token_admin}"}
+    r = await cliente.patch("/sites/nao-e-uuid", headers=cab, json={"ativo": False})
+    assert r.status_code == 422, r.text
+    r = await cliente.post("/sites/nao-e-uuid/token", headers=cab)
+    assert r.status_code == 422, r.text
+    r = await cliente.post("/sites/00000000-0000-0000-0000-000000000000/token", headers=cab)
+    assert r.status_code == 404
+
+
 async def test_recebido_desligado_da_404(cliente, monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "PROVA_RECEPTOR_TESTE", False)
