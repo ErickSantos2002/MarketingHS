@@ -235,6 +235,17 @@ async def test_lead_id_e_email_inexistentes_caem_para_o_dnia_id(cliente, contato
     assert r.json()["lead_id"] == outro
 
 
+async def test_dnia_id_mal_formado_da_400_nos_dois_caminhos(cliente, contato):
+    """Antes: o texto ia direto para `$1::uuid` e virava 500."""
+    for corpo in (_evento("deal_won", dnia_id="nao-e-uuid"),
+                  {"source_app": "website", "event_type": "page_view", "title": "x",
+                   "dnia_id": "nao-e-uuid"}):
+        r = await cliente.post("/publico/evento-de-contato",
+                               headers=_auth(contato["escrita"]), json=corpo)
+        assert r.status_code == 400, (corpo, r.text)
+        assert "dnia_id" in r.text
+
+
 # ── Receptor de teste ────────────────────────────────────────────────────────
 
 def _card(external_id=None, **kw):
