@@ -769,3 +769,33 @@ async def test_rota_sem_modo_teste_aceita_qualquer_aviso(rota_jornadas):
         await _exigir_027(conn)
     r = await post(entry_node_id="n1", nodes=[NO_AVISO])
     assert r.status_code == 201, r.text
+
+
+# ── Revisão 4: o CONTATO é reconferido na hora de sair ───────────────────────
+
+async def test_aviso_de_contato_que_saiu_da_lista_nao_sai(saida, resend_falso, jornada_real):
+    """O nó rodou com o contato na lista; a lista mudou antes do worker
+    drenar. Sai nada."""
+    jid, lid = await jornada_real(["comercial@exemplo.invalid"], "cliente@real.invalid")
+    sid = await saida("aviso_email", "comercial@exemplo.invalid", journey_id=jid, lead_id=lid)
+    r = await saidas.rodar_saidas(somente=[sid])
+    assert r["falhos"] == 1 and resend_falso["enviados"] == []
+    linha = await _linha(sid)
+    assert linha["status"] == "falhou" and linha["erro"] == "modo teste: contato fora da lista"
+
+
+async def test_webhook_de_contato_fora_da_lista_nao_sai(saida, jornada_real):
+    jid, lid = await jornada_real(["erick@exemplo.invalid"], "cliente@real.invalid")
+    sid = await saida("webhook", "https://gancho.exemplo.com/x", journey_id=jid, lead_id=lid)
+    chamadas = []
+    r = await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
+    assert r["falhos"] == 1 and chamadas == []
+    assert (await _linha(sid))["erro"] == "modo teste: contato fora da lista"
+
+
+async def test_contato_na_lista_sai_normal(saida, jornada_real):
+    jid, lid = await jornada_real([" Erick@Exemplo.invalid "], "erick@exemplo.INVALID")
+    sid = await saida("webhook", "https://gancho.exemplo.com/x", journey_id=jid, lead_id=lid)
+    chamadas = []
+    r = await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
+    assert r["enviados"] == 1 and len(chamadas) == 1

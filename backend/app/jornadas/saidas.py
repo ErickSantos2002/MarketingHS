@@ -387,6 +387,10 @@ def _classificar(erro: Exception) -> str:
 
 async def _mandar_webhook(s: dict, transporte) -> str:
     url = (s["destino"] or "").strip()
+    _, contato_ok = await _modo_teste_agora(s)
+    if not contato_ok:
+        await _falhar(s["id"], MOTIVO_CONTATO_FORA)
+        return "falhos"
     try:
         # O nó e a rota já conferem a forma; aqui vai também a resolução — o
         # nome pode ter passado a apontar para dentro depois de salvo.
@@ -429,6 +433,23 @@ async def _anotar_destinatario(saida_id: int, email: str, resend_id: str) -> Non
                 WHERE id = $1""", saida_id, email, resend_id or "")
 
 
+MOTIVO_CONTATO_FORA = "modo teste: contato fora da lista"
+
+
+async def _modo_teste_agora(s: dict):
+    """(lista em vigor, contato permitido?) — relidos na hora de sair. O nó
+    conferiu o contato quando rodou; a lista pode ter mudado até o worker
+    drenar (antimeta nº 1)."""
+    async with sessao(role="service_role") as conn:
+        lista = await modo_teste.lista_da_jornada(conn, s.get("journey_id"))
+        if not modo_teste.ligado(lista):
+            return lista, True
+        email = await conn.fetchval(
+            "SELECT email FROM leads WHERE id = $1::uuid", s.get("lead_id")) \
+            if s.get("lead_id") else None
+    return lista, modo_teste.na_lista(lista, email)
+
+
 async def _anotar_pulados(saida_id: int, pulados: list[str]) -> None:
     async with sessao(role="service_role") as conn:
         await conn.execute(
@@ -447,8 +468,10 @@ async def _mandar_aviso(s: dict, chave: str, de: str, compasso, por_segundo: flo
     # RECEBE o aviso também precisa estar na lista (a rota recusa ao salvar;
     # isto cobre a lista que mudou depois). Fora da lista, o destinatário é
     # pulado e anotado em `payload.pulados`.
-    async with sessao(role="service_role") as conn:
-        lista = await modo_teste.lista_da_jornada(conn, s.get("journey_id"))
+    lista, contato_ok = await _modo_teste_agora(s)
+    if not contato_ok:
+        await _falhar(s["id"], MOTIVO_CONTATO_FORA)
+        return "falhos"
     pulados = [d for d in destinos if not modo_teste.na_lista(lista, d)]
     if pulados:
         destinos = [d for d in destinos if d not in pulados]
