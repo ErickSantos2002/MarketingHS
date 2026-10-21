@@ -28,6 +28,7 @@ import {
 import { usePages, type Page, type PageFormData, type PageStat } from '@/hooks/usePages';
 import { NewPageDialog } from './NewPageDialog';
 import { UTMPresetsModal } from './UTMPresetsModal';
+import { NumerosDasPaginas } from './NumerosDasPaginas';
 
 export function PagesManagement() {
   const { pages, pageStats, isLoading, refetch, createPage, updatePage, deletePage, toggleStatus, updatePageConfig } = usePages();
@@ -233,6 +234,9 @@ export function PagesManagement() {
           ))}
         </div>
       )}
+
+      {/* Visitas, conversões e taxa por página e por formulário de site */}
+      <NumerosDasPaginas />
 
       {/* New Page Dialog */}
       <NewPageDialog

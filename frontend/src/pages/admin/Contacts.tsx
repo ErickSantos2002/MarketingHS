@@ -1,4 +1,10 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
+import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { LeadDetailSheet } from '@/components/admin/LeadDetailSheet';
+import { lerFicha } from '@/lib/leitura';
+import type { Lead } from '@/hooks/useLeads';
 import { useAdminData } from '@/hooks/useAdminData';
 import { useContactsEnriched } from '@/hooks/useContactsEnriched';
 import { ContactsToolbar } from '@/components/admin/contacts/ContactsToolbar';
@@ -11,6 +17,10 @@ import { Button } from '@/components/ui/button';
 import { GitMerge, Trash2 } from 'lucide-react';
 import { getUniqueValues } from '@/hooks/useDashboardFilters';
 import type { DeletedView } from '@/hooks/useLeads';
+
+// Link direto para a ficha: `/contacts?contato=<id>` — é o link que vai no
+// aviso por e-mail ao comercial (nó "Avisar por e-mail").
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function Contacts() {
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -43,6 +53,34 @@ export default function Contacts() {
   };
 
   const search = legacyFilters.search || '';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const contatoDoLink = searchParams.get('contato');
+  const contatoValido = !!contatoDoLink && UUID.test(contatoDoLink);
+  // Primeiro procura na lista já carregada (traz tags e ecossistema); se não
+  // estiver nela (filtro, apagado, fora da página), lê a ficha do servidor.
+  const leadDaLista = useMemo(
+    () => (contatoValido ? allEnrichedLeads.find(l => l.id === contatoDoLink) ?? null : null),
+    [allEnrichedLeads, contatoDoLink, contatoValido],
+  );
+  const { data: leadDoServidor, isError: linkQuebrado } = useQuery({
+    queryKey: ['contato-do-link', contatoDoLink],
+    queryFn: () => lerFicha<Lead>(contatoDoLink!).then(r => r.lead),
+    enabled: contatoValido && !isLoading && !leadDaLista,
+    retry: false,
+  });
+  const leadDoLink = leadDaLista ?? leadDoServidor ?? null;
+  // Link de aviso antigo (contato apagado de vez) não pode falhar calado.
+  useEffect(() => {
+    if (linkQuebrado) toast.error('O contato deste link não foi encontrado.');
+  }, [linkQuebrado]);
+  const fecharLink = () => {
+    setSearchParams(prev => {
+      const novo = new URLSearchParams(prev);
+      novo.delete('contato');
+      return novo;
+    }, { replace: true });
+  };
+
   const handleSearchChange = (value: string) => {
     setLegacyFilters(prev => ({ ...prev, search: value || undefined }));
   };
@@ -209,6 +247,17 @@ export default function Contacts() {
         onSort={handleSort}
       />
 
+
+      {/* Ficha aberta pelo link ?contato=<id> */}
+      {contatoValido && (
+        <LeadDetailSheet
+          lead={leadDoLink as Lead | null}
+          open={!!leadDoLink}
+          onOpenChange={(o) => { if (!o) fecharLink(); }}
+          allTags={allTags}
+          onDataChanged={handleRefresh}
+        />
+      )}
 
       {/* Duplicates button */}
       <div className="flex justify-end">
