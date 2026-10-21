@@ -390,8 +390,10 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
         from app.jornadas import saidas
 
         url = str(cfg.get("url") or "").strip()
-        if not url.lower().startswith("https://"):
-            raise ErroDefinitivo("enviar para webhook exige URL com https://")
+        try:
+            saidas.conferir_forma_da_url(url)
+        except saidas.DestinoRecusado as e:
+            raise ErroDefinitivo(str(e)) from None
         lead, conversao = await saidas.dados_do_lead(conn, run["lead_id"])
         saida = await saidas.enfileirar(conn, run, no, "webhook", url,
                                         saidas.montar_webhook(lead, conversao, run, no))

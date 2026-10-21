@@ -119,6 +119,20 @@ class JornadaPatch(BaseModel):
 CASTS = {"entry_config": "::jsonb", "nodes": "::jsonb", "allowed_emails": "::text[]"}
 
 
+def _conferir_webhooks(nos: list[dict] | None) -> None:
+    """A forma da URL de cada nó `webhook` (sem DNS — o worker resolve na hora
+    de mandar): o admin vê "recusado" ao salvar, não dias depois na saída."""
+    from app.jornadas.saidas import DestinoRecusado, conferir_forma_da_url
+
+    for no in nos or []:
+        if isinstance(no, dict) and no.get("type") == "webhook":
+            try:
+                conferir_forma_da_url(str((no.get("config") or {}).get("url") or ""))
+            except DestinoRecusado as e:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    f"nó {no.get('id')}: {e}") from None
+
+
 def _sem_execucoes() -> dict:
     return {"active": 0, "waiting": 0, "done": 0, "failed": 0, "exited": 0}
 
@@ -165,6 +179,7 @@ async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     usuário; mascarar por um genérico deixaria quem monta o fluxo sem saber
     onde errou.
     """
+    _conferir_webhooks(dados.nodes)
     campos = dados.model_dump()
     if campos["allowed_emails"] is None:
         # Sem lista, a coluna fica fora do INSERT (o NULL do DEFAULT vale): a
@@ -197,6 +212,7 @@ async def editar(jornada_id: str, dados: JornadaPatch,
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada a atualizar.")
+    _conferir_webhooks(campos.get("nodes"))
 
     partes, valores = [], []
     for i, (coluna, valor) in enumerate(campos.items(), start=2):

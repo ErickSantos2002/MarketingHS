@@ -23,7 +23,10 @@ volta manda só do terceiro em diante — ninguém recebe o aviso duas vezes.
 
 import asyncio
 import html as _html
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlsplit
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -55,6 +58,95 @@ CAMPOS_DO_LEAD = ("id", "nome", "email", "whatsapp", "phone_normalized", "empres
 CAMPOS_DA_CONVERSAO = ("id", "converted_at", "tipo", "source", "page_slug", "form_id",
                        "site_id", "page_url", "page_path", "canal", "utm_source",
                        "utm_medium", "utm_campaign", "utm_term", "utm_content")
+
+
+# ── SSRF: o webhook nunca chama a rede de dentro ─────────────────────────────
+# O backend roda no EasyPanel ao lado do banco, do worker e dos outros
+# serviços, todos alcançáveis por nome curto ou IP privado — e o metadata da
+# nuvem mora em 169.254.169.254. Uma URL de webhook digitada no construtor não
+# pode virar um pedido do servidor para lá.
+
+REDE_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+
+
+class DestinoRecusado(ValueError):
+    """A URL do webhook aponta (ou pode apontar) para a rede interna. Não se
+    cura esperando: a saída vira `falhou` sem nova tentativa."""
+
+
+def _ip_proibido(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+            or ip.is_multicast or ip.is_unspecified
+            or (ip.version == 4 and ip in REDE_CGNAT)
+            or not ip.is_global)
+
+
+def conferir_forma_da_url(url: str) -> tuple[str, int]:
+    """Só a FORMA (sem DNS) — é o que a rota que salva a jornada confere, para
+    o admin ver o erro na hora. Devolve (host, porta).
+
+    Recusa: sem `https://`, sem host, credencial na URL, `localhost` (e
+    `*.localhost`), nome sem ponto (serviço interno do EasyPanel) e IP literal
+    de rede interna."""
+    bruto = (url or "").strip()
+    try:
+        partes = urlsplit(bruto)
+        porta = partes.port or 443
+    except ValueError:
+        raise DestinoRecusado(f"webhook recusado: URL inválida ({bruto!r})") from None
+    if partes.scheme.lower() != "https":
+        raise DestinoRecusado("webhook recusado: a URL precisa começar com https://")
+    if partes.username is not None or partes.password is not None:
+        raise DestinoRecusado("webhook recusado: credencial na URL não é aceita")
+    host = (partes.hostname or "").rstrip(".").lower()
+    if not host:
+        raise DestinoRecusado("webhook recusado: URL sem endereço")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        if _ip_proibido(ip):
+            raise DestinoRecusado(f"webhook recusado: {host} é endereço de rede interna")
+        return host, porta
+    if host == "localhost" or host.endswith(".localhost"):
+        raise DestinoRecusado("webhook recusado: localhost é a própria máquina")
+    if "." not in host:
+        raise DestinoRecusado(
+            f"webhook recusado: {host!r} parece nome de serviço interno (sem domínio)")
+    return host, porta
+
+
+async def _resolver(host: str, porta: int) -> list[str]:
+    infos = await asyncio.get_running_loop().getaddrinfo(
+        host, porta, type=socket.SOCK_STREAM)
+    return [i[4][0] for i in infos]
+
+
+async def conferir_destino(url: str) -> None:
+    """A forma e, para nome, a resolução: recusa se QUALQUER endereço que o
+    nome devolve for interno (um nome público apontado para 10.x é o truque).
+
+    `socket.gaierror` (DNS fora do ar) sobe como está — é transitório.
+
+    ⚠️ Limite conhecido: o httpx resolve de novo ao conectar. Um DNS que muda
+    de resposta entre as duas consultas (rebinding) passaria; fechar isso exige
+    conectar no IP conferido, e fica registrado no arquivo da frente."""
+    host, porta = conferir_forma_da_url(url)
+    try:
+        ipaddress.ip_address(host)
+        return  # IP literal: a forma já conferiu
+    except ValueError:
+        pass
+    enderecos = await _resolver(host, porta)
+    if not enderecos:
+        raise DestinoRecusado(f"webhook recusado: {host} não resolve para nenhum endereço")
+    for e in enderecos:
+        if _ip_proibido(ipaddress.ip_address(e.split("%", 1)[0])):
+            raise DestinoRecusado(
+                f"webhook recusado: {host} resolve para {e}, endereço de rede interna")
 
 
 def espera(tentativas: int) -> timedelta:
@@ -253,10 +345,15 @@ def _classificar(erro: Exception) -> str:
 
 async def _mandar_webhook(s: dict, transporte) -> str:
     url = (s["destino"] or "").strip()
-    if not url.lower().startswith("https://"):
-        # O nó já recusa; a reconferência cobre linha escrita por outro caminho.
-        await _falhar(s["id"], "webhook exige https://")
+    try:
+        # O nó e a rota já conferem a forma; aqui vai também a resolução — o
+        # nome pode ter passado a apontar para dentro depois de salvo.
+        await conferir_destino(url)
+    except DestinoRecusado as e:
+        await _falhar(s["id"], str(e))
         return "falhos"
+    except OSError as e:  # DNS fora do ar: tenta de novo depois
+        return await _reagendar(s, f"DNS: {e}")
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_WEBHOOK, transport=transporte,
                                      follow_redirects=False) as cliente:

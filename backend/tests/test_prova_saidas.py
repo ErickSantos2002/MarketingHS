@@ -26,6 +26,20 @@ from app.jornadas import executor, saidas
 
 pytestmark = pytest.mark.trava_global
 
+IP_PUBLICO = "93.184.216.34"
+
+
+@pytest.fixture(autouse=True)
+def dns_publico(monkeypatch):
+    """Nenhum teste resolve nome de verdade: todo host vira um IP público
+    (o teste de SSRF troca isto para mostrar a recusa)."""
+    resolvidos = {}
+
+    async def resolver(host, porta):
+        return resolvidos.get(host, [IP_PUBLICO])
+    monkeypatch.setattr(saidas, "_resolver", resolver)
+    return resolvidos
+
 
 async def _exigir_027(conn):
     if not await conn.fetchval("SELECT to_regclass('public.journey_saidas') IS NOT NULL"):
@@ -397,3 +411,83 @@ async def test_aviso_retomado_nao_reenvia_a_quem_ja_recebeu(saida, resend_falso)
     assert [e["para"] for e in resend_falso["enviados"]] == [
         "a@exemplo.invalid", "b@exemplo.invalid"]
     assert (await _linha(sid))["resend_email_id"] == "re_teste_1,re_teste_2"
+
+
+# ── SSRF: o webhook nunca chama a rede interna ───────────────────────────────
+
+@pytest.mark.parametrize("url", [
+    "http://exemplo.com/gancho",            # sem https
+    "https://127.0.0.1/x", "https://localhost/x", "https://api.localhost/x",
+    "https://10.0.0.5/x", "https://192.168.1.10/x", "https://172.16.0.1/x",
+    "https://169.254.169.254/latest/meta-data", "https://[::1]/x",
+    "https://[fd00::1]/x", "https://100.64.0.1/x", "https://0.0.0.0/x",
+    "https://224.0.0.1/x", "https://[::ffff:127.0.0.1]/x",
+    "https://marketinghs-api/x",            # nome de serviço interno, sem ponto
+    "https://usuario:senha@exemplo.com/x",  # credencial na URL
+    "https:///sem-host", "", "javascript:alert(1)",
+])
+def test_forma_da_url_recusada(url):
+    with pytest.raises(saidas.DestinoRecusado):
+        saidas.conferir_forma_da_url(url)
+
+
+def test_forma_da_url_publica_passa():
+    assert saidas.conferir_forma_da_url("https://gancho.exemplo.com:8443/a?b=1") == (
+        "gancho.exemplo.com", 8443)
+
+
+@pytest.mark.parametrize("ips", [["10.1.2.3"], ["127.0.0.1"], ["169.254.169.254"],
+                                 ["::1"], [IP_PUBLICO, "192.168.0.9"], []])
+async def test_nome_que_resolve_para_dentro_e_recusado(dns_publico, ips):
+    dns_publico["interno.exemplo.com"] = ips
+    with pytest.raises(saidas.DestinoRecusado):
+        await saidas.conferir_destino("https://interno.exemplo.com/x")
+
+
+async def test_nome_publico_passa(dns_publico):
+    await saidas.conferir_destino("https://gancho.exemplo.com/x")
+
+
+async def test_webhook_para_dentro_falha_sem_chamar_e_sem_nova_tentativa(saida, dns_publico):
+    dns_publico["rebind.exemplo.com"] = ["10.0.0.7"]
+    ids = [await saida("webhook", "https://rebind.exemplo.com/x"),
+           await saida("webhook", "https://169.254.169.254/latest/meta-data"),
+           await saida("webhook", "https://marketinghs-api/x")]
+    chamadas = []
+    r = await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=ids)
+    assert r["falhos"] == 3 and chamadas == []
+    for sid in ids:
+        linha = await _linha(sid)
+        assert linha["status"] == "falhou" and "recusado" in linha["erro"]
+
+
+async def test_dns_fora_do_ar_reagenda(saida, monkeypatch):
+    import socket
+
+    async def cair(host, porta):
+        raise socket.gaierror("sem DNS")
+    monkeypatch.setattr(saidas, "_resolver", cair)
+    sid = await saida("webhook", "https://gancho.exemplo.com/x")
+    r = await saidas.rodar_saidas(transporte=_transporte(200, []), somente=[sid])
+    assert r["reagendados"] == 1
+
+
+async def test_no_webhook_para_dentro_e_erro_definitivo(conexao):
+    await _exigir_027(conexao)
+    run, _ = await _jornada_e_run(conexao)
+    no = {"id": "n2", "type": "webhook",
+          "config": {"url": "https://169.254.169.254/x"}, "next": None}
+    with pytest.raises(executor.ErroDefinitivo, match="recusado"):
+        await executor.executar_no(conexao, run, no)
+
+
+async def test_rota_recusa_webhook_para_dentro_na_hora(cliente, token_admin):
+    nos = [{"id": "n1", "type": "webhook", "config": {"url": "https://10.0.0.1/x"},
+            "next": None}]
+    r = await cliente.post(
+        "/jornadas", headers={"Authorization": f"Bearer {token_admin}"},
+        json={"name": "prova-saidas ssrf", "entry_type": "event",
+              "entry_config": {"event_type": "form_submitted"},
+              "entry_node_id": "n1", "nodes": nos})
+    assert r.status_code == 400
+    assert "recusado" in r.json()["detail"]
