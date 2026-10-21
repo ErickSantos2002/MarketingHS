@@ -6,7 +6,8 @@ Plano: `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` — Tarefas
 
 ## Estado
 - [x] Fase 0 — Tarefa 1 (migration 027 + `~/marketinghs-migration-027.sh`) — **pronto para merge** (21/10)
-- [ ] Fase 1 — Tarefas 2–6 (abrem depois do merge da 027)
+- [x] Fase 0 mergeada na `main` (`b80b9de`)
+- [ ] Fase 1 — Tarefas 2–6
 
 **Para o Erick, depois do merge:** `bash ~/marketinghs-migration-027.sh`
 (aditiva; pode ir antes de qualquer deploy). Aplica duas vezes e imprime três
