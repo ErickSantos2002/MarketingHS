@@ -21,3 +21,8 @@ Plano: `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` — Tarefas
   landing manda `visitor_id` (cookie `mhs_vid`) e `consentimento` só quando a
   página tem o bloco. Erro aceito pelo front: `detail` texto, `{mensagem,
   campos}` ou a lista do 422.
+- **Para as Tarefas 3 e 5 (revisão da `prova-landing`, 21/10):** a conversão
+  da landing passa a mandar `referrer`, `gclid` e `fbclid` além das UTMs — o
+  servidor usa para o canal (sem isso, Google Ads sem UTM cai em "direto").
+  Consentimento: decidir pela **presença** do bloco na config, não pelo
+  texto (texto vazio = texto padrão), igual ao front.
