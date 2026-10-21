@@ -365,6 +365,40 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
                               {"handoff_id": pedido, "ja_na_fila": pedido is None})
         return {"tipo": "avancar", "proximo": no.get("next")}
 
+    if tipo == "notify_email":
+        # Aviso interno pela caixa de saída (app/jornadas/saidas.py). O retrato
+        # do lead é tirado AGORA, no nó — o aviso diz o que o contato era
+        # quando converteu, não quando o worker drenou.
+        from app.jornadas import saidas
+        from app.texto import html_para_texto
+
+        emails = [str(e).strip() for e in (cfg.get("emails") or []) if str(e).strip()]
+        if not emails:
+            raise ErroDefinitivo("avisar por e-mail sem destinatário")
+        lead, conversao = await saidas.dados_do_lead(conn, run["lead_id"])
+        assunto, html = saidas.montar_aviso(lead, conversao,
+                                            saidas.url_da_ficha(run["lead_id"]),
+                                            cfg.get("assunto"))
+        saida = await saidas.enfileirar(
+            conn, run, no, "aviso_email", ",".join(emails),
+            {"assunto": assunto, "html": html, "texto": html_para_texto(html)})
+        await registrar_passo(conn, run, no, "enqueued",
+                              {"saida_id": saida, "ja_na_fila": saida is None})
+        return {"tipo": "avancar", "proximo": no.get("next")}
+
+    if tipo == "webhook":
+        from app.jornadas import saidas
+
+        url = str(cfg.get("url") or "").strip()
+        if not url.lower().startswith("https://"):
+            raise ErroDefinitivo("enviar para webhook exige URL com https://")
+        lead, conversao = await saidas.dados_do_lead(conn, run["lead_id"])
+        saida = await saidas.enfileirar(conn, run, no, "webhook", url,
+                                        saidas.montar_webhook(lead, conversao, run, no))
+        await registrar_passo(conn, run, no, "enqueued",
+                              {"saida_id": saida, "ja_na_fila": saida is None})
+        return {"tipo": "avancar", "proximo": no.get("next")}
+
     raise ErroDefinitivo(f"tipo de nó desconhecido: {tipo}")
 
 

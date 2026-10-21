@@ -134,24 +134,58 @@ def cota(r: Ritmo, hoje: date, primeiro_dia: date | None, *,
 # Resend (falha, supressão e fila-morta não têm). Os status que o webhook muda
 # depois (delivered, opened...) preservam `sent_at` e o id, então contam.
 #
+# ⚠️ O aviso interno das jornadas (`journey_saidas`, tipo `aviso_email`, 027)
+# também sai pelo Resend e CONTA: um por id em `resend_email_id` (o aviso para
+# dois endereços acumula dois ids, separados por vírgula).
+#
 # ⚠️ O primeiro dia é lido à parte e guardado no processo: ele nunca muda
 # depois de existir, e `min()` sem índice em `sent_at` varre a tabela.
+_DIA = f"""(SELECT (now() AT TIME ZONE '{FUSO}')::date AS hoje,
+               date_trunc('day', now() AT TIME ZONE '{FUSO}') AT TIME ZONE '{FUSO}'
+                   AS inicio_do_dia)"""
+
 SQL_USO = f"""
+WITH d AS {_DIA},
+     e AS (SELECT cs.sent_at AS quando, 1 AS n
+             FROM campaign_sends cs, d
+            WHERE cs.resend_email_id IS NOT NULL
+              AND cs.sent_at >= least(now() - interval '1 hour', d.inicio_do_dia)
+           UNION ALL
+           SELECT s.enviado_em, cardinality(string_to_array(s.resend_email_id, ','))
+             FROM journey_saidas s, d
+            WHERE s.tipo = 'aviso_email' AND s.resend_email_id IS NOT NULL
+              AND s.enviado_em >= least(now() - interval '1 hour', d.inicio_do_dia))
+SELECT coalesce(sum(n) FILTER (WHERE quando >= now() - interval '1 hour'), 0) AS hora,
+       coalesce(sum(n) FILTER (WHERE quando >= (SELECT inicio_do_dia FROM d)), 0) AS dia,
+       (SELECT hoje FROM d)                                                 AS hoje
+  FROM e
+"""
+
+SQL_PRIMEIRO_DIA = f"""
+SELECT (least((SELECT min(sent_at) FROM campaign_sends WHERE resend_email_id IS NOT NULL),
+              (SELECT min(enviado_em) FROM journey_saidas
+                WHERE tipo = 'aviso_email' AND resend_email_id IS NOT NULL))
+        AT TIME ZONE '{FUSO}')::date
+"""
+
+# Antes da 027 (`journey_saidas` não existe): só o e-mail de campanha/fluxo.
+# Sem isto o worker inteiro pararia num banco ainda sem a migration.
+SQL_USO_SEM_SAIDAS = f"""
 SELECT count(*) FILTER (WHERE sent_at >= now() - interval '1 hour') AS hora,
        count(*) FILTER (WHERE sent_at >= inicio_do_dia)              AS dia,
        max(hoje)                                                     AS hoje
-  FROM (SELECT (now() AT TIME ZONE '{FUSO}')::date AS hoje,
-               date_trunc('day', now() AT TIME ZONE '{FUSO}') AT TIME ZONE '{FUSO}'
-                   AS inicio_do_dia) d
+  FROM {_DIA} d
   LEFT JOIN campaign_sends cs
          ON cs.resend_email_id IS NOT NULL
         AND cs.sent_at >= least(now() - interval '1 hour', d.inicio_do_dia)
 """
 
-SQL_PRIMEIRO_DIA = f"""
+SQL_PRIMEIRO_DIA_SEM_SAIDAS = f"""
 SELECT (min(sent_at) AT TIME ZONE '{FUSO}')::date
   FROM campaign_sends WHERE resend_email_id IS NOT NULL
 """
+
+_tem_saidas = False
 
 _primeiro_dia: date | None = None
 
@@ -165,10 +199,16 @@ class Uso:
 
 
 async def medir(conn) -> Uso:
-    global _primeiro_dia
-    linha = await conn.fetchrow(SQL_USO)
+    global _primeiro_dia, _tem_saidas
+    if not _tem_saidas:
+        # Conferido até dar certo uma vez: a 027 aplicada com o worker no ar
+        # passa a contar os avisos sem reiniciar.
+        _tem_saidas = bool(await conn.fetchval(
+            "SELECT to_regclass('public.journey_saidas') IS NOT NULL"))
+    linha = await conn.fetchrow(SQL_USO if _tem_saidas else SQL_USO_SEM_SAIDAS)
     if _primeiro_dia is None:
-        _primeiro_dia = await conn.fetchval(SQL_PRIMEIRO_DIA)
+        _primeiro_dia = await conn.fetchval(
+            SQL_PRIMEIRO_DIA if _tem_saidas else SQL_PRIMEIRO_DIA_SEM_SAIDAS)
     return Uso(hoje=linha["hoje"], enviados_hora=int(linha["hora"] or 0),
                enviados_dia=int(linha["dia"] or 0), primeiro_dia=_primeiro_dia)
 
