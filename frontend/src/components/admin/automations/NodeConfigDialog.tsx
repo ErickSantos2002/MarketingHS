@@ -10,7 +10,7 @@ import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSegments } from '@/hooks/useSegments';
 import { useLeadStatuses } from '@/hooks/useLeadStatuses';
-import { NODE_LABELS, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
+import { NODE_LABELS, EVENT_OPTIONS, isBranch, lerListaDeEmails, webhookValido, type JourneyNodeType } from '@/lib/journeys';
 import { GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 
 // Mesmo vocabulário field/operator/value que build_segment_condition
@@ -127,6 +127,11 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   // change_status
   const [statusName, setStatusName] = useState('');
 
+  // notify_email (aviso interno) e webhook
+  const [notifyEmails, setNotifyEmails] = useState('');
+  const [notifyAssunto, setNotifyAssunto] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
+
   // Etiquetas vinculadas aos contatos (tabela `tags`, ligada por lead_tags) —
   // as mesmas do filtro ETIQUETA de /contacts e do campo Etiqueta dos segmentos.
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
@@ -151,6 +156,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
     if (type && isBranch(type)) setCondType(type);
     setTagName(cfg.tag_name || '');
     setStatusName(cfg.status || '');
+    setNotifyEmails(Array.isArray(cfg.emails) ? cfg.emails.join('\n') : '');
+    setNotifyAssunto(cfg.assunto || '');
+    setWebhookUrl(cfg.url || '');
   }, [open, type, initialConfig]);
 
   useEffect(() => {
@@ -176,6 +184,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   };
 
   const normalizedTag = tagName.replace(/^\/+/, '').trim().toLowerCase();
+  const avisoLido = lerListaDeEmails(notifyEmails);
 
   const isValid = (): boolean => {
     switch (effType) {
@@ -191,6 +200,10 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       // Sem configuração: o card entra na etapa de entrada do funil
       // configurado em Configurações → GrowthHS (decisão 7 do plano).
       case 'handoff_growthhs': return true;
+      // Endereço que não parece e-mail trava o salvar: some em silêncio, o
+      // aviso não chega a quem devia e ninguém percebe.
+      case 'notify_email': return avisoLido.validos.length > 0 && avisoLido.invalidos.length === 0;
+      case 'webhook': return webhookValido(webhookUrl);
       default: return false;
     }
   };
@@ -230,6 +243,15 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
         break;
       case 'handoff_growthhs':
         config = {};
+        break;
+      case 'notify_email':
+        config = {
+          emails: avisoLido.validos,
+          ...(notifyAssunto.trim() ? { assunto: notifyAssunto.trim() } : {}),
+        };
+        break;
+      case 'webhook':
+        config = { url: webhookUrl.trim() };
         break;
     }
     // Passa o subtipo real quando é uma Condição; o chamador persiste esse type.
@@ -540,6 +562,56 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
               <p className="text-xs text-[--on-tint-warning]">
                 {GROWTHHS_NAO_CONFIGURADO}
               </p>
+            </div>
+          )}
+
+          {type === 'notify_email' && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="aviso-emails">Avisar estes e-mails</Label>
+                <Textarea id="aviso-emails" value={notifyEmails} onChange={(e) => setNotifyEmails(e.target.value)}
+                  placeholder={'comercial@healthsafety.com.br'} className="min-h-[64px] font-mono text-xs" />
+                <p className="text-xs text-muted-foreground">
+                  Um por linha ou separados por vírgula. O aviso leva nome, e-mail, celular, empresa, página ou
+                  formulário, mensagem e o link para a ficha do contato.
+                </p>
+                {avisoLido.invalidos.length > 0 && (
+                  <p className="text-xs text-[--on-tint-danger]" role="alert">
+                    Não parece e-mail: {avisoLido.invalidos.join(', ')}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="aviso-assunto">Assunto (opcional)</Label>
+                <Input id="aviso-assunto" value={notifyAssunto} onChange={(e) => setNotifyAssunto(e.target.value)}
+                  placeholder="[MarketingHS] Novo lead: nome — empresa" />
+              </div>
+              <div className="flex gap-2 rounded-md border border-border/40 bg-muted/20 p-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  É um aviso interno: não passa por supressão nem descadastro do contato, mas conta no teto de
+                  envio do dia. Sai em segundo plano; o fluxo segue sem esperar.
+                </p>
+              </div>
+            </>
+          )}
+
+          {type === 'webhook' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="webhook-url">URL do webhook</Label>
+              <Input id="webhook-url" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://n8n.exemplo.com/webhook/novo-lead" className="font-mono text-xs"
+                aria-invalid={!!webhookUrl.trim() && !webhookValido(webhookUrl)} />
+              {webhookUrl.trim() && !webhookValido(webhookUrl) ? (
+                <p className="text-xs text-[--on-tint-danger]" role="alert">
+                  A URL precisa começar por https:// — endereço sem criptografia não é aceito.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Recebe um POST JSON com o contato, a conversão e o fluxo. Falha temporária é tentada de novo
+                  (até 5 vezes); erro 4xx desiste na hora.
+                </p>
+              )}
             </div>
           )}
         </div>

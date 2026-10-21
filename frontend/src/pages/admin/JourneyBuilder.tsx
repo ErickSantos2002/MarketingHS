@@ -20,20 +20,23 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus, Play, Pause, Archive, Save, GitBranch, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Play, Pause, Archive, Save, GitBranch, AlertTriangle, FlaskConical } from 'lucide-react';
 import { useJourney } from '@/hooks/useJourneys';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
 import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 import { useSegments } from '@/hooks/useSegments';
 import { useTemplates } from '@/hooks/useTemplates';
 import {
-  NODE_LABELS, NODE_NAO_LIGADO, STATUS_LABELS, EVENT_OPTIONS, EVENTO_COM_PAGINA, entryEventConfig,
-  isBranch, newNodeId, readEntrySegments,
+  NODE_LABELS, NODE_NAO_LIGADO, STATUS_LABELS, EVENT_OPTIONS, EVENTO_COM_PAGINA, buildEntryConfig,
+  isBranch, newNodeId, readEntrySegments, readEntryFormIds, lerListaDeEmails,
   type Journey, type JourneyNode, type JourneyNodeType,
 } from '@/lib/journeys';
 import { JourneyNodeCard } from '@/components/admin/automations/JourneyNodeCard';
 import { NodeConfigDialog } from '@/components/admin/automations/NodeConfigDialog';
 import { EntryPageSelect } from '@/components/admin/automations/EntryPageSelect';
+import {
+  ModoTesteCampo, SeloModoTeste, EntryFormIdsCampo, lerFormIds,
+} from '@/components/admin/automations/ModoTesteCampo';
 import { EmailTemplatePreviewDialog } from '@/components/admin/campaigns/EmailTemplatePreviewDialog';
 
 type BranchKey = 'next' | 'next_false' | 'next_timeout';
@@ -50,6 +53,8 @@ const ADD_MENU: { label: string; type: JourneyNodeType }[] = [
   { label: NODE_LABELS.remove_tag, type: 'remove_tag' },
   { label: NODE_LABELS.change_status, type: 'change_status' },
   { label: NODE_LABELS.handoff_growthhs, type: 'handoff_growthhs' },
+  { label: NODE_LABELS.notify_email, type: 'notify_email' },
+  { label: NODE_LABELS.webhook, type: 'webhook' },
 ];
 
 function minutesToLabel(m: number): string {
@@ -78,6 +83,13 @@ export default function JourneyBuilder() {
   const [entryExcludedSegmentIds, setEntryExcludedSegmentIds] = useState<string[]>([]);
   const [entryEventType, setEntryEventType] = useState('');
   const [entryPageSlug, setEntryPageSlug] = useState('');
+  const [entryFormIds, setEntryFormIds] = useState('');
+  // Modo teste: o texto digitado; a lista sai de lerListaDeEmails na hora de
+  // salvar. `modoTesteSalvo` (abaixo) é a lista como está no banco — é com
+  // ela que se decide se o admin está DESLIGANDO o modo teste.
+  const [modoTeste, setModoTeste] = useState('');
+  const [showModoTesteDialog, setShowModoTesteDialog] = useState(false);
+  const [confirmDesligarTeste, setConfirmDesligarTeste] = useState(false);
   const [reentry, setReentry] = useState<'once' | 'allowed'>('once');
   // C1: exibido em dias na UI, convertido para reentry_cooldown_hours no PATCH.
   const [reentryCooldownDays, setReentryCooldownDays] = useState(7);
@@ -108,6 +120,8 @@ export default function JourneyBuilder() {
     setEntryExcludedSegmentIds(journey.entry_type === 'segment' ? entrySegs.exclude : []);
     setEntryEventType(journey.entry_type === 'event' ? (journey.entry_config?.event_type || '') : '');
     setEntryPageSlug(journey.entry_type === 'event' ? (journey.entry_config?.page_slug || '') : '');
+    setEntryFormIds(journey.entry_type === 'event' ? readEntryFormIds(journey.entry_config).join(', ') : '');
+    setModoTeste((journey.allowed_emails ?? []).join('\n'));
     setReentry(journey.reentry);
     setReentryCooldownDays(Math.max(1, Math.round((journey.reentry_cooldown_hours ?? 168) / 24)));
     setOriginalNodeIds(new Set((journey.nodes || []).map((n) => n.id)));
@@ -178,6 +192,12 @@ export default function JourneyBuilder() {
         return `Status → ${node.config.status}`;
       case 'handoff_growthhs':
         return 'Etapa de entrada do funil configurado';
+      case 'notify_email': {
+        const emails: string[] = Array.isArray(node.config.emails) ? node.config.emails : [];
+        return `Para ${emails.join(', ') || '(ninguém)'}`;
+      }
+      case 'webhook':
+        return `POST ${node.config.url || '(sem URL)'}`;
       default:
         return '';
     }
@@ -285,15 +305,22 @@ export default function JourneyBuilder() {
     }
   };
 
+  const modoTesteSalvo = journey?.allowed_emails ?? null;
+  const listaTeste = lerListaDeEmails(modoTeste);
+
   const doSaveGraph = async () => {
     setSaving(true);
+    // Lista vazia só vira "sem modo teste" quando o admin a esvaziou de
+    // propósito — e aí passou pela confirmação de handleSaveClick. Endereço
+    // inválido bloqueia o salvar antes de chegar aqui.
     const ok = await savePatch({
+      allowed_emails: listaTeste.validos.length ? listaTeste.validos : (modoTesteSalvo?.length ? [] : null),
       nodes,
       entry_node_id: entryNodeId,
       entry_type: entryType,
       entry_config: entryType === 'segment'
         ? { segment_ids: entrySegmentIds, excluded_segment_ids: entryExcludedSegmentIds }
-        : entryEventConfig(entryEventType, entryPageSlug),
+        : buildEntryConfig(entryEventType, entryPageSlug, lerFormIds(entryFormIds)),
       reentry,
       reentry_cooldown_hours: Math.max(1, Math.round(reentryCooldownDays * 24)),
     });
@@ -301,12 +328,21 @@ export default function JourneyBuilder() {
     if (ok) {
       toast.success('Fluxo salvo');
       setConfirmActiveEdit(false);
+      setConfirmDesligarTeste(false);
       setDirty(false);
       await refetch();
     }
   };
 
-  const handleSaveClick = () => {
+  const handleSaveClick = (jaConfirmouTeste = false) => {
+    if (listaTeste.invalidos.length > 0) {
+      toast.error(`Modo teste: "${listaTeste.invalidos[0]}" não parece e-mail. Corrija antes de salvar.`);
+      return;
+    }
+    if (!jaConfirmouTeste && (modoTesteSalvo?.length ?? 0) > 0 && listaTeste.validos.length === 0) {
+      setConfirmDesligarTeste(true);
+      return;
+    }
     const currentIds = new Set(nodes.map((n) => n.id));
     const deletedSomething = [...originalNodeIds].some((oid) => !currentIds.has(oid));
     if (journey?.status === 'active' && deletedSomething) {
@@ -494,13 +530,14 @@ export default function JourneyBuilder() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold">{journey.name}</h1>
               <Badge className="text-xs">{STATUS_LABELS[journey.status]}</Badge>
+              <SeloModoTeste emails={modoTesteSalvo} />
             </div>
             {journey.description && <p className="text-sm text-muted-foreground">{journey.description}</p>}
           </div>
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleSaveClick} disabled={saving}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleSaveClick()} disabled={saving}>
             <Save className="h-3.5 w-3.5" /> Salvar
           </Button>
           {journey.status !== 'active' && journey.status !== 'archived' && (
@@ -529,13 +566,36 @@ export default function JourneyBuilder() {
             <p className="text-sm font-medium truncate">
               {entryType === 'segment'
                 ? `Segmentos: ${entrySegmentIds.length === 0 ? '(selecione)' : entrySegmentIds.length}${entryExcludedSegmentIds.length > 0 ? ` — exceto ${entryExcludedSegmentIds.length}` : ''}`
-                : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}${entryEventType === EVENTO_COM_PAGINA && entryPageSlug ? ` — página ${entryPageSlug}` : ''}`}
+                : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}${entryEventType === EVENTO_COM_PAGINA && entryPageSlug ? ` — página ${entryPageSlug}` : ''}${entryEventType === EVENTO_COM_PAGINA && lerFormIds(entryFormIds).length ? `${entryPageSlug ? ' ou' : ' —'} formulário ${lerFormIds(entryFormIds).join(', ')}` : ''}`}
             </p>
             <p className="text-xs text-muted-foreground">
               Reentrada: {reentry === 'once' ? 'uma vez por contato' : `pode entrar de novo (mín. ${reentryCooldownDays}d)`}
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => setShowEntryDialog(true)}>Editar</Button>
+        </CardContent>
+      </Card>
+
+      {/* Modo teste -- a lista de e-mails para quem os passos com efeito agem */}
+      <Card className="max-w-md mx-auto border-border/40">
+        <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <FlaskConical className="h-3 w-3" /> Modo teste
+            </p>
+            <p className="text-sm font-medium truncate">
+              {listaTeste.validos.length
+                ? `Só envia para ${listaTeste.validos.length} e-mail${listaTeste.validos.length === 1 ? '' : 's'}`
+                : 'Desligado — envia para todo contato que entrar'}
+            </p>
+            {listaTeste.validos.length > 0 && (
+              <p className="text-xs text-muted-foreground truncate">{listaTeste.validos.join(', ')}</p>
+            )}
+            {listaTeste.invalidos.length > 0 && (
+              <p className="text-xs text-[--on-tint-danger] truncate">Inválido: {listaTeste.invalidos.join(', ')}</p>
+            )}
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setShowModoTesteDialog(true)}>Editar</Button>
         </CardContent>
       </Card>
 
@@ -581,7 +641,7 @@ export default function JourneyBuilder() {
 
       {/* Editar entrada */}
       <Dialog open={showEntryDialog} onOpenChange={setShowEntryDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent aria-describedby={undefined} className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Entrada do fluxo</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <Select value={entryType} onValueChange={(v) => { setEntryType(v as 'segment' | 'event'); setDirty(true); }}>
@@ -615,7 +675,10 @@ export default function JourneyBuilder() {
                   </SelectContent>
                 </Select>
                 {entryEventType === EVENTO_COM_PAGINA && (
-                  <EntryPageSelect value={entryPageSlug} onChange={(v) => { setEntryPageSlug(v); setDirty(true); }} />
+                  <>
+                    <EntryPageSelect value={entryPageSlug} onChange={(v) => { setEntryPageSlug(v); setDirty(true); }} />
+                    <EntryFormIdsCampo value={entryFormIds} onChange={(v) => { setEntryFormIds(v); setDirty(true); }} />
+                  </>
                 )}
               </div>
             )}
@@ -663,6 +726,38 @@ export default function JourneyBuilder() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Editar modo teste */}
+      <Dialog open={showModoTesteDialog} onOpenChange={setShowModoTesteDialog}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader><DialogTitle>Modo teste</DialogTitle></DialogHeader>
+          <ModoTesteCampo value={modoTeste} onChange={(v) => { setModoTeste(v); setDirty(true); }} />
+          <DialogFooter>
+            <Button onClick={() => setShowModoTesteDialog(false)}>Concluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Desligar o modo teste é o momento em que o fluxo passa a falar com a
+          base de verdade -- nunca por engano. */}
+      <AlertDialog open={confirmDesligarTeste} onOpenChange={(o) => !o && !saving && setConfirmDesligarTeste(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desligar o modo teste?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A lista de e-mails ficou vazia. Ao salvar, este fluxo passa a enviar e-mail, aviso, webhook e
+              GrowthHS para <strong>todo contato que entrar</strong>, não só para os {modoTesteSalvo?.length ?? 0} da
+              lista de teste.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={saving} onClick={(e) => { e.preventDefault(); setConfirmDesligarTeste(false); handleSaveClick(true); }}>
+              Desligar e salvar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Aviso: excluir este passo descarta o ramo "Não"/timeout que só existia
           por causa dele -- exatamente a regra descrita no plano da Fase 6. */}

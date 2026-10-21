@@ -17,7 +17,11 @@ export type JourneyNodeType =
   | 'apply_tag'
   | 'remove_tag'
   | 'change_status'
-  | 'handoff_growthhs';
+  | 'handoff_growthhs'
+  // Prova do RD (migration 027): aviso interno por e-mail e POST para uma URL.
+  // Os dois saem pela caixa de saída `journey_saidas`, drenada pelo worker.
+  | 'notify_email'
+  | 'webhook';
 
 export interface JourneyNode {
   id: string;
@@ -43,6 +47,11 @@ export interface Journey {
   // emails para sempre -- ver journey_enroll_segment/_event (20260714101500).
   reentry_cooldown_hours: number;
   entry_node_id: string | null;
+  // Modo teste (prova do RD): com lista, nó com efeito (e-mail, aviso,
+  // webhook, GrowthHS) só age para contato cujo e-mail está nela; o resto
+  // passa como "pulado". `null` = sem modo teste. Pode faltar enquanto o
+  // backend não devolver a coluna — ler sempre com `?? null`.
+  allowed_emails?: string[] | null;
   nodes: JourneyNode[];
   created_at: string;
   updated_at: string;
@@ -65,6 +74,8 @@ export const NODE_LABELS: Record<JourneyNodeType, string> = {
   remove_tag: 'Remover tag',
   change_status: 'Mudar status',
   handoff_growthhs: 'Enviar ao GrowthHS',
+  notify_email: 'Avisar por e-mail',
+  webhook: 'Enviar para webhook',
 };
 
 // Tipos de nó cujo consumidor AINDA NÃO EXISTE neste produto. A tela não pode
@@ -112,10 +123,57 @@ export const EVENT_OPTIONS: { value: string; label: string }[] = [
 // Sem `page_slug` no entry_config = qualquer página (o comportamento de antes).
 export const EVENTO_COM_PAGINA = 'form_submitted';
 
-export function entryEventConfig(eventType: string, pageSlug: string): Record<string, any> {
-  return eventType === EVENTO_COM_PAGINA && pageSlug
-    ? { event_type: eventType, page_slug: pageSlug }
-    : { event_type: eventType };
+/**
+ * `entry_config` de um fluxo por evento. Só o `form_submitted` filtra:
+ * `page_slug` (a página da casa) e `form_ids` (formulários de site de fora,
+ * migration 027) valem em OU — entra quem converter na página OU em qualquer
+ * um dos formulários. Sem nenhum dos dois = qualquer origem.
+ */
+export function buildEntryConfig(eventType: string, pageSlug?: string, formIds?: string[]): Record<string, any> {
+  const cfg: Record<string, any> = { event_type: eventType };
+  if (eventType !== EVENTO_COM_PAGINA) return cfg;
+  if (pageSlug) cfg.page_slug = pageSlug;
+  const ids = (formIds ?? []).map((f) => f.trim()).filter(Boolean);
+  if (ids.length) cfg.form_ids = [...new Set(ids)];
+  return cfg;
+}
+
+/** Os `form_ids` gravados, aceitando só lista de texto (como o banco). */
+export function readEntryFormIds(cfg: any): string[] {
+  return Array.isArray(cfg?.form_ids) ? cfg.form_ids.filter((f: unknown) => typeof f === 'string') : [];
+}
+
+// Mesmo critério de formato do servidor (é ele quem decide; aqui é só para
+// avisar antes de salvar).
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Lista de e-mails digitada (vírgula, ponto e vírgula, espaço ou linha):
+ * aparada, minúscula, sem repetidos. O que não parece e-mail volta em
+ * `invalidos` — nunca é descartado em silêncio: lista do modo teste que perde
+ * um endereço por erro de digitação ainda trava, mas a que vira vazia por erro
+ * de leitura desliga a trava.
+ */
+export function lerListaDeEmails(texto: string): { validos: string[]; invalidos: string[] } {
+  const validos: string[] = [];
+  const invalidos: string[] = [];
+  for (const parte of texto.split(/[\s,;]+/)) {
+    const e = parte.trim().toLowerCase();
+    if (!e) continue;
+    if (!EMAIL.test(e)) { if (!invalidos.includes(parte.trim())) invalidos.push(parte.trim()); continue; }
+    if (!validos.includes(e)) validos.push(e);
+  }
+  return { validos, invalidos };
+}
+
+/** O webhook só aceita `https://` (o banco recusa o resto). */
+export function webhookValido(url: string): boolean {
+  try {
+    const u = new URL(url.trim());
+    return u.protocol === 'https:' && !!u.hostname;
+  } catch {
+    return false;
+  }
 }
 
 export function newNodeId(): string {
