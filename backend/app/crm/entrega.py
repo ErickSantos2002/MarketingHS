@@ -62,7 +62,27 @@ MOTIVO_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — "
 _COLUNAS_LEAD = """id::text AS id, nome, email, whatsapp, phone_normalized, empresa,
     cargo, faturamento, funcionarios, desafios, indicacao, utm_source, utm_medium,
     utm_campaign, utm_term, utm_content, lead_score, etiqueta,
-    dnia_id::text AS dnia_id, deleted_at"""
+    dnia_id::text AS dnia_id, deleted_at, campos_extras"""
+
+
+async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
+    """(última conversão, último consentimento) do lead, para o card (prova
+    do RD). `converted_at`/`criado_em` em ISO 8601, como o resto do corpo."""
+    conversao = await conn.fetchrow(
+        """SELECT lc.page_slug, lc.form_id, s.nome AS site_nome, lc.page_url,
+                  to_char(lc.converted_at AT TIME ZONE 'UTC',
+                          'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS converted_at, lc.canal
+             FROM lead_conversions lc LEFT JOIN sites s ON s.id = lc.site_id
+            WHERE lc.lead_id = $1::uuid
+            ORDER BY lc.converted_at DESC LIMIT 1""", lead_id)
+    consentimento = await conn.fetchrow(
+        """SELECT base_legal, versao, provisoria,
+                  to_char(criado_em AT TIME ZONE 'UTC',
+                          'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS criado_em
+             FROM lead_consents WHERE lead_id = $1::uuid
+            ORDER BY criado_em DESC LIMIT 1""", lead_id)
+    return (dict(conversao) if conversao else None,
+            dict(consentimento) if consentimento else None)
 
 
 def espera_transitoria(tentativas: int) -> timedelta:
@@ -182,6 +202,8 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, transporte) -> str:
             f"SELECT {_COLUNAS_LEAD} FROM leads WHERE id = $1::uuid", pedido["lead_id"])
         lead = dict(lead) if lead else None
         anterior = await _ja_entregue(conn, lead) if lead else None
+        conversao, consentimento = (await origem_do_card(conn, pedido["lead_id"])
+                                    if lead else (None, None))
 
     if lead is None or lead["deleted_at"] is not None:
         await _falhar(pedido, None, "O contato foi excluído antes da entrega.")
@@ -215,8 +237,9 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, transporte) -> str:
         return "ja_entregues"
 
     try:
-        resposta = await growthhs.criar_card(cfg, growthhs.montar_card(lead, cfg.board_id),
-                                             transporte=transporte)
+        corpo = growthhs.montar_card(lead, cfg.board_id, conversao=conversao,
+                                     consentimento=consentimento)
+        resposta = await growthhs.criar_card(cfg, corpo, transporte=transporte)
     except growthhs.ErroDefinitivo as erro:
         if erro.status in STATUS_DE_CONFIGURACAO:
             # Revisão final do 8D (I3): configuração, não o lead — pausa.

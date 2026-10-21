@@ -59,15 +59,26 @@ async def _id_da_tag(conn, nome: str) -> tuple[str, bool]:
     return await conn.fetchval("SELECT id::text FROM tags WHERE name = $1", nome), False
 
 
-async def _lead_por_identificador(conn, dnia_id: UUID | None, email: str | None,
-                                  phone: str | None):
+async def _lead_por_identificador(conn, dnia_id: UUID | str | None, email: str | None,
+                                  phone: str | None, lead_id: str | None = None):
     """A ordem da origem: dnia_id, depois e-mail, depois telefone.
 
     Diferente da origem, que fazia `limit(1)` sem ordem: pelo `dnia_id` vence o
     lead CANÔNICO da identidade (`dndash_lead_id`, lote 5C), e nos outros o
     mais recente — o mesmo critério de `_resolver_lead` em `publico.py`.
+
+    `lead_id` (prova do RD: o `external_id` do card no GrowthHS) vem antes de
+    todos — é o exato. Texto que não é uuid não acha nada (404 de quem chama,
+    nunca 500 de cast).
     """
     colunas = "id::text AS id, dnia_id::text AS dnia_id, status"
+    if lead_id:
+        try:
+            UUID(str(lead_id))
+        except ValueError:
+            return None
+        return await conn.fetchrow(
+            f"SELECT {colunas} FROM leads WHERE id = $1::uuid", str(lead_id))
     if dnia_id:
         canonico = await conn.fetchrow(
             f"""SELECT {colunas} FROM leads WHERE id =
@@ -82,6 +93,8 @@ async def _lead_por_identificador(conn, dnia_id: UUID | None, email: str | None,
         return await conn.fetchrow(
             f"SELECT {colunas} FROM leads WHERE lower(email) = lower($1) "
             "ORDER BY created_at DESC LIMIT 1", email.strip())
+    if not phone:
+        return None
     normalizado = await conn.fetchval("SELECT normalize_phone_br($1)", phone)
     return await conn.fetchrow(
         f"""SELECT {colunas} FROM leads
@@ -234,7 +247,12 @@ async def atualizar_contato(
 
 
 class StatusApiIn(BaseModel):
-    dnia_id: UUID
+    # Um dos três é obrigatório (400). `lead_id` e `email` desde a prova do RD
+    # (21/10): o GrowthHS conhece o lead pelo `external_id` do card, não pelo
+    # `dnia_id`.
+    dnia_id: UUID | None = None
+    lead_id: str | None = Field(default=None, max_length=64)
+    email: str | None = Field(default=None, max_length=320)
     status: str = Field(min_length=1, max_length=60)
 
 
@@ -254,6 +272,8 @@ async def atualizar_status(dados: StatusApiIn,
     if not dados.status.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             'Campo "status" não pode ser vazio.')
+    if dados.dnia_id is None:
+        return await _status_por_lead(dados)
     dnia_id = str(dados.dnia_id)
 
     async with sessao(role="service_role") as conn:
@@ -288,6 +308,31 @@ async def atualizar_status(dados: StatusApiIn,
             "status_anterior": anterior, "status_atual": novo,
             # Sempre falso: status não é criado por API (decisão do lote 1D).
             # O campo fica porque integrador pode estar lendo.
+            "status_created": False}
+
+
+async def _status_por_lead(dados: StatusApiIn) -> dict:
+    """O mesmo `atualizar_status`, achando o lead por `lead_id` ou e-mail (o
+    caminho do `dnia_id` fica como sempre foi, acima). Aqui o status pode
+    voltar — é a rota de "pôr neste status"; a regra de só avançar é da volta
+    automática do CRM (`app/crm/retorno.py`)."""
+    if not (dados.lead_id or (dados.email or "").strip()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Informe dnia_id, lead_id ou email.")
+    async with sessao(role="service_role") as conn:
+        novo = await _resolver_status(conn, dados.status)
+        lead = await _lead_por_identificador(conn, None, dados.email, None,
+                                             lead_id=dados.lead_id)
+        if lead is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
+        anterior = lead["status"]
+        await conn.execute("UPDATE leads SET status = $2 WHERE id = $1::uuid",
+                           lead["id"], novo)
+        await _registrar_mudanca(conn, lead["id"], anterior, novo,
+                                 origem="api", descricao=DESCRICAO_API,
+                                 metadata_extra={"source": "api"})
+    return {"success": True, "dnia_id": lead["dnia_id"], "lead_id": lead["id"],
+            "status_anterior": anterior, "status_atual": novo,
             "status_created": False}
 
 

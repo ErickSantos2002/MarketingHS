@@ -35,6 +35,7 @@ from app.routers.paginas import router as paginas_router
 from app.routers.painel import router as painel_router
 from app.routers.publico import router as publico_router
 from app.routers.rastreio import router as rastreio_router
+from app.routers.receptor_growthhs import router as receptor_growthhs_router
 from app.routers.ritmo_envio import router as ritmo_envio_router
 from app.routers.webhook import router as webhook_router
 from app.routers.segmentos import router as segmentos_router
@@ -188,6 +189,8 @@ app.include_router(ab_publico_router)
 app.include_router(publico_router)
 app.include_router(rastreio_router)
 app.include_router(sites_router)
+# Sempre incluído; 404 em tudo enquanto `PROVA_RECEPTOR_TESTE` for falso.
+app.include_router(receptor_growthhs_router)
 app.include_router(webhook_router)
 app.include_router(landing_router)
 
