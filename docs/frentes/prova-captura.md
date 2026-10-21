@@ -9,3 +9,8 @@ Plano: `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` — Tarefas
 - [ ] Fase 1 — Tarefas 2–6 (abrem depois do merge da 027)
 
 ## Perguntas / fora do território
+- **Para a Tarefa 3 (coordenadora, 21/10):** ao salvar/servir `pages.config`,
+  recusar `consentimento.link`, `imagem_url` e `redirect_url` que não sejam
+  `http(s)` (ou caminho relativo `/publico/...`) — revisão de segurança achou
+  `javascript:` possível no href do consentimento. O front já filtra (frente
+  `prova-landing`); o servidor é a segunda linha.
