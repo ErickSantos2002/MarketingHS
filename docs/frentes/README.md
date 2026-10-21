@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 22/10:** `prova-telas` ✅ mergeada (T13–17 + `ErroApi` legível + tipo `allowed_emails`; revisão: pode mergear; portão depois do merge: 55 testes node, `tsc` 0, guarda 0, builds ok). ⚠️ **Não fazer deploy do `marketinghs-sistema` antes de `prova-jornadas` e `prova-captura-f1` entrarem na `main`:** sem elas o backend descarta `allowed_emails` (fluxo salvo sem modo teste, em silêncio) e a `key` do segmento por campo personalizado. Item para depois: login perde `?contato=` (`ProtectedRoute.tsx:28`).
+
 **Estado em 21/10 (fim da noite):** `prova-captura` Fase 0 ✅ mergeada (migration 027; funções recriadas conferidas contra 026/006/001 — só as mudanças do plano; suíte 530 passed / 18 skipped, leads 2.107 antes e depois). ✅ **027 aplicada em produção pelo Erick (21/10, três provas `true`).** Próximo: Fase 1 — `prova-captura` (T2–6), `prova-jornadas` (T7–9), `prova-telas` (T13–17).
 
 **Estado em 21/10 (noite):** `prova-landing` ✅ mergeada (Tarefas 10–12 + 2 correções de segurança + 5 da revisão; portão depois do merge: 43 testes node, `tsc` 0, guarda 0, builds ok, `dist/` sem `prova/`). `prova-captura` na Fase 0.
