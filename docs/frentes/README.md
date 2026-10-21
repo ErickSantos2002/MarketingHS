@@ -13,6 +13,15 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 21/10 — prova de substituição do RD:** plano em
+`docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` (spec
+`docs/superpowers/specs/2026-10-21-prova-substituir-rd-design.md`). A tabela
+de frentes e territórios **é a do plano** (seção "Frentes"): `prova-captura`
+(n 17, dona da migration 027), `prova-jornadas` (18), `prova-landing` (19),
+`prova-telas` (14). Abertas agora: `prova-captura` (Fase 0, Tarefa 1) e
+`prova-landing` (Tarefas 10–12, não depende da 027). `prova-jornadas` e
+`prova-telas` abrem depois do merge da 027.
+
 **Estado em 07/10 (noite, depois):** `conferencia-telas` ✅ mergeada; conserto do foco da ficha (CT-1) ✅ mergeado; nenhuma frente aberta.
 
 **Estado em 07/10 (noite):** aberta `conferencia-telas` (URL do webhook do Resend na tela, Contatos no celular, `conferir-telas.mjs` abrindo painéis de leitura). Conta do Claude recriada, permanente.
