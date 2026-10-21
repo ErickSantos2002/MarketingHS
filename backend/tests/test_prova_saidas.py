@@ -799,3 +799,64 @@ async def test_contato_na_lista_sai_normal(saida, jornada_real):
     chamadas = []
     r = await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
     assert r["enviados"] == 1 and len(chamadas) == 1
+
+
+# ── Revisão 5: o webhook não lê a resposta e tem prazo total ─────────────────
+
+class _CorpoVigiado(httpx.AsyncByteStream):
+    def __init__(self):
+        self.lido = False
+        self.fechado = False
+
+    async def __aiter__(self):
+        self.lido = True
+        for _ in range(1000):
+            yield b"x" * 65536
+
+    async def aclose(self):
+        self.fechado = True
+
+
+async def test_webhook_nao_le_o_corpo_da_resposta(saida):
+    corpo = _CorpoVigiado()
+    sid = await saida("webhook", "https://gancho.exemplo.com/x")
+    transporte = httpx.MockTransport(lambda pedido: httpx.Response(200, stream=corpo))
+    r = await saidas.rodar_saidas(transporte=transporte, somente=[sid])
+    assert r["enviados"] == 1
+    assert corpo.lido is False and corpo.fechado is True
+
+
+async def test_webhook_lento_estoura_o_prazo_total_e_reagenda(saida, monkeypatch):
+    import asyncio
+    monkeypatch.setattr(saidas, "PRAZO_TOTAL_WEBHOOK", 0.2)
+
+    async def lento(pedido):
+        await asyncio.sleep(5)
+        return httpx.Response(200)
+    sid = await saida("webhook", "https://gancho.exemplo.com/x")
+    r = await saidas.rodar_saidas(transporte=httpx.MockTransport(lento), somente=[sid])
+    assert r["reagendados"] == 1
+    assert "prazo" in (await _linha(sid))["erro"]
+
+
+def test_prazo_total_do_webhook_e_15s():
+    assert saidas.PRAZO_TOTAL_WEBHOOK == 15
+
+
+async def test_avisos_drenam_antes_dos_webhooks(saida, resend_falso, monkeypatch):
+    ordem = []
+    aviso, webhook = saidas._mandar_aviso, saidas._mandar_webhook
+
+    async def aviso_espiao(*a, **k):
+        ordem.append("aviso")
+        return await aviso(*a, **k)
+
+    async def webhook_espiao(*a, **k):
+        ordem.append("webhook")
+        return await webhook(*a, **k)
+    monkeypatch.setattr(saidas, "_mandar_aviso", aviso_espiao)
+    monkeypatch.setattr(saidas, "_mandar_webhook", webhook_espiao)
+    ids = [await saida("webhook", "https://gancho.exemplo.com/x"),
+           await saida("aviso_email", "comercial@exemplo.invalid")]
+    await saidas.rodar_saidas(transporte=_transporte(200, []), somente=ids)
+    assert ordem == ["aviso", "webhook"]

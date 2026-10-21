@@ -45,6 +45,10 @@ ESPERA_BASE = timedelta(minutes=1)
 ESPERA_MAXIMA = timedelta(minutes=60)
 PRAZO_DA_REIVINDICACAO = timedelta(minutes=5)
 TIMEOUT_WEBHOOK = 10
+# O prazo da chamada INTEIRA (conectar, mandar, receber o status). O timeout
+# do httpx vale por operação; um servidor que pinga um byte a cada 9 s o
+# atravessaria para sempre.
+PRAZO_TOTAL_WEBHOOK = 15
 LOTE = 20
 # A mesma ordem de prioridade de `worker._remetente` (gravado vence o
 # ambiente). Duplicado de propósito: importar o worker daqui seria circular.
@@ -400,26 +404,35 @@ async def _mandar_webhook(s: dict, transporte) -> str:
         return "falhos"
     except OSError as e:  # DNS fora do ar: tenta de novo depois
         return await _reagendar(s, f"DNS: {e}")
-    try:
+    no_ip, cabecalho_host, sni = _url_no_ip(url, ip)
+
+    async def postar() -> int:
         async with httpx.AsyncClient(timeout=TIMEOUT_WEBHOOK, transport=transporte,
                                      follow_redirects=False) as cliente:
             # ⚠️ Conecta no IP conferido, nunca no nome: o httpx resolveria
             # de novo, e um DNS que troca de resposta (rebinding) levaria o
             # pedido para dentro depois da conferência.
-            no_ip, cabecalho_host, sni = _url_no_ip(url, ip)
-            resposta = await cliente.post(
-                no_ip, json=s["payload"], headers={"Host": cabecalho_host},
-                extensions={"sni_hostname": sni})
-        resposta.raise_for_status()
-    except Exception as e:  # noqa: BLE001 — rede, timeout, status: tudo classificado
-        motivo = (f"HTTP {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError)
-                  else f"{type(e).__name__}: {e}")
-        if _classificar(e) == "definitivo":
-            await _falhar(s["id"], motivo)
-            return "falhos"
-        return await _reagendar(s, motivo)
-    await asyncio.shield(_marcar_enviado(s["id"]))
-    return "enviados"
+            # ⚠️ `stream` e só o status: o corpo da resposta NUNCA é lido
+            # (um destino hostil poderia mandar gigabytes); sair do bloco
+            # fecha a conexão sem consumi-lo.
+            async with cliente.stream(
+                    "POST", no_ip, json=s["payload"], headers={"Host": cabecalho_host},
+                    extensions={"sni_hostname": sni}) as resposta:
+                return resposta.status_code
+
+    try:
+        codigo = await asyncio.wait_for(postar(), PRAZO_TOTAL_WEBHOOK)
+    except asyncio.TimeoutError:
+        return await _reagendar(s, f"prazo de {PRAZO_TOTAL_WEBHOOK} s esgotado")
+    except Exception as e:  # noqa: BLE001 — rede: transitório
+        return await _reagendar(s, f"{type(e).__name__}: {e}")
+    if 200 <= codigo < 300:
+        await asyncio.shield(_marcar_enviado(s["id"]))
+        return "enviados"
+    if 300 <= codigo < 500 and codigo not in STATUS_TRANSITORIOS:
+        await _falhar(s["id"], f"HTTP {codigo}")
+        return "falhos"
+    return await _reagendar(s, f"HTTP {codigo}")
 
 
 async def _anotar_destinatario(saida_id: int, email: str, resend_id: str) -> None:
@@ -518,6 +531,11 @@ async def rodar_saidas(*, parar: asyncio.Event | None = None,
     contagem = {"enviados": 0, "reagendados": 0, "falhos": 0}
     if parar is not None and parar.is_set():
         return contagem
+    # ⚠️ Avisos ANTES dos webhooks: um lote de webhooks lentos (até
+    # `PRAZO_TOTAL_WEBHOOK` cada) não pode atrasar o aviso ao comercial.
+    await _drenar_avisos(contagem, parar, compasso, somente)
+    if parar is not None and parar.is_set():
+        return contagem
 
     async with sessao(role="service_role") as conn:
         webhooks = await reivindicar(conn, "webhook", LOTE, somente=somente)
@@ -529,10 +547,13 @@ async def rodar_saidas(*, parar: asyncio.Event | None = None,
             contagem[await _mandar_webhook(s, transporte)] += 1
         except Exception:  # noqa: BLE001 — defeito nosso: o prazo devolve a linha
             logger.exception("[saidas] webhook %s quebrou", s["id"])
+    return contagem
 
+
+async def _drenar_avisos(contagem: dict, parar, compasso, somente) -> None:
     chave = await integracoes.ler_segredo("RESEND_API_KEY")
     if not chave or (compasso is not None and compasso.segurado()):
-        return contagem
+        return
     de = (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
     r = await ritmo.ler()
     async with sessao(role="service_role") as conn:
@@ -558,4 +579,3 @@ async def rodar_saidas(*, parar: asyncio.Event | None = None,
             break
         except Exception:  # noqa: BLE001
             logger.exception("[saidas] aviso %s quebrou", s["id"])
-    return contagem
