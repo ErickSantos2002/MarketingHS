@@ -24,6 +24,7 @@ não sobrescreve dado, congela o primeiro toque, publica `form_submitted` com o
 
 import json
 import logging
+import re
 import time
 from urllib.parse import urlsplit
 
@@ -102,8 +103,19 @@ def _origem_do_frontend() -> str:
 # inteiro, e uma ida ao banco por visita só para achar o site é desperdício.
 # Rotacionar o token ou desligar o site limpa este cache (`routers/sites.py`);
 # em outro processo, vale em até 60 s.
+#
+# ⚠️ A rota é anônima: quem quiser manda um token inventado por pedido. Por
+# isso (revisão de segurança, 21/10): (1) o FORMATO exato do gerador
+# (`routers/sites.py::_novo_token` = `pub_` + `token_urlsafe(24)`, 32
+# caracteres base64url) é conferido antes de tocar no cache ou no banco;
+# (2) resultado NEGATIVO não é guardado — senão cada token inventado viraria
+# uma entrada; (3) o cache tem teto (`CACHE_MAXIMO`), despeja a entrada mais
+# antiga e descarta a expirada na leitura. Token bem formado e inexistente
+# custa uma consulta, dentro do balde de limite da rota.
 TTL_SEGUNDOS = 60
-_cache: dict[str, tuple[dict | None, float]] = {}
+CACHE_MAXIMO = 256
+FORMATO_DO_TOKEN = re.compile(r"pub_[A-Za-z0-9_-]{32}")  # fullmatch: com `$`, uma quebra de linha no fim passaria
+_cache: dict[str, tuple[dict, float]] = {}
 
 
 def _limpar_cache() -> None:
@@ -111,16 +123,23 @@ def _limpar_cache() -> None:
 
 
 async def _site_do_token(token) -> dict | None:
-    if not isinstance(token, str) or not token.startswith("pub_") or len(token) > 100:
+    if not isinstance(token, str) or not FORMATO_DO_TOKEN.fullmatch(token):
         return None
     em_cache = _cache.get(token)
-    if em_cache and em_cache[1] > time.monotonic():
-        return em_cache[0]
+    if em_cache:
+        if em_cache[1] > time.monotonic():
+            return em_cache[0]
+        del _cache[token]
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
             "SELECT id::text, nome, dominios, mapa_campos, tags FROM sites "
             "WHERE token = $1 AND ativo", token)
-    site = dict(linha) if linha else None
+    if linha is None:
+        return None
+    site = dict(linha)
+    while len(_cache) >= CACHE_MAXIMO:
+        # O dict guarda a ordem de inserção: o primeiro é o mais antigo.
+        del _cache[next(iter(_cache))]
     _cache[token] = (site, time.monotonic() + TTL_SEGUNDOS)
     return site
 

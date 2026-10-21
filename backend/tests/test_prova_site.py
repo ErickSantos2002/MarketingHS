@@ -84,6 +84,71 @@ def test_origem_permitida():
     assert not origem_permitida("", dominios)
 
 
+class _SessaoFalsa:
+    """Conta as idas ao "banco" e responde que o token não existe."""
+
+    def __init__(self):
+        self.consultas = 0
+
+    def __call__(self, **_kw):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        return False
+
+    async def fetchrow(self, *_a):
+        self.consultas += 1
+        return None
+
+
+async def test_token_de_formato_invalido_nao_consulta_o_banco(monkeypatch):
+    from app.routers import rastreio
+    falsa = _SessaoFalsa()
+    monkeypatch.setattr(rastreio, "sessao", falsa)
+    for ruim in (None, 123, "", "pub_", "pub_curto", "pub_" + "x" * 31, "pub_" + "x" * 33,
+                 "pub_" + "x" * 31 + "!", "xyz_" + "x" * 32, "pub_" + "x" * 32 + "\n"):
+        assert await rastreio._site_do_token(ruim) is None, ruim
+    assert falsa.consultas == 0
+
+
+async def test_tokens_inventados_nao_aumentam_o_cache(monkeypatch):
+    import secrets
+    from app.routers import rastreio
+    falsa = _SessaoFalsa()
+    monkeypatch.setattr(rastreio, "sessao", falsa)
+    rastreio._limpar_cache()
+    for _ in range(1000):
+        assert await rastreio._site_do_token("pub_" + secrets.token_urlsafe(24)) is None
+    assert falsa.consultas == 1000
+    assert len(rastreio._cache) == 0
+
+
+async def test_cache_tem_teto_e_despeja_o_mais_antigo(monkeypatch):
+    import secrets
+    from app.routers import rastreio
+
+    class _Achada(_SessaoFalsa):
+        async def fetchrow(self, *_a):
+            self.consultas += 1
+            return {"id": "x", "nome": "n", "dominios": [], "mapa_campos": {}, "tags": []}
+
+    monkeypatch.setattr(rastreio, "sessao", _Achada())
+    rastreio._limpar_cache()
+    tokens = ["pub_" + secrets.token_urlsafe(24) for _ in range(rastreio.CACHE_MAXIMO + 10)]
+    for t in tokens:
+        assert await rastreio._site_do_token(t) is not None
+    assert len(rastreio._cache) == rastreio.CACHE_MAXIMO
+    assert tokens[0] not in rastreio._cache and tokens[-1] in rastreio._cache
+    # Expirada some na leitura.
+    rastreio._cache[tokens[-1]] = (rastreio._cache[tokens[-1]][0], 0.0)
+    await rastreio._site_do_token(tokens[-1])
+    assert rastreio._cache[tokens[-1]][1] > 0.0
+    rastreio._limpar_cache()
+
+
 # ── Banco ────────────────────────────────────────────────────────────────────
 
 async def _limpar():
@@ -133,10 +198,11 @@ async def site(monkeypatch):
     _limpar_caches()
     await _limpar()
     async with db.sessao(role="service_role") as conn:
+        from app.routers.sites import _novo_token
         token = await conn.fetchval(
             """INSERT INTO sites (nome, dominios, token, tags)
-               VALUES ($1, $2, 'pub_sonda_' || gen_random_uuid(), $3) RETURNING token""",
-            NOME_DO_SITE, [DOMINIO], [TAG])
+               VALUES ($1, $2, $3, $4) RETURNING token""",
+            NOME_DO_SITE, [DOMINIO], _novo_token(), [TAG])
         await conn.execute(
             """INSERT INTO pages (name, slug, component_name, page_type, status, config)
                VALUES ('Sonda site', $1, 'SondaSite', 'landing', 'active', '{}')""", SLUG)
@@ -248,7 +314,7 @@ async def test_conversao_com_origin_de_outro_dominio_da_403(cliente, site):
 
 
 async def test_token_invalido_da_403(cliente, site):
-    r = await _postar(cliente, "/publico/site/conversao", _conversao("pub_nao_existe"))
+    r = await _postar(cliente, "/publico/site/conversao", _conversao("pub_" + "x" * 32))
     assert r.status_code == 403
     assert await _nada_gravado()
 
