@@ -147,9 +147,27 @@ async def _site_do_token(token) -> dict | None:
 # ── Corpo ────────────────────────────────────────────────────────────────────
 
 async def _ler_corpo(request: Request) -> dict:
-    corpo = await request.body()
-    if len(corpo) > CORPO_MAXIMO:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Corpo grande demais.")
+    """O corpo, sem nunca ler mais que `CORPO_MAXIMO` + 1 pedaço.
+
+    ⚠️ `await request.body()` lê TUDO antes de medir: um POST anônimo de
+    centenas de MB ocupava memória antes do 413. Agora o `Content-Length`
+    declarado acima do teto é recusado sem ler nada, e sem ele (chunked) a
+    leitura para assim que passa do teto.
+    """
+    declarado = request.headers.get("content-length")
+    if declarado is not None:
+        try:
+            tamanho = int(declarado)
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Content-Length inválido.")
+        if tamanho > CORPO_MAXIMO:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Corpo grande demais.")
+    corpo = bytearray()
+    async for pedaco in request.stream():
+        corpo += pedaco
+        if len(corpo) > CORPO_MAXIMO:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Corpo grande demais.")
+    corpo = bytes(corpo)
     try:
         dados = json.loads(corpo or b"null")
     except (ValueError, UnicodeDecodeError):

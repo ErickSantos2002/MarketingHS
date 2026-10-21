@@ -126,6 +126,49 @@ async def test_tokens_inventados_nao_aumentam_o_cache(monkeypatch):
     assert len(rastreio._cache) == 0
 
 
+class _PedidoFalso:
+    """O mínimo de `Request` que `_ler_corpo` usa, contando o que foi lido."""
+
+    def __init__(self, cabecalhos, pedacos):
+        self.headers = cabecalhos
+        self._pedacos = pedacos
+        self.lidos = 0
+
+    async def body(self):
+        raise AssertionError("não pode ler o corpo inteiro de uma vez")
+
+    async def stream(self):
+        for pedaco in self._pedacos:
+            self.lidos += 1
+            yield pedaco
+
+
+async def test_corpo_recusado_pelo_content_length_sem_ler():
+    import fastapi
+    from app.routers import rastreio
+    pedido = _PedidoFalso({"content-length": str(16 * 1024 + 1)}, [b"{}"])
+    with pytest.raises(fastapi.HTTPException) as erro:
+        await rastreio._ler_corpo(pedido)
+    assert erro.value.status_code == 413 and pedido.lidos == 0
+    pedido = _PedidoFalso({"content-length": "abc"}, [b"{}"])
+    with pytest.raises(fastapi.HTTPException) as erro:
+        await rastreio._ler_corpo(pedido)
+    assert erro.value.status_code == 400
+
+
+async def test_corpo_sem_content_length_para_de_ler_no_teto():
+    import fastapi
+    from app.routers import rastreio
+    pedacos = [b"x" * 4096] * 100          # 400 KB se lesse tudo
+    pedido = _PedidoFalso({}, pedacos)
+    with pytest.raises(fastapi.HTTPException) as erro:
+        await rastreio._ler_corpo(pedido)
+    assert erro.value.status_code == 413
+    assert pedido.lidos == 5               # 5 × 4 KB = 20 KB > 16 KB: parou
+    pedido = _PedidoFalso({}, [b'{"a":', b' 1}'])
+    assert await rastreio._ler_corpo(pedido) == {"a": 1}
+
+
 async def test_cache_tem_teto_e_despeja_o_mais_antigo(monkeypatch):
     import secrets
     from app.routers import rastreio
