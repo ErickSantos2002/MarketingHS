@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 21/10 (fim da noite):** `prova-captura` Fase 0 ✅ mergeada (migration 027; funções recriadas conferidas contra 026/006/001 — só as mudanças do plano; suíte 530 passed / 18 skipped, leads 2.107 antes e depois). **Espera o Erick aplicar `bash ~/marketinghs-migration-027.sh`.** Próximo: Fase 1 — `prova-captura` (T2–6), `prova-jornadas` (T7–9), `prova-telas` (T13–17).
+
 **Estado em 21/10 (noite):** `prova-landing` ✅ mergeada (Tarefas 10–12 + 2 correções de segurança + 5 da revisão; portão depois do merge: 43 testes node, `tsc` 0, guarda 0, builds ok, `dist/` sem `prova/`). `prova-captura` na Fase 0.
 
 **Estado em 21/10 — prova de substituição do RD:** plano em
