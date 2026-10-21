@@ -564,3 +564,88 @@ async def test_falha_ao_marcar_enviado_nao_reenvia_sem_fim(saida, monkeypatch):
         await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
     assert len(chamadas) == saidas.MAX_TENTATIVAS
     assert (await _linha(sid))["status"] == "falhou"
+
+
+# ── Revisão 2: teto do Resend por destinatário, com reserva ──────────────────
+
+async def test_aviso_reivindicado_pela_conta_de_destinatarios(saida, resend_falso, monkeypatch):
+    """Cota 2: o aviso para dois sai; o de um, que viria depois, espera."""
+    monkeypatch.setattr(saidas.ritmo, "cota_de", lambda *a, **k: 2)
+    dois = await saida("aviso_email", "a@exemplo.invalid,b@exemplo.invalid")
+    um = await saida("aviso_email", "c@exemplo.invalid")
+    r = await saidas.rodar_saidas(somente=[dois, um])
+    assert r["enviados"] == 1
+    assert [e["para"] for e in resend_falso["enviados"]] == [
+        "a@exemplo.invalid", "b@exemplo.invalid"]
+    linha = await _linha(um)
+    assert linha["status"] == "pendente" and linha["tentativas"] == 0
+
+
+async def test_aviso_aceito_pelo_resend_conta_mesmo_sem_enviado_em(conexao):
+    """Falhou entre o Resend aceitar e o `_marcar_enviado`: o id já está lá,
+    o e-mail saiu, e conta no teto."""
+    await _exigir_027(conexao)
+    antes = await ritmo.medir(conexao)
+    await conexao.execute(
+        "INSERT INTO journey_saidas (journey_run_id, journey_node_id, tipo, destino, payload, "
+        "resend_email_id) VALUES (gen_random_uuid(), 'n1', 'aviso_email', "
+        "'a@exemplo.invalid,b@exemplo.invalid', '{\"enviados\": [\"a@exemplo.invalid\"]}', 're_1')")
+    depois = await ritmo.medir(conexao)
+    assert depois.enviados_hora == antes.enviados_hora + 1
+    assert depois.enviados_dia == antes.enviados_dia + 1
+
+
+async def test_reivindicado_e_nao_enviado_e_reserva(conexao, semear):
+    """O que um laço já reivindicou (e ainda não mandou) desconta a cota do
+    outro: senão os dois gastam a última vaga."""
+    from app import fila
+    await _exigir_027(conexao)
+    antes = await ritmo.medir(conexao)
+    await conexao.execute(
+        "INSERT INTO journey_saidas (journey_run_id, journey_node_id, tipo, destino, payload, "
+        "tentativas, visivel_em) VALUES (gen_random_uuid(), 'n1', 'aviso_email', "
+        "'a@exemplo.invalid,b@exemplo.invalid,c@exemplo.invalid', "
+        "'{\"enviados\": [\"a@exemplo.invalid\"]}', 1, now() + interval '5 minutes')")
+    await semear(1)
+    await fila.reivindicar(conexao, limite=100, visibilidade=300)
+    depois = await ritmo.medir(conexao)
+    assert depois.reservados >= antes.reservados + 3  # 2 do aviso + ao menos 1 da fila
+    r = ritmo.Ritmo(teto_hora=depois.enviados_hora + depois.reservados + 1,
+                    teto_dia=10_000, aquecimento_dia1=0)
+    assert ritmo.cota_de(r, depois, lote=20, visibilidade=300) == 1
+
+
+def test_cota_de_desconta_reservados():
+    from datetime import date
+    r = ritmo.Ritmo(teto_hora=10, teto_dia=100, aquecimento_dia1=0)
+    uso = ritmo.Uso(hoje=date(2026, 10, 21), enviados_hora=6, enviados_dia=6,
+                    primeiro_dia=None, reservados=3)
+    assert ritmo.cota_de(r, uso, lote=20, visibilidade=300) == 1
+    assert ritmo.cota_de(r, ritmo.Uso(hoje=uso.hoje, enviados_hora=9, enviados_dia=9,
+                                      primeiro_dia=None, reservados=3),
+                         lote=20, visibilidade=300) == 0
+
+
+async def test_os_dois_lacos_medem_sob_a_mesma_trava(saida, resend_falso, monkeypatch):
+    """Medir + reivindicar acontece com `ritmo.travar_cota` tomada — a mesma
+    chave no laço das saídas e no `_tick` do worker."""
+    ordem = []
+    travar, medir = ritmo.travar_cota, ritmo.medir
+
+    async def travar_espiao(conn):
+        ordem.append("trava")
+        await travar(conn)
+
+    async def medir_espiao(conn):
+        ordem.append("mede")
+        return await medir(conn)
+    monkeypatch.setattr(saidas.ritmo, "travar_cota", travar_espiao)
+    monkeypatch.setattr(saidas.ritmo, "medir", medir_espiao)
+    sid = await saida("aviso_email", "a@exemplo.invalid")
+    await saidas.rodar_saidas(somente=[sid])
+    assert ordem[:2] == ["trava", "mede"]
+
+    import inspect
+    from app import worker
+    fonte = inspect.getsource(worker._tick)
+    assert fonte.index("ritmo.travar_cota(conn)") < fonte.index("ritmo.medir(conn)")

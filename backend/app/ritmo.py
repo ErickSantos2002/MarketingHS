@@ -151,10 +151,15 @@ WITH d AS {_DIA},
             WHERE cs.resend_email_id IS NOT NULL
               AND cs.sent_at >= least(now() - interval '1 hour', d.inicio_do_dia)
            UNION ALL
-           SELECT s.enviado_em, cardinality(string_to_array(s.resend_email_id, ','))
+           -- ⚠️ `coalesce(enviado_em, atualizado_em)`: o id do Resend é
+           -- anotado a cada destinatário, antes do `enviado`. Se o processo
+           -- cair entre um e outro, o e-mail saiu do mesmo jeito e conta.
+           SELECT coalesce(s.enviado_em, s.atualizado_em),
+                  cardinality(string_to_array(s.resend_email_id, ','))
              FROM journey_saidas s, d
             WHERE s.tipo = 'aviso_email' AND s.resend_email_id IS NOT NULL
-              AND s.enviado_em >= least(now() - interval '1 hour', d.inicio_do_dia))
+              AND coalesce(s.enviado_em, s.atualizado_em)
+                  >= least(now() - interval '1 hour', d.inicio_do_dia))
 SELECT coalesce(sum(n) FILTER (WHERE quando >= now() - interval '1 hour'), 0) AS hora,
        coalesce(sum(n) FILTER (WHERE quando >= (SELECT inicio_do_dia FROM d)), 0) AS dia,
        (SELECT hoje FROM d)                                                 AS hoje
@@ -163,7 +168,7 @@ SELECT coalesce(sum(n) FILTER (WHERE quando >= now() - interval '1 hour'), 0) AS
 
 SQL_PRIMEIRO_DIA = f"""
 SELECT (least((SELECT min(sent_at) FROM campaign_sends WHERE resend_email_id IS NOT NULL),
-              (SELECT min(enviado_em) FROM journey_saidas
+              (SELECT min(coalesce(enviado_em, atualizado_em)) FROM journey_saidas
                 WHERE tipo = 'aviso_email' AND resend_email_id IS NOT NULL))
         AT TIME ZONE '{FUSO}')::date
 """
@@ -185,6 +190,37 @@ SELECT (min(sent_at) AT TIME ZONE '{FUSO}')::date
   FROM campaign_sends WHERE resend_email_id IS NOT NULL
 """
 
+# A RESERVA: o que já foi reivindicado e ainda não saiu. O laço do e-mail
+# (`worker._tick`) e o das saídas (`jornadas/saidas.py`) medem cada um por
+# si; sem descontar o que o outro tem em mãos, os dois gastariam a última vaga
+# do teto. Conta: mensagem da fila escondida depois de reivindicada
+# (`tentativas > 0`, inclui a que espera recuo — que também vai sair), e os
+# destinatários que faltam de cada aviso reivindicado.
+SQL_RESERVADOS = """
+SELECT (SELECT count(*) FROM email_send_queue
+         WHERE visivel_em > now() AND tentativas > 0)
+     + (SELECT coalesce(sum(greatest(
+                 cardinality(string_to_array(destino, ','))
+                 - coalesce(jsonb_array_length(payload->'enviados'), 0), 0)), 0)
+          FROM journey_saidas
+         WHERE tipo = 'aviso_email' AND status = 'pendente'
+           AND visivel_em > now() AND tentativas > 0)
+"""
+
+SQL_RESERVADOS_SEM_SAIDAS = """
+SELECT count(*) FROM email_send_queue WHERE visivel_em > now() AND tentativas > 0
+"""
+
+# A trava da cota: medir + reivindicar acontece com ela tomada, nos DOIS
+# laços, na mesma transação da reivindicação. Solta no commit — quando a
+# reserva já está visível para o outro.
+CHAVE_DA_COTA = 7_270_027_018
+
+
+async def travar_cota(conn) -> None:
+    await conn.execute("SELECT pg_advisory_xact_lock($1)", CHAVE_DA_COTA)
+
+
 _tem_saidas = False
 
 _primeiro_dia: date | None = None
@@ -196,6 +232,7 @@ class Uso:
     enviados_hora: int
     enviados_dia: int
     primeiro_dia: date | None
+    reservados: int = 0
 
 
 async def medir(conn) -> Uso:
@@ -209,8 +246,20 @@ async def medir(conn) -> Uso:
     if _primeiro_dia is None:
         _primeiro_dia = await conn.fetchval(
             SQL_PRIMEIRO_DIA if _tem_saidas else SQL_PRIMEIRO_DIA_SEM_SAIDAS)
+    reservados = await conn.fetchval(
+        SQL_RESERVADOS if _tem_saidas else SQL_RESERVADOS_SEM_SAIDAS)
     return Uso(hoje=linha["hoje"], enviados_hora=int(linha["hora"] or 0),
-               enviados_dia=int(linha["dia"] or 0), primeiro_dia=_primeiro_dia)
+               enviados_dia=int(linha["dia"] or 0), primeiro_dia=_primeiro_dia,
+               reservados=int(reservados or 0))
+
+
+def cota_de(r: Ritmo, uso: Uso, *, lote: int, visibilidade: int) -> int:
+    """A `cota` descontando o que já está reservado (reivindicado e não
+    enviado) — é a que os dois laços usam."""
+    return cota(r, uso.hoje, uso.primeiro_dia,
+                enviados_hora=uso.enviados_hora + uso.reservados,
+                enviados_dia=uso.enviados_dia + uso.reservados,
+                lote=lote, visibilidade=visibilidade)
 
 
 class Compasso:

@@ -304,17 +304,32 @@ async def reivindicar(conn, tipo: str, limite: int, *,
         tipo, MAX_TENTATIVAS, somente)
     if limite <= 0:
         return []
+    # ⚠️ Para aviso, `limite` é de DESTINATÁRIOS (o teto do Resend conta
+    # e-mail, não linha): cada aviso custa os endereços que ainda faltam, e
+    # entram na ordem enquanto a soma couber. Webhook custa 1.
     linhas = await conn.fetch(
-        """UPDATE journey_saidas SET visivel_em = now() + $3::interval,
+        """WITH cand AS (
+               SELECT id, visivel_em,
+                      CASE WHEN tipo = 'aviso_email'
+                           THEN greatest(cardinality(string_to_array(destino, ','))
+                                - coalesce(jsonb_array_length(payload->'enviados'), 0), 1)
+                           ELSE 1 END AS custo
+                 FROM journey_saidas
+                WHERE status = 'pendente' AND visivel_em <= now()
+                  AND tipo = $1 AND tentativas < $5
+                  AND ($4::bigint[] IS NULL OR id = ANY($4::bigint[]))
+                ORDER BY visivel_em, id LIMIT $6
+                FOR UPDATE SKIP LOCKED),
+           escolhidas AS (
+               SELECT id FROM (SELECT id, sum(custo) OVER (ORDER BY visivel_em, id) AS acumulado
+                                 FROM cand) x
+                WHERE acumulado <= $2)
+           UPDATE journey_saidas SET visivel_em = now() + $3::interval,
                   tentativas = tentativas + 1, atualizado_em = now()
-            WHERE id IN (SELECT id FROM journey_saidas
-                          WHERE status = 'pendente' AND visivel_em <= now()
-                            AND tipo = $1 AND tentativas < $5
-                            AND ($4::bigint[] IS NULL OR id = ANY($4::bigint[]))
-                          ORDER BY visivel_em, id LIMIT $2
-                          FOR UPDATE SKIP LOCKED)
-        RETURNING id, tipo, destino, payload, tentativas, resend_email_id""",
-        tipo, limite, PRAZO_DA_REIVINDICACAO, somente, MAX_TENTATIVAS)
+            WHERE id IN (SELECT id FROM escolhidas)
+        RETURNING id, tipo, destino, payload, tentativas, resend_email_id,
+                  journey_id::text AS journey_id, lead_id::text AS lead_id""",
+        tipo, limite, PRAZO_DA_REIVINDICACAO, somente, MAX_TENTATIVAS, LOTE)
     return [{**dict(l), "payload": _como_dict(l["payload"]) or {}} for l in linhas]
 
 
@@ -477,11 +492,12 @@ async def rodar_saidas(*, parar: asyncio.Event | None = None,
     de = (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
     r = await ritmo.ler()
     async with sessao(role="service_role") as conn:
+        # A mesma trava do `worker._tick`: medir + reivindicar sem o outro
+        # laço no meio. `limite` aqui é de DESTINATÁRIOS, não de linhas.
+        await ritmo.travar_cota(conn)
         uso = await ritmo.medir(conn)
-        limite = ritmo.cota(
-            r, uso.hoje, uso.primeiro_dia,
-            enviados_hora=uso.enviados_hora, enviados_dia=uso.enviados_dia,
-            lote=LOTE, visibilidade=int(PRAZO_DA_REIVINDICACAO.total_seconds()))
+        limite = ritmo.cota_de(r, uso, lote=LOTE,
+                               visibilidade=int(PRAZO_DA_REIVINDICACAO.total_seconds()))
         avisos = await reivindicar(conn, "aviso_email", limite, somente=somente)
     for i, s in enumerate(avisos):
         if parar is not None and parar.is_set():

@@ -287,12 +287,14 @@ async def _tick() -> int:
             return 0
         # ⚠️ O teto limita o que se REIVINDICA. O que passa dele continua na
         # fila, intocado, e sai na hora ou no dia seguinte — nunca 'failed'.
+        # ⚠️ A trava da cota: o laço das saídas (aviso por e-mail) mede e
+        # reivindica sob a MESMA chave. Medir sem ela deixaria os dois
+        # gastarem a última vaga do teto. Solta no fim desta transação, com a
+        # reivindicação já gravada (e contada em `uso.reservados`).
+        await ritmo.travar_cota(conn)
         uso = await ritmo.medir(conn)
-        limite = ritmo.cota(
-            r, uso.hoje, uso.primeiro_dia,
-            enviados_hora=uso.enviados_hora, enviados_dia=uso.enviados_dia,
-            lote=settings.FILA_LOTE,
-            visibilidade=settings.FILA_VISIBILIDADE_SEGUNDOS)
+        limite = ritmo.cota_de(r, uso, lote=settings.FILA_LOTE,
+                               visibilidade=settings.FILA_VISIBILIDADE_SEGUNDOS)
         _registrar_teto(limite <= 0, uso, r)
         if limite <= 0:
             return 0
