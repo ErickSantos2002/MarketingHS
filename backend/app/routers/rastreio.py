@@ -197,12 +197,18 @@ def _utm(bloco) -> dict:
 
 
 def _toque(dados) -> dict:
-    """Um toque do script: `{utm, gclid, fbclid, referrer, url}`."""
+    """Um toque do script (`mhs_pt`/`mhs_ut` do `rastreio.js`): `{utm,
+    gclid, fbclid, referrer, url, ts}` — só essas chaves, UTMs da lista,
+    textos cortados. Vem de cookie do visitante: é entrada anônima, e é este
+    filtro que decide o que dela chega ao banco (inclusive no `primeiro_toque`
+    da visita, que vai inteiro para um jsonb)."""
     if not isinstance(dados, dict):
-        return {"utm": {}, "gclid": None, "fbclid": None, "referrer": None}
+        dados = {}
     return {"utm": _utm(dados.get("utm")), "gclid": _texto(dados.get("gclid"), TEXTO_MAXIMO),
             "fbclid": _texto(dados.get("fbclid"), TEXTO_MAXIMO),
-            "referrer": _texto(dados.get("referrer"), URL_MAXIMA)}
+            "referrer": _texto(dados.get("referrer"), URL_MAXIMA),
+            "url": _texto(dados.get("url"), URL_MAXIMA),
+            "ts": _texto(dados.get("ts"), 40)}
 
 
 def _canal(toque: dict, host: str | None) -> str:
@@ -275,7 +281,7 @@ async def visita(request: Request):
             _texto(dados.get("titulo"), 300), toque["referrer"],
             *(toque["utm"].get(u) for u in UTMS), toque["gclid"], toque["fbclid"],
             _canal(toque, _host(origin)),
-            primeiro if isinstance(primeiro, dict) else None)
+            _toque(primeiro) if isinstance(primeiro, dict) else None)
     return _aceito()
 
 

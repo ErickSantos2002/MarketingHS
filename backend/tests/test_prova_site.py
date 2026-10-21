@@ -412,6 +412,28 @@ async def test_visita_grava_canal_visitor_e_primeiro_toque(cliente, site):
     assert _json(v["primeiro_toque"])["referrer"] == "https://www.google.com/"
 
 
+async def test_visita_filtra_o_primeiro_toque(cliente, site):
+    """O `primeiro_toque` vem do cookie do visitante — é entrada anônima. Passa
+    pelo mesmo filtro do toque da conversão: só as chaves do script, UTMs da
+    lista, textos cortados."""
+    corpo = {"token": site, "visitor_id": VISITANTE, "url": ORIGEM, "utm": {},
+             "primeiro_toque": {"utm": {"utm_source": "google", "lixo": "x"},
+                                "gclid": "g" * 900, "referrer": "https://www.google.com/",
+                                "url": f"{ORIGEM}/a", "ts": "2026-10-21T10:00:00.000Z",
+                                "qualquer": {"coisa": "x" * 5000}}}
+    r = await _postar(cliente, "/publico/site/visita", corpo)
+    assert r.status_code == 202, r.text
+    async with db.sessao(role="service_role") as conn:
+        pt = _json(await conn.fetchval(
+            "SELECT primeiro_toque FROM visitas WHERE visitor_id = $1", VISITANTE))
+    assert set(pt) == {"utm", "gclid", "fbclid", "referrer", "url", "ts"}
+    assert pt["utm"] == {"utm_source": "google"}
+    assert len(pt["gclid"]) == 500 and pt["url"] == f"{ORIGEM}/a"
+    r = await _postar(cliente, "/publico/site/visita",
+                      {**corpo, "primeiro_toque": "não é objeto"})
+    assert r.status_code == 202
+
+
 async def test_visita_por_pagina_exige_origin_do_frontend(cliente, site):
     from app.config import settings
     corpo = {"pagina": SLUG, "visitor_id": VISITANTE, "url": f"{settings.FRONTEND_URL}/p/{SLUG}",
