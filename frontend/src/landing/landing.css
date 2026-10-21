@@ -80,7 +80,8 @@ body {
   gap: 14px;
 }
 
-.captura label {
+.captura .captura-campo,
+.captura .captura-campo > label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -89,7 +90,9 @@ body {
   color: var(--landing-fg);
 }
 
-.captura input {
+.captura input:not([type="checkbox"]):not([type="radio"]),
+.captura select,
+.captura textarea {
   /* alvo de toque de pelo menos 44px, mesmo em telas pequenas */
   min-height: 44px;
   padding: 10px 12px;
@@ -99,9 +102,17 @@ body {
   border-radius: 8px;
   background: #ffffff;
   color: var(--landing-fg);
+  font-family: inherit;
+  width: 100%;
 }
 
-.captura input:focus {
+.captura textarea {
+  resize: vertical;
+}
+
+.captura input:focus,
+.captura select:focus,
+.captura textarea:focus {
   outline: 2px solid var(--landing-accent);
   outline-offset: 1px;
 }
@@ -187,4 +198,207 @@ body {
   .hero {
     padding: 36px 32px;
   }
+}
+
+/* ---- Campos tipados (prova de substituição do RD, 21/10) ---- */
+
+.captura-obrigatorio {
+  color: var(--landing-erro);
+}
+
+.captura [aria-invalid="true"] {
+  border-color: var(--landing-erro);
+}
+
+.captura-erro-campo {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--landing-erro);
+}
+
+.captura-grupo {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.captura-grupo legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.captura-opcoes {
+  display: flex;
+  gap: 12px;
+}
+
+.captura-radio,
+.captura-consentimento label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 0.95rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.captura-radio {
+  padding: 0 14px;
+  border: 1px solid var(--landing-border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.captura-radio input,
+.captura-consentimento input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--landing-accent);
+}
+
+.captura-consentimento {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.captura-consentimento label {
+  align-items: flex-start;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--landing-fg-muted);
+}
+
+.captura-consentimento input {
+  margin-top: 1px;
+}
+
+.captura-consentimento a {
+  color: var(--landing-accent);
+  font-weight: 600;
+}
+
+.captura-sucesso p + p {
+  margin-top: 10px;
+}
+
+/* ---- Landing com imagem e corpo ---- */
+
+.landing-completa {
+  align-items: flex-start;
+}
+
+.landing-grade {
+  width: 100%;
+  max-width: 1080px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+.landing-conteudo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.landing-conteudo h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 5vw, 2.4rem);
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.landing-conteudo .sub {
+  margin: 0;
+  font-size: clamp(1rem, 3vw, 1.15rem);
+  line-height: 1.5;
+  color: var(--landing-fg-muted);
+}
+
+.landing-imagem {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--landing-border);
+  background: #ffffff;
+}
+
+.landing-corpo {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.landing-corpo p {
+  margin: 0 0 12px;
+}
+
+.landing-corpo ul {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.landing-corpo li + li {
+  margin-top: 4px;
+}
+
+.landing-cartao {
+  max-width: none;
+}
+
+@media (min-width: 900px) {
+  .landing-completa {
+    padding: 48px 32px;
+  }
+
+  .landing-grade {
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .landing-cartao {
+    position: sticky;
+    top: 24px;
+  }
+}
+
+/* O botão flutuante não pode cobrir o fim do formulário no celular. */
+.landing-com-whatsapp {
+  padding-bottom: 88px;
+}
+
+/* Botão flutuante de WhatsApp — verde da marca do WhatsApp, fora da paleta
+   de propósito: é o sinal que a pessoa reconhece. */
+.landing-whatsapp {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #25d366;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 10;
+}
+
+.landing-whatsapp:focus-visible {
+  outline: 3px solid var(--landing-fg);
+  outline-offset: 3px;
 }
