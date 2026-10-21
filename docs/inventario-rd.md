@@ -172,7 +172,10 @@ do GA4 conectado (`G-D9LDBR96FT`). → Depende do script do item 1 (R3 + R6).
   Leão Marketeria.
 - **O que é o Horus** e quem depende dele (atendimento por IA/WhatsApp da
   agência?). Continua recebendo lead? Erick não sabe; perguntar à Leão.
-- **A Leão Marketeria segue?** Ela opera o RD, as importações e os dois
-  webhooks. Define o papel de operador (D6) e quem cola o script no site.
+- ~~**A Leão Marketeria segue?**~~ Nicholson, 21/10: **segue por enquanto,
+  mas o objetivo é tirar a dependência dela.** Régua para tudo que vier do
+  RD: nada pode depender de conta, n8n, Horus ou acesso da agência — o script
+  do site, a LP, o roteamento ao GrowthHS e os e-mails ficam com a H&S. O
+  Sérgio ficou de passar o acesso ao GitHub das páginas (LP do Lovable).
 - **Quem mantém o site ColdFusion?** É lá que o script troca.
 - **E-mails da nutrição:** reaproveitar os textos do RD como estão?
