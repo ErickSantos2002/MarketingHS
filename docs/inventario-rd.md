@@ -166,12 +166,12 @@ do GA4 conectado (`G-D9LDBR96FT`). → Depende do script do item 1 (R3 + R6).
 
 ## Perguntas novas
 
-- **O CRM é o Pipedrive?** O comercial recebe lead no Pipedrive hoje, pelo
-  n8n da agência. O plano (5A) era mandar ao GrowthHS. Substituir o RD
-  mantendo o Pipedrive é só um webhook; trocar para o GrowthHS muda o
-  processo do comercial.
+- ~~**O CRM é o Pipedrive?**~~ Erick, 21/10: **o CRM é o GrowthHS.** A saída
+  para o comercial é a do 5A. Fica a dúvida de quem ainda olha o Pipedrive,
+  que o RD alimenta até hoje (n8n da agência ativo em 21/10) — pergunta à
+  Leão Marketeria.
 - **O que é o Horus** e quem depende dele (atendimento por IA/WhatsApp da
-  agência?). Continua recebendo lead?
+  agência?). Continua recebendo lead? Erick não sabe; perguntar à Leão.
 - **A Leão Marketeria segue?** Ela opera o RD, as importações e os dois
   webhooks. Define o papel de operador (D6) e quem cola o script no site.
 - **Quem mantém o site ColdFusion?** É lá que o script troca.
