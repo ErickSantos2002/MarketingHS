@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 21/10 (noite):** `prova-landing` ✅ mergeada (Tarefas 10–12 + 2 correções de segurança + 5 da revisão; portão depois do merge: 43 testes node, `tsc` 0, guarda 0, builds ok, `dist/` sem `prova/`). `prova-captura` na Fase 0.
+
 **Estado em 21/10 — prova de substituição do RD:** plano em
 `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md` (spec
 `docs/superpowers/specs/2026-10-21-prova-substituir-rd-design.md`). A tabela
