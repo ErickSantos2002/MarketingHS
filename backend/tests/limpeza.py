@@ -19,3 +19,15 @@ async def apagar_leads(conn, ids) -> None:
     await conn.execute(
         "DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
     await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
+
+
+async def apagar_visitas(conn, visitor_ids) -> None:
+    """Apaga as visitas de teste pelo `visitor_id` (prova do RD).
+
+    ⚠️ Antes do site: `visitas.site_id` é ON DELETE SET NULL, mas a visita
+    precisa de site OU página (`visitas_com_origem`) — apagar o site de uma
+    visita sem página falha no CHECK.
+    """
+    await conn.execute(
+        "DELETE FROM visitas WHERE visitor_id = ANY($1::text[])",
+        [str(v) for v in visitor_ids])
