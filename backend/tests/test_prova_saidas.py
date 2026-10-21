@@ -533,3 +533,34 @@ async def test_conferir_destino_devolve_o_ip_permitido(dns_publico):
     dns_publico["gancho.exemplo.com"] = [IP_PUBLICO, IP_PUBLICO]
     assert await saidas.conferir_destino("https://gancho.exemplo.com/x") == IP_PUBLICO
     assert await saidas.conferir_destino(f"https://{IP_PUBLICO}/x") == IP_PUBLICO
+
+
+# ── Revisão 1: tentativas esgotadas não voltam ───────────────────────────────
+
+async def test_pendente_que_esgotou_vira_falhou_sem_sair(saida, resend_falso):
+    """A falha DEPOIS do envio (ex.: `_marcar_enviado` estourando) deixa a
+    linha pendente com o prazo vencendo: sem o teto na reivindicação ela
+    voltaria para sempre, mandando de novo a cada 5 min."""
+    w = await saida("webhook", "https://exemplo.invalid/a", tentativas=5)
+    a = await saida("aviso_email", "comercial@exemplo.invalid", tentativas=7)
+    chamadas = []
+    await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[w, a])
+    assert chamadas == [] and resend_falso["enviados"] == []
+    for sid in (w, a):
+        linha = await _linha(sid)
+        assert linha["status"] == "falhou" and "tentativas" in linha["erro"]
+
+
+async def test_falha_ao_marcar_enviado_nao_reenvia_sem_fim(saida, monkeypatch):
+    sid = await saida("webhook", "https://exemplo.invalid/a")
+    chamadas = []
+
+    async def quebra(saida_id, *a, **k):
+        raise RuntimeError("banco caiu depois do 2xx")
+    monkeypatch.setattr(saidas, "_marcar_enviado", quebra)
+    for _ in range(saidas.MAX_TENTATIVAS + 2):
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("UPDATE journey_saidas SET visivel_em = now() WHERE id = $1", sid)
+        await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
+    assert len(chamadas) == saidas.MAX_TENTATIVAS
+    assert (await _linha(sid))["status"] == "falhou"

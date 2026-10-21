@@ -290,6 +290,18 @@ async def reivindicar(conn, tipo: str, limite: int, *,
     """As saídas vencidas de um tipo, escondidas por 5 min e com a tentativa
     somada. ⚠️ `somente` existe para os testes: eles rodam contra o banco de
     produção, e uma passada sem filtro mandaria as saídas reais."""
+    # ⚠️ Esgotou as tentativas e continua pendente: a falha veio DEPOIS da
+    # chamada (ex.: `_marcar_enviado` estourando após o 2xx), e a linha
+    # voltaria a cada prazo para sempre — mandando de novo. Vira `falhou`.
+    await conn.execute(
+        """UPDATE journey_saidas
+              SET status = 'falhou', atualizado_em = now(),
+                  erro = left(concat_ws(' — ', erro,
+                         'desistiu: ' || tentativas || ' tentativas esgotadas'), 1000)
+            WHERE status = 'pendente' AND visivel_em <= now() AND tipo = $1
+              AND tentativas >= $2
+              AND ($3::bigint[] IS NULL OR id = ANY($3::bigint[]))""",
+        tipo, MAX_TENTATIVAS, somente)
     if limite <= 0:
         return []
     linhas = await conn.fetch(
@@ -297,12 +309,12 @@ async def reivindicar(conn, tipo: str, limite: int, *,
                   tentativas = tentativas + 1, atualizado_em = now()
             WHERE id IN (SELECT id FROM journey_saidas
                           WHERE status = 'pendente' AND visivel_em <= now()
-                            AND tipo = $1
+                            AND tipo = $1 AND tentativas < $5
                             AND ($4::bigint[] IS NULL OR id = ANY($4::bigint[]))
                           ORDER BY visivel_em, id LIMIT $2
                           FOR UPDATE SKIP LOCKED)
         RETURNING id, tipo, destino, payload, tentativas, resend_email_id""",
-        tipo, limite, PRAZO_DA_REIVINDICACAO, somente)
+        tipo, limite, PRAZO_DA_REIVINDICACAO, somente, MAX_TENTATIVAS)
     return [{**dict(l), "payload": _como_dict(l["payload"]) or {}} for l in linhas]
 
 
