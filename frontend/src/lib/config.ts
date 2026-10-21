@@ -1,6 +1,6 @@
 // Configuração de integrações. Os segredos ficam no banco e NUNCA voltam para
 // a tela — só o fato de existirem.
-import { api, BASE, ErroApi, lerToken } from '@/lib/api';
+import { api, BASE, ErroApi, lerToken, mensagemDoDetalhe } from '@/lib/api';
 
 export interface DominioResend {
   id: string;
@@ -111,9 +111,9 @@ export async function subirImagemDeEmail(
     body: corpo,
   });
   if (!resposta.ok) {
-    let detalhe = `Erro ${resposta.status}`;
-    try { detalhe = (await resposta.json()).detail ?? detalhe; } catch { /* sem corpo */ }
-    throw new ErroApi(resposta.status, detalhe);
+    let detalhe: unknown = null;
+    try { detalhe = (await resposta.json()).detail; } catch { /* sem corpo */ }
+    throw new ErroApi(resposta.status, mensagemDoDetalhe(detalhe, `Erro ${resposta.status}`));
   }
   return resposta.json();
 }
@@ -147,9 +147,9 @@ export async function subirArquivo(arquivo: File): Promise<Arquivo> {
     body: corpo,
   });
   if (!resposta.ok) {
-    let detalhe: unknown = `Erro ${resposta.status}`;
-    try { detalhe = (await resposta.json()).detail ?? detalhe; } catch { /* sem corpo */ }
-    throw new ErroApi(resposta.status, typeof detalhe === 'string' ? detalhe : `Erro ${resposta.status}`);
+    let detalhe: unknown = null;
+    try { detalhe = (await resposta.json()).detail; } catch { /* sem corpo */ }
+    throw new ErroApi(resposta.status, mensagemDoDetalhe(detalhe, `Erro ${resposta.status}`));
   }
   return resposta.json();
 }

@@ -16,7 +16,7 @@ const PERIODOS = [7, 30, 90] as const;
 const num = (n: number | undefined) => (n ?? 0).toLocaleString('pt-BR');
 
 function mensagem(e: unknown): string {
-  if (e instanceof Error && e.message && e.message !== '[object Object]') return e.message;
+  if (e instanceof Error && e.message) return e.message;
   return 'erro desconhecido';
 }
 

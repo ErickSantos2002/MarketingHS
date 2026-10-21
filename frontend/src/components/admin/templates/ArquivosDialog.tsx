@@ -19,7 +19,7 @@ function tamanhoLegivel(bytes: number): string {
 }
 
 function mensagem(e: unknown, padrao: string): string {
-  if (e instanceof Error && e.message && e.message !== '[object Object]') return e.message;
+  if (e instanceof Error && e.message) return e.message;
   return padrao;
 }
 

@@ -48,7 +48,8 @@ n 14 · Vite 8094 · usa o backend da 8100.
 - `npx tsc --noEmit -p tsconfig.app.json`: **0 erros**.
 - `npm run guarda:visual -- src`: **0**.
 - `node --test scripts/*.test.mjs`: **50 testes, 50 passam** (inclui os 7 de
-  `journeys-nos` e os 2 de `journeys-eventos`).
+  `journeys-nos` e os 2 de `journeys-eventos`). Depois do commit do `ErroApi`:
+  **55 testes, 55 passam** (tsc 0, guarda 0, builds ok).
 - `npx vite build` e `npm run build:landing`: ok.
 - `git diff --stat main...`: 21 arquivos de `frontend/` + este; nenhum `.env`
   nem credencial.
@@ -88,13 +89,17 @@ Claro/escuro × 1440/390, sem estouro de largura em nenhuma:
    `RegraIn` e de mandá-la ao banco (`model_dump(exclude_none=True)`). A
    condição de **fluxo** não sofre disso (`nodes: list[dict]`). Nenhuma frente
    da prova tem `segmentos.py` no território — a coordenadora decide quem faz.
-2. `lib/jornadas.ts` (fora do território) não declara `allowed_emails` em
-   `JornadaEntrada`; passa porque `useJourneys` e o construtor mandam o objeto
-   inteiro. Vale acrescentar o campo lá quando alguém for dono do arquivo.
-3. `ErroApi` (`lib/api.ts`, dono único) vira `"[object Object]"` quando o
-   `detail` é objeto (o formato de erro da captura, `{mensagem, campos}`). As
-   telas daqui contornam; o conserto é no `api.ts`.
-4. `conferir-telas.mjs` não tem "arquivos" em `ABRIDORES` — para conferir o
+   → **Decidido (coordenadora):** fica com a `prova-captura`.
+2. ✅ `allowed_emails?: string[] | null` declarado em `JornadaEntrada`
+   (`lib/jornadas.ts`; extensão de território dada pela coordenadora).
+3. ✅ `ErroApi` não mostra mais "[object Object]": `mensagemDoDetalhe` em
+   `lib/api.ts` (extensão de território) usa `detail` texto, `detail.mensagem`
+   ou junta os `msg` da lista do 422; vale também para os uploads multipart de
+   `lib/config.ts`. `scripts/api-erro.test.mjs` (5 testes). Os contornos das
+   telas desta frente saíram. Para o Node importar o `api.ts` no teste:
+   `import.meta.env?.` e o `status` do `ErroApi` como campo declarado (a
+   propriedade de parâmetro não é sintaxe apagável).
+4. (Para depois, decisão da coordenadora) `conferir-telas.mjs` não tem "arquivos" em `ABRIDORES` — para conferir o
    diálogo de Arquivos, acrescentar (abre só leitura).
 5. Ao conferir Contatos vi 3 leads "Semente / teste-conversao-semente-…@exemplo.invalid"
    (tipo `teste`, 21/10 14:48) na lista de produção; minutos depois a lista
