@@ -26,6 +26,7 @@ import asyncpg
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.captura.urls import urls_invalidas
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual
 
@@ -43,6 +44,24 @@ COLUNAS = """id::text, name, slug, component_name, page_type, status,
              description, webhook_url, whatsapp_group_url, meta_title,
              meta_description, config, template_base,
              created_at::text, updated_at::text"""
+
+
+def recusar_urls_inseguras(config) -> None:
+    """400 se a config traz `redirect_url`, `imagem_url` ou
+    `consentimento.link` que não seja `http(s)` nem caminho do próprio site.
+
+    A config vai para a landing PÚBLICA: um `javascript:` no link da política
+    vira script na mão de quem clica (revisão de segurança da prova do RD,
+    21/10). O front já filtra; o servidor recusa ao salvar e descarta ao
+    servir (`app/captura/urls.py`). Usada também pelas rotas de página da
+    chave de API (`publico.py`).
+    """
+    ruins = urls_invalidas(config)
+    if ruins:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "URL inválida na config (use http(s):// ou um caminho /...): "
+            + ", ".join(ruins) + ".")
 
 
 class PaginaIn(BaseModel):
@@ -119,6 +138,7 @@ async def estatisticas(usuario: Usuario = Depends(admin_atual)):
 async def criar(dados: PaginaIn, usuario: Usuario = Depends(admin_atual)):
     """⚠️ O gatilho `trg_sanitize_page_slug` pode reescrever o slug. Por isso o
     `RETURNING`: quem chama deve usar o slug DEVOLVIDO, não o que mandou."""
+    recusar_urls_inseguras(dados.config)
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         try:
             linha = await conn.fetchrow(
@@ -145,6 +165,7 @@ async def atualizar(pagina_id: str, dados: PaginaPatch,
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada para atualizar.")
+    recusar_urls_inseguras(campos.get("config"))
     atribuicoes = ", ".join(
         f"{nome} = ${i}" for i, nome in enumerate(campos, start=2))
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
@@ -174,6 +195,7 @@ async def atualizar_config(slug: str,
     PÚBLICA `PATCH /publico/paginas/{slug}` funde, porque a function que ela
     substitui fundia. As duas semânticas são preservadas de propósito.
     """
+    recusar_urls_inseguras(config)
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"UPDATE pages SET config = $2 WHERE slug = $1 RETURNING {COLUNAS}",

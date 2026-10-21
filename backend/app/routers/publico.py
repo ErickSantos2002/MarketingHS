@@ -1502,6 +1502,8 @@ async def criar_pagina_publico(dados: PaginaPublicaIn,
                                _: ChaveApi = Depends(chave_api("write"))):
     """⚠️ Nasce com `status = 'inactive'`, como na origem: página criada de fora
     não entra no ar sozinha."""
+    from app.routers.paginas import recusar_urls_inseguras
+    recusar_urls_inseguras(dados.config)
     async with sessao(role="service_role") as conn:
         try:
             linha = await conn.fetchrow(
@@ -1557,6 +1559,9 @@ async def atualizar_pagina_publico(slug: str, dados: PaginaPublicaPatch,
 
         config = dict(atual["config"] or {})
         if dados.config:
+            # Confere o que chega; o que já estava gravado é descartado ao servir.
+            from app.routers.paginas import recusar_urls_inseguras
+            recusar_urls_inseguras(dados.config)
             config.update(dados.config)
         link_utm = None
         if dados.utm_preset:
