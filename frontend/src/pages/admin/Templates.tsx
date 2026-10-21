@@ -5,22 +5,30 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, MoreHorizontal, Eye, Pencil, Copy, Trash2, Loader2, LayoutTemplate } from 'lucide-react';
+import { Plus, MoreHorizontal, Eye, Pencil, Copy, Trash2, Loader2, LayoutTemplate, FileText } from 'lucide-react';
 import { useTemplates, type EmailTemplate } from '@/hooks/useTemplates';
+import { ArquivosDialog } from '@/components/admin/templates/ArquivosDialog';
 
 export default function Templates() {
   const navigate = useNavigate();
   const { templates, loading, duplicateTemplate, deleteTemplate } = useTemplates();
   const [deleteTarget, setDeleteTarget] = useState<EmailTemplate | null>(null);
+  const [arquivosAberto, setArquivosAberto] = useState(false);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {/* PDF com link público para pôr no e-mail (ficha técnica) */}
+        <Button variant="outline" onClick={() => setArquivosAberto(true)}>
+          <FileText className="h-4 w-4 mr-2" />
+          Arquivos
+        </Button>
         <Button onClick={() => navigate('/templates/new')}>
           <Plus className="h-4 w-4 mr-2" />
           Novo template
         </Button>
       </div>
+      <ArquivosDialog open={arquivosAberto} onOpenChange={setArquivosAberto} />
 
       {loading ? (
         <div className="flex items-center justify-center py-12">

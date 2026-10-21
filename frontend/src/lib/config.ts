@@ -117,3 +117,39 @@ export async function subirImagemDeEmail(
   }
   return resposta.json();
 }
+
+// Arquivos (PDF) para pôr link em e-mail — a ficha técnica da prova do RD.
+// `url_publica` é o link absoluto e estável (`<FRONTEND_URL>/api/publico/
+// arquivo/<id>`): é ele que vai no template. O servidor confere tipo, os bytes
+// `%PDF-` e o teto de 10 MB; a tela avisa antes só para não mandar à toa.
+export interface Arquivo {
+  id: string;
+  nome: string;
+  tamanho: number;
+  url: string;
+  url_publica: string;
+  criado_em: string;
+}
+
+export const TAMANHO_MAXIMO_ARQUIVO = 10 * 1024 * 1024;
+
+export const listarArquivos = () => api.get<Arquivo[]>('/arquivos');
+
+// ⚠️ Multipart, como `subirImagemDeEmail`: o `fetch` vai direto.
+export async function subirArquivo(arquivo: File): Promise<Arquivo> {
+  const corpo = new FormData();
+  corpo.append('arquivo', arquivo);
+
+  const token = lerToken();
+  const resposta = await fetch(`${BASE}/arquivos`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: corpo,
+  });
+  if (!resposta.ok) {
+    let detalhe: unknown = `Erro ${resposta.status}`;
+    try { detalhe = (await resposta.json()).detail ?? detalhe; } catch { /* sem corpo */ }
+    throw new ErroApi(resposta.status, typeof detalhe === 'string' ? detalhe : `Erro ${resposta.status}`);
+  }
+  return resposta.json();
+}
