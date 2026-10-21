@@ -133,6 +133,26 @@ def _conferir_webhooks(nos: list[dict] | None) -> None:
                                     f"nó {no.get('id')}: {e}") from None
 
 
+def _conferir_avisos_no_modo_teste(lista, nos) -> None:
+    """Antimeta nº 1: com modo teste ligado, quem RECEBE o aviso por e-mail
+    também tem de estar na lista. Sem modo teste, qualquer endereço (o aviso
+    real vai a um endereço de fora da empresa)."""
+    from app.jornadas import modo_teste
+
+    if not modo_teste.ligado(lista):
+        return
+    for no in nos or []:
+        if not (isinstance(no, dict) and no.get("type") == "notify_email"):
+            continue
+        fora = [str(e).strip() for e in ((no.get("config") or {}).get("emails") or [])
+                if str(e).strip() and not modo_teste.na_lista(lista, str(e))]
+        if fora:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"nó {no.get('id')}: com o modo teste ligado, o aviso só pode ir para "
+                f"e-mails da lista — fora dela: {', '.join(fora)}")
+
+
 def _sem_execucoes() -> dict:
     return {"active": 0, "waiting": 0, "done": 0, "failed": 0, "exited": 0}
 
@@ -180,6 +200,7 @@ async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     onde errou.
     """
     _conferir_webhooks(dados.nodes)
+    _conferir_avisos_no_modo_teste(dados.allowed_emails, dados.nodes)
     campos = dados.model_dump()
     if campos["allowed_emails"] is None:
         # Sem lista, a coluna fica fora do INSERT (o NULL do DEFAULT vale): a
@@ -221,6 +242,17 @@ async def editar(jornada_id: str, dados: JornadaPatch,
 
     try:
         async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            if "nodes" in campos or "allowed_emails" in campos:
+                # A lista e os nós EM VIGOR depois do PATCH: o que veio no
+                # corpo, e o resto do que está gravado.
+                atual = await conn.fetchrow(
+                    """SELECT to_jsonb(j)->'allowed_emails' AS lista, j.nodes
+                         FROM journeys j WHERE j.id = $1::uuid FOR UPDATE""", jornada_id)
+                if atual is not None:
+                    _conferir_avisos_no_modo_teste(
+                        campos["allowed_emails"] if "allowed_emails" in campos
+                        else atual["lista"],
+                        campos["nodes"] if "nodes" in campos else atual["nodes"])
             r = await conn.execute(
                 f"""UPDATE journeys SET {', '.join(partes)}, updated_at = now()
                      WHERE id = $1::uuid""",

@@ -35,6 +35,7 @@ from app import integracoes, ritmo
 from app.config import settings
 from app.database import sessao
 from app.email import resend
+from app.jornadas import modo_teste
 from app.texto import html_para_texto
 
 logger = logging.getLogger(__name__)
@@ -428,6 +429,13 @@ async def _anotar_destinatario(saida_id: int, email: str, resend_id: str) -> Non
                 WHERE id = $1""", saida_id, email, resend_id or "")
 
 
+async def _anotar_pulados(saida_id: int, pulados: list[str]) -> None:
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            """UPDATE journey_saidas SET payload = jsonb_set(payload, '{pulados}', $2::jsonb),
+                      atualizado_em = now() WHERE id = $1""", saida_id, pulados)
+
+
 async def _mandar_aviso(s: dict, chave: str, de: str, compasso, por_segundo: float) -> str:
     payload = s["payload"]
     ja = set(payload.get("enviados") or [])
@@ -435,6 +443,19 @@ async def _mandar_aviso(s: dict, chave: str, de: str, compasso, por_segundo: flo
     if not destinos:
         await _falhar(s["id"], "aviso sem destinatário")
         return "falhos"
+    # ⚠️ Antimeta nº 1, de novo na hora de sair: com modo teste ligado, quem
+    # RECEBE o aviso também precisa estar na lista (a rota recusa ao salvar;
+    # isto cobre a lista que mudou depois). Fora da lista, o destinatário é
+    # pulado e anotado em `payload.pulados`.
+    async with sessao(role="service_role") as conn:
+        lista = await modo_teste.lista_da_jornada(conn, s.get("journey_id"))
+    pulados = [d for d in destinos if not modo_teste.na_lista(lista, d)]
+    if pulados:
+        destinos = [d for d in destinos if d not in pulados]
+        await _anotar_pulados(s["id"], pulados)
+        if not destinos:
+            await _falhar(s["id"], "modo teste: nenhum destinatário do aviso está na lista")
+            return "falhos"
     html = payload.get("html") or ""
     for email in destinos:
         if email in ja:

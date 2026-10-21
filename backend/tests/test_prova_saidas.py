@@ -649,3 +649,123 @@ async def test_os_dois_lacos_medem_sob_a_mesma_trava(saida, resend_falso, monkey
     from app import worker
     fonte = inspect.getsource(worker._tick)
     assert fonte.index("ritmo.travar_cota(conn)") < fonte.index("ritmo.medir(conn)")
+
+
+# ── Revisão 3: modo teste vale também para quem RECEBE o aviso ───────────────
+
+@pytest_asyncio.fixture
+async def jornada_real():
+    """Jornada (draft, sem run — o guard deixa apagar) e lead COMITADOS,
+    apagados por id no fim. `await jornada_real(["a@x"], "lead@x")`."""
+    from limpeza import apagar_leads
+    await db.init_db()
+    criadas, leads = [], []
+
+    async def criar(permitidos, email_do_lead="erick@exemplo.invalid"):
+        async with db.sessao(role="service_role") as conn:
+            await _exigir_027(conn)
+            jid = await conn.fetchval(
+                """INSERT INTO journeys (name, entry_type, entry_config, allowed_emails)
+                   VALUES ('prova-saidas real', 'event', '{"event_type": "form_submitted"}',
+                           $1::text[]) RETURNING id::text""", permitidos)
+            lid = await conn.fetchval(
+                "INSERT INTO leads (nome, email, tipo) VALUES ('Prova saídas', $1, 'teste') "
+                "RETURNING id::text", email_do_lead)
+        criadas.append(jid)
+        leads.append(lid)
+        return jid, lid
+
+    yield criar
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM journeys WHERE id = ANY($1::uuid[])", criadas)
+        await apagar_leads(conn, leads)
+
+
+async def test_aviso_pula_destinatario_fora_da_lista(saida, resend_falso, jornada_real):
+    jid, lid = await jornada_real(["erick@exemplo.invalid", "comercial@exemplo.invalid"])
+    sid = await saida("aviso_email", "comercial@exemplo.invalid,gerente@cliente.invalid",
+                      journey_id=jid, lead_id=lid)
+    r = await saidas.rodar_saidas(somente=[sid])
+    assert r["enviados"] == 1
+    assert [e["para"] for e in resend_falso["enviados"]] == ["comercial@exemplo.invalid"]
+    linha = await _linha(sid)
+    assert linha["payload"]["pulados"] == ["gerente@cliente.invalid"]
+
+
+async def test_aviso_so_para_fora_da_lista_falha_sem_enviar(saida, resend_falso, jornada_real):
+    jid, lid = await jornada_real(["erick@exemplo.invalid"])
+    sid = await saida("aviso_email", "gerente@cliente.invalid", journey_id=jid, lead_id=lid)
+    r = await saidas.rodar_saidas(somente=[sid])
+    assert r["falhos"] == 1 and resend_falso["enviados"] == []
+    linha = await _linha(sid)
+    assert linha["status"] == "falhou" and "modo teste" in linha["erro"]
+
+
+async def test_aviso_sem_modo_teste_vai_para_qualquer_endereco(saida, resend_falso, jornada_real):
+    jid, lid = await jornada_real(None, "qualquer@cliente.invalid")
+    sid = await saida("aviso_email", "vendedor@gmail.invalid", journey_id=jid, lead_id=lid)
+    r = await saidas.rodar_saidas(somente=[sid])
+    assert r["enviados"] == 1
+
+
+NO_AVISO = {"id": "n1", "type": "notify_email",
+            "config": {"emails": ["Comercial@Exemplo.invalid", "gerente@cliente.invalid"]},
+            "next": None}
+
+
+@pytest_asyncio.fixture
+async def rota_jornadas(cliente, token_admin):
+    ids = []
+
+    async def post(**corpo):
+        r = await cliente.post("/jornadas", headers={"Authorization": f"Bearer {token_admin}"},
+                               json={"name": "prova-saidas rota", "entry_type": "event",
+                                     "entry_config": {"event_type": "form_submitted"},
+                                     **corpo})
+        if r.status_code == 201:
+            ids.append(r.json()["journey"]["id"])
+        return r
+
+    async def patch(jid, **corpo):
+        return await cliente.patch(f"/jornadas/{jid}",
+                                   headers={"Authorization": f"Bearer {token_admin}"},
+                                   json=corpo)
+
+    yield post, patch
+    if ids:
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM journeys WHERE id = ANY($1::uuid[])", ids)
+
+
+async def test_rota_recusa_aviso_para_fora_da_lista_do_modo_teste(rota_jornadas):
+    post, patch = rota_jornadas
+    async with db.sessao(role="service_role") as conn:
+        await _exigir_027(conn)
+    r = await post(allowed_emails=["comercial@exemplo.invalid"], entry_node_id="n1",
+                   nodes=[NO_AVISO])
+    assert r.status_code == 400
+    assert "gerente@cliente.invalid" in r.json()["detail"]
+    assert "modo teste" in r.json()["detail"]
+
+    ok = await post(allowed_emails=["comercial@exemplo.invalid", "gerente@cliente.invalid"],
+                    entry_node_id="n1", nodes=[NO_AVISO])
+    assert ok.status_code == 201, ok.text
+    jid = ok.json()["journey"]["id"]
+    # Tirar da lista quem o nó avisa também é recusado (PATCH só da lista)...
+    r = await patch(jid, allowed_emails=["comercial@exemplo.invalid"])
+    assert r.status_code == 400
+    # ... e trocar o nó para fora da lista (PATCH só dos nós).
+    fora = {**NO_AVISO, "config": {"emails": ["outro@cliente.invalid"]}}
+    r = await patch(jid, nodes=[fora])
+    assert r.status_code == 400
+    # Desligar o modo teste libera qualquer endereço.
+    assert (await patch(jid, allowed_emails=[])).status_code == 200
+    assert (await patch(jid, nodes=[fora])).status_code == 200
+
+
+async def test_rota_sem_modo_teste_aceita_qualquer_aviso(rota_jornadas):
+    post, _ = rota_jornadas
+    async with db.sessao(role="service_role") as conn:
+        await _exigir_027(conn)
+    r = await post(entry_node_id="n1", nodes=[NO_AVISO])
+    assert r.status_code == 201, r.text

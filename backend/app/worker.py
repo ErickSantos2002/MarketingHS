@@ -20,6 +20,7 @@ from app import fila, integracoes, ritmo
 from app.config import settings
 from app.crm import entrega
 from app.database import close_db, init_db, sessao
+from app.jornadas import modo_teste
 from app.email import resend
 from app.email.montagem import (
     aplicar_merge_tags,
@@ -101,22 +102,9 @@ async def _remetente() -> str:
     return (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
 
-def _na_lista_do_modo_teste(lista, email: str | None) -> bool:
-    """Mesma regra do `executor.contato_permitido`: lista nula = sem modo
-    teste; senão o e-mail, aparado e sem caixa, precisa estar nela. Lista
-    vazia ou de forma inesperada não libera ninguém.
-
-    ⚠️ A lista vem de `to_jsonb(j)->'allowed_emails'` — NULL também quando a
-    027 ainda não foi aplicada (a coluna não existe), que é "sem modo teste"."""
-    if lista is None:
-        return True
-    if isinstance(lista, str):
-        import json as _json
-        lista = _json.loads(lista)
-    if not isinstance(lista, list):
-        return False
-    alvo = (email or "").strip().lower()
-    return bool(alvo) and alvo in {str(e).strip().lower() for e in lista}
+# A regra do modo teste mora em `app/jornadas/modo_teste.py` — a mesma do
+# executor e da caixa de saída.
+_na_lista_do_modo_teste = modo_teste.na_lista
 
 
 async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
