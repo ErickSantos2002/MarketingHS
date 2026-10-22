@@ -25,7 +25,8 @@ from app.integracoes import ler_segredo
 
 logger = logging.getLogger(__name__)
 
-SEGREDO_CHAVE = "GROWTHHS_API_KEY"
+SEGREDO_CLIENTE = "GROWTHHS_CLIENT_SECRET"
+SEGREDO_WEBHOOK = "GROWTHHS_WEBHOOK_SECRET"
 TIMEOUT = 15
 CAMINHO_CARDS = "/api/v1/integration/cards"
 UTMS = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
@@ -34,13 +35,16 @@ UTMS = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
 @dataclass(frozen=True)
 class Config:
     base_url: str | None
-    board_id: int | None
+    client_id: str | None
+    client_secret: str | None
+    list_id: int | None
+    boards_conferidos: tuple[int, ...]
     app_url: str | None
-    api_key: str | None
 
     @property
     def configurado(self) -> bool:
-        return bool(self.base_url and self.board_id and self.api_key)
+        return bool(self.base_url and self.client_id and self.client_secret
+                    and self.list_id and self.boards_conferidos)
 
     def url_do_card(self, card_id) -> str | None:
         """O link "Ver no GrowthHS" (rota `/cards/:cardId` do app dele)."""
@@ -50,18 +54,27 @@ class Config:
 
 
 async def ler_config() -> Config:
-    """Nunca levanta: banco fora vira "não configurado", e a fila espera."""
+    """Nunca levanta: banco fora vira "não configurado", e a fila espera.
+
+    ⚠️ Modo de falhar: erro de leitura da tabela ou coluna ausente (migration
+    029 não aplicada) devolve tudo vazio, nunca exceção — o worker não pode
+    cair por causa de configuração.
+    """
     try:
         async with sessao(role="service_role") as conn:
             linha = await conn.fetchrow(
-                "SELECT base_url, board_id, app_url FROM growthhs_config LIMIT 1")
+                """SELECT base_url, client_id, list_id, boards_conferidos,
+                          app_url FROM growthhs_config LIMIT 1""")
     except Exception:
         logger.exception("[growthhs] não foi possível ler growthhs_config")
         linha = None
-    return Config(base_url=linha["base_url"] if linha else None,
-                  board_id=linha["board_id"] if linha else None,
-                  app_url=linha["app_url"] if linha else None,
-                  api_key=await ler_segredo(SEGREDO_CHAVE))
+    return Config(
+        base_url=linha["base_url"] if linha else None,
+        client_id=linha["client_id"] if linha else None,
+        client_secret=await ler_segredo(SEGREDO_CLIENTE),
+        list_id=linha["list_id"] if linha else None,
+        boards_conferidos=tuple(linha["boards_conferidos"] or ()) if linha else (),
+        app_url=linha["app_url"] if linha else None)
 
 
 def normalizar_faturamento(valor: str | None) -> str | None:
