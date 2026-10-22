@@ -172,3 +172,24 @@ corpo de `Formulario.tsx`/`rastreio.js` — casam.
 
 **Pronto para merge** (`prova-captura-f1`). Ao Erick, para a prova:
 `PROVA_RECEPTOR_TESTE=true` no ambiente da API só durante o roteiro.
+
+## Sobras da revisão (21–22/10, branch `prova-captura-f2`)
+
+Um commit por item, TDD (cada teste visto falhando antes do conserto):
+
+| Commit | Item |
+|---|---|
+| `586e002` | Retorno do CRM acha o lead na ordem do contrato: `lead_id` → e-mail → `dnia_id`, cada um só se o anterior não achou; `lead_id` inexistente cai para o e-mail (`api_contato.lead_do_crm`). `_lead_por_identificador` voltou a ser o da origem. Contrato: frase da ordem/fallback. |
+| `ee6a0bc` | `dnia_id` mal formado no `evento-de-contato` → 400 nos dois caminhos (growthhs e os outros `source_app`); antes, 500 de cast. O `/contato/status` já dava 422 pelo pydantic (teste antigo `test_status_dnia_id_malformado_e_422`, mantido). |
+| `9a9032d` | Contato com `deleted_at` não é achado pelo retorno do CRM nem pelo `/contato/status` (por `lead_id`, e-mail ou `dnia_id`) → 404, estágio intacto. |
+| `8bba85b` | `rastreio.py`: `Content-Length` > 16 KB → 413 sem ler; inválido → 400; sem ele, leitura em pedaços que para no teto. |
+| `15c4bc3` | `primeiro_toque` da visita passa por `_toque()` (que agora guarda também `url` e `ts`, cortados). |
+| `2dea8d1` | `UUID` no caminho de `/sites/{id}`, `/sites/{id}/token`, `/contatos/{id}/consentimentos` → 422, não 500. |
+
+**Testes:** os de cada item rodaram verdes no banco de produção
+(`test_prova_crm` 24 + `test_api_contato` 29 = 53 passed depois do item 3;
+`test_prova_site` `-k "corpo"` 4, `-k "visita or conversao"` 8, item 6 5).
+A rodada conjunta dos arquivos tocados e a suíte inteira **não terminaram
+aqui**: a máquina suspendeu à noite e a coordenadora matou os pytest (banco
+conferido por ela: 2.107 leads, sem sobra). **A suíte inteira fica com a
+coordenadora**, uma por vez.
