@@ -463,3 +463,29 @@ async def test_trocar_as_duas_listas_juntas_e_aceito(cliente, banco_growthhs, to
                           json={"listas_reuniao": [32], "listas_ganho": [28]})
     assert r.status_code == 200, r.text
     assert r.json()["listas_reuniao"] == [32] and r.json()["listas_ganho"] == [28]
+
+
+async def test_trocar_o_endereco_sem_secret_apaga_o_secret(cliente, banco_growthhs, token_admin,
+                                                          monkeypatch):
+    """O secret é só de escrita. Trocar o endereço e clicar "Testar" o
+    mandaria ao endereço novo — então o endereço novo sem secret no mesmo
+    pedido derruba o salvo. Mesmo endereço (até com barra no fim) não mexe."""
+    conn = banco_growthhs
+    await _configurar(conn, monkeypatch)
+
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={"base_url": "https://growthhs.exemplo.invalid/"})
+    assert r.status_code == 200, r.text
+    assert r.json()["client_secret"]["configurado"] is True
+
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={"base_url": "https://outro.exemplo.invalid"})
+    assert r.status_code == 200, r.text
+    assert r.json()["base_url"] == "https://outro.exemplo.invalid"
+    assert r.json()["client_secret"]["configurado"] is False
+
+    # Endereço novo COM o secret no mesmo pedido: fica.
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        "base_url": "https://terceiro.exemplo.invalid", "client_secret": SEGREDO_CLIENTE})
+    assert r.status_code == 200, r.text
+    assert r.json()["client_secret"]["configurado"] is True

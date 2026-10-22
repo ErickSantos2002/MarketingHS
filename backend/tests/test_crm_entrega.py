@@ -441,6 +441,22 @@ async def test_pessoa_com_card_aberto_atualiza_e_anota_sem_criar(lead_8d):
     assert (meta["card_id"], meta["ja_entregue"], meta["atualizado"]) == (aberto, True, True)
 
 
+async def test_descricao_no_teto_nao_cresce_mas_anota(lead_8d):
+    """Reconversão em série com o e-mail de um cliente não faz a descrição do
+    card dele crescer sem fim: passado o teto, só a nota sai."""
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    cheia = "x" * entrega.TETO_DA_DESCRICAO
+    aberto = api.card(pessoa, board=7, descricao=cheia)
+    await _enfileirar(lead_8d["lead_id"])
+    resultado = await _rodar(lead_8d["lead_id"], api)
+    assert resultado == {**ZERO, "atualizadas": 1}
+    assert api.puts() == [] and api.cards[aberto]["description"] == cheia
+    [nota] = api.notas
+    assert nota["card_id"] == aberto
+    assert (await _pedido(lead_8d["lead_id"]))["status"] == "entregue"
+
+
 async def test_entre_varios_abertos_atualiza_o_mais_recente(lead_8d):
     api = GrowthHSFalso()
     pessoa = api.pessoa(email=EMAIL)

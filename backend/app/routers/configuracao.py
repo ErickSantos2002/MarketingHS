@@ -1017,8 +1017,19 @@ async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(adm
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "A mesma lista não pode valer como reunião e como ganho: "
                 + ", ".join(str(i) for i in sorted(reuniao & ganho)))
+    limpar = set(dados.limpar)
+    if "base_url" in dados.model_fields_set and not dados.client_secret:
+        # ⚠️ O secret é só de escrita: ninguém o lê de volta pela tela. Trocar
+        # o endereço e clicar "Testar" o mandaria (no client-credentials) ao
+        # endereço novo — um admin leria o secret apontando para um servidor
+        # dele. Endereço mudou sem secret no mesmo pedido → o secret salvo cai.
+        from app.crm import growthhs
+
+        antes = (await growthhs.ler_config()).base_url
+        if (antes or "").rstrip("/") != (dados.base_url or "").rstrip("/"):
+            limpar.add("client_secret")
     for campo, nome in _SEGREDOS_GROWTHHS.items():
-        if campo in dados.limpar:
+        if campo in limpar:
             await apagar_segredo(nome)
         elif getattr(dados, campo):
             # Já vem sem espaço (validador) — o GrowthHS faz strip do dele.

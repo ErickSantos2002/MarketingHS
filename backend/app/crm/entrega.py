@@ -85,6 +85,8 @@ STATUS_DE_CONFIGURACAO = frozenset({401, 403, 404})
 ESPERA_DA_PAUSA = timedelta(minutes=10)
 # `erro` de um pedido pausado começa com isto — é por este prefixo que
 # `GET /config/growthhs` deriva `fila.pausada`.
+# Tamanho máximo da descrição do card depois de anexar o bloco de reconversão.
+TETO_DA_DESCRICAO = 20_000
 PREFIXO_PAUSA = "Pausa de configuração"
 MOTIVO_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — "
                 "pedido registrado no contrato (docs/contratos/"
@@ -455,9 +457,14 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
             # o segundo bloco não entra. O PUT só ANEXA: descrição atual +
             # bloco, e só a chave `description`.
             if not growthhs.bloco_ja_aplicado(descricao, pedido["id"]):
-                await cliente.atualizar_descricao(card_id, descricao + growthhs.bloco_de_atualizacao(
+                bloco = growthhs.bloco_de_atualizacao(
                     lead, conversao=conversao, consentimento=consentimento,
-                    frontend_url=frontend_url, pedido_id=pedido["id"], quando=quando))
+                    frontend_url=frontend_url, pedido_id=pedido["id"], quando=quando)
+                # ⚠️ Quem sabe o e-mail de um cliente reconverte quantas vezes
+                # quiser e cada vez anexa um bloco ao card dele. Passado o
+                # teto, a descrição para de crescer — só a nota sai.
+                if len(descricao) + len(bloco) <= TETO_DA_DESCRICAO:
+                    await cliente.atualizar_descricao(card_id, descricao + bloco)
     except (growthhs.ErroDefinitivo, growthhs.ErroTransitorio) as erro:
         # ⚠️ 404 em `ler_card`/PUT (card apagado entre a listagem e a
         # leitura) cai na pausa de configuração como qualquer 404: a fila
