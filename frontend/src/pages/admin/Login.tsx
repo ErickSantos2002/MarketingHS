@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { z } from 'zod';
 import logoHs from '@/assets/logo-hs.png';
+import { destinoSeguro } from '@/lib/destino';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -16,6 +17,12 @@ const loginSchema = z.object({
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const local = useLocation();
+  // A6: para onde a pessoa ia antes do login (só caminho interno). Pelo
+  // `state` do ProtectedRoute, ou por `?de=` (a recarga do 401 em `lib/api`
+  // não tem como levar `state`).
+  const destino = destinoSeguro(
+    (local.state as { de?: unknown } | null)?.de ?? new URLSearchParams(local.search).get('de'));
   const { user, isLoading, signIn } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -29,9 +36,9 @@ export default function AdminLogin() {
   // nenhuma explicação.
   useEffect(() => {
     if (user && !isLoading) {
-      navigate('/');
+      navigate(destino, { replace: true });
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate, destino]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

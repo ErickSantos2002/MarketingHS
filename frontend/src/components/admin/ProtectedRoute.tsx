@@ -1,7 +1,8 @@
 import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
+import { destinoDoLogin } from '@/lib/destino';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -10,6 +11,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, requireAdmin = true }: ProtectedRouteProps) {
   const { user, isAdmin, isLoading } = useAuth();
+  const local = useLocation();
 
   // O papel chega junto com o usuário em /auth/eu, então não há mais um
   // segundo carregamento só para descobri-lo.
@@ -25,7 +27,9 @@ export function ProtectedRoute({ children, requireAdmin = true }: ProtectedRoute
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    // A6: o destino (caminho + query) vai no `state`, e o login volta a ele
+    // — o link `/contacts?contato=<id>` do aviso abre a ficha depois de entrar.
+    return <Navigate to="/login" replace state={{ de: destinoDoLogin(local) }} />;
   }
 
   if (requireAdmin && !isAdmin) {
