@@ -37,6 +37,7 @@ from datetime import timedelta
 
 from app.crm import growthhs
 from app.database import sessao
+from app.jornadas import modo_teste
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,19 @@ async def _ja_entregue(conn, lead: dict) -> dict | None:
     return dict(anterior) if anterior else None
 
 
+async def _lista_do_pedido(conn, pedido: dict):
+    """O modo teste da jornada que pediu a entrega, como está AGORA (A5,
+    pergunta 66). Só pedido de jornada tem `journey_run_id`; manual e regra
+    = `None` (sem modo teste). Run ou jornada que sumiu = `None`, como em
+    `modo_teste.lista_da_jornada`."""
+    if not pedido.get("journey_run_id"):
+        return None
+    jornada = await conn.fetchval(
+        "SELECT journey_id::text FROM journey_runs WHERE id = $1::uuid",
+        pedido["journey_run_id"])
+    return await modo_teste.lista_da_jornada(conn, jornada)
+
+
 async def _marcar_entregue(pedido_id: int, card_id: int | None, person_id: int | None) -> None:
     async with sessao(role="service_role") as conn:
         await conn.execute(
@@ -204,9 +218,16 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, transporte) -> str:
         anterior = await _ja_entregue(conn, lead) if lead else None
         conversao, consentimento = (await origem_do_card(conn, pedido["lead_id"])
                                     if lead else (None, None))
+        lista = await _lista_do_pedido(conn, pedido) if lead else None
 
     if lead is None or lead["deleted_at"] is not None:
         await _falhar(pedido, None, "O contato foi excluído antes da entrega.")
+        return "falhas"
+    if not modo_teste.na_lista(lista, lead["email"]):
+        # A5 (pergunta 66): a segunda trava do modo teste, a mesma do e-mail,
+        # do aviso e do webhook. O nó já conferiu; a lista pode ter mudado
+        # entre o nó e a saída. Nem o card antigo é reaproveitado.
+        await _falhar(pedido, lead, "modo teste: fora da lista da jornada")
         return "falhas"
     if pedido["acao"] == "mover":
         await _falhar(pedido, lead, MOTIVO_MOVER)

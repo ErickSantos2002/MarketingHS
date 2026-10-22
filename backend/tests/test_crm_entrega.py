@@ -422,3 +422,56 @@ async def test_cancelar_depois_do_2xx_ainda_grava_entregue(lead_8d, monkeypatch)
             break
         await asyncio.sleep(0.1)
     assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
+
+
+# ── Modo teste na saída (A5, pergunta 66) ───────────────────────────────────
+
+async def test_lista_do_pedido_vem_da_jornada_do_run(conexao):
+    """A lista em vigor AGORA, pela jornada do run. Transação revertida: a
+    jornada e o run nunca existem para o worker de produção."""
+    jornada = await conexao.fetchval(
+        """INSERT INTO journeys (name, status, entry_type, entry_config, entry_node_id,
+                                 nodes, allowed_emails)
+           VALUES ('a5-modo-teste', 'paused', 'event', '{"event_type": "form_submitted"}',
+                   'n1', '[{"id": "n1", "type": "handoff_growthhs", "config": {}, "next": null}]',
+                   '{erick@exemplo.invalid}')
+           RETURNING id::text""")
+    lead = await conexao.fetchval(
+        "INSERT INTO leads (email, tipo) VALUES ('a5@exemplo.invalid', 'teste') RETURNING id::text")
+    run = await conexao.fetchval(
+        "INSERT INTO journey_runs (journey_id, lead_id, state, current_node_id) "
+        "VALUES ($1::uuid, $2::uuid, 'done', 'n1') RETURNING id::text", jornada, lead)
+
+    assert await entrega._lista_do_pedido(conexao, {"journey_run_id": run}) == [
+        "erick@exemplo.invalid"]
+    assert await entrega._lista_do_pedido(conexao, {"journey_run_id": None}) is None
+    await conexao.execute("UPDATE journeys SET allowed_emails = NULL WHERE id = $1::uuid", jornada)
+    assert await entrega._lista_do_pedido(conexao, {"journey_run_id": run}) is None
+
+
+async def test_handoff_de_jornada_fora_da_lista_nao_sai(lead_8d, monkeypatch):
+    """A lista pode ter mudado entre o nó e a entrega: a saída reconfere,
+    como o aviso e o webhook. O GrowthHS não é chamado."""
+    async def lista(conn, pedido):
+        return ["outro@exemplo.invalid"]
+    monkeypatch.setattr(entrega, "_lista_do_pedido", lista)
+    async with db.sessao(role="service_role") as conn:
+        await entrega.enfileirar(conn, lead_8d["lead_id"], "jornada")
+    chamadas = []
+    resultado = await entrega.rodar_entregas(
+        somente_lead=lead_8d["lead_id"], cfg=CFG,
+        transporte=_transporte(201, {"id": 4821}, chamadas))
+    assert resultado["falhas"] == 1 and chamadas == []
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "falhou" and pedido["erro"].startswith("modo teste")
+
+
+async def test_handoff_de_jornada_na_lista_sai(lead_8d, monkeypatch):
+    async def lista(conn, pedido):
+        return [f" {EMAIL.upper()} "]
+    monkeypatch.setattr(entrega, "_lista_do_pedido", lista)
+    async with db.sessao(role="service_role") as conn:
+        await entrega.enfileirar(conn, lead_8d["lead_id"], "jornada")
+    resultado = await entrega.rodar_entregas(
+        somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(201, {"id": 4821}))
+    assert resultado["entregues"] == 1
