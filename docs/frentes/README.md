@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 22/10 (noite):** `prova-jornadas`, `prova-captura-f2` e `prova-roteiro` ✅ mergeadas; suíte única do integrado 786 passed (com `systemd-inhibit` — a máquina suspendeu à noite e congelou duas suítes paralelas por 13 h; **suíte só uma por vez e com inibidor**). Nenhuma frente aberta. Próximo: deploy + roteiro (`docs/prova-rd/roteiro.md`).
+
 **Estado em 22/10 (tarde):** `prova-captura` Fase 1 ✅ mergeada (`e270f13`; suíte 653 passed / 0 skipped, leads 2.107 antes e depois; revisão: pode mergear). Sobras baratas para depois do merge da `prova-jornadas`: ordem de busca do lead no retorno do CRM (contrato diz lead_id→e-mail→dnia_id), `dnia_id` mal formado dá 500, lead excluído não filtrado, teto de 16 KB pelo `Content-Length`, `primeiro_toque` da visita filtrado. `prova-jornadas` em correção da revisão.
 
 **Estado em 22/10:** `prova-telas` ✅ mergeada (T13–17 + `ErroApi` legível + tipo `allowed_emails`; revisão: pode mergear; portão depois do merge: 55 testes node, `tsc` 0, guarda 0, builds ok). ⚠️ **Não fazer deploy do `marketinghs-sistema` antes de `prova-jornadas` e `prova-captura-f1` entrarem na `main`:** sem elas o backend descarta `allowed_emails` (fluxo salvo sem modo teste, em silêncio) e a `key` do segmento por campo personalizado. Item para depois: login perde `?contato=` (`ProtectedRoute.tsx:28`).

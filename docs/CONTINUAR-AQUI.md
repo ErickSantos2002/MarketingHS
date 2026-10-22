@@ -1,5 +1,44 @@
 # Continuar aqui
 
+> ## 🧪 Prova de substituição do RD — código pronto na `main` (22/10/2026)
+>
+> **O quê:** landing `phoebus-prova` + captura de formulário de outro site
+> (`rastreio.js`) + consentimento + jornadas em **modo teste** (boas-vindas →
+> nutrição, ficha técnica em PDF, aviso por e-mail, envio ao GrowthHS pelo
+> receptor de teste) + números por página + volta do CRM. Spec
+> `docs/superpowers/specs/2026-10-21-prova-substituir-rd-design.md`, plano
+> `docs/superpowers/plans/2026-10-21-prova-substituir-rd.md`, inventário do RD
+> em `docs/inventario-rd.md`.
+>
+> **Estado:** as 4 frentes + roteiro mergeadas; migration **027 aplicada**;
+> suíte única do código integrado **786 passed** (56 min, leads 2.107 antes e
+> depois); portão do front ok (55 testes node, `tsc` 0, guarda 0, builds).
+> Seis revisões de segurança automáticas tratadas (XSS no link, página de teste
+> fora da origem do admin, SSRF + DNS rebinding no webhook, cache do token).
+>
+> **Falta (Erick, em ordem — detalhe em `docs/prova-rd/roteiro.md`):**
+> 1. Deploy de `marketinghs-api`, `-worker` e `-sistema` (tudo junto: o front
+>    novo sem o backend novo descartaria o modo teste em silêncio).
+> 2. `PROVA_RECEPTOR_TESTE=true` só na API + deploy da API. Conferir o nome
+>    interno da API no EasyPanel (o `receptor.sql` supõe
+>    `http://erick_marketinghs-api:8000`).
+> 3. Serviço estático no EasyPanel servindo `prova-site/`, domínio próprio.
+> 4. Chave de API com escopo escrita (passo 9).
+> 5. `bash ~/marketinghs-prova-rd.sh semear <dominio> E1,E2,E3 [whatsapp]`,
+>    esperar 1 min; `bash ~/marketinghs-prova-rd.sh receptor`.
+> 6. Subir o PDF da ficha (Templates → Arquivos) e trocar `{{LINK_DO_PDF}}`.
+> 7. Claude confere as telas (só leitura) e o Erick roda os passos 1–12;
+>    no fim `conferir` (antimeta = 0 linhas), `limpar`, `conferir`.
+> 8. Depois: receptor desligado, serviço estático parado, chave revogada,
+>    ✅/❌ por passo aqui.
+>
+> **Antes de liberar externamente** (com o RD rodando junto): pergunta 62
+> (jornada sem filtro × site), D3 (base legal), endpoint `POST
+> /integration/cards` no `hsgrowth-sistema` (contrato atualizado em
+> `docs/contratos/`), entrega ao CRM reconferir o modo teste na saída
+> (pergunta 66), login que perde `?contato=` (`ProtectedRoute.tsx`).
+
+
 > ## 🌅 Comece por aqui — fechado em 07/10/2026
 >
 > **Em produção** (https://marketinghs.healthsafetytech.com, projeto `erick`):

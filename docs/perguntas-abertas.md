@@ -122,3 +122,11 @@ dia no `CONTINUAR-AQUI.md`.
 65. **Campo-isca na conversão de site:** a spec pedia, o plano tirou (o
     formulário do site é do site; o token + `Origin` + limite seguram).
     **Assumido:** sem campo-isca; reavaliar se aparecer spam.
+66. **Entrega ao CRM e modo teste na saída** (revisão da `prova-jornadas`):
+    aviso e webhook reconferem `allowed_emails` na hora de sair; a entrega ao
+    GrowthHS (`crm/entrega.py`) só confere no nó. **Assumido:** basta para a
+    prova (a lista não muda no meio); fazer antes da fase externa.
+67. **Limpeza da prova não apaga contato que já existia** (`limpeza.sql`):
+    só lista. **Assumido:** um contato real que converteu na prova não vai
+    para a lixeira.
+68. **Destinatário do aviso na prova** = 1º e-mail da lista do `semear`.
