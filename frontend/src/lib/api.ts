@@ -69,7 +69,7 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
     // Sessão morta: limpa e manda para o login em vez de deixar a tela
     // tentando de novo com um token que não vale mais.
     limparToken();
-    if (!location.pathname.startsWith('/login')) location.assign('/login');
+    if (!location.pathname.startsWith('/login')) location.assign('/login?de=' + encodeURIComponent(location.pathname + location.search + location.hash));
     throw new ErroApi(401, 'Sessão expirada.');
   }
 
