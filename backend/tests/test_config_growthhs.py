@@ -127,6 +127,13 @@ async def test_limpar_campo_desconhecido_e_400(cliente, banco_growthhs, token_ad
     {"base_url": "https://u@growthhs.exemplo.invalid"},
     {"app_url": "https://app.exemplo.invalid/#/x"},
     {"base_url": "https://growthhs.exemplo.invalid/a b"},
+    # Revisão final (M5): query string e porta inválida.
+    {"base_url": "https://growthhs.exemplo.invalid/?x=1"},
+    {"app_url": "https://app.exemplo.invalid?"},
+    {"base_url": "https://growthhs.exemplo.invalid:99999"},
+    {"base_url": "https://growthhs.exemplo.invalid:porta"},
+    # Revisão final (M4): a mesma lista como reunião e ganho.
+    {"listas_reuniao": [28, 40], "listas_ganho": [40]},
     {"list_id": 0},
     {"boards_conferidos": [0]},
     {"boards_conferidos": [6, 6]},
@@ -270,8 +277,9 @@ async def test_testar_mostra_o_detail_json_de_la(cliente, banco_growthhs, token_
 @pytest.mark.parametrize("status,kw,secreto,esperado", CORPOS_SECRETOS)
 async def test_erro_da_fila_nunca_ecoa_o_corpo(cliente, banco_growthhs, token_admin,
                                                monkeypatch, status, kw, secreto, esperado):
-    """404 pausa, 500 adia, 422 falha — nos três, o `erro` gravado (e o que o
-    GET mostra) tem o status e a mensagem, nunca o corpo."""
+    """404 e 422 (no token, que o transporte recusa primeiro) pausam, 500
+    adia — nos três, o `erro` gravado (e o que o GET mostra) tem o status e a
+    mensagem, nunca o corpo."""
     conn = banco_growthhs
     await _zerar(conn, monkeypatch)
     monkeypatch.setattr(entrega, "sessao", configuracao.sessao)
@@ -398,3 +406,60 @@ async def test_reenfileirar_devolve_as_falhas_sem_entrega(cliente, banco_growthh
     assert dict(linha) == {"status": "pendente", "tentativas": 0, "erro": None,
                            "visivel": True}
     assert pendentes_do_segundo == 0
+
+
+async def test_reenfileirar_pega_a_falha_de_reconversao(cliente, banco_growthhs,
+                                                       token_admin, monkeypatch):
+    """Revisão final (I2): entregue em setembro, converteu de novo e o pedido
+    novo falhou. O painel conta essa falha (`_FALHA_EM_ABERTO`); o botão
+    tinha de pegá-la também — antes, QUALQUER `entregue` excluía o lead."""
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    if await conn.fetchval("SELECT count(*) FROM crm_handoffs WHERE status = 'falhou'"):
+        pytest.skip("há falhas reais na fila — o teste não tranca produção")
+    lead = await _lead(conn, "fila-real-f@exemplo.invalid")
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, card_id) "
+        "VALUES ($1::uuid, 'manual', 'entregue', 4821)", lead)
+    falha = await conn.fetchval(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
+        "VALUES ($1::uuid, 'regra', 'falhou', '422: corpo') RETURNING id", lead)
+    assert (await cliente.get(ROTA, headers=_auth(token_admin))).json()["fila"]["falhas"] == 1
+
+    r = await cliente.post(f"{ROTA}/reenfileirar", headers=_auth(token_admin))
+    assert r.json() == {"reenfileirados": 1}
+    assert await conn.fetchval(
+        "SELECT status FROM crm_handoffs WHERE id = $1", falha) == "pendente"
+
+
+async def _config_com_listas(conn, monkeypatch):
+    await _configurar(conn, monkeypatch)
+    await conn.execute("UPDATE growthhs_config SET listas_reuniao = '{28}', "
+                       "listas_ganho = '{32}'")
+
+
+@pytest.mark.parametrize("corpo", [{"listas_ganho": [28]}, {"listas_reuniao": [32, 50]}])
+async def test_lista_em_comum_com_a_salva_e_422(cliente, banco_growthhs, token_admin,
+                                               monkeypatch, corpo):
+    """Revisão final (M4): só uma das duas no PUT — a outra é a salva. A mesma
+    lista como reunião e como ganho marcaria venda num card que só teve
+    reunião. Nada é gravado."""
+    conn = banco_growthhs
+    await _config_com_listas(conn, monkeypatch)
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={**corpo, "client_id": "hsg_nao_gravado"})
+    assert r.status_code == 422, r.text
+    linha = await conn.fetchrow(
+        "SELECT client_id, listas_reuniao, listas_ganho FROM growthhs_config")
+    assert (linha["client_id"], linha["listas_reuniao"], linha["listas_ganho"]) == (
+        "hsg_teste_cfg", [28], [32])
+
+
+async def test_trocar_as_duas_listas_juntas_e_aceito(cliente, banco_growthhs, token_admin,
+                                                    monkeypatch):
+    """Inverter reunião e ganho num PUT só: o que vale é o par novo."""
+    await _config_com_listas(banco_growthhs, monkeypatch)
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={"listas_reuniao": [32], "listas_ganho": [28]})
+    assert r.status_code == 200, r.text
+    assert r.json()["listas_reuniao"] == [32] and r.json()["listas_ganho"] == [28]

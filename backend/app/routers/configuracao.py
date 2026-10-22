@@ -839,7 +839,10 @@ class GrowthHSIn(BaseModel):
     @field_validator("base_url", "app_url")
     @classmethod
     def _endereco(cls, valor):
-        """Só http/https, com host, sem usuário/senha e sem fragmento.
+        """Só http/https, com host, sem usuário/senha, sem query string, sem
+        fragmento e com porta válida (revisão final, M5: `?x=1` iria colado
+        na frente de todo caminho da API, e porta inválida só estourava na
+        fila, pedido a pedido).
 
         ⚠️ IP privado NÃO é recusado: a API do GrowthHS pode ser legítima
         pelo nome interno do EasyPanel (`http://erick_hsgrowth-api:8000`). A
@@ -852,6 +855,7 @@ class GrowthHSIn(BaseModel):
         try:
             partes = urlsplit(valor)
             host = partes.hostname
+            partes.port  # ⚠️ porta fora de 0–65535 ou não numérica levanta aqui
         except ValueError:
             raise ValueError("endereço inválido") from None
         if partes.scheme.lower() not in ("http", "https") or not host or re.search(r"\s", valor):
@@ -860,6 +864,8 @@ class GrowthHSIn(BaseModel):
             raise ValueError("não coloque usuário ou senha no endereço")
         if partes.fragment or "#" in valor:
             raise ValueError("o endereço não pode ter # (fragmento)")
+        if partes.query or "?" in valor:
+            raise ValueError("o endereço não pode ter ? (parâmetros)")
         return valor
 
     @field_validator("client_id", "client_secret")
@@ -993,6 +999,24 @@ async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(adm
     if desconhecidos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Campos desconhecidos: {', '.join(desconhecidos)}")
+    if dados.listas_reuniao is not None or dados.listas_ganho is not None:
+        # ⚠️ Revisão final (M4): a mesma lista em "reunião" e em "ganho" faria
+        # o webhook de volta marcar venda num card que só teve reunião (ou o
+        # contrário). Quando só uma vem no PUT, a outra é a salva. Antes de
+        # gravar qualquer coisa, segredo inclusive.
+        from app.crm import growthhs
+
+        salvo = (await growthhs.ler_config()
+                 if dados.listas_reuniao is None or dados.listas_ganho is None else None)
+        reuniao = set(dados.listas_reuniao if dados.listas_reuniao is not None
+                      else salvo.listas_reuniao)
+        ganho = set(dados.listas_ganho if dados.listas_ganho is not None
+                    else salvo.listas_ganho)
+        if reuniao & ganho:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "A mesma lista não pode valer como reunião e como ganho: "
+                + ", ".join(str(i) for i in sorted(reuniao & ganho)))
     for campo, nome in _SEGREDOS_GROWTHHS.items():
         if campo in dados.limpar:
             await apagar_segredo(nome)
@@ -1055,8 +1079,12 @@ async def reenfileirar_falhas_growthhs(_: Usuario = Depends(admin_atual)):
 
     Um pedido por lead (o mais recente), só de criar card — `mover` falharia
     de novo, pelo mesmo motivo —, só de lead que não foi apagado, não tem
-    entrega `entregue` e não tem pedido pendente (o índice único de pendente
-    recusaria o segundo). Tentativas zeradas, visível na hora."""
+    pedido pendente (o índice único de pendente recusaria o segundo) e não
+    foi entregue DEPOIS da falha — o mesmo critério de `_FALHA_EM_ABERTO`.
+    ⚠️ Revisão final (I2): excluir o lead com QUALQUER `entregue` deixava de
+    fora a falha de reconversão (entregue em setembro, converteu de novo,
+    falhou) — o painel contava a falha e o botão não a pegava. Tentativas
+    zeradas, visível na hora."""
     async with sessao(role="service_role") as conn:
         ids = await conn.fetch(
             """UPDATE crm_handoffs h
@@ -1069,7 +1097,8 @@ async def reenfileirar_falhas_growthhs(_: Usuario = Depends(admin_atual)):
                          AND l.deleted_at IS NULL
                          AND NOT EXISTS (SELECT 1 FROM crm_handoffs e
                                           WHERE e.lead_id = f.lead_id AND e.acao = 'criar'
-                                            AND e.status IN ('entregue', 'pendente'))
+                                            AND (e.status = 'pendente'
+                                                 OR (e.status = 'entregue' AND e.id > f.id)))
                        ORDER BY f.lead_id, f.id DESC)
             RETURNING h.id""")
     return {"reenfileirados": len(ids)}
