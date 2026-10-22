@@ -61,7 +61,6 @@ MAX_VALOR_EXTRA = 500
 VALIDADE_PADRAO_TOKEN = 8 * 3600
 FOLGA_TOKEN = 5 * 60
 CAMPOS_EMAIL = ("email", "email_commercial", "email_personal", "email_alternative")
-CAMPOS_TELEFONE = ("phone", "phone_whatsapp", "phone_commercial")
 
 
 @dataclass(frozen=True)
@@ -247,7 +246,7 @@ def origem_do_card_texto(conversao: dict | None) -> str:
 
 
 def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict | None,
-                     frontend_url: str) -> str:
+                     frontend_url: str, pedido_id: int | None = None) -> str:
     """A `description` do card: uma linha por item, SÓ os que têm valor (o
     "—" do contrato antigo poluía o card), na ordem da spec §2. O card
     comercial não tem `business_info`/`custom_fields`/`conversion`/`consent`
@@ -257,7 +256,13 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
     resposta livre do formulário (`campos_extras`, chave e valor) vai num
     bloco próprio, "Respostas do formulário:", com cada linha prefixada por
     "- " — nenhuma delas pode começar como uma linha nossa ("Lead score",
-    "Ver no MarketingHS", o cabeçalho do bloco de atualização)."""
+    "Ver no MarketingHS", "Pedido MarketingHS", o cabeçalho do bloco de
+    atualização).
+
+    Com `pedido_id` (só no card que NASCE de um pedido — `montar_card`), a
+    linha `Pedido MarketingHS: <id>` é a assinatura do card: é por ela que a
+    entrega reconhece, num retry, o card que este pedido criou (ver
+    `card_do_pedido`)."""
     linhas: list[str] = []
 
     def item(rotulo, valor):
@@ -305,6 +310,8 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
             versao = f"{versao} (provisória)".strip()
         item("Versão do consentimento", versao)
         item("Data do consentimento", data_do_vendedor(consentimento.get("criado_em")))
+    if pedido_id is not None:
+        linhas.append(marca_de_criacao(pedido_id))
     if _tem(frontend_url):
         linhas.append(f"Ver no MarketingHS: {frontend_url.rstrip('/')}"
                       f"/contacts?contato={lead['id']}")
@@ -321,20 +328,20 @@ def _titulo(lead: dict) -> str:
 
 def montar_card(lead: dict, cfg: Config, *, conversao: dict | None = None,
                 consentimento: dict | None = None, person_id: int,
-                frontend_url: str) -> dict:
+                frontend_url: str, pedido_id: int) -> dict:
     """O corpo do `POST /api/v1/cards` (§3 de lá).
 
     Sem `client_id`/organização: o CRM exige Setor e Tipo de Relacionamento
     na empresa e o formulário não tem (§5 de lá) — o vendedor vincula depois.
     Sem `source`/`external_id`: o card comercial não tem (a idempotência é
-    nossa, ver `entrega.py`)."""
+    nossa, ver `entrega.py`): a descrição leva `Pedido MarketingHS: <id>`."""
     utms = {c: _cortar(lead.get(c), MAX_UTM) for c in UTMS if _tem(lead.get(c))}
     return {
         "list_id": cfg.list_id,
         "title": _titulo(lead),
         "description": montar_descricao(lead, conversao=conversao,
                                         consentimento=consentimento,
-                                        frontend_url=frontend_url),
+                                        frontend_url=frontend_url, pedido_id=pedido_id),
         "person_id": person_id,
         "origin": origem_do_card_texto(conversao),
         "acquisition_channel": "Inbound",
@@ -346,12 +353,33 @@ def montar_card(lead: dict, cfg: Config, *, conversao: dict | None = None,
     }
 
 
-CABECALHO_DO_BLOCO = "— Atualizado pelo MarketingHS"
+CABECALHO_DO_BLOCO = "— Nova conversão pelo MarketingHS"
+AVISO_NAO_VERIFICADO = "(dados informados no formulário, não verificados)"
+ROTULO_DO_PEDIDO = "Pedido MarketingHS"
+
+
+def marca_de_criacao(pedido_id) -> str:
+    """A linha que assina o card criado por um pedido."""
+    return f"{ROTULO_DO_PEDIDO}: {pedido_id}"
+
+
+def card_do_pedido(descricao: str | None, pedido_id) -> bool:
+    """O card foi criado por ESTE pedido? Só se uma linha da descrição é
+    exatamente `Pedido MarketingHS: <id>` (`7` não casa `71`).
+
+    ⚠️ Segurança: reconhecer um card como "nosso" marca o pedido entregue SEM
+    entregar nada. Por data só, um card que a automação do RD ou o vendedor
+    criou durante uma pausa passaria por nosso e o lead sumiria. A linha não
+    pode ser forjada pelo formulário: todo valor de fora entra numa linha
+    rotulada ("Empresa: …", "- chave: valor") e numa linha só
+    (`uma_linha`), então nenhuma linha vinda de fora começa com o rótulo."""
+    marca = marca_de_criacao(pedido_id)
+    return any(linha.rstrip() == marca for linha in (descricao or "").splitlines())
 
 
 def bloco_ja_aplicado(descricao: str | None, pedido_id) -> bool:
     """A descrição já tem o bloco DESTE pedido? Só conta a marca numa linha
-    que COMEÇA com o cabeçalho nosso.
+    que COMEÇA com o cabeçalho nosso (`— Nova conversão pelo MarketingHS`).
 
     ⚠️ Procurar a marca no texto todo deixaria um campo do formulário
     contendo "(pedido 7)" — ou o vendedor escrevendo isso — suprimir a
@@ -376,9 +404,15 @@ def bloco_de_atualizacao(lead: dict, *, conversao: dict | None,
                          pedido_id: int, quando: datetime) -> str:
     """O bloco que vai NO FIM da descrição de um card aberto (decisão 3 do
     Erick). Nunca substitui o que o vendedor escreveu: quem chama concatena
-    com a descrição atual."""
+    com a descrição atual.
+
+    ⚠️ Segurança (coordenadora, 22/10): o card é de um vendedor e o bloco vem
+    de um formulário PÚBLICO — qualquer um que saiba o e-mail do cliente
+    converte "por ele". O cabeçalho diz que são dados informados no
+    formulário, não verificados, para o vendedor não tomar o bloco como
+    cadastro conferido."""
     return (f"\n\n{CABECALHO_DO_BLOCO} em {data_do_vendedor(quando)} "
-            f"{marca_do_pedido(pedido_id)} —\n"
+            f"{marca_do_pedido(pedido_id)} {AVISO_NAO_VERIFICADO} —\n"
             + montar_descricao(lead, conversao=conversao, consentimento=consentimento,
                                frontend_url=frontend_url))
 
@@ -492,7 +526,7 @@ class Cliente:
     # ── Pessoa ──
 
     async def _buscar_pessoa(self, termo: str, campos: tuple[str, ...]) -> int | None:
-        """⚠️ A busca de lá é parcial (`ILIKE '%termo%'`): `ana@x.com` traz
+        """Só para e-mail (ver `achar_ou_criar_pessoa`). ⚠️ A busca de lá é parcial (`ILIKE '%termo%'`): `ana@x.com` traz
         `joana@x.com`. Só vale o casamento EXATO (minúsculas, sem espaço)
         num dos `campos`."""
         resposta = await self._chamar("GET", CAMINHO_PESSOAS,
@@ -509,20 +543,24 @@ class Cliente:
     async def achar_ou_criar_pessoa(self, lead: dict) -> int:
         """O `person_id` do lead (o `POST /cards` não aceita contato inline).
 
-        E-mail primeiro; sem e-mail, o telefone E.164 (busca de telefone é
-        texto cru lá — pouco confiável, por isso só sem e-mail). Lead sem
-        nenhum dos dois: o CRM daria 422 no card — falha o pedido aqui, sem
-        rede. ⚠️ 400 no POST com e-mail é corrida (alguém criou a pessoa
-        entre a busca e o POST): busca de novo e usa a achada."""
+        Casa SÓ por e-mail exato. ⚠️ Segurança (coordenadora, 22/10): a
+        entrega anexa dados do formulário público ao card aberto da pessoa
+        achada — casar pelo telefone (texto cru lá, sem unicidade; 26
+        clientes do ERP dividem um telefone) poria o formulário de um no
+        card de outro. Sem e-mail, NÃO busca: cria pessoa nova (quem chama
+        guarda o id no pedido, para o retry não duplicar). Lead sem e-mail e
+        sem telefone: o CRM daria 422 — falha o pedido aqui, sem rede.
+        ⚠️ 400 no POST com e-mail é corrida (alguém criou a pessoa entre a
+        busca e o POST): busca de novo e usa a achada."""
         email = (lead.get("email") or "").strip().lower()
         telefone = uma_linha(lead.get("phone_normalized"))
         if not email and not telefone:
             raise ErroDefinitivo("lead sem e-mail e sem telefone: o GrowthHS recusa "
                                  "pessoa assim (422)", 422)
-        termo, campos = (email, CAMPOS_EMAIL) if email else (telefone, CAMPOS_TELEFONE)
-        achada = await self._buscar_pessoa(termo, campos)
-        if achada is not None:
-            return achada
+        if email:
+            achada = await self._buscar_pessoa(email, CAMPOS_EMAIL)
+            if achada is not None:
+                return achada
         corpo = {"name": _cortar(lead.get("nome"), MAX_NOME_PESSOA)
                  or (email or telefone)[:MAX_NOME_PESSOA]}
         if email:

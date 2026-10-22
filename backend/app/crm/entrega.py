@@ -8,10 +8,14 @@ Desde 22/10 a entrega fala com a API NORMAL do GrowthHS (spec
 `2026-10-22-growthhs-real-design.md` §3; autoridade:
 `hsgrowth-sistema/docs/integracao-marketinghs.md`), por pedido:
 
-    achar/criar a pessoa → cards dela nos boards conferidos →
-      card aberto criado DEPOIS do pedido → é o nosso: entregue, nada mais
-      outro card aberto → atualiza a descrição (bloco no fim) + nota
+    achar/criar a pessoa (SÓ por e-mail exato) → cards dela nos boards →
+      aberto criado DEPOIS do pedido E assinado `Pedido MarketingHS: <id>`
+        → é o nosso (201 perdido): entregue, nada mais
+      outro card aberto → anexa um bloco no fim da descrição + nota
       nenhum aberto (inclusive só ganhos/perdidos) → cria
+
+Lead SEM e-mail nunca casa com pessoa nem card existente: cria pessoa nova
+(o id fica no pedido, para o retry não criar outra) e card novo.
 
 ⚠️ A rede nunca roda dentro de transação: reivindica (sessão curta, com prazo
 escalado ao tamanho do lote — ver `_reivindicar`), chama, grava o resultado
@@ -20,9 +24,17 @@ pedido volta depois do prazo e é tentado de novo.
 
 ⚠️ O `POST /cards` de lá NÃO é idempotente (§6 de lá: não há `external_id`).
 A defesa é toda daqui, e é a ordem acima: o retry depois de um 201 que se
-perdeu acha o card aberto mais novo que `crm_handoffs.criado_em` e o
-reconhece em vez de criar outro; o retry depois de um PUT que se perdeu acha
-a marca `(pedido N)` no cabeçalho do bloco e não empilha o segundo.
+perdeu acha o card aberto mais novo que `crm_handoffs.criado_em` com a
+assinatura deste pedido e o reconhece em vez de criar outro; o retry depois
+de um PUT que se perdeu acha a marca `(pedido N)` no cabeçalho do bloco e não
+empilha o segundo.
+
+⚠️ Segurança (coordenadora, 22/10): atualizar o card aberto põe dados de um
+formulário PÚBLICO no card de um vendedor. As travas: pessoa só por e-mail
+exato (telefone lá não tem unicidade); o bloco e a nota dizem "dados
+informados no formulário, não verificados"; o PUT só ANEXA à `description`
+(nunca título, pessoa ou outro campo); a identidade nunca troca o card/pessoa
+já gravados.
 
 ⚠️ A guarda local antiga (`_ja_entregue`: lead já entregue não era mandado
 de novo, e o `person_id` guardado era reusado) SAIU de propósito (spec §3):
@@ -75,9 +87,10 @@ PREFIXO_PAUSA = "Pausa de configuração"
 MOTIVO_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — "
                 "pedido registrado no contrato (docs/contratos/"
                 "2026-09-02-endpoint-card-comercial-growthhs.md).")
-# Um pedido custa várias chamadas agora (token, pessoa, cards de cada board,
-# card, PUT, nota) — o prazo da reivindicação conta com isso.
-CHAMADAS_POR_PEDIDO = 6
+# O pior caso real de um pedido: token (+ renovação no 401), busca de pessoa,
+# POST /persons (+ nova busca no 400), cards nos 2 boards, leitura do card,
+# PUT e nota — umas 10 chamadas de até `TIMEOUT` segundos cada.
+CHAMADAS_POR_PEDIDO = 10
 
 _COLUNAS_LEAD = """id::text AS id, nome, email, whatsapp, phone_normalized, empresa,
     cargo, faturamento, funcionarios, desafios, indicacao, utm_source, utm_medium,
@@ -135,15 +148,17 @@ async def enfileirar(conn, lead_id: str, origem: str, *, acao: str = "criar",
 
 async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict]:
     """O prazo da reivindicação escala com o tamanho do lote (achado I2 do
-    round 1): um lote de 20 pedidos, cada um com várias chamadas de até
-    `TIMEOUT` segundos mais alguns segundos de escrita, não pode expirar
+    round 1): um lote de 20 pedidos, cada um com até `CHAMADAS_POR_PEDIDO`
+    chamadas de até `TIMEOUT` segundos (+5 s de escrita), não pode expirar
     antes do worker terminar de processá-lo — senão o pedido é reivindicado
     de novo NO MEIO do processamento do primeiro worker, e dois pedirem o
-    mesmo card. `× 2` é folga; o piso de 5 min cobre o caso comum de lote
-    pequeno.
+    mesmo card. `× 2` é folga sobre esse pior caso; o piso de 5 min cobre o
+    caso comum de lote pequeno. O custo: pedido de worker que morreu volta
+    só quando o prazo vence (até ~1 h com lote de 20).
 
-    Devolve `criado_em` do pedido: é contra ele que a entrega reconhece o
-    card que uma tentativa anterior deste pedido criou (ver `_escolher`)."""
+    Devolve `criado_em` (contra ele a entrega procura o card que uma
+    tentativa anterior criou, ver `_separar`) e `person_id` (a pessoa que
+    uma tentativa anterior criou para lead SEM e-mail, ver `_entregar`)."""
     prazo = max(PRAZO_MINIMO_DA_REIVINDICACAO,
                timedelta(seconds=(growthhs.TIMEOUT * CHAMADAS_POR_PEDIDO + 5) * 2 * limite))
     async with sessao(role="service_role") as conn:
@@ -156,7 +171,8 @@ async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict
                               ORDER BY visivel_em LIMIT $1
                               FOR UPDATE SKIP LOCKED)
             RETURNING id, lead_id::text AS lead_id, acao, origem, rule_id::text AS rule_id,
-                      journey_run_id::text AS journey_run_id, tentativas, criado_em""",
+                      journey_run_id::text AS journey_run_id, tentativas, criado_em,
+                      person_id""",
             limite, prazo, somente_lead)
     return [dict(l) for l in linhas]
 
@@ -238,26 +254,34 @@ def _aberto(card: dict) -> bool:
             and not card.get("is_won") and not card.get("is_lost"))
 
 
-def _escolher(abertos: list[dict],
-              criado_em: datetime | None) -> tuple[dict | None, dict | None]:
-    """(o card que ESTE pedido já criou, o card aberto a atualizar) — no
-    máximo um dos dois.
+def _separar(abertos: list[dict], criado_em: datetime | None) -> tuple[list[dict], list[dict]]:
+    """(candidatos a "o card que ESTE pedido criou", todos os abertos do mais
+    recente ao mais antigo).
 
-    O primeiro é um aberto com `created_at >= crm_handoffs.criado_em`: uma
-    tentativa anterior deste pedido criou e a resposta se perdeu (§6 de lá).
-    ⚠️ Card sem `created_at` legível nunca é "o nosso": na dúvida, atualiza
-    (um bloco a mais no card do vendedor) em vez de calar a conversão. Sem o
-    nosso, o aberto de `created_at` mais recente — sem data conta como o
-    mais antigo de todos."""
+    Candidato é aberto com `created_at >= crm_handoffs.criado_em`; ele só
+    vira "o nosso" depois que `ler_card` confirma a assinatura
+    (`growthhs.card_do_pedido`). ⚠️ Data sozinha não basta: o card que a
+    automação do RD, o vendedor à mão durante uma pausa ou o gêmeo criou
+    também é mais novo que o pedido, e reconhecê-lo marcaria entregue sem
+    entregar. Card sem `created_at` legível nunca é candidato e, na ordem,
+    conta como o mais antigo de todos."""
     datados = [(growthhs.criado_em_utc(c), c) for c in abertos]
-    if criado_em is not None:
-        nossos = [(d, c) for d, c in datados if d is not None and d >= criado_em]
-        if nossos:
-            return min(nossos, key=lambda par: (par[0], par[1]["id"]))[1], None
-    if not datados:
-        return None, None
+    candidatos = sorted(((d, c) for d, c in datados
+                         if criado_em is not None and d is not None and d >= criado_em),
+                        key=lambda par: (par[0], par[1]["id"]))
     piso = datetime.min.replace(tzinfo=timezone.utc)
-    return None, max(datados, key=lambda par: (par[0] or piso, par[1]["id"]))[1]
+    ordem = sorted(datados, key=lambda par: (par[0] or piso, par[1]["id"]), reverse=True)
+    return [c for _, c in candidatos], [c for _, c in ordem]
+
+
+async def _gravar_pessoa_do_pedido(pedido_id: int, person_id: int) -> None:
+    """Lead sem e-mail: a pessoa que ESTE pedido criou fica no pedido logo
+    depois de criada — no retry (201 do card perdido, transitório) é ela que
+    se reusa, em vez de criar uma segunda pessoa."""
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE crm_handoffs SET person_id = $2, atualizado_em = now() WHERE id = $1",
+            pedido_id, person_id)
 
 
 async def _tratar_erro(pedido: dict, lead: dict, erro: Exception) -> str:
@@ -299,11 +323,15 @@ async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: in
     try:
         async with sessao(role="service_role") as conn:
             if lead["dnia_id"]:
-                # M2: 2xx sem `id` não apaga o card já anotado.
+                # ⚠️ Segurança (coordenadora, 22/10, B2): só PREENCHE. O card e
+                # a pessoa já gravados na identidade não são trocados por uma
+                # entrega que atualizou outro card — o que o formulário
+                # público disser não reescreve o vínculo da pessoa (e 2xx sem
+                # `id`, M2, também não apaga nada).
                 await conn.execute(
                     """UPDATE ecosystem_identities
-                          SET growthhs_card_id = coalesce($2, growthhs_card_id),
-                              growthhs_person_id = coalesce($3, growthhs_person_id)
+                          SET growthhs_card_id = coalesce(growthhs_card_id, $2),
+                              growthhs_person_id = coalesce(growthhs_person_id, $3)
                         WHERE dnia_id = $1::uuid""", lead["dnia_id"], card_id, person_id)
             await _registrar_evento(conn, lead, "crm_handoff", titulo,
                                     {"origem": pedido["origem"], "rule_id": pedido["rule_id"],
@@ -316,7 +344,8 @@ async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: in
 def texto_da_nota(conversao: dict | None, quando: datetime) -> str:
     return (f"Lead converteu de novo pelo MarketingHS "
             f"({growthhs.origem_do_card_texto(conversao)}) em "
-            f"{growthhs.data_do_vendedor(quando)}. Descrição do card atualizada.")
+            f"{growthhs.data_do_vendedor(quando)}. Descrição do card atualizada "
+            f"com dados informados no formulário (não verificados).")
 
 
 async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
@@ -343,31 +372,60 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
 
     frontend_url = settings.FRONTEND_URL
     quando = datetime.now(timezone.utc)
+    tem_email = bool((lead.get("email") or "").strip())
     try:
-        person_id = await cliente.achar_ou_criar_pessoa(lead)
-        abertos = [c for c in await cliente.cards_da_pessoa(person_id) if _aberto(c)]
-        nosso, alvo = _escolher(abertos, pedido.get("criado_em"))
-        if nosso is not None:
-            # O card já nasceu com a descrição deste pedido: nem atualiza nem
-            # anota.
-            await _concluir(pedido, lead, nosso["id"], person_id,
-                            "Enviado ao comercial (GrowthHS)", {"recuperado": True})
-            return "entregues"
+        if tem_email:
+            # A pessoa é sempre BUSCADA (Review Focus 2: nenhum `person_id`
+            # guardado vale sem busca — os do receptor de teste eram
+            # inventados).
+            person_id = await cliente.achar_ou_criar_pessoa(lead)
+            abertos = [c for c in await cliente.cards_da_pessoa(person_id) if _aberto(c)]
+        elif pedido.get("person_id") is not None:
+            # Sem e-mail, retry: a pessoa é a que ESTE pedido criou; os cards
+            # dela só servem para reconhecer o nosso — nunca para atualizar.
+            person_id = pedido["person_id"]
+            abertos = [c for c in await cliente.cards_da_pessoa(person_id) if _aberto(c)]
+        else:
+            person_id = await cliente.achar_ou_criar_pessoa(lead)  # sem e-mail: cria
+            await _gravar_pessoa_do_pedido(pedido["id"], person_id)
+            abertos = []  # pessoa recém-criada não tem card
+        candidatos, ordem = _separar(abertos, pedido.get("criado_em"))
+        lidos: dict[int, str] = {}
+        for candidato in candidatos:
+            lidos[candidato["id"]] = (await cliente.ler_card(candidato["id"])).get(
+                "description") or ""
+            if growthhs.card_do_pedido(lidos[candidato["id"]], pedido["id"]):
+                # O card já nasceu com a descrição deste pedido: nem
+                # atualiza nem anota.
+                await _concluir(pedido, lead, candidato["id"], person_id,
+                                "Enviado ao comercial (GrowthHS)", {"recuperado": True})
+                return "entregues"
+        # ⚠️ Sem e-mail não há "a pessoa do lead" lá — só a que este pedido
+        # criou. Atualizar card dela que não é nosso seria escrever no card
+        # de um vendedor por um contato que nunca se provou o mesmo.
+        alvo = ordem[0] if ordem and tem_email else None
         if alvo is None:
             resposta = await cliente.criar_card(growthhs.montar_card(
                 lead, cfg, conversao=conversao, consentimento=consentimento,
-                person_id=person_id, frontend_url=frontend_url))
+                person_id=person_id, frontend_url=frontend_url, pedido_id=pedido["id"]))
         else:
             card_id = alvo["id"]
-            descricao = (await cliente.ler_card(card_id)).get("description") or ""
+            if card_id not in lidos:
+                lidos[card_id] = (await cliente.ler_card(card_id)).get("description") or ""
+            descricao = lidos[card_id]
             # Review Focus 1: a tentativa anterior deste pedido pode ter feito
             # o PUT e perdido a resposta — a marca no cabeçalho diz que sim, e
-            # o segundo bloco não entra.
+            # o segundo bloco não entra. O PUT só ANEXA: descrição atual +
+            # bloco, e só a chave `description`.
             if not growthhs.bloco_ja_aplicado(descricao, pedido["id"]):
                 await cliente.atualizar_descricao(card_id, descricao + growthhs.bloco_de_atualizacao(
                     lead, conversao=conversao, consentimento=consentimento,
                     frontend_url=frontend_url, pedido_id=pedido["id"], quando=quando))
     except (growthhs.ErroDefinitivo, growthhs.ErroTransitorio) as erro:
+        # ⚠️ 404 em `ler_card`/PUT (card apagado entre a listagem e a
+        # leitura) cai na pausa de configuração como qualquer 404: a fila
+        # espera 10 min e a próxima listagem já não traz o card. Raro, e
+        # resolve sozinho — por isso não ganhou caminho próprio.
         return await _tratar_erro(pedido, lead, erro)
 
     if alvo is None:
@@ -385,6 +443,10 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
 
     # A descrição já está atualizada (agora ou numa tentativa anterior). A
     # nota é o aviso ao vendedor.
+    # ⚠️ O POST da nota não é idempotente: se ele chegar lá e a resposta se
+    # perder (transitório → adia), o retry anota DE NOVO. Aceito: uma nota
+    # repetida no histórico do card é ruído; não avisar o vendedor é perder
+    # o lead. A descrição, essa, não repete (a marca do bloco).
     erro_da_nota = None
     try:
         await cliente.anotar(card_id, texto_da_nota(conversao, quando))
@@ -395,10 +457,11 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
             return "adiadas"
         erro_da_nota = f"{erro} (desistiu após {pedido['tentativas']} tentativas)"
     except growthhs.ErroDefinitivo as erro:
-        # ⚠️ Falhar o pedido mentiria: a descrição do card JÁ mudou. Entrega,
-        # e o erro da nota fica na linha do tempo. Vale também para 401/403/
-        # 404 aqui: pausar re-tentaria um pedido cujo efeito principal já
-        # aconteceu.
+        # ⚠️ Erro definitivo DEPOIS do PUT e antes da nota: falhar o pedido
+        # mentiria — a descrição do card JÁ mudou. Entrega, e o erro da nota
+        # fica na linha do tempo (`erro_da_nota`). Vale também para 401/403/
+        # 404 aqui (inclusive o card apagado entre o PUT e a nota): pausar
+        # re-tentaria um pedido cujo efeito principal já aconteceu.
         erro_da_nota = str(erro)
     extra = {"ja_entregue": True, "atualizado": True}
     if erro_da_nota:

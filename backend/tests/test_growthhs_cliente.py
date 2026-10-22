@@ -276,14 +276,19 @@ async def test_pessoa_corrida_400_busca_de_novo():
     assert erro.value.status == 400
 
 
-async def test_pessoa_so_telefone_busca_pelo_telefone():
+async def test_pessoa_sem_email_cria_sem_buscar():
+    """Segurança (coordenadora, 22/10): casar pelo telefone poria o
+    formulário de um no card de outro (telefone sem unicidade lá). Sem
+    e-mail, nem busca: pessoa nova."""
     lead = {**LEAD, "email": None}
     api = Api({PESSOAS: [httpx.Response(200, json={"persons": [
-        {"id": 3, "phone": "+55819999999990"},
-        {"id": 4, "phone": "(81) 99999-9999", "phone_commercial": "+5581999999999"}]})]})
+                   {"id": 4, "phone": "+5581999999999"}]})],
+               CRIAR_PESSOA: [httpx.Response(201, json={"id": 1181})]})
     async with Cliente(CFG, transporte=api.transporte()) as cli:
-        assert await cli.achar_ou_criar_pessoa(lead) == 4
-    assert _params(api.de(*PESSOAS)[0])["search"] == "+5581999999999"
+        assert await cli.achar_ou_criar_pessoa(lead) == 1181
+    assert api.de(*PESSOAS) == []
+    corpo = _corpo(api.de(*CRIAR_PESSOA)[0])
+    assert "email" not in corpo and corpo["phone"] == "+5581999999999"
 
 
 async def test_pessoa_sem_email_nem_telefone_e_422_sem_rede():
@@ -409,7 +414,7 @@ def test_origem():
 
 def test_descricao_e_card():
     card = montar_card(LEAD, CFG, conversao=CONVERSAO, consentimento=CONSENTIMENTO,
-                       person_id=1180, frontend_url=FRONT + "/")
+                       person_id=1180, frontend_url=FRONT + "/", pedido_id=7)
     assert card["title"] == "Carla Menezes — Transportadora XYZ"
     assert card["list_id"] == 22 and card["person_id"] == 1180
     assert card["origin"] == "Landing Page phoebus-prova"
@@ -427,7 +432,7 @@ def test_descricao_e_card():
                      "Funcionários: 11-50 funcionarios", "Lead score: 60",
                      "Etiqueta: hotlead", "Campanha: black-friday",
                      "Desafios: controle de jornada", "Respostas do formulário:",
-                     "- ja_faz_testagem: sim",
+                     "- ja_faz_testagem: sim", "Pedido MarketingHS: 7",
                      f"Ver no MarketingHS: {FRONT}/contacts?contato={LEAD['id']}"):
         assert esperada in linhas, esperada
     assert linhas[-1].startswith("Ver no MarketingHS: ")
@@ -440,17 +445,19 @@ def test_descricao_e_card():
     # A ordem da spec §2.
     ordem = ["Empresa:", "Cargo:", "Faturamento:", "Funcionários:", "Lead score:",
              "Etiqueta:", "Campanha:", "Desafios:", "Respostas do formulário:",
-             "- ja_faz_testagem:", "Conversão:", "Base legal:", "Ver no MarketingHS:"]
+             "- ja_faz_testagem:", "Conversão:", "Base legal:", "Pedido MarketingHS:",
+             "Ver no MarketingHS:"]
     posicoes = [next(i for i, l in enumerate(linhas) if l.startswith(p)) for p in ordem]
     assert posicoes == sorted(posicoes)
 
     minimo = montar_card({"id": LEAD["id"], "email": "a@x.com"}, CFG, person_id=1,
-                         frontend_url=FRONT)
+                         frontend_url=FRONT, pedido_id=1)
     assert minimo["title"] == "a@x.com" and minimo["origin"] == "MarketingHS"
     assert minimo["utm_params"] is None and minimo["gclid"] is None
     assert "—" not in minimo["description"]
     assert all(not l.rstrip().endswith(":") for l in minimo["description"].split("\n"))
-    assert minimo["description"] == f"Ver no MarketingHS: {FRONT}/contacts?contato={LEAD['id']}"
+    assert minimo["description"] == (
+        f"Pedido MarketingHS: 1\nVer no MarketingHS: {FRONT}/contacts?contato={LEAD['id']}")
 
 
 def test_card_corta_campos_longos():
@@ -458,7 +465,7 @@ def test_card_corta_campos_longos():
             "utm_campaign": "c" * 300, "utm_term": "t" * 300, "utm_medium": "m" * 300,
             "desafios": "d" * 900}
     card = montar_card(lead, CFG, conversao={**CONVERSAO, "gclid": "g" * 900},
-                       person_id=1, frontend_url=FRONT)
+                       person_id=1, frontend_url=FRONT, pedido_id=1)
     assert len(card["title"]) == 500
     assert len(card["utm_source"]) == len(card["utm_campaign"]) == len(card["utm_term"]) == 200
     assert len(card["utm_params"]) <= 500 and len(card["gclid"]) == 500
@@ -480,12 +487,27 @@ def test_bloco_de_atualizacao():
     quando = datetime(2026, 10, 22, 13, 0, tzinfo=timezone.utc)
     bloco = bloco_de_atualizacao(LEAD, conversao=CONVERSAO, consentimento=CONSENTIMENTO,
                                  frontend_url=FRONT, pedido_id=7, quando=quando)
-    assert bloco.startswith("\n\n— Atualizado pelo MarketingHS em 22/10/2026 10:00 "
-                            "(pedido 7) —\n")
+    assert bloco.startswith("\n\n— Nova conversão pelo MarketingHS em 22/10/2026 10:00 "
+                            "(pedido 7) (dados informados no formulário, não verificados) —\n")
+    # O bloco não assina o card: só o card criado leva "Pedido MarketingHS".
+    assert "Pedido MarketingHS" not in bloco
     assert marca_do_pedido(7) == "(pedido 7)" and marca_do_pedido(7) in bloco
     assert bloco.endswith(montar_descricao(LEAD, conversao=CONVERSAO,
                                            consentimento=CONSENTIMENTO,
                                            frontend_url=FRONT))
+
+
+def test_card_do_pedido_so_pela_linha_exata():
+    """Reconhecer um card como "nosso" marca entregue sem entregar: só a
+    linha exata conta, e `7` não casa `71`."""
+    card = montar_card(LEAD, CFG, person_id=1, frontend_url=FRONT, pedido_id=7)
+    assert growthhs.card_do_pedido(card["description"], 7)
+    assert not growthhs.card_do_pedido(card["description"], 71)
+    assert not growthhs.card_do_pedido(
+        montar_card(LEAD, CFG, person_id=1, frontend_url=FRONT, pedido_id=71)["description"], 7)
+    assert not growthhs.card_do_pedido("- obs: Pedido MarketingHS: 7", 7)
+    assert not growthhs.card_do_pedido("Empresa: Pedido MarketingHS: 7", 7)
+    assert not growthhs.card_do_pedido(None, 7)
 
 
 # ── Segurança: o formulário não forja linha na descrição ────────────────────
@@ -509,7 +531,7 @@ def test_valor_do_formulario_vira_uma_linha_so(q):
                  "page_url": sujo, "canal": sujo}
     consentimento = {**CONSENTIMENTO, "versao": sujo, "base_legal": sujo}
     card = montar_card(lead, CFG, conversao=conversao, consentimento=consentimento,
-                       person_id=1, frontend_url=FRONT)
+                       person_id=1, frontend_url=FRONT, pedido_id=7)
     linhas = card["description"].split("\n")
     assert all(q not in l for l in linhas)
     assert all(not any(c in l for c in "\r\u2028\u2029\u0085\x0b\x00") for l in linhas)
@@ -523,8 +545,11 @@ def test_valor_do_formulario_vira_uma_linha_so(q):
     quando = datetime(2026, 10, 22, 13, 0, tzinfo=timezone.utc)
     bloco = bloco_de_atualizacao(lead, conversao=conversao, consentimento=consentimento,
                                  frontend_url=FRONT, pedido_id=7, quando=quando)
-    assert [l for l in bloco.split("\n") if l.startswith("— Atualizado pelo")] == [
-        "— Atualizado pelo MarketingHS em 22/10/2026 10:00 (pedido 7) —"]
+    assert [l for l in bloco.split("\n") if l.startswith("— Nova conversão pelo")] == [
+        "— Nova conversão pelo MarketingHS em 22/10/2026 10:00 (pedido 7) "
+        "(dados informados no formulário, não verificados) —"]
+    # A assinatura do card criado também não se forja pelo formulário.
+    assert [l for l in linhas if l.startswith("Pedido MarketingHS")] == ["Pedido MarketingHS: 7"]
     assert [l for l in bloco.split("\n") if l.startswith("Ver no MarketingHS")] == nossas
 
 

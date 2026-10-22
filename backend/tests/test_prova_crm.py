@@ -483,7 +483,7 @@ async def test_entrega_le_ultima_conversao_e_consentimento(conexao):
     cfg = growthhs.Config(base_url="https://x.invalid", client_id="c", client_secret="s",
                           list_id=22, boards_conferidos=(6, 7), app_url=None)
     card = growthhs.montar_card(linha, cfg, conversao=conversao, consentimento=consentimento,
-                                person_id=1, frontend_url=FRONT)
+                                person_id=1, frontend_url=FRONT, pedido_id=1)
     assert "- x: 1" in card["description"].split("\n")
     assert card["origin"] == "Landing Page phoebus-prova"
     assert card["gclid"] == "gclid-novo"

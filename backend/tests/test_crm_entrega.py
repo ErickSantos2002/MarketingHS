@@ -18,6 +18,7 @@ import asyncio
 import itertools
 import json
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
@@ -28,7 +29,7 @@ import pytest_asyncio
 import app.database as db
 from app.config import settings
 from app.crm import entrega, growthhs
-from app.crm.growthhs import Config, bloco_ja_aplicado, marca_do_pedido
+from app.crm.growthhs import Config, bloco_ja_aplicado, marca_de_criacao, marca_do_pedido
 from rodada import EmailDeRodada
 
 # Único por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
@@ -40,9 +41,10 @@ CFG = Config(base_url="https://growthhs.exemplo.invalid", client_id="hsg_8d",
              client_secret="segredo-8d", list_id=LISTA_DE_ENTRADA,
              boards_conferidos=(6, 7), app_url="https://app.exemplo.invalid")
 ZERO = {"entregues": 0, "atualizadas": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
-CABECALHO = "— Atualizado pelo MarketingHS"
+CABECALHO = "— Nova conversão pelo MarketingHS"
 NOTA = re.compile(r"^Lead converteu de novo pelo MarketingHS \(MarketingHS\) em "
-                  r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\. Descrição do card atualizada\.$")
+                  r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\. Descrição do card atualizada com "
+                  r"dados informados no formulário \(não verificados\)\.$")
 CARDS, NOTAS, PESSOAS = "/api/v1/cards", "/api/v1/card-notes", "/api/v1/persons"
 ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
 
@@ -236,6 +238,35 @@ async def gemeo(lead_8d):
     await limpar()
 
 
+NOME_SEM_EMAIL = "Entrega 8D sem e-mail"
+
+
+@pytest_asyncio.fixture
+async def lead_sem_email():
+    """Um lead SÓ com telefone (sem identidade), apagado pelo id — e os de
+    rodada morta pelo nome, com mais de 2 h (molde de `tests/rodada.py`)."""
+    await db.init_db()
+    telefone = "+55819" + str(uuid.uuid4().int)[:8]
+
+    async def limpar(ids):
+        async with db.sessao(role="service_role") as conn:
+            ids = ids + [r["id"] for r in await conn.fetch(
+                "SELECT id FROM leads WHERE email IS NULL AND nome = $1 "
+                "AND created_at < now() - interval '2 hours'", NOME_SEM_EMAIL)]
+            await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
+            await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
+            await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
+
+    async with db.sessao(role="service_role") as conn:
+        lead = await conn.fetchval(
+            """INSERT INTO leads (nome, email, tipo, phone_normalized)
+               VALUES ($1, NULL, 'teste', $2) RETURNING id""", NOME_SEM_EMAIL, telefone)
+    try:
+        yield {"lead_id": str(lead), "telefone": telefone}
+    finally:
+        await limpar([lead])
+
+
 async def _enfileirar(lead_id, origem="manual", **kw):
     async with db.sessao(role="service_role") as conn:
         return await entrega.enfileirar(conn, lead_id, origem, **kw)
@@ -330,6 +361,8 @@ async def test_entrega_cria_pessoa_e_card(lead_8d):
     corpo = json.loads(post.content)
     assert corpo["list_id"] == LISTA_DE_ENTRADA and corpo["person_id"] == pessoa["id"]
     assert corpo["acquisition_channel"] == "Inbound" and corpo["origin"] == "MarketingHS"
+    pedido_id = (await _pedido(lead_8d["lead_id"]))["id"]
+    assert marca_de_criacao(pedido_id) in corpo["description"].split("\n")
     assert (f"Ver no MarketingHS: {settings.FRONTEND_URL.rstrip('/')}"
             f"/contacts?contato={lead_8d['lead_id']}") in corpo["description"]
     [card_id] = api.cards
@@ -390,7 +423,8 @@ async def test_pessoa_com_card_aberto_atualiza_e_anota_sem_criar(lead_8d):
     assert put.url.path == f"{CARDS}/{aberto}" and set(json.loads(put.content)) == {"description"}
     descricao = api.cards[aberto]["description"]
     assert descricao.startswith(f"Anotação do vendedor\n\n{CABECALHO} em ")
-    assert f"{marca_do_pedido(pedido_id)} —\n" in descricao
+    assert (f"{marca_do_pedido(pedido_id)} (dados informados no formulário, "
+            f"não verificados) —\n") in descricao
     assert descricao.count(CABECALHO) == 1
     assert api.cards[fechado]["description"] == ""
     [nota] = api.notas
@@ -421,15 +455,17 @@ async def test_entre_varios_abertos_atualiza_o_mais_recente(lead_8d):
 
 
 async def test_card_aberto_criado_depois_do_pedido_e_o_nosso(lead_8d):
-    """O §6 de lá: um card aberto mais novo que o pedido é o que uma
-    tentativa anterior DESTE pedido criou — marca entregue com ele, sem
-    criar, atualizar nem anotar."""
+    """O §6 de lá: um card aberto mais novo que o pedido E assinado com
+    `Pedido MarketingHS: <id>` é o que uma tentativa anterior DESTE pedido
+    criou — marca entregue com ele, sem criar, atualizar nem anotar."""
     api = GrowthHSFalso()
     await _enfileirar(lead_8d["lead_id"])
     criado_em = (await _pedido(lead_8d["lead_id"]))["criado_em"]
+    pedido_id = (await _pedido(lead_8d["lead_id"]))["id"]
     pessoa = api.pessoa(email=EMAIL)
     velho = api.card(pessoa)
-    nosso = api.card(pessoa, created_at=_ingenuo_utc(criado_em + timedelta(seconds=1)))
+    nosso = api.card(pessoa, created_at=_ingenuo_utc(criado_em + timedelta(seconds=1)),
+                     descricao=f"Empresa: X\n{marca_de_criacao(pedido_id)}\nVer no MarketingHS: y")
     assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
     assert api.de("POST", CARDS) == [] and api.puts() == [] and api.notas == []
     assert api.de("GET", f"{CARDS}/{velho}") == []
@@ -439,6 +475,28 @@ async def test_card_aberto_criado_depois_do_pedido_e_o_nosso(lead_8d):
     [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
     assert evento["title"] == "Enviado ao comercial (GrowthHS)"
     assert evento["metadata"]["recuperado"] is True and evento["metadata"]["card_id"] == nosso
+
+
+@pytest.mark.parametrize("descricao", ["Card criado pela automação do RD",
+                                       "Pedido MarketingHS: {id}1",
+                                       "- obs: Pedido MarketingHS: {id}"])
+async def test_card_aberto_novo_sem_a_marca_e_atualizado_nunca_reconhecido(lead_8d, descricao):
+    """Revisão (A): só a data reconheceria como "nosso" o card que a
+    automação do RD, o vendedor à mão durante uma pausa ou o gêmeo criou —
+    e o pedido ficaria entregue sem entregar. Sem a assinatura exata, o card
+    novo é atualizado e anotado, como qualquer aberto."""
+    api = GrowthHSFalso()
+    pedido_id = await _enfileirar(lead_8d["lead_id"])
+    criado_em = (await _pedido(lead_8d["lead_id"]))["criado_em"]
+    pessoa = api.pessoa(email=EMAIL)
+    novo = api.card(pessoa, created_at=_ingenuo_utc(criado_em + timedelta(seconds=1)),
+                    descricao=descricao.format(id=pedido_id))
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    [put] = api.puts()
+    assert put.url.path == f"{CARDS}/{novo}" and len(api.notas) == 1
+    assert api.de("POST", CARDS) == []
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert "recuperado" not in evento["metadata"] and evento["metadata"]["atualizado"] is True
 
 
 async def test_201_perdido_nao_vira_segundo_card(lead_8d):
@@ -531,6 +589,145 @@ async def test_falha_apos_o_put_nao_reatualiza(lead_8d, monkeypatch):
     assert (await _pedido(lead_8d["lead_id"]))["status"] == "entregue"
     assert await _rodar(lead_8d["lead_id"], api) == ZERO
     assert len(api.puts()) == 1 and len(api.notas) == 1
+
+
+async def test_identidade_ja_gravada_nao_e_sobrescrita(lead_8d):
+    """B2: a identidade guarda o PRIMEIRO card/pessoa da pessoa; uma entrega
+    que atualiza outro card não troca o que já estava lá."""
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE ecosystem_identities SET growthhs_card_id = 555, growthhs_person_id = 77 "
+            "WHERE dnia_id = $1::uuid", lead_8d["dnia_id"])
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação")
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    assert (await _pedido(lead_8d["lead_id"]))["card_id"] == aberto
+    ident = await _identidade(lead_8d["dnia_id"])
+    assert (ident["growthhs_card_id"], ident["growthhs_person_id"]) == (555, 77)
+
+
+async def test_cancelar_no_atualizar_o_retry_so_anota(lead_8d, monkeypatch):
+    """Cancelamento entre o PUT e a nota: o pedido fica pendente; o retry
+    acha a marca do bloco, pula o PUT e só anota."""
+    original = growthhs.Cliente.anotar
+    entrou = asyncio.Event()
+
+    async def lenta(self, *args):
+        entrou.set()
+        await asyncio.sleep(5)
+        await original(self, *args)
+    monkeypatch.setattr(growthhs.Cliente, "anotar", lenta)
+
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação")
+    pedido_id = await _enfileirar(lead_8d["lead_id"])
+    tarefa = asyncio.create_task(_rodar(lead_8d["lead_id"], api))
+    await asyncio.wait_for(entrou.wait(), timeout=30)
+    tarefa.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await tarefa
+    assert len(api.puts()) == 1 and api.notas == []
+    assert (await _pedido(lead_8d["lead_id"]))["status"] == "pendente"
+
+    monkeypatch.setattr(growthhs.Cliente, "anotar", original)
+    await _tornar_visivel(pedido_id)
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    assert len(api.puts()) == 1 and len(api.notas) == 1
+    assert api.cards[aberto]["description"].count(CABECALHO) == 1
+
+
+async def test_cancelar_dentro_da_gravacao_do_atualizar_ainda_grava_entregue(lead_8d,
+                                                                           monkeypatch):
+    """I5 no caminho de atualizar: o PUT e a nota já saíram; o cancelamento
+    dentro da gravação blindada não deixa o pedido pendente (seria o
+    segundo aviso ao vendedor)."""
+    original = entrega._marcar_entregue
+    entrou = asyncio.Event()
+
+    async def lento(*args):
+        entrou.set()
+        await asyncio.sleep(0.3)
+        await original(*args)
+    monkeypatch.setattr(entrega, "_marcar_entregue", lento)
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação")
+    await _enfileirar(lead_8d["lead_id"])
+    tarefa = asyncio.create_task(_rodar(lead_8d["lead_id"], api))
+    await asyncio.wait_for(entrou.wait(), timeout=30)
+    tarefa.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await tarefa
+    prazo = asyncio.get_running_loop().time() + 10
+    while True:
+        pedido = await _pedido(lead_8d["lead_id"])
+        if pedido["status"] == "entregue" or asyncio.get_running_loop().time() > prazo:
+            break
+        await asyncio.sleep(0.1)
+    assert (pedido["status"], pedido["card_id"]) == ("entregue", aberto)
+    assert len(api.puts()) == 1 and len(api.notas) == 1
+
+
+# ── Lead sem e-mail (B1: casamento só por e-mail exato) ─────────────────────
+
+async def test_lead_sem_email_cria_pessoa_e_card_sem_buscar(lead_sem_email):
+    """Sem e-mail, nem busca: o telefone lá é texto cru e sem unicidade —
+    casar por ele poria o formulário de um no card aberto de outro."""
+    api = GrowthHSFalso()
+    outra = api.pessoa(phone=lead_sem_email["telefone"])
+    api.card(outra, descricao="Card de outra pessoa com o mesmo telefone")
+    lead = lead_sem_email["lead_id"]
+    await _enfileirar(lead)
+    assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
+    assert api.de("GET", PESSOAS) == [] and api.puts() == [] and api.notas == []
+    assert len(api.de("POST", PESSOAS)) == 1 and len(api.de("POST", CARDS)) == 1
+    nova = max(api.pessoas)
+    assert nova != outra
+    pedido = await _pedido(lead)
+    assert (pedido["status"], pedido["person_id"]) == ("entregue", nova)
+
+
+async def test_lead_sem_email_retry_reusa_a_pessoa_do_pedido(lead_sem_email):
+    """O 201 do card se perdeu: o retry não cria outra pessoa (reusa a que
+    ESTE pedido criou, gravada no pedido) e reconhece o card pela
+    assinatura."""
+    api = GrowthHSFalso()
+    lead = lead_sem_email["lead_id"]
+    await _enfileirar(lead)
+    pedido = await _pedido(lead)
+    api.agora = _ingenuo_utc(pedido["criado_em"] + timedelta(seconds=1))
+    api.perder[("POST", CARDS)] = 1
+    assert await _rodar(lead, api) == {**ZERO, "adiadas": 1}
+    [pessoa] = api.pessoas
+    assert (await _pedido(lead))["person_id"] == pessoa
+    await _tornar_visivel(pedido["id"])
+    assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
+    assert len(api.de("POST", PESSOAS)) == 1 and len(api.de("POST", CARDS)) == 1
+    assert api.puts() == [] and api.notas == []
+    assert (await _pedido(lead))["card_id"] == next(iter(api.cards))
+
+
+async def test_lead_sem_email_retry_sem_a_marca_cria_nunca_atualiza(lead_sem_email):
+    """Na pessoa que este pedido criou apareceu um card aberto que não é
+    nosso (vendedor à mão): sem e-mail não se atualiza card nenhum — cria."""
+    api = GrowthHSFalso()
+    lead = lead_sem_email["lead_id"]
+    await _enfileirar(lead)
+    pedido = await _pedido(lead)
+    api.forcar[("POST", CARDS)] = [_resposta(503)]
+    assert await _rodar(lead, api) == {**ZERO, "adiadas": 1}
+    [pessoa] = api.pessoas
+    do_vendedor = api.card(pessoa, descricao="Card do vendedor",
+                           created_at=_ingenuo_utc(pedido["criado_em"] + timedelta(seconds=1)))
+    await _tornar_visivel(pedido["id"])
+    assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
+    assert len(api.de("POST", PESSOAS)) == 1 and api.puts() == [] and api.notas == []
+    assert len(api.cards) == 2
+    card_id = (await _pedido(lead))["card_id"]
+    assert card_id != do_vendedor and card_id in api.cards
 
 
 # ── Erros ────────────────────────────────────────────────────────────────────
