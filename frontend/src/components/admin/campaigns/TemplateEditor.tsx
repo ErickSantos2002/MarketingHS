@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ArrowLeft, Save, Loader2, Info } from 'lucide-react';
 import EmailEditor, { type EditorRef } from 'react-email-editor';
 import { toast } from 'sonner';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSocialLinks } from '@/hooks/useSocialLinks';
 import { BASE_EMAIL_DESIGN, buildEmailEditorOptions, registerEmailImageUpload } from './emailEditorConfig';
+import { designDoTemplate } from './designDoHtml';
 
 export default function TemplateEditor() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +27,9 @@ export default function TemplateEditor() {
   const [editorReady, setEditorReady] = useState(false);
   const [editorLoading, setEditorLoading] = useState(true);
   const [initialDesign, setInitialDesign] = useState<any>(null);
+  // Template criado fora do editor (só `html`, sem `design`): abre num bloco
+  // HTML e a tela avisa. Ver designDoHtml.ts.
+  const [veioDoHtml, setVeioDoHtml] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
 
@@ -46,7 +51,12 @@ export default function TemplateEditor() {
       setName(t.name);
       setDescription(t.description || '');
       setCategory(t.category || '');
-      setInitialDesign(t.design || BASE_EMAIL_DESIGN);
+      // NUNCA `t.design || BASE_EMAIL_DESIGN`: template sem design mas com
+      // html abriria o padrão e o "Salvar" gravaria o padrão por cima do
+      // html original (defeito de produção, 22/10/2026).
+      const { design, doHtml } = designDoTemplate(t, BASE_EMAIL_DESIGN);
+      setInitialDesign(design);
+      setVeioDoHtml(doHtml);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -140,6 +150,16 @@ export default function TemplateEditor() {
           <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Quando usar este template" />
         </div>
       </div>
+
+      {veioDoHtml && (
+        <Alert>
+          <Info />
+          <AlertDescription>
+            Este template foi criado fora do editor: o conteúdo original está num bloco HTML.
+            Edite o código do bloco ou refaça com os blocos.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="relative">
         {editorLoading && (
