@@ -28,3 +28,11 @@ entra em build nenhum.
 
 O endereço do sistema é a constante `MHS_SISTEMA` no topo do `<head>` do HTML
 — o único lugar a trocar (ex.: para o Homo).
+
+## No EasyPanel (o jeito curto)
+
+Serviço **App** no projeto `erick`, nome `prova-site`: fonte GitHub, este
+repositório, branch `main`, **Build path `/prova-site/`**, build por
+**Dockerfile** (o desta pasta, nginx). Porta 80. Domínio: o gratuito que o
+EasyPanel oferece (`…easypanel.host`) — outra origem, sem cookie do admin.
+Depois da prova, parar/apagar o serviço.
