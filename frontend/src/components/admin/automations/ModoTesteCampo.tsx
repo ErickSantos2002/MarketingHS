@@ -58,7 +58,8 @@ export function EntryFormIdsCampo({ value, onChange, id = 'form-ids' }: {
       <p id={`${id}-ajuda`} className="text-xs text-muted-foreground">
         O identificador é o <code>id</code> do formulário no site (o que aparece nos números da tela de
         Páginas). Separe por vírgula. Com página e formulários, entra quem converter na página <strong>ou</strong> em
-        qualquer um deles; sem nenhum dos dois, qualquer origem.
+        qualquer um deles; sem nenhum dos dois, qualquer origem — menos formulário de site, que só entra
+        pelo identificador.
       </p>
     </div>
   );

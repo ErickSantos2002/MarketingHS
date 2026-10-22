@@ -127,7 +127,9 @@ export const EVENTO_COM_PAGINA = 'form_submitted';
  * `entry_config` de um fluxo por evento. Só o `form_submitted` filtra:
  * `page_slug` (a página da casa) e `form_ids` (formulários de site de fora,
  * migration 027) valem em OU — entra quem converter na página OU em qualquer
- * um dos formulários. Sem nenhum dos dois = qualquer origem.
+ * um dos formulários. Sem nenhum dos dois = qualquer origem, MENOS conversão de
+ * site de fora (`site_id`), que só entra em fluxo que nomeia o formulário
+ * (migration 028, pergunta 62).
  */
 export function buildEntryConfig(eventType: string, pageSlug?: string, formIds?: string[]): Record<string, any> {
   const cfg: Record<string, any> = { event_type: eventType };
