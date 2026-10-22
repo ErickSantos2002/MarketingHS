@@ -1,208 +1,302 @@
-"""A configuração do GrowthHS. O modo de falhar é a chave voltar inteira na
-resposta (é ela que cria card no funil de vendas) ou um usuário comum mudar
-para onde vão os leads."""
+"""A configuração do GrowthHS real (client-credentials + webhook de volta).
+
+O modo de falhar é um segredo voltar inteiro na resposta (o `client_secret`
+cria card no funil de vendas; o do webhook marca reunião e venda), um usuário
+comum mudar para onde vão os leads, ou um espaço colado no segredo virar 401
+eterno (o GrowthHS faz `strip()` do segredo dele antes de assinar).
+
+⚠️ Tudo roda em `banco_growthhs`: `growthhs_config`, `integration_secrets`,
+leads e `crm_handoffs` vivem na transação revertida. O worker de produção lê
+as mesmas tabelas — gravar ali de verdade mandaria a credencial falsa daqui ao
+GrowthHS real. Os fixtures de token vêm DEPOIS de `banco_growthhs` na
+assinatura: a `conexao` fecha a pool ao sair, e o token apaga o usuário de
+teste pela pool.
+"""
 
 import httpx
 import pytest
-import pytest_asyncio
 
-import app.database as db
 from app import integracoes
+from app.config import settings
 from app.crm import entrega, growthhs
+from app.routers import configuracao
+from growthhs_banco import SEGREDOS, banco_growthhs  # noqa: F401 — fixture
 
 ROTA = "/config/growthhs"
+SEGREDO_CLIENTE = "segredo-do-cliente-8d-1234"
+SEGREDO_WEBHOOK = "segredo-do-webhook-com-folga"
 
 
 def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _sem_chave():
-    anterior = await integracoes.ler_segredo(growthhs.SEGREDO_CHAVE)
-    await integracoes.apagar_segredo(growthhs.SEGREDO_CHAVE)
-    return anterior
+async def _zerar(conn, monkeypatch):
+    """Configuração e segredos vazios NESTA transação (e no ambiente: o
+    `ler_segredo` cai para `os.environ` quando o banco não tem)."""
+    for nome in SEGREDOS:
+        monkeypatch.delenv(nome, raising=False)
+        integracoes.esquecer(nome)
+    await conn.execute("DELETE FROM growthhs_config")
+    await conn.execute("DELETE FROM public.integration_secrets WHERE name = ANY($1::text[])",
+                       list(SEGREDOS))
+
+
+async def _configurar(conn, monkeypatch, *, base_url="https://growthhs.exemplo.invalid",
+                      client_id="hsg_teste_cfg", segredo=SEGREDO_CLIENTE):
+    await _zerar(conn, monkeypatch)
+    await conn.execute(
+        """INSERT INTO growthhs_config (base_url, client_id, list_id, boards_conferidos)
+           VALUES ($1, $2, 22, '{6,7}')""", base_url, client_id)
+    if segredo:
+        await integracoes.gravar_segredo(growthhs.SEGREDO_CLIENTE, segredo)
 
 
 async def test_config_exige_admin(cliente, token_usuario):
-    for metodo, corpo in (("GET", None), ("PUT", {"board_id": 1})):
-        r = await cliente.request(metodo, ROTA, json=corpo, headers=_auth(token_usuario))
-        assert r.status_code == 403
-    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_usuario))
-    assert r.status_code == 403
+    for metodo, rota, corpo in (("GET", ROTA, None), ("PUT", ROTA, {"list_id": 1}),
+                                ("POST", f"{ROTA}/testar", None),
+                                ("POST", f"{ROTA}/reenfileirar", None)):
+        r = await cliente.request(metodo, rota, json=corpo, headers=_auth(token_usuario))
+        assert r.status_code == 403, (metodo, rota)
 
 
-async def test_grava_parcial_e_nunca_devolve_a_chave(cliente, token_admin, config_growthhs):
-    # Revisão final do 8D (I3): o banco é o de produção, e o worker (outro
-    # processo, cache de 60 s do segredo) poderia mandar a chave falsa deste
-    # teste ao GrowthHS de verdade. Com chave real gravada, o teste não roda.
-    if await integracoes.ler_segredo(growthhs.SEGREDO_CHAVE):
-        pytest.skip("há chave real do GrowthHS gravada — o teste não sobrescreve produção")
-    await config_growthhs(None, None)
-    anterior = await _sem_chave()
-    try:
-        r = await cliente.put(ROTA, headers=_auth(token_admin), json={
-            "base_url": "https://growthhs.exemplo.invalid/", "board_id": 3,
-            "api_key": "chave-secreta-8d-1234"})
-        assert r.status_code == 200, r.text
-        corpo = r.json()
-        assert corpo["base_url"] == "https://growthhs.exemplo.invalid"
-        assert corpo["board_id"] == 3 and corpo["configurado"] is True
-        assert corpo["api_key"] == {"configurado": True, "ultimos4": "1234"}
-        assert "chave-secreta" not in r.text
+async def test_grava_parcial_e_nunca_devolve_segredos(cliente, banco_growthhs, token_admin,
+                                                      monkeypatch):
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        "base_url": "https://growthhs.exemplo.invalid/", "client_id": "  hsg_cliente  ",
+        # ⚠️ Espaço colado em volta: o GrowthHS faz strip do dele, então o
+        # nosso tem de ir sem — senão 401 para sempre.
+        "client_secret": f"  {SEGREDO_CLIENTE}\n", "list_id": 22,
+        "boards_conferidos": [6, 7], "webhook_secret": f" {SEGREDO_WEBHOOK} ",
+        "listas_reuniao": [28], "listas_ganho": [32, 33]})
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert corpo["base_url"] == "https://growthhs.exemplo.invalid"
+    assert corpo["client_id"] == "hsg_cliente"
+    assert corpo["list_id"] == 22 and corpo["boards_conferidos"] == [6, 7]
+    assert corpo["listas_reuniao"] == [28] and corpo["listas_ganho"] == [32, 33]
+    assert corpo["client_secret"] == {"configurado": True, "ultimos4": "1234"}
+    assert corpo["webhook_secret"] == {"configurado": True}
+    assert corpo["configurado"] is True
+    assert "board_id" not in corpo and "api_key" not in corpo
+    assert SEGREDO_CLIENTE not in r.text and SEGREDO_WEBHOOK not in r.text
+    gravados = dict(await conn.fetch(
+        "SELECT name, value FROM public.integration_secrets WHERE name = ANY($1::text[])",
+        list(SEGREDOS)))
+    assert gravados == {growthhs.SEGREDO_CLIENTE: SEGREDO_CLIENTE,
+                        growthhs.SEGREDO_WEBHOOK: SEGREDO_WEBHOOK}
 
-        # Só o endereço do app: o resto fica.
-        r = await cliente.put(ROTA, headers=_auth(token_admin),
-                              json={"app_url": "https://app.exemplo.invalid"})
-        assert r.json()["board_id"] == 3
-        assert r.json()["app_url"] == "https://app.exemplo.invalid"
-
-        r = await cliente.put(ROTA, headers=_auth(token_admin), json={"limpar": ["api_key"]})
-        assert r.json()["api_key"]["configurado"] is False
-        assert r.json()["configurado"] is False
-    finally:
-        # Devolve exatamente o que havia — inclusive "nada": a chave de teste
-        # não pode ficar gravada se o teste quebrar no meio.
-        if anterior:
-            await integracoes.gravar_segredo(growthhs.SEGREDO_CHAVE, anterior)
-        else:
-            await integracoes.apagar_segredo(growthhs.SEGREDO_CHAVE)
-        integracoes.esquecer(growthhs.SEGREDO_CHAVE)
-
-
-async def test_recusa_endereco_sem_protocolo_e_funil_invalido(cliente, token_admin,
-                                                             config_growthhs):
-    await config_growthhs(None, None)
+    # Só o endereço do app: o resto fica (inclusive os segredos).
     r = await cliente.put(ROTA, headers=_auth(token_admin),
-                          json={"base_url": "growthhs.exemplo.invalid"})
-    assert r.status_code == 422
-    r = await cliente.put(ROTA, headers=_auth(token_admin), json={"board_id": 0})
-    assert r.status_code == 422
+                          json={"app_url": "https://app.exemplo.invalid"})
+    corpo = r.json()
+    assert corpo["app_url"] == "https://app.exemplo.invalid"
+    assert corpo["client_id"] == "hsg_cliente" and corpo["list_id"] == 22
+    assert corpo["boards_conferidos"] == [6, 7] and corpo["listas_ganho"] == [32, 33]
+    assert corpo["client_secret"]["configurado"] and corpo["webhook_secret"]["configurado"]
+
+    # String vazia é "não mexi", não "apague".
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={"client_secret": "   ", "webhook_secret": ""})
+    assert r.status_code == 200, r.text
+    assert r.json()["client_secret"]["configurado"] is True
+
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={"limpar": ["client_secret", "webhook_secret"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["client_secret"] == {"configurado": False, "ultimos4": None}
+    assert r.json()["webhook_secret"] == {"configurado": False}
+    assert r.json()["configurado"] is False
 
 
-async def test_mostra_a_fila_com_as_falhas(cliente, token_admin, config_growthhs):
-    await config_growthhs(None, None)
-    async with db.sessao(role="service_role") as conn:
-        lead = await conn.fetchval(
-            "INSERT INTO leads (nome, email, tipo) VALUES ('Fila 8D', "
-            "'fila-8d@exemplo.invalid', 'teste') RETURNING id::text")
-        await conn.execute(
-            "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
-            "VALUES ($1::uuid, 'manual', 'falhou', '401: chave inválida')", lead)
-    try:
-        fila = (await cliente.get(ROTA, headers=_auth(token_admin))).json()["fila"]
-        assert fila["falhas"] >= 1
-        assert any(f["lead_id"] == lead and f["erro"] == "401: chave inválida"
-                   for f in fila["ultimas_falhas"])
-    finally:
-        # `fn_lead_insert_event` grava um contact_event (e o gatilho das
-        # jornadas, um journey_event) em todo INSERT de lead — sem FK.
-        async with db.sessao(role="service_role") as conn:
-            await conn.execute("DELETE FROM journey_events WHERE lead_id = $1::uuid", lead)
-            await conn.execute("DELETE FROM contact_events WHERE lead_id = $1::uuid", lead)
-            await conn.execute("DELETE FROM leads WHERE id = $1::uuid", lead)
-
-
-async def test_testar_sem_endereco_e_400(cliente, token_admin, config_growthhs):
-    await config_growthhs(None, None)
-    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+async def test_limpar_campo_desconhecido_e_400(cliente, banco_growthhs, token_admin,
+                                              monkeypatch):
+    await _zerar(banco_growthhs, monkeypatch)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={"limpar": ["api_key"]})
     assert r.status_code == 400
 
 
-# ---------------------------------------------------------------------------
-# Revisão final do 8D — I3 (pausa e reenfileirar), M3 (falhas que já não são)
-# ---------------------------------------------------------------------------
-
-EMAILS_FILA = ("fila-8d-a@exemplo.invalid", "fila-8d-b@exemplo.invalid")
-
-
-@pytest_asyncio.fixture
-async def leads_fila():
-    """Dois leads sem identidade, apagados (com o que o INSERT grava sem FK)
-    antes e depois. `crm_handoffs` vai junto pelo ON DELETE CASCADE."""
-    await db.init_db()
-
-    async def limpar():
-        async with db.sessao(role="service_role") as conn:
-            ids = [r["id"] for r in await conn.fetch(
-                "SELECT id FROM leads WHERE email = ANY($1::text[])", list(EMAILS_FILA))]
-            await conn.execute("DELETE FROM journey_events WHERE lead_id = ANY($1::uuid[])", ids)
-            await conn.execute("DELETE FROM contact_events WHERE lead_id = ANY($1::uuid[])", ids)
-            await conn.execute("DELETE FROM leads WHERE id = ANY($1::uuid[])", ids)
-
-    await limpar()
-    async with db.sessao(role="service_role") as conn:
-        ids = [await conn.fetchval(
-            "INSERT INTO leads (nome, email, tipo) VALUES ('Fila 8D', $1, 'teste') "
-            "RETURNING id::text", e) for e in EMAILS_FILA]
-    yield ids
-    await limpar()
+@pytest.mark.parametrize("corpo", [
+    {"base_url": "growthhs.exemplo.invalid"},
+    {"app_url": "ftp://app.exemplo.invalid"},
+    {"list_id": 0},
+    {"boards_conferidos": [0]},
+    {"boards_conferidos": [6, 6]},
+    {"boards_conferidos": list(range(1, 12))},
+    {"listas_reuniao": [-1]},
+    {"listas_ganho": [32, 32]},
+    {"listas_reuniao": list(range(1, 12))},
+    {"webhook_secret": "curto-demais"},
+    {"client_id": "x" * 201},
+])
+async def test_recusa_entradas_invalidas(cliente, token_admin, corpo):
+    # 422 é do pydantic, antes da rota — nada chega ao banco.
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json=corpo)
+    assert r.status_code == 422, (corpo, r.text)
 
 
-async def test_chave_errada_aparece_como_pausa(cliente, token_admin, config_growthhs,
-                                              leads_fila):
-    await config_growthhs(None, None)
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, leads_fila[0], "manual")
-    cfg = growthhs.Config(base_url="https://growthhs.exemplo.invalid", board_id=3,
-                          app_url=None, api_key="chave-errada")
+async def test_mostra_urls_do_webhook(cliente, banco_growthhs, token_admin, monkeypatch):
+    await _zerar(banco_growthhs, monkeypatch)
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://mkt.exemplo.invalid/")
+    r = await cliente.get(ROTA, headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    base = "https://mkt.exemplo.invalid/api/publico/growthhs/webhook?evento="
+    assert r.json()["webhook_urls"] == {"meeting_scheduled": base + "meeting_scheduled",
+                                        "deal_won": base + "deal_won"}
+    # Sem configuração: a tela abre "Não configurado", com as listas padrão.
+    assert r.json()["configurado"] is False
+    assert r.json()["listas_reuniao"] == [28] and r.json()["listas_ganho"] == [32]
+
+
+# ── Testar ──────────────────────────────────────────────────────────────────
+
+async def test_testar_valido(cliente, banco_growthhs, token_admin, monkeypatch):
+    await _configurar(banco_growthhs, monkeypatch)
+    vistos = []
+
+    async def falso(cfg, **_):
+        vistos.append(cfg)
+
+    monkeypatch.setattr(growthhs, "testar", falso)
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"valido": True}
+    # A config SALVA: é ela que a fila vai usar.
+    assert vistos[0].client_id == "hsg_teste_cfg"
+    assert vistos[0].client_secret == SEGREDO_CLIENTE
+
+
+async def test_testar_recusado(cliente, banco_growthhs, token_admin, monkeypatch):
+    await _configurar(banco_growthhs, monkeypatch)
+
+    async def falso(cfg, **_):
+        raise growthhs.ErroDefinitivo("401: " + "credencial inválida " * 40, 401)
+
+    monkeypatch.setattr(growthhs, "testar", falso)
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    corpo = r.json()
+    assert corpo["valido"] is False and corpo["status"] == 401
+    assert corpo["detalhe"].startswith("401: credencial") and len(corpo["detalhe"]) <= 200
+    assert SEGREDO_CLIENTE not in r.text
+
+
+async def test_testar_fora_do_ar_e_502(cliente, banco_growthhs, token_admin, monkeypatch):
+    await _configurar(banco_growthhs, monkeypatch)
+
+    async def falso(cfg, **_):
+        raise growthhs.ErroTransitorio("sem resposta do GrowthHS")
+
+    monkeypatch.setattr(growthhs, "testar", falso)
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+    assert r.status_code == 502
+
+
+@pytest.mark.parametrize("falta", ["base_url", "client_id", "segredo"])
+async def test_testar_sem_config_e_400(cliente, banco_growthhs, token_admin, monkeypatch,
+                                       falta):
+    await _configurar(banco_growthhs, monkeypatch, **{falta: None})
+
+    async def nunca(cfg, **_):  # pragma: no cover — não pode ser chamado
+        raise AssertionError("testou sem credencial completa")
+
+    monkeypatch.setattr(growthhs, "testar", nunca)
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+    assert r.status_code == 400, r.text
+
+
+# ── Fila (pausa, falhas, reenfileirar) ──────────────────────────────────────
+
+async def _lead(conn, email):
+    return await conn.fetchval(
+        "INSERT INTO leads (nome, email, tipo) VALUES ('Fila GrowthHS', $1, 'teste') "
+        "RETURNING id::text", email)
+
+
+async def test_mostra_a_fila_com_as_falhas(cliente, banco_growthhs, token_admin, monkeypatch):
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    lead = await _lead(conn, "fila-real-a@exemplo.invalid")
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
+        "VALUES ($1::uuid, 'manual', 'falhou', '401: credencial inválida')", lead)
+    fila = (await cliente.get(ROTA, headers=_auth(token_admin))).json()["fila"]
+    assert fila["falhas"] >= 1
+    assert any(f["lead_id"] == lead and f["erro"] == "401: credencial inválida"
+               for f in fila["ultimas_falhas"])
+
+
+async def test_credencial_errada_aparece_como_pausa(cliente, banco_growthhs, token_admin,
+                                                   monkeypatch):
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    # A entrega também precisa cair na transação revertida.
+    monkeypatch.setattr(entrega, "sessao", configuracao.sessao)
+    lead = await _lead(conn, "fila-real-b@exemplo.invalid")
+    await entrega.enfileirar(conn, lead, "manual")
+    cfg = growthhs.Config(base_url="https://growthhs.exemplo.invalid",
+                          client_id="hsg_pausa_cfg", client_secret="segredo-errado",
+                          list_id=22, boards_conferidos=(6,), app_url=None)
     await entrega.rodar_entregas(
-        somente_lead=leads_fila[0], cfg=cfg,
-        transporte=httpx.MockTransport(lambda r: httpx.Response(401, json={"detail": "chave"})))
+        somente_lead=lead, cfg=cfg,
+        transporte=httpx.MockTransport(
+            lambda r: httpx.Response(401, json={"detail": "credencial inválida"})))
     fila = (await cliente.get(ROTA, headers=_auth(token_admin))).json()["fila"]
     assert fila["pausada"] is not None
     assert "401" in fila["pausada"]["motivo"] and fila["pausada"]["desde"]
 
 
-async def test_falha_ja_resolvida_nao_conta(cliente, token_admin, config_growthhs, leads_fila):
-    """M3: um pedido que falhou e depois foi entregue (reenfileirado, botão)
-    não é falha — o painel não pode acusar o que já chegou ao comercial."""
-    await config_growthhs(None, None)
+async def test_falha_ja_resolvida_nao_conta(cliente, banco_growthhs, token_admin, monkeypatch):
+    """Um pedido que falhou e depois foi entregue (reenfileirado, botão) não é
+    falha — o painel não pode acusar o que já chegou ao comercial."""
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    lead = await _lead(conn, "fila-real-c@exemplo.invalid")
     antes = (await cliente.get(ROTA, headers=_auth(token_admin))).json()["fila"]["falhas"]
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute(
-            "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
-            "VALUES ($1::uuid, 'manual', 'falhou', '503: fora do ar')", leads_fila[0])
-        await conn.execute(
-            "INSERT INTO crm_handoffs (lead_id, origem, status, card_id) "
-            "VALUES ($1::uuid, 'manual', 'entregue', 4821)", leads_fila[0])
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
+        "VALUES ($1::uuid, 'manual', 'falhou', '503: fora do ar')", lead)
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, card_id) "
+        "VALUES ($1::uuid, 'manual', 'entregue', 4821)", lead)
     fila = (await cliente.get(ROTA, headers=_auth(token_admin))).json()["fila"]
     assert fila["falhas"] == antes
-    assert all(f["lead_id"] != leads_fila[0] for f in fila["ultimas_falhas"])
+    assert all(f["lead_id"] != lead for f in fila["ultimas_falhas"])
 
 
-async def test_reenfileirar_devolve_as_falhas_sem_entrega(cliente, token_admin, token_usuario,
-                                                         leads_fila):
-    r = await cliente.post(f"{ROTA}/reenfileirar", headers=_auth(token_usuario))
-    assert r.status_code == 403
-
-    async with db.sessao(role="service_role") as conn:
-        # ⚠️ A rota reenfileira a fila INTEIRA — o banco é o de produção. Com
-        # falha real na fila, o teste não roda (não é ele quem decide isso).
-        reais = await conn.fetchval(
-            "SELECT count(*) FROM crm_handoffs WHERE status = 'falhou' "
-            "AND lead_id <> ALL($1::uuid[])", leads_fila)
-        if reais:
-            pytest.skip("há falhas reais na fila — o teste não reenfileira produção")
-        # O primeiro só falhou; o segundo falhou e depois chegou ao comercial.
-        await conn.execute(
-            "INSERT INTO crm_handoffs (lead_id, origem, status, erro, tentativas) "
-            "VALUES ($1::uuid, 'manual', 'falhou', '422: corpo', 3)", leads_fila[0])
-        await conn.execute(
-            "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
-            "VALUES ($1::uuid, 'manual', 'falhou', '422: corpo')", leads_fila[1])
-        await conn.execute(
-            "INSERT INTO crm_handoffs (lead_id, origem, status, card_id) "
-            "VALUES ($1::uuid, 'manual', 'entregue', 4821)", leads_fila[1])
+async def test_reenfileirar_devolve_as_falhas_sem_entrega(cliente, banco_growthhs,
+                                                         token_admin, monkeypatch):
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    # ⚠️ A rota reenfileira a fila INTEIRA. Na transação revertida nada fica,
+    # mas o UPDATE trancaria as linhas reais enquanto o teste roda e a contagem
+    # incluiria as delas — com falha real na fila, o teste não roda.
+    if await conn.fetchval("SELECT count(*) FROM crm_handoffs WHERE status = 'falhou'"):
+        pytest.skip("há falhas reais na fila — o teste não tranca produção")
+    primeiro = await _lead(conn, "fila-real-d@exemplo.invalid")
+    segundo = await _lead(conn, "fila-real-e@exemplo.invalid")
+    # O primeiro só falhou; o segundo falhou e depois chegou ao comercial.
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, erro, tentativas) "
+        "VALUES ($1::uuid, 'manual', 'falhou', '422: corpo', 3)", primeiro)
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, erro) "
+        "VALUES ($1::uuid, 'manual', 'falhou', '422: corpo')", segundo)
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, card_id) "
+        "VALUES ($1::uuid, 'manual', 'entregue', 4821)", segundo)
 
     r = await cliente.post(f"{ROTA}/reenfileirar", headers=_auth(token_admin))
     assert r.status_code == 200, r.text
     assert r.json() == {"reenfileirados": 1}
-    async with db.sessao(role="service_role") as conn:
-        primeiro = await conn.fetchrow(
-            "SELECT status, tentativas, erro, visivel_em <= now() AS visivel "
-            "FROM crm_handoffs WHERE lead_id = $1::uuid", leads_fila[0])
-        segundo = await conn.fetchval(
-            "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1::uuid AND status = 'pendente'",
-            leads_fila[1])
-    assert dict(primeiro) == {"status": "pendente", "tentativas": 0, "erro": None, "visivel": True}
-    assert segundo == 0
+    linha = await conn.fetchrow(
+        "SELECT status, tentativas, erro, visivel_em <= now() AS visivel "
+        "FROM crm_handoffs WHERE lead_id = $1::uuid", primeiro)
+    pendentes_do_segundo = await conn.fetchval(
+        "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1::uuid AND status = 'pendente'",
+        segundo)
+    assert dict(linha) == {"status": "pendente", "tentativas": 0, "erro": None,
+                           "visivel": True}
+    assert pendentes_do_segundo == 0
