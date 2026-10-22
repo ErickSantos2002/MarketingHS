@@ -218,7 +218,7 @@ def _ler_iso(valor) -> datetime | None:
     return data.astimezone(timezone.utc)
 
 
-def _data_do_vendedor(valor) -> str | None:
+def data_do_vendedor(valor) -> str | None:
     """`dd/mm/aaaa hh:mm` em São Paulo — é o vendedor quem lê."""
     data = _ler_iso(valor)
     if data is None:
@@ -297,14 +297,14 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
         item("Site", conversao.get("site_nome"))
         item("URL da conversão", conversao.get("page_url"))
         item("Canal", conversao.get("canal"))
-        item("Data da conversão", _data_do_vendedor(conversao.get("converted_at")))
+        item("Data da conversão", data_do_vendedor(conversao.get("converted_at")))
     if consentimento:
         item("Base legal", consentimento.get("base_legal"))
         versao = uma_linha(consentimento.get("versao"))
         if consentimento.get("provisoria"):
             versao = f"{versao} (provisória)".strip()
         item("Versão do consentimento", versao)
-        item("Data do consentimento", _data_do_vendedor(consentimento.get("criado_em")))
+        item("Data do consentimento", data_do_vendedor(consentimento.get("criado_em")))
     if _tem(frontend_url):
         linhas.append(f"Ver no MarketingHS: {frontend_url.rstrip('/')}"
                       f"/contacts?contato={lead['id']}")
@@ -346,6 +346,24 @@ def montar_card(lead: dict, cfg: Config, *, conversao: dict | None = None,
     }
 
 
+CABECALHO_DO_BLOCO = "— Atualizado pelo MarketingHS"
+
+
+def bloco_ja_aplicado(descricao: str | None, pedido_id) -> bool:
+    """A descrição já tem o bloco DESTE pedido? Só conta a marca numa linha
+    que COMEÇA com o cabeçalho nosso.
+
+    ⚠️ Procurar a marca no texto todo deixaria um campo do formulário
+    contendo "(pedido 7)" — ou o vendedor escrevendo isso — suprimir a
+    atualização do pedido 7: o lead converteria de novo e o card não
+    mudaria, sem erro. Nenhuma linha vinda de fora começa com o cabeçalho:
+    as respostas livres vão prefixadas por "- " e os itens pelo rótulo
+    (`montar_descricao`)."""
+    marca = marca_do_pedido(pedido_id)
+    return any(linha.startswith(CABECALHO_DO_BLOCO) and marca in linha
+               for linha in (descricao or "").splitlines())
+
+
 def marca_do_pedido(pedido_id) -> str:
     """O que identifica, na descrição do card, o bloco de UM pedido. A
     entrega procura esta marca antes do PUT: se uma tentativa anterior do
@@ -359,7 +377,7 @@ def bloco_de_atualizacao(lead: dict, *, conversao: dict | None,
     """O bloco que vai NO FIM da descrição de um card aberto (decisão 3 do
     Erick). Nunca substitui o que o vendedor escreveu: quem chama concatena
     com a descrição atual."""
-    return (f"\n\n— Atualizado pelo MarketingHS em {_data_do_vendedor(quando)} "
+    return (f"\n\n{CABECALHO_DO_BLOCO} em {data_do_vendedor(quando)} "
             f"{marca_do_pedido(pedido_id)} —\n"
             + montar_descricao(lead, conversao=conversao, consentimento=consentimento,
                                frontend_url=frontend_url))
