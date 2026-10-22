@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 22/10 (fim do dia):** `ajustes-prova` ✅ mergeada e no ar (`6550ab8`, deploy de api, worker e sistema; migration 028 aplicada). A primeira suíte deu 3 falhas: o **worker de produção reivindicava as linhas de teste** de `journey_saidas`, que os testes gravam fora da transação revertida. Consertado com `saidas.NO_DE_TESTE`, que a passada sem `somente=` nunca pega. Depois do deploy: **804 passed**, banco limpo. Nenhuma frente aberta.
+
 **Estado em 22/10 (tarde, depois da prova):** aberta `ajustes-prova` (sobras da prova; dona da migration 028). A suíte inteira é da coordenadora.
 
 **Estado em 22/10 (noite):** `prova-jornadas`, `prova-captura-f2` e `prova-roteiro` ✅ mergeadas; suíte única do integrado 786 passed (com `systemd-inhibit` — a máquina suspendeu à noite e congelou duas suítes paralelas por 13 h; **suíte só uma por vez e com inibidor**). Nenhuma frente aberta. Próximo: deploy + roteiro (`docs/prova-rd/roteiro.md`).

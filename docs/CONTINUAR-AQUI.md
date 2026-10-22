@@ -1,5 +1,25 @@
 # Continuar aqui
 
+> ## ✅ Ajustes da prova no ar (22/10/2026, fim do dia)
+>
+> `ajustes-prova` (A1–A8) + volta ao destino no 401 (`?de=`) + conserto das
+> saídas, tudo em `6550ab8`, com deploy de api, worker e sistema e a 028
+> aplicada. Suíte **804 passed**; banco limpo (leads 2.109 = 2.107 + `+site`/`+ficha`
+> da prova).
+>
+> ⚠️ **Achado:** os testes de `rodar_saidas` gravam linha de verdade em
+> `journey_saidas`, e o worker de produção (sem filtro) as pegava antes do
+> teste. Ele chegou a tentar webhooks de teste para `exemplo.invalid`/`gancho.exemplo.com`.
+> No Resend não saiu nada da suíte (conferido pelo Erick). Agora a linha de
+> teste nasce com `journey_node_id = saidas.NO_DE_TESTE` e só sai com `somente=`.
+> **Regra:** teste que grava fora da transação revertida precisa de uma marca
+> que o worker de produção ignore.
+>
+> **Pendente antes de liberar para fora:** endpoint real do GrowthHS
+> (`hsgrowth-sistema`), base legal D3, quem cola o script no site, `ti@` com
+> status "Venda realizada" (voltar para Lead?), um card por e-mail quando o
+> telefone é o mesmo (A3).
+
 > ## ✅ Prova de substituição do RD — RODADA em produção (22/10/2026)
 >
 > Os 12 passos do `docs/prova-rd/roteiro.md` passaram, com os e-mails internos
