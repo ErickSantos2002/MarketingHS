@@ -61,3 +61,58 @@ async def avancar_status(conn, lead_id: str, novo: str, *,
              FROM leads l WHERE l.id = $1::uuid""",
         lead_id, metadata, DESCRICAO_CRM)
     return anterior, novo, True
+
+
+# O que conta como a conversão `agendamento` do teste A/B. É a mesma lista de
+# `publico.EVENTOS_DE_AGENDAMENTO`; aqui só chega `meeting_scheduled`.
+EVENTOS_DE_AGENDAMENTO = ("meeting_scheduled", "scheduling_widget_booked")
+
+
+async def aplicar_evento(conn, lead: dict, *, event_type: str, title: str,
+                         metadata: dict, description: str | None = None) -> dict:
+    """O evento do CRM aplicado a um lead JÁ ACHADO (`id`, `dnia_id`,
+    `status`): grava em `contact_events` (`source_app = 'growthhs'`), avança
+    o estágio por `ESTAGIO_POR_EVENTO` (só para a frente) e, para reunião,
+    costura o visitante A/B e registra a conversão `agendamento`.
+
+    Quem chama decide o lead e a transação; nada aqui procura contato.
+
+    ⚠️ `routers/publico.py:_evento_do_growthhs` (o `/publico/evento-de-contato`)
+    ficou com uma CÓPIA própria desta aplicação — era território de outra
+    frente quando esta nasceu. As duas têm de andar juntas: mudar a regra do
+    estágio, do evento ou da costura numa e não na outra faz a mesma reunião
+    contar diferente conforme a porta por onde chegou.
+    """
+    from app.ab.costura import costurar_visitante, extrair_ab, registrar_conversao_ab
+
+    lead_id = str(lead["id"])
+    dnia_id = str(lead["dnia_id"]) if lead["dnia_id"] else None
+    evento_id = await conn.fetchval(
+        """INSERT INTO contact_events (dnia_id, lead_id, source_app, event_type,
+                                       title, description, metadata)
+           VALUES ($1::uuid, $2::uuid, 'growthhs', $3, $4, $5, $6::jsonb)
+           RETURNING id""",
+        dnia_id, lead_id, event_type, title, description, metadata or {})
+
+    estagio = ESTAGIO_POR_EVENTO.get(event_type)
+    if estagio:
+        anterior, atual, mudou = await avancar_status(
+            conn, lead_id, estagio,
+            metadata_extra={"evento_crm": event_type, "evento_id": str(evento_id)})
+    else:
+        anterior = atual = lead["status"]
+        mudou = False
+
+    if event_type in EVENTOS_DE_AGENDAMENTO:
+        email = await conn.fetchval("SELECT email FROM leads WHERE id = $1::uuid", lead_id)
+        ab = await costurar_visitante(
+            conn, extrair_ab({}, metadata), email=email, phone=None,
+            phone_normalized=None, lead_id=lead_id, dnia_id=dnia_id,
+            source_app="growthhs",
+            metadata={"origin": "growthhs-webhook", "event_type": event_type})
+        await registrar_conversao_ab(
+            conn, ab, "agendamento", lead_id=lead_id, dnia_id=dnia_id,
+            metadata={"event_type": event_type})
+
+    return {"evento_id": str(evento_id), "lead_id": lead_id, "dnia_id": dnia_id,
+            "status_anterior": anterior, "status_atual": atual, "mudou": mudou}

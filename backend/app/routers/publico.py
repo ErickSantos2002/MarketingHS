@@ -13,12 +13,13 @@ from uuid import UUID
 
 import asyncpg
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from app.ab.costura import Ab, costurar_visitante, extrair_ab, registrar_conversao_ab
 from app.captura.evento import publicar_conversao
 from app.chave_api import ChaveApi, chave_api
+from app.crm import growthhs, volta
 from app.database import sessao
 from app.routers.automacoes import (
     RegraIn, RegraPatch, atualizar_regra, inserir_regra,
@@ -323,6 +324,74 @@ async def _evento_do_growthhs(dados: EventoIn) -> dict:
 
     return {"evento_id": str(evento_id), "lead_id": lead_id, "dnia_id": dnia_id,
             "status_anterior": anterior, "status_atual": atual, "mudou": mudou}
+
+
+async def _corpo_do_webhook(request: Request) -> bytes:
+    """Os bytes crus, sem nunca ler mais que `volta.CORPO_MAXIMO` + 1 pedaço
+    (o molde de `rastreio._ler_corpo`): `Content-Length` declarado acima do
+    teto é recusado sem ler; sem ele (chunked), a leitura para ao passar."""
+    declarado = request.headers.get("content-length")
+    if declarado is not None:
+        try:
+            tamanho = int(declarado)
+        except ValueError:
+            tamanho = 0  # a leitura em pedaços abaixo mede de verdade
+        if tamanho > volta.CORPO_MAXIMO:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Corpo grande demais.")
+    corpo = bytearray()
+    async for pedaco in request.stream():
+        corpo += pedaco
+        if len(corpo) > volta.CORPO_MAXIMO:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Corpo grande demais.")
+    return bytes(corpo)
+
+
+@router.post("/growthhs/webhook")
+async def webhook_do_growthhs(request: Request,
+                              evento: str | None = Query(default=None)) -> dict:
+    """A volta pelo webhook de automação do GrowthHS (`app/crm/volta.py`).
+
+    Sem chave de API: quem prova a origem é a assinatura
+    `X-HSGrowth-Signature` com `GROWTHHS_WEBHOOK_SECRET`. Sem segredo
+    configurado → 503 (a rota não liga aberta); corpo > 64 KB → 413;
+    assinatura ausente/errada → 401. Daí em diante, TUDO é 200.
+
+    ⚠️ Por que 200 até no erro: a automação de lá se desliga sozinha depois
+    de 5 respostas não-2xx seguidas e não re-tenta (doc do GrowthHS §8.5).
+    Card que não é nosso, evento que não tratamos ou JSON torto é rotina
+    (`{"ignorado": true}`); bug nosso vai para o log (`{"erro": true}`) — um
+    5xx desligaria a volta de todos os cards até alguém reativar na tela.
+    401 continua 4xx de propósito: só um GrowthHS desconfigurado erra a
+    assinatura, e a automação desligada é o sinal visível disso.
+
+    ⚠️ Esta rota está no balde do limite de taxa de `/publico` (30/min por
+    IP, `main.py`), e 429 conta como falha lá.
+    """
+    segredo = await ler_segredo(growthhs.SEGREDO_WEBHOOK)
+    if not segredo:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Webhook do GrowthHS sem segredo configurado.")
+    corpo = await _corpo_do_webhook(request)
+    if not volta.assinatura_confere(corpo, segredo,
+                                    request.headers.get("x-hsgrowth-signature")):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Assinatura inválida.")
+
+    if evento not in volta.EVENTOS:
+        return {"ignorado": True}
+    try:
+        payload = json.loads(corpo)
+    except (ValueError, UnicodeDecodeError):
+        return {"ignorado": True}
+    if not isinstance(payload, dict):
+        return {"ignorado": True}
+    try:
+        # Transação curta, na hora: o envio de lá é síncrono (o vendedor que
+        # arrastou o card espera) e tem 10 s de timeout.
+        async with sessao(role="service_role") as conn:
+            return await volta.aplicar(conn, evento, payload)
+    except Exception:
+        logger.exception("webhook do GrowthHS: evento %s não aplicado", evento)
+        return {"erro": True}
 
 
 # ============================================================================
