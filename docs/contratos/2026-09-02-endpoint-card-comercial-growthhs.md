@@ -1,5 +1,16 @@
 # Contrato: `POST /integration/cards` no GrowthHS
 
+> ⚠️ **Substituído em 22/10/2026** por
+> `hsgrowth-sistema/docs/integracao-marketinghs.md` (§1–§8): o GrowthHS
+> **não vai ter** `POST /integration/cards`. O MarketingHS passou a usar a
+> API normal do CRM (`client-credentials` → pessoa → `POST /cards`, e
+> `PUT /cards/{id}` + `POST /card-notes` para card aberto) e a receber a
+> volta pelo webhook de automação dele (`POST /publico/growthhs/webhook`).
+> Spec do lado de cá: `docs/superpowers/specs/2026-10-22-growthhs-real-design.md`.
+> O que segue fica como registro; o receptor de teste
+> (`app/routers/receptor_growthhs.py`) implementa este contrato morto e
+> continua desligado.
+
 **Para quem implementa:** este documento é um **pedido ao `hsgrowth-sistema`**.
 Nada aqui se implementa dentro do MarketingHS — o MarketingHS é o *chamador*.
 
