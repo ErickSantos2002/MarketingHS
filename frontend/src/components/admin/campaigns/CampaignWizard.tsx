@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, MessageCircle, ChevronRight, ChevronLeft, Send, Clock, AlertTriangle, Loader2, Check, Pencil } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Mail, MessageCircle, ChevronRight, ChevronLeft, Send, Clock, AlertTriangle, Loader2, Check, Pencil, Info } from 'lucide-react';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
 import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 import { useCampaigns, type Campaign } from '@/hooks/useCampaigns';
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 import EmailEditor, { type EditorRef } from 'react-email-editor';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { BASE_EMAIL_DESIGN, buildEmailEditorOptions, registerEmailImageUpload } from './emailEditorConfig';
+import { designDoTemplate } from './designDoHtml';
 import { useSocialLinks } from '@/hooks/useSocialLinks';
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog';
 import { EmailTemplateFrame } from './EmailTemplateFrame';
@@ -97,6 +99,9 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
   const [editorLoading, setEditorLoading] = useState(true);
   const [emailHtml, setEmailHtml] = useState(campaign?.channel === 'email' ? (campaign.body ?? '') : '');
   const [emailDesign, setEmailDesign] = useState<any>((campaign as any)?.design ?? null);
+  // Conteúdo que chegou só como HTML (template ou campanha criados fora do
+  // editor) abre num bloco HTML, e a tela avisa. Ver designDoHtml.ts.
+  const [conteudoDoHtml, setConteudoDoHtml] = useState(false);
   const [subject, setSubject] = useState(campaign?.channel === 'email' ? (campaign.subject ?? '') : '');
   const { templates } = useTemplates();
   // O bloco social so nasce pre-preenchido se as options existirem na
@@ -142,12 +147,16 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
 
     registerEmailImageUpload(unlayer, 'campaigns');
 
-    // Load design
-    if (emailDesign) {
-      unlayer.loadDesign(emailDesign);
-    } else {
-      unlayer.loadDesign(BASE_EMAIL_DESIGN);
-    }
+    // Campanha com `body` e sem `design` (criada fora do editor) abre o HTML
+    // num bloco, não o padrão — senão o próximo "Avançar" exportaria o padrão
+    // por cima do conteúdo original. Mesma regra do TemplateEditor.
+    const { design, doHtml } = designDoTemplate(
+      { design: emailDesign, html: emailHtml },
+      BASE_EMAIL_DESIGN,
+    );
+    unlayer.loadDesign(design);
+    setConteudoDoHtml(doHtml);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailDesign]);
 
   const exportFromEditor = (): Promise<{ html: string; design: any }> => {
@@ -172,8 +181,12 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
     setTemplateId(t.id);
     const editor = emailEditorRef.current?.editor;
     if (editor) {
-      editor.loadDesign(t.design);
-      setEmailDesign(t.design);
+      // Template criado fora do editor tem `html` e `design` nulo: entra como
+      // bloco HTML, nunca como "nada" (ver designDoHtml.ts).
+      const { design, doHtml } = designDoTemplate(t, BASE_EMAIL_DESIGN);
+      editor.loadDesign(design);
+      setEmailDesign(design);
+      setConteudoDoHtml(doHtml);
     }
   };
 
@@ -522,7 +535,9 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                         return;
                       }
                       const t = templates.find(t => t.id === value);
-                      if (!t || !t.design) {
+                      // Sem design mas com html também se aplica (bloco HTML);
+                      // só o template vazio dos dois lados não tem o que carregar.
+                      if (!t || (!t.design && !t.html?.trim())) {
                         setTemplateId(value);
                         return;
                       }
@@ -593,6 +608,16 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                     />
                   </div>
                 ) : (
+                  <>
+                  {conteudoDoHtml && (
+                    <Alert>
+                      <Info />
+                      <AlertDescription>
+                        Este conteúdo foi criado fora do editor: o original está num bloco HTML.
+                        Edite o código do bloco ou refaça com os blocos.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="relative">
                     {editorLoading && (
                       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/80 rounded-lg">
@@ -611,6 +636,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                       )}
                     </div>
                   </div>
+                  </>
                 )}
               </>
             ) : (
