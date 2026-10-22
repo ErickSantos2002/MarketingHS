@@ -1,5 +1,45 @@
 # Continuar aqui
 
+> ## ✅ Prova de substituição do RD — RODADA em produção (22/10/2026)
+>
+> Os 12 passos do `docs/prova-rd/roteiro.md` passaram, com os e-mails internos
+> (`healthsafetyti@gmail.com`, `ti@healthsafetytech.com` e `+site`/`+ficha`):
+>
+> | Passo | Resultado |
+> |---|---|
+> | 1 visita nos números | ✅ |
+> | 2 consentimento (recusa sem; grava texto/versão/IP/UA com) | ✅ |
+> | 3 boas-vindas → nutrição 1 → nutrição 2 (10 min) | ✅ chegou na caixa de entrada (Outlook) |
+> | 4 aviso interno com os dados e link da ficha | ✅ |
+> | 5 card no "GrowthHS" | ✅ no **receptor de teste** — endpoint real pendente no `hsgrowth-sistema` |
+> | 6 ficha técnica com o PDF | ✅ (depois do conserto do editor, abaixo) |
+> | 7 formulário de outro domínio, com o script do RD junto | ✅ envio original intacto; `prova_cap_phoebus`, canal "pago" |
+> | 8 mesmo e-mail de novo | ✅ não duplica, não sobrescreve, conta conversão |
+> | 9 volta do CRM | ✅ Lead → Reunião agendada → Venda realizada; não volta |
+> | 10 descadastro no meio da nutrição | ✅ nutrição seguinte `suppressed` |
+> | 11 números por página/canal | ✅ batem |
+> | 12 antimeta (0 e-mail fora da lista) + limpeza | ✅ |
+>
+> **Achados na prova:**
+> - 🔴→✅ **Editor de template apagava o conteúdo** de template criado fora do
+>   editor (abria o modelo padrão; salvar gravava por cima). Consertado no
+>   mesmo dia (`9d7b542`, deploy do sistema): abre o HTML num bloco, com aviso.
+>   A ficha foi restaurada por `~/marketinghs-prova-rd-ficha.sh`.
+> - `healthsafetyti@gmail.com` está descadastrado desde 02/10 (teste do R0) —
+>   o sistema respeitou (boas-vindas `suppressed`).
+> - Canal: UTM de origem desconhecida (`utm_source=teste`) cai em "direto";
+>   deveria ser uma categoria de campanha.
+> - A prévia da landing dentro do editor conta visita.
+> - Taxa de conversão passa de 100% quando a mesma pessoa testa com vários
+>   e-mails (conta visitante único) — esperado em teste.
+> - O receptor de teste devolve o mesmo `card_id` para leads diferentes.
+> - O `ti@` ficou com estágio "Venda realizada" (passo 9).
+>
+> **Falta (Erick):** `PROVA_RECEPTOR_TESTE=false` + deploy da API; parar o
+> serviço `prova-site` no EasyPanel; revogar a chave de API `prova-rd-crm`.
+>
+> **Antes de liberar externamente (RD em paralelo):** ver o bloco abaixo.
+
 > ## 🧪 Prova de substituição do RD — código pronto na `main` (22/10/2026)
 >
 > **O quê:** landing `phoebus-prova` + captura de formulário de outro site
