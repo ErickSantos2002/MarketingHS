@@ -1,45 +1,187 @@
-"""A fila de entrega ao GrowthHS.
+"""A fila de entrega ao GrowthHS — pela API normal (pessoa → cards → criar ou
+atualizar).
 
 O modo de falhar: o lead "vai para o comercial" e não vai (falha silenciosa),
-vira dois cards (entrega repetida), ou uma chave errada é re-tentada para
-sempre. Nenhum aparece em tela; o vendedor descobre.
+vira dois cards (entrega repetida, ou retry depois de um 201 que se perdeu),
+o card aberto ganha dois blocos "Atualizado pelo MarketingHS" (retry depois
+de um PUT que se perdeu), ou uma chave errada é re-tentada para sempre.
+Nenhum aparece em tela; o vendedor descobre.
+
+Nenhum teste fala com a rede: `GrowthHSFalso` é o GrowthHS inteiro em
+memória (pessoas, cards, notas), servido por `httpx.MockTransport`. Os
+pedidos são gravados FORA de transação (a entrega abre as próprias sessões),
+por isso `somente_lead=` sempre e e-mails `@exemplo.invalid`; `cfg=` sempre
+— nenhum teste lê `growthhs_config`.
 """
 
 import asyncio
-from datetime import timedelta
+import itertools
+import json
+import re
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
 import pytest_asyncio
 
 import app.database as db
-from app.crm import entrega
-from app.crm.growthhs import Config
+from app.config import settings
+from app.crm import entrega, growthhs
+from app.crm.growthhs import Config, bloco_ja_aplicado, marca_do_pedido
 from rodada import EmailDeRodada
 
 # Único por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
 _EMAIL = EmailDeRodada("entrega-8d", antigo="entrega-8d@exemplo.invalid")
 _EMAIL_GEMEO = EmailDeRodada("entrega-8d-gemeo", antigo="entrega-8d-gemeo@exemplo.invalid")
 EMAIL, EMAIL_GEMEO = _EMAIL.atual, _EMAIL_GEMEO.atual
-CFG = Config(base_url="https://growthhs.exemplo.invalid", board_id=3,
-             app_url="https://app.exemplo.invalid", api_key="chave-8d")
+LISTA_DE_ENTRADA, BOARD_DE_ENTRADA = 22, 6
+CFG = Config(base_url="https://growthhs.exemplo.invalid", client_id="hsg_8d",
+             client_secret="segredo-8d", list_id=LISTA_DE_ENTRADA,
+             boards_conferidos=(6, 7), app_url="https://app.exemplo.invalid")
+ZERO = {"entregues": 0, "atualizadas": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
+CABECALHO = "— Atualizado pelo MarketingHS"
+NOTA = re.compile(r"^Lead converteu de novo pelo MarketingHS \(MarketingHS\) em "
+                  r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\. Descrição do card atualizada\.$")
+CARDS, NOTAS, PESSOAS = "/api/v1/cards", "/api/v1/card-notes", "/api/v1/persons"
+ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
 
 
-def _transporte(status, corpo=None, contagem=None):
-    def responder(request):
-        if contagem is not None:
-            contagem.append(request)
-        return httpx.Response(status, json=corpo or {"detail": "x"})
-    return httpx.MockTransport(responder)
+@pytest.fixture(autouse=True)
+def _sem_token_guardado():
+    growthhs.limpar_tokens()
+    yield
+    growthhs.limpar_tokens()
 
 
-def _transporte_corpo_invalido(status, contagem=None):
-    """Um 2xx cujo corpo NÃO é JSON — round 1, achado I1(b)."""
-    def responder(request):
-        if contagem is not None:
-            contagem.append(request)
-        return httpx.Response(status, content=b"isto nao e json")
-    return httpx.MockTransport(responder)
+class GrowthHSFalso:
+    """O GrowthHS em memória, com o comportamento de §8 de lá que importa:
+    busca de pessoa PARCIAL e sem `email_alternative`; `POST /persons` 400
+    para e-mail repetido em qualquer dos quatro campos; listagem de cards por
+    board + pessoa SEM a descrição (por isso a entrega lê o card).
+
+    Defeitos sob encomenda:
+    - `forcar[(método, prefixo do caminho)]`: respostas devolvidas ANTES do
+      comportamento normal, consumidas em ordem (a rota volta ao normal
+      quando a lista acaba);
+    - `perder[(método, prefixo)] = n`: faz a operação e PERDE a resposta
+      (timeout) n vezes — o 201/200 que nunca chegou;
+    - `corpo_do_post_card`: bytes no lugar do JSON do 201 (o card é criado);
+    - `ao_criar_card`: chamado depois de criar um card.
+    `agora` é o `created_at` dos cards criados por `POST` — fixo no passado
+    por padrão, para o teste não depender do relógio desta máquina contra o
+    do banco (que dá o `criado_em` do pedido)."""
+
+    def __init__(self):
+        self.pessoas: dict[int, dict] = {}
+        self.cards: dict[int, dict] = {}
+        self.notas: list[dict] = []
+        self.pedidos: list[httpx.Request] = []
+        self.forcar: dict[tuple[str, str], list] = {}
+        self.perder: dict[tuple[str, str], int] = {}
+        self.corpo_do_post_card: bytes | None = None
+        self.ao_criar_card = None
+        self.agora = "2026-10-01T12:00:00"
+        self._ids = itertools.count(7001)
+
+    # ── semear ──
+    def pessoa(self, **campos) -> int:
+        pid = next(self._ids)
+        self.pessoas[pid] = {"id": pid, "name": "Pessoa", **campos}
+        return pid
+
+    def card(self, person_id, *, descricao="", board=BOARD_DE_ENTRADA, is_won=False,
+             is_lost=False, created_at=ANTIGO) -> int:
+        cid = next(self._ids)
+        self.cards[cid] = {"id": cid, "person_id": person_id, "list_id": LISTA_DE_ENTRADA,
+                           "board_id": board, "title": "Card do vendedor",
+                           "description": descricao, "is_won": is_won, "is_lost": is_lost,
+                           "created_at": created_at}
+        return cid
+
+    # ── olhar ──
+    def de(self, metodo, caminho):
+        return [p for p in self.pedidos if p.method == metodo and p.url.path == caminho]
+
+    def puts(self):
+        return [p for p in self.pedidos if p.method == "PUT"]
+
+    def transporte(self):
+        return httpx.MockTransport(self)
+
+    # ── servir ──
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.pedidos.append(request)
+        caminho = request.url.path
+        for (metodo, prefixo), fila in self.forcar.items():
+            if metodo == request.method and caminho.startswith(prefixo) and fila:
+                resposta = fila.pop(0)
+                if isinstance(resposta, Exception):
+                    raise resposta
+                return resposta
+        resposta = self._servir(request, caminho)
+        for (metodo, prefixo), n in self.perder.items():
+            if metodo == request.method and caminho.startswith(prefixo) and n > 0:
+                self.perder[(metodo, prefixo)] = n - 1
+                raise httpx.ReadTimeout("resposta perdida", request=request)
+        return resposta
+
+    def _servir(self, request, caminho) -> httpx.Response:
+        metodo = request.method
+        corpo = json.loads(request.content) if request.content else {}
+        params = {k: v[0] for k, v in parse_qs(urlsplit(str(request.url)).query).items()}
+        if (metodo, caminho) == ("POST", "/api/v1/auth/client-credentials"):
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 28800})
+        if (metodo, caminho) == ("GET", PESSOAS):
+            termo = params.get("search", "").lower()
+            campos = ("name", "email", "email_commercial", "email_personal",
+                      "phone", "phone_commercial", "phone_whatsapp")
+            achadas = [p for p in self.pessoas.values()
+                       if any(termo in str(p.get(c) or "").lower() for c in campos)]
+            return httpx.Response(200, json={"persons": achadas, "total": len(achadas),
+                                             "page": 1, "page_size": 100, "total_pages": 1})
+        if (metodo, caminho) == ("POST", PESSOAS):
+            email = (corpo.get("email") or "").lower()
+            for p in self.pessoas.values():
+                if email and email in [str(p.get(c) or "").lower() for c in
+                                       ("email", "email_commercial", "email_personal",
+                                        "email_alternative")]:
+                    return httpx.Response(400, json={"detail": "E-mail já cadastrado"})
+            pid = self.pessoa(**corpo)
+            return httpx.Response(201, json=self.pessoas[pid])
+        if (metodo, caminho) == ("GET", CARDS):
+            board, pessoa = int(params["board_id"]), int(params["person_id"])
+            achados = [{k: v for k, v in c.items() if k != "description"}
+                       for c in self.cards.values()
+                       if c["board_id"] == board and c["person_id"] == pessoa]
+            return httpx.Response(200, json={"cards": achados, "total": len(achados),
+                                             "page": 1, "page_size": 100, "total_pages": 1})
+        if (metodo, caminho) == ("POST", CARDS):
+            cid = self.card(corpo["person_id"], descricao=corpo.get("description") or "",
+                            created_at=self.agora)
+            self.cards[cid].update({k: v for k, v in corpo.items() if k != "description"})
+            if self.ao_criar_card:
+                self.ao_criar_card()
+            if self.corpo_do_post_card is not None:
+                return httpx.Response(201, content=self.corpo_do_post_card)
+            return httpx.Response(201, json=self.cards[cid])
+        if caminho.startswith(CARDS + "/"):
+            cid = int(caminho.rsplit("/", 1)[1])
+            if cid not in self.cards:
+                return httpx.Response(404, json={"detail": "Card não encontrado"})
+            if metodo == "GET":
+                return httpx.Response(200, json=self.cards[cid])
+            if metodo == "PUT":
+                self.cards[cid]["description"] = corpo["description"]
+                return httpx.Response(200, json=self.cards[cid])
+        if (metodo, caminho) == ("POST", NOTAS):
+            self.notas.append(corpo)
+            return httpx.Response(201, json={"id": len(self.notas), **corpo})
+        return httpx.Response(599, json={"detail": f"rota não prevista {metodo} {caminho}"})
+
+
+def _resposta(status):
+    return httpx.Response(status, json={"detail": "x"})
 
 
 @pytest_asyncio.fixture
@@ -69,154 +211,6 @@ async def lead_8d():
     await limpar()
 
 
-async def _pedido(lead_id):
-    async with db.sessao(role="service_role") as conn:
-        return await conn.fetchrow(
-            "SELECT * FROM crm_handoffs WHERE lead_id = $1::uuid ORDER BY id DESC LIMIT 1",
-            lead_id)
-
-
-async def _eventos(lead_id, tipo):
-    async with db.sessao(role="service_role") as conn:
-        return await conn.fetch(
-            "SELECT metadata FROM contact_events WHERE lead_id = $1::uuid AND event_type = $2",
-            lead_id, tipo)
-
-
-async def test_enfileirar_nao_duplica_pendente(lead_8d):
-    async with db.sessao(role="service_role") as conn:
-        primeiro = await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-        segundo = await entrega.enfileirar(conn, lead_8d["lead_id"], "regra")
-    assert primeiro is not None and segundo is None
-
-
-async def test_sem_configuracao_nao_reivindica_nada(lead_8d):
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    vazio = Config(base_url=None, board_id=None, app_url=None, api_key=None)
-    assert await entrega.rodar_entregas(cfg=vazio, somente_lead=lead_8d["lead_id"]) == {"desligado": True}
-    assert (await _pedido(lead_8d["lead_id"]))["status"] == "pendente"
-
-
-async def test_entrega_grava_o_card_na_fila_na_identidade_e_na_linha_do_tempo(lead_8d):
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(201, {"id": 4821, "person_id": 1180, "created": True}))
-    assert resultado["entregues"] == 1
-
-    pedido = await _pedido(lead_8d["lead_id"])
-    assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
-    async with db.sessao(role="service_role") as conn:
-        ident = await conn.fetchrow(
-            "SELECT growthhs_card_id, growthhs_person_id FROM ecosystem_identities "
-            "WHERE dnia_id = $1::uuid", lead_8d["dnia_id"])
-    assert (ident["growthhs_card_id"], ident["growthhs_person_id"]) == (4821, 1180)
-    eventos = await _eventos(lead_8d["lead_id"], "crm_handoff")
-    assert eventos[0]["metadata"]["card_id"] == 4821
-    assert eventos[0]["metadata"]["origem"] == "manual"
-
-
-async def test_lead_ja_entregue_nao_chama_de_novo(lead_8d):
-    chamadas = []
-    corpo = {"id": 4821, "person_id": 1180, "created": True}
-    for _ in range(2):
-        async with db.sessao(role="service_role") as conn:
-            await entrega.enfileirar(conn, lead_8d["lead_id"], "regra")
-        await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(201, corpo, chamadas))
-    assert len(chamadas) == 1
-    assert (await _pedido(lead_8d["lead_id"]))["card_id"] == 4821
-
-
-async def test_erro_definitivo_falha_na_hora_e_aparece(lead_8d):
-    """422 é o corpo DAQUELE lead — falha o pedido. (401/403/404 são
-    configuração e pausam a fila: ver o teste da pausa.)"""
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(422))
-    assert resultado["falhas"] == 1
-    pedido = await _pedido(lead_8d["lead_id"])
-    assert pedido["status"] == "falhou" and pedido["erro"].startswith("422")
-    assert len(await _eventos(lead_8d["lead_id"], "crm_handoff_falhou")) == 1
-
-
-async def test_erro_transitorio_adia_e_esgota(lead_8d, monkeypatch):
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    assert (await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(503)))["adiadas"] == 1
-    pedido = await _pedido(lead_8d["lead_id"])
-    assert pedido["status"] == "pendente" and pedido["tentativas"] == 1
-
-    # Esgotar: com o pedido já visível e o teto em 2, a próxima falha é final.
-    monkeypatch.setattr(entrega, "MAX_TENTATIVAS", 2)
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute("UPDATE crm_handoffs SET visivel_em = now() WHERE id = $1",
-                           pedido["id"])
-    assert (await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(503)))["falhas"] == 1
-    assert (await _pedido(lead_8d["lead_id"]))["status"] == "falhou"
-
-
-async def test_mover_etapa_falha_a_vista(lead_8d):
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "regra", acao="mover")
-    chamadas = []
-    await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(201, {"id": 1}, chamadas))
-    pedido = await _pedido(lead_8d["lead_id"])
-    assert pedido["status"] == "falhou" and "mover" in pedido["erro"]
-    assert chamadas == []
-
-
-async def test_2xx_com_corpo_invalido_ainda_entrega_e_nao_repete(lead_8d):
-    """Round 1, achado I1(b): um 2xx já criou o card do lado do GrowthHS —
-    corpo ilegível não pode virar re-envio (segundo card)."""
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    chamadas = []
-    resultado = await entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG,
-        transporte=_transporte_corpo_invalido(201, chamadas))
-    assert resultado["entregues"] == 1
-    pedido = await _pedido(lead_8d["lead_id"])
-    assert pedido["status"] == "entregue" and pedido["card_id"] is None
-
-    # Segunda passada: nada pendente, nenhuma chamada nova ao GrowthHS.
-    outro_resultado = await entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG,
-        transporte=_transporte_corpo_invalido(201, chamadas))
-    assert outro_resultado == {"entregues": 0, "ja_entregues": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
-    assert len(chamadas) == 1
-
-
-async def test_falha_apos_o_2xx_nao_reenvia(lead_8d, monkeypatch):
-    """Round 1, achado I1(a): um defeito NOSSO depois do sucesso (aqui,
-    `_registrar_evento` explodindo) não pode desfazer o `entregue` nem
-    provocar um segundo POST."""
-    async def _explode(*args, **kwargs):
-        raise RuntimeError("defeito simulado depois do sucesso")
-    monkeypatch.setattr(entrega, "_registrar_evento", _explode)
-
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    chamadas = []
-    resultado = await entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG,
-        transporte=_transporte(201, {"id": 4821, "person_id": 1180, "created": True}, chamadas))
-    assert resultado["entregues"] == 1
-    pedido = await _pedido(lead_8d["lead_id"])
-    assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
-
-    # Segunda passada: nada pendente, nenhuma chamada nova ao GrowthHS, mesmo
-    # com o passo de registro tendo "quebrado" na primeira.
-    outro_resultado = await entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG,
-        transporte=_transporte(201, {"id": 9999, "person_id": 1}, chamadas))
-    assert outro_resultado == {"entregues": 0, "ja_entregues": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
-    assert len(chamadas) == 1
-
-
-# ---------------------------------------------------------------------------
-# Revisão final do 8D — I2, I3, I5, M2
-# ---------------------------------------------------------------------------
-
 @pytest_asyncio.fixture
 async def gemeo(lead_8d):
     """Um SEGUNDO lead da mesma pessoa (mesmo `dnia_id`) — o que a fusão de
@@ -242,6 +236,37 @@ async def gemeo(lead_8d):
     await limpar()
 
 
+async def _enfileirar(lead_id, origem="manual", **kw):
+    async with db.sessao(role="service_role") as conn:
+        return await entrega.enfileirar(conn, lead_id, origem, **kw)
+
+
+async def _rodar(lead, api, **kw):
+    return await entrega.rodar_entregas(somente_lead=lead, cfg=CFG,
+                                        transporte=api.transporte(), **kw)
+
+
+async def _pedido(lead_id):
+    async with db.sessao(role="service_role") as conn:
+        return await conn.fetchrow(
+            "SELECT * FROM crm_handoffs WHERE lead_id = $1::uuid ORDER BY id DESC LIMIT 1",
+            lead_id)
+
+
+async def _tornar_visivel(pedido_id):
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("UPDATE crm_handoffs SET visivel_em = now() WHERE id = $1",
+                           pedido_id)
+
+
+async def _eventos(lead_id, tipo):
+    async with db.sessao(role="service_role") as conn:
+        return await conn.fetch(
+            "SELECT title, metadata FROM contact_events "
+            "WHERE lead_id = $1::uuid AND event_type = $2 ORDER BY occurred_at",
+            lead_id, tipo)
+
+
 async def _identidade(dnia_id):
     async with db.sessao(role="service_role") as conn:
         return await conn.fetchrow(
@@ -249,75 +274,363 @@ async def _identidade(dnia_id):
             "WHERE dnia_id = $1::uuid", dnia_id)
 
 
-async def test_mesma_pessoa_em_dois_leads_nao_vira_dois_cards(lead_8d, gemeo):
-    """I2: a origem olhava a PESSOA; olhar só o lead deixava a fusão de
-    contatos gerar dois cards para a mesma pessoa."""
-    chamadas = []
-    corpo = {"id": 4821, "person_id": 1180, "created": True}
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG,
-                                 transporte=_transporte(201, corpo, chamadas))
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, gemeo, "regra")
-    resultado = await entrega.rodar_entregas(somente_lead=gemeo, cfg=CFG,
-                                             transporte=_transporte(201, {"id": 9}, chamadas))
-    assert len(chamadas) == 1
-    assert resultado["ja_entregues"] == 1
-    pedido = await _pedido(gemeo)
-    assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
+def _ingenuo_utc(quando: datetime) -> str:
+    """Como o GrowthHS serializa `created_at`: UTC sem fuso."""
+    return quando.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
 
 
-async def test_identidade_com_card_conta_como_entregue(lead_8d):
-    """I2, o outro lado: card anotado na identidade (entrega de outro lead já
-    apagado, ou vínculo lido do GrowthHS) também é "já está lá"."""
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute(
-            "UPDATE ecosystem_identities SET growthhs_card_id = 555, growthhs_person_id = 77 "
-            "WHERE dnia_id = $1::uuid", lead_8d["dnia_id"])
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    chamadas = []
-    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG,
-                                             transporte=_transporte(201, {"id": 1}, chamadas))
-    assert chamadas == [] and resultado["ja_entregues"] == 1
+# ── A marca do pedido (puro) ─────────────────────────────────────────────────
+
+def test_marca_so_conta_na_linha_do_cabecalho():
+    """Um campo do formulário com "(pedido 7)" não pode suprimir o bloco do
+    pedido 7: a marca só conta na linha que COMEÇA com o cabeçalho nosso."""
+    bloco = growthhs.bloco_de_atualizacao(
+        {"id": "x", "empresa": "Acme"}, conversao=None, consentimento=None,
+        frontend_url="https://mkt.exemplo.invalid", pedido_id=7,
+        quando=datetime(2026, 10, 22, 13, 0, tzinfo=timezone.utc))
+    assert bloco_ja_aplicado("Anotação" + bloco, 7)
+    assert not bloco_ja_aplicado("Anotação" + bloco, 71)
+    assert not bloco_ja_aplicado("- campo: (pedido 7)\nCargo: (pedido 7)", 7)
+    assert not bloco_ja_aplicado(f"Resposta: {CABECALHO} {marca_do_pedido(7)}", 7)
+    assert not bloco_ja_aplicado(None, 7)
+
+
+# ── Fila ─────────────────────────────────────────────────────────────────────
+
+async def test_enfileirar_nao_duplica_pendente(lead_8d):
+    primeiro = await _enfileirar(lead_8d["lead_id"], "manual")
+    segundo = await _enfileirar(lead_8d["lead_id"], "regra")
+    assert primeiro is not None and segundo is None
+
+
+async def test_sem_configuracao_nao_reivindica_nada(lead_8d):
+    await _enfileirar(lead_8d["lead_id"])
+    vazio = Config(base_url=None, client_id=None, client_secret=None, list_id=None,
+                   boards_conferidos=(), app_url=None)
+    assert await entrega.rodar_entregas(cfg=vazio, somente_lead=lead_8d["lead_id"]) == {
+        "desligado": True}
+    assert (await _pedido(lead_8d["lead_id"]))["status"] == "pendente"
+
+
+async def test_ciclo_vazio_conta_as_cinco_chaves(lead_8d):
+    assert await _rodar(lead_8d["lead_id"], GrowthHSFalso()) == ZERO
+
+
+# ── Criar ────────────────────────────────────────────────────────────────────
+
+async def test_entrega_cria_pessoa_e_card(lead_8d):
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    resultado = await _rodar(lead_8d["lead_id"], api)
+    assert resultado == {**ZERO, "entregues": 1}
+
+    [pessoa] = api.pessoas.values()
+    assert pessoa["email"] == EMAIL.lower()
+    [post] = api.de("POST", CARDS)
+    corpo = json.loads(post.content)
+    assert corpo["list_id"] == LISTA_DE_ENTRADA and corpo["person_id"] == pessoa["id"]
+    assert corpo["acquisition_channel"] == "Inbound" and corpo["origin"] == "MarketingHS"
+    assert (f"Ver no MarketingHS: {settings.FRONTEND_URL.rstrip('/')}"
+            f"/contacts?contato={lead_8d['lead_id']}") in corpo["description"]
+    [card_id] = api.cards
+    assert api.notas == [] and api.puts() == []
+
     pedido = await _pedido(lead_8d["lead_id"])
-    assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == ("entregue", 555, 77)
-
-
-async def test_ja_entregue_preenche_a_identidade_vazia(lead_8d):
-    """M2: se a identidade ficou sem o card (a gravação dela é só registro e
-    pode ter falhado), o caminho "já entregue" a preenche."""
-    corpo = {"id": 4821, "person_id": 1180, "created": True}
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG,
-                                 transporte=_transporte(201, corpo))
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute(
-            "UPDATE ecosystem_identities SET growthhs_card_id = NULL, growthhs_person_id = NULL "
-            "WHERE dnia_id = $1::uuid", lead_8d["dnia_id"])
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG,
-                                             transporte=_transporte(201, {"id": 9}))
-    assert resultado["ja_entregues"] == 1
+    assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == (
+        "entregue", card_id, pessoa["id"])
     ident = await _identidade(lead_8d["dnia_id"])
-    assert (ident["growthhs_card_id"], ident["growthhs_person_id"]) == (4821, 1180)
+    assert (ident["growthhs_card_id"], ident["growthhs_person_id"]) == (card_id, pessoa["id"])
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["title"] == "Enviado ao comercial (GrowthHS)"
+    assert evento["metadata"]["card_id"] == card_id and evento["metadata"]["origem"] == "manual"
+
+
+async def test_so_cards_ganhos_ou_perdidos_cria_novo(lead_8d):
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    api.card(pessoa, is_won=True)
+    api.card(pessoa, board=7, is_lost=True)
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    assert len(api.de("POST", CARDS)) == 1 and api.puts() == [] and api.notas == []
+    assert len(api.de("POST", PESSOAS)) == 0  # a pessoa achada é reusada
+    assert (await _pedido(lead_8d["lead_id"]))["person_id"] == pessoa
+
+
+async def test_mesma_pessoa_em_dois_leads_um_card(lead_8d, gemeo):
+    """A fusão de contatos: dois leads, uma pessoa lá (o e-mail do gêmeo é o
+    comercial dela). O segundo lead atualiza o card do primeiro."""
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL, email_commercial=EMAIL_GEMEO)
+    await _enfileirar(lead_8d["lead_id"])
+    assert (await _rodar(lead_8d["lead_id"], api))["entregues"] == 1
+    [card_id] = api.cards
+
+    await _enfileirar(gemeo, "regra")
+    assert await _rodar(gemeo, api) == {**ZERO, "atualizadas": 1}
+    assert len(api.de("POST", CARDS)) == 1 and len(api.notas) == 1
+    pedido = await _pedido(gemeo)
+    assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == (
+        "entregue", card_id, pessoa)
+
+
+# ── Atualizar + nota ─────────────────────────────────────────────────────────
+
+async def test_pessoa_com_card_aberto_atualiza_e_anota_sem_criar(lead_8d):
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL.upper())
+    fechado = api.card(pessoa, is_won=True, created_at="2026-09-01T10:00:00")
+    aberto = api.card(pessoa, board=7, descricao="Anotação do vendedor")
+    pedido_id = await _enfileirar(lead_8d["lead_id"])
+    resultado = await _rodar(lead_8d["lead_id"], api)
+    assert resultado == {**ZERO, "atualizadas": 1}
+
+    assert api.de("POST", CARDS) == [] and api.de("POST", PESSOAS) == []
+    [put] = api.puts()
+    assert put.url.path == f"{CARDS}/{aberto}" and set(json.loads(put.content)) == {"description"}
+    descricao = api.cards[aberto]["description"]
+    assert descricao.startswith(f"Anotação do vendedor\n\n{CABECALHO} em ")
+    assert f"{marca_do_pedido(pedido_id)} —\n" in descricao
+    assert descricao.count(CABECALHO) == 1
+    assert api.cards[fechado]["description"] == ""
+    [nota] = api.notas
+    assert nota["card_id"] == aberto and NOTA.match(nota["content"]), nota["content"]
+
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert (pedido["status"], pedido["card_id"], pedido["person_id"], pedido["erro"]) == (
+        "entregue", aberto, pessoa, None)
+    ident = await _identidade(lead_8d["dnia_id"])
+    assert (ident["growthhs_card_id"], ident["growthhs_person_id"]) == (aberto, pessoa)
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["title"] == "Card atualizado no comercial (GrowthHS)"
+    meta = evento["metadata"]
+    assert (meta["card_id"], meta["ja_entregue"], meta["atualizado"]) == (aberto, True, True)
+
+
+async def test_entre_varios_abertos_atualiza_o_mais_recente(lead_8d):
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    api.card(pessoa, created_at="2026-03-01T10:00:00")
+    recente = api.card(pessoa, board=7, created_at="2026-05-01T10:00:00")
+    api.card(pessoa, created_at=None)  # sem data legível: nunca "o nosso", e o último
+    api.card(pessoa, created_at="2026-04-01T10:00:00")
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    [put] = api.puts()
+    assert put.url.path == f"{CARDS}/{recente}"
+
+
+async def test_card_aberto_criado_depois_do_pedido_e_o_nosso(lead_8d):
+    """O §6 de lá: um card aberto mais novo que o pedido é o que uma
+    tentativa anterior DESTE pedido criou — marca entregue com ele, sem
+    criar, atualizar nem anotar."""
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    criado_em = (await _pedido(lead_8d["lead_id"]))["criado_em"]
+    pessoa = api.pessoa(email=EMAIL)
+    velho = api.card(pessoa)
+    nosso = api.card(pessoa, created_at=_ingenuo_utc(criado_em + timedelta(seconds=1)))
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    assert api.de("POST", CARDS) == [] and api.puts() == [] and api.notas == []
+    assert api.de("GET", f"{CARDS}/{velho}") == []
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == (
+        "entregue", nosso, pessoa)
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["title"] == "Enviado ao comercial (GrowthHS)"
+    assert evento["metadata"]["recuperado"] is True and evento["metadata"]["card_id"] == nosso
+
+
+async def test_201_perdido_nao_vira_segundo_card(lead_8d):
+    """O caminho inteiro do §6: o POST criou o card e a resposta se perdeu
+    (timeout = transitório, adia). Na volta, o card mais novo que o pedido é
+    reconhecido — um POST só."""
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    pedido = await _pedido(lead_8d["lead_id"])
+    api.agora = _ingenuo_utc(pedido["criado_em"] + timedelta(seconds=1))
+    api.perder[("POST", CARDS)] = 1
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "adiadas": 1}
+    await _tornar_visivel(pedido["id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    assert len(api.de("POST", CARDS)) == 1 and len(api.cards) == 1
+    assert (await _pedido(lead_8d["lead_id"]))["card_id"] == next(iter(api.cards))
+
+
+async def test_retry_nao_empilha_bloco(lead_8d):
+    """Review Focus 1: o PUT deu certo e a resposta se perdeu. O retry acha a
+    marca do pedido na descrição, pula o PUT e só anota."""
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação do vendedor")
+    pedido_id = await _enfileirar(lead_8d["lead_id"])
+    api.perder[("PUT", CARDS)] = 1
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "adiadas": 1}
+    assert len(api.puts()) == 1 and api.notas == []
+    await _tornar_visivel(pedido_id)
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    assert len(api.puts()) == 1 and len(api.notas) == 1
+    assert api.cards[aberto]["description"].count(CABECALHO) == 1
+
+
+async def test_marca_num_campo_do_formulario_nao_suprime_o_bloco(lead_8d):
+    """Decisão do controlador: "(pedido N)" fora da linha do cabeçalho nosso
+    (aqui, uma resposta de formulário de outra entrega) não conta."""
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    pedido_id = await _enfileirar(lead_8d["lead_id"])
+    aberto = api.card(pessoa, descricao=f"Respostas do formulário:\n"
+                                        f"- obs: {marca_do_pedido(pedido_id)}")
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    assert len(api.puts()) == 1
+    assert api.cards[aberto]["description"].count(CABECALHO) == 1
+
+
+async def test_nota_transitoria_adia_e_o_retry_so_anota(lead_8d):
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação")
+    pedido_id = await _enfileirar(lead_8d["lead_id"])
+    api.forcar[("POST", NOTAS)] = [_resposta(503)]
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "adiadas": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "pendente" and pedido["erro"].startswith("503")
+    await _tornar_visivel(pedido_id)
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    assert len(api.puts()) == 1 and len(api.notas) == 1
+    assert api.cards[aberto]["description"].count(CABECALHO) == 1
+
+
+async def test_nota_recusada_entrega_e_registra_o_erro(lead_8d):
+    """A descrição JÁ foi atualizada: falhar o pedido mentiria. Entrega, e o
+    erro da nota fica no evento."""
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação")
+    await _enfileirar(lead_8d["lead_id"])
+    api.forcar[("POST", NOTAS)] = [_resposta(422)]
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert (pedido["status"], pedido["card_id"]) == ("entregue", aberto)
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["metadata"]["erro_da_nota"].startswith("422")
+    assert await _eventos(lead_8d["lead_id"], "crm_handoff_falhou") == []
+
+
+async def test_falha_apos_o_put_nao_reatualiza(lead_8d, monkeypatch):
+    """I1, no caminho de atualizar: defeito NOSSO depois do PUT e da nota não
+    desfaz o `entregue` nem provoca segundo bloco/segunda nota."""
+    async def _explode(*args, **kwargs):
+        raise RuntimeError("defeito simulado depois do sucesso")
+    monkeypatch.setattr(entrega, "_registrar_evento", _explode)
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    api.card(pessoa, descricao="Anotação")
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    assert (await _pedido(lead_8d["lead_id"]))["status"] == "entregue"
+    assert await _rodar(lead_8d["lead_id"], api) == ZERO
+    assert len(api.puts()) == 1 and len(api.notas) == 1
+
+
+# ── Erros ────────────────────────────────────────────────────────────────────
+
+async def test_erro_definitivo_falha_na_hora_e_aparece(lead_8d):
+    """422 é o corpo DAQUELE lead — falha o pedido. (401/403/404 são
+    configuração e pausam a fila: ver o teste da pausa.)"""
+    api = GrowthHSFalso()
+    api.forcar[("POST", CARDS)] = [_resposta(422)]
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "falhas": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "falhou" and pedido["erro"].startswith("422")
+    assert len(await _eventos(lead_8d["lead_id"], "crm_handoff_falhou")) == 1
+
+
+async def test_400_do_growthhs_falha_o_pedido_e_nao_pausa(lead_8d):
+    """O e-mail só existe em `email_alternative`: a busca de lá não olha esse
+    campo, e o `POST /persons` recusa (400). É o dado DAQUELE lead — falha o
+    pedido; pausar travaria a fila inteira por um contato."""
+    api = GrowthHSFalso()
+    api.pessoa(email="outra@exemplo.invalid", email_alternative=EMAIL)
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "falhas": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "falhou" and pedido["erro"].startswith("400")
+    assert api.de("POST", CARDS) == []
+
+
+async def test_erro_transitorio_adia_e_esgota(lead_8d, monkeypatch):
+    api = GrowthHSFalso()
+    api.forcar[("POST", CARDS)] = [_resposta(503), _resposta(503)]
+    await _enfileirar(lead_8d["lead_id"])
+    assert (await _rodar(lead_8d["lead_id"], api))["adiadas"] == 1
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "pendente" and pedido["tentativas"] == 1
+
+    # Esgotar: com o pedido já visível e o teto em 2, a próxima falha é final.
+    monkeypatch.setattr(entrega, "MAX_TENTATIVAS", 2)
+    await _tornar_visivel(pedido["id"])
+    assert (await _rodar(lead_8d["lead_id"], api))["falhas"] == 1
+    assert (await _pedido(lead_8d["lead_id"]))["status"] == "falhou"
+
+
+async def test_mover_etapa_falha_a_vista(lead_8d):
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"], "regra", acao="mover")
+    await _rodar(lead_8d["lead_id"], api)
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "falhou" and "mover" in pedido["erro"]
+    assert api.pedidos == []
+
+
+async def test_2xx_com_corpo_invalido_ainda_entrega_e_nao_repete(lead_8d):
+    """Round 1, achado I1(b): um 2xx já criou o card do lado do GrowthHS —
+    corpo ilegível não pode virar re-envio (segundo card)."""
+    api = GrowthHSFalso()
+    api.corpo_do_post_card = b"isto nao e json"
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "entregue" and pedido["card_id"] is None
+    # O `person_id` é o achado, não o da resposta: sobrevive ao corpo torto.
+    assert pedido["person_id"] == next(iter(api.pessoas))
+
+    # Segunda passada: nada pendente, nenhuma chamada nova ao GrowthHS.
+    assert await _rodar(lead_8d["lead_id"], api) == ZERO
+    assert len(api.de("POST", CARDS)) == 1
+
+
+async def test_falha_apos_o_2xx_nao_reenvia(lead_8d, monkeypatch):
+    """Round 1, achado I1(a): um defeito NOSSO depois do sucesso (aqui,
+    `_registrar_evento` explodindo) não pode desfazer o `entregue` nem
+    provocar um segundo POST."""
+    async def _explode(*args, **kwargs):
+        raise RuntimeError("defeito simulado depois do sucesso")
+    monkeypatch.setattr(entrega, "_registrar_evento", _explode)
+
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "entregue" and pedido["card_id"] == next(iter(api.cards))
+    assert await _rodar(lead_8d["lead_id"], api) == ZERO
+    assert len(api.de("POST", CARDS)) == 1
 
 
 async def test_chave_errada_pausa_a_fila_sem_gastar_tentativa(lead_8d, gemeo):
     """I3: 401/403/404 é configuração — a mesma para todos os pedidos. Falhar
     cada um derrubaria a fila inteira de uma vez; o certo é pausar: o pedido
     volta a pendente daqui a 10 min, a tentativa não conta, e o ciclo para
-    (os outros pedidos do lote nem são tentados)."""
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-        await entrega.enfileirar(conn, gemeo, "manual")
-    chamadas = []
-    resultado = await entrega.rodar_entregas(
-        somente_lead=[lead_8d["lead_id"], gemeo], cfg=CFG,
-        transporte=_transporte(401, None, chamadas))
-    assert len(chamadas) == 1
-    assert resultado["pausadas"] == 2 and resultado["falhas"] == 0
+    (os outros pedidos do lote nem são tentados). Um 401 no próprio
+    client-credentials é credencial errada: uma chamada só."""
+    api = GrowthHSFalso()
+    api.forcar[("POST", "/api/v1/auth/client-credentials")] = [_resposta(401)]
+    await _enfileirar(lead_8d["lead_id"])
+    await _enfileirar(gemeo)
+    resultado = await _rodar([lead_8d["lead_id"], gemeo], api)
+    assert len(api.pedidos) == 1
+    assert resultado == {**ZERO, "pausadas": 2}
     async with db.sessao(role="service_role") as conn:
         pedidos = await conn.fetch(
             """SELECT status, tentativas, erro, visivel_em > now() + interval '9 minutes' AS adiado
@@ -332,11 +645,11 @@ async def test_chave_errada_pausa_a_fila_sem_gastar_tentativa(lead_8d, gemeo):
 
 @pytest.mark.parametrize("codigo", [403, 404])
 async def test_403_e_404_tambem_pausam(lead_8d, codigo):
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG,
-                                             transporte=_transporte(codigo))
-    assert resultado["pausadas"] == 1
+    """404 no `POST /cards` é a lista de entrada errada (configuração)."""
+    api = GrowthHSFalso()
+    api.forcar[("POST", CARDS)] = [_resposta(codigo)]
+    await _enfileirar(lead_8d["lead_id"])
+    assert (await _rodar(lead_8d["lead_id"], api))["pausadas"] == 1
     pedido = await _pedido(lead_8d["lead_id"])
     assert pedido["status"] == "pendente" and pedido["tentativas"] == 0
 
@@ -351,28 +664,28 @@ def test_transitorio_espera_com_teto_e_desiste_depois_de_um_dia():
     assert sum(esperas, timedelta()) > timedelta(hours=24)
 
 
+async def test_um_token_para_o_lote_inteiro(lead_8d, gemeo):
+    """Um `Cliente` por ciclo: o token do primeiro pedido serve ao segundo."""
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    await _enfileirar(gemeo)
+    assert (await _rodar([lead_8d["lead_id"], gemeo], api))["entregues"] == 2
+    assert len(api.de("POST", "/api/v1/auth/client-credentials")) == 1
+
+
+# ── Parada do worker ─────────────────────────────────────────────────────────
+
 async def test_parada_do_worker_sai_entre_pedidos_e_devolve_o_resto(lead_8d, gemeo):
     """I5: o worker pedindo parada não pode ficar entregando o lote inteiro;
     sai entre um pedido e outro, e o que foi reivindicado e não tentado volta
     à fila na hora, sem gastar tentativa."""
     parar = asyncio.Event()
-    chamadas = []
-
-    def responder(request):
-        chamadas.append(request)
-        parar.set()
-        return httpx.Response(201, json={"id": 4821})
-
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-        await entrega.enfileirar(conn, gemeo, "manual")
-        # O gêmeo não pode cair no "já entregue" por ser a mesma pessoa: tira
-        # a identidade dele para o teste medir só a parada.
-        await conn.execute("UPDATE leads SET dnia_id = NULL WHERE id = $1::uuid", gemeo)
-    resultado = await entrega.rodar_entregas(
-        somente_lead=[lead_8d["lead_id"], gemeo], cfg=CFG,
-        transporte=httpx.MockTransport(responder), parar=parar)
-    assert len(chamadas) == 1 and resultado["entregues"] == 1
+    api = GrowthHSFalso()
+    api.ao_criar_card = parar.set
+    await _enfileirar(lead_8d["lead_id"])
+    await _enfileirar(gemeo)
+    resultado = await _rodar([lead_8d["lead_id"], gemeo], api, parar=parar)
+    assert len(api.de("POST", CARDS)) == 1 and resultado["entregues"] == 1
     async with db.sessao(role="service_role") as conn:
         restante = await conn.fetchrow(
             """SELECT status, tentativas, visivel_em <= now() AS visivel FROM crm_handoffs
@@ -394,34 +707,26 @@ async def test_cancelar_depois_do_2xx_ainda_grava_entregue(lead_8d, monkeypatch)
         await original(*args)
     monkeypatch.setattr(entrega, "_marcar_entregue", lento)
 
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "manual")
-    chamadas = []
-    tarefa = asyncio.create_task(entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG,
-        transporte=_transporte(201, {"id": 4821}, chamadas)))
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    tarefa = asyncio.create_task(_rodar(lead_8d["lead_id"], api))
     # O cancelamento tem de cair DENTRO da gravação blindada — é ela que o
-    # teste prova. Até a rodada 6 isto era "esperar a chamada HTTP e mais
-    # `sleep(0.1)` fixo", uma aposta de tempo contra o banco remoto (a busca do
-    # pedido e do lead vem antes do POST). Agora espera o `lento` começar, com
-    # teto: estourar o teto é vermelho de verdade, não espera curta.
+    # teste prova: espera o `lento` começar, com teto (estourar o teto é
+    # vermelho de verdade, não espera curta).
     await asyncio.wait_for(entrou.wait(), timeout=30)
-    assert chamadas, "a gravação começou sem o POST ao GrowthHS"
+    assert api.de("POST", CARDS), "a gravação começou sem o POST ao GrowthHS"
     tarefa.cancel()
     with pytest.raises(asyncio.CancelledError):
         await tarefa
-    # A gravação blindada continua depois do cancelamento (0,3 s do `lento` +
-    # idas ao banco remoto). Até 01/10 era um `sleep(0.6)` fixo, que sob a
-    # carga da suíte inteira não bastou (achou 'pendente'). Agora sonda até
-    # gravar ou estourar o teto — o teto é generoso porque só é gasto no
-    # vermelho de verdade; a asserção abaixo não muda.
+    # A gravação blindada continua depois do cancelamento: sonda até gravar
+    # ou estourar o teto (só gasto no vermelho de verdade).
     prazo = asyncio.get_running_loop().time() + 10
     while True:
         pedido = await _pedido(lead_8d["lead_id"])
         if pedido["status"] == "entregue" or asyncio.get_running_loop().time() > prazo:
             break
         await asyncio.sleep(0.1)
-    assert pedido["status"] == "entregue" and pedido["card_id"] == 4821
+    assert pedido["status"] == "entregue" and pedido["card_id"] == next(iter(api.cards))
 
 
 # ── Modo teste na saída (A5, pergunta 66) ───────────────────────────────────
@@ -451,17 +756,15 @@ async def test_lista_do_pedido_vem_da_jornada_do_run(conexao):
 
 async def test_handoff_de_jornada_fora_da_lista_nao_sai(lead_8d, monkeypatch):
     """A lista pode ter mudado entre o nó e a entrega: a saída reconfere,
-    como o aviso e o webhook. O GrowthHS não é chamado."""
+    como o aviso e o webhook. O GrowthHS não é chamado — nem para achar a
+    pessoa."""
     async def lista(conn, pedido):
         return ["outro@exemplo.invalid"]
     monkeypatch.setattr(entrega, "_lista_do_pedido", lista)
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "jornada")
-    chamadas = []
-    resultado = await entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG,
-        transporte=_transporte(201, {"id": 4821}, chamadas))
-    assert resultado["falhas"] == 1 and chamadas == []
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"], "jornada")
+    resultado = await _rodar(lead_8d["lead_id"], api)
+    assert resultado["falhas"] == 1 and api.pedidos == []
     pedido = await _pedido(lead_8d["lead_id"])
     assert pedido["status"] == "falhou" and pedido["erro"].startswith("modo teste")
 
@@ -470,8 +773,5 @@ async def test_handoff_de_jornada_na_lista_sai(lead_8d, monkeypatch):
     async def lista(conn, pedido):
         return [f" {EMAIL.upper()} "]
     monkeypatch.setattr(entrega, "_lista_do_pedido", lista)
-    async with db.sessao(role="service_role") as conn:
-        await entrega.enfileirar(conn, lead_8d["lead_id"], "jornada")
-    resultado = await entrega.rodar_entregas(
-        somente_lead=lead_8d["lead_id"], cfg=CFG, transporte=_transporte(201, {"id": 4821}))
-    assert resultado["entregues"] == 1
+    await _enfileirar(lead_8d["lead_id"], "jornada")
+    assert (await _rodar(lead_8d["lead_id"], GrowthHSFalso()))["entregues"] == 1

@@ -4,37 +4,53 @@ Três caminhos enfileiram (a regra de automação pelo gatilho do banco, o nó d
 jornada, o botão manual) e o worker drena. Um caminho de entrega, uma política
 de re-tentativa, um lugar para ver falha (`GET /config/growthhs`).
 
+Desde 22/10 a entrega fala com a API NORMAL do GrowthHS (spec
+`2026-10-22-growthhs-real-design.md` §3; autoridade:
+`hsgrowth-sistema/docs/integracao-marketinghs.md`), por pedido:
+
+    achar/criar a pessoa → cards dela nos boards conferidos →
+      card aberto criado DEPOIS do pedido → é o nosso: entregue, nada mais
+      outro card aberto → atualiza a descrição (bloco no fim) + nota
+      nenhum aberto (inclusive só ganhos/perdidos) → cria
+
 ⚠️ A rede nunca roda dentro de transação: reivindica (sessão curta, com prazo
 escalado ao tamanho do lote — ver `_reivindicar`), chama, grava o resultado
 (outra sessão curta). Se o worker morrer entre a chamada e a gravação, o
-pedido volta depois do prazo e é mandado de novo — e é por isso que o
-`external_id` vai no corpo: o contrato pede ao GrowthHS a restrição
-`(external_source, external_id)` que torna o reenvio inofensivo.
+pedido volta depois do prazo e é tentado de novo.
 
-⚠️ Guarda do nosso lado (decisão 4): lead que já tem entrega `entregue` não
-é mandado de novo — a restrição do GrowthHS ainda não existe. Revisão final
-do 8D (I2): a guarda olha a PESSOA, como a origem — o card anotado na
-identidade (`ecosystem_identities.growthhs_card_id`) ou a entrega de outro
-lead com o mesmo `dnia_id` (fusão de contatos) também contam.
+⚠️ O `POST /cards` de lá NÃO é idempotente (§6 de lá: não há `external_id`).
+A defesa é toda daqui, e é a ordem acima: o retry depois de um 201 que se
+perdeu acha o card aberto mais novo que `crm_handoffs.criado_em` e o
+reconhece em vez de criar outro; o retry depois de um PUT que se perdeu acha
+a marca `(pedido N)` no cabeçalho do bloco e não empilha o segundo.
 
-⚠️ Revisão final do 8D (I3): 401/403/404 são configuração (chave, endereço ou
-funil errados), a mesma para todos os pedidos. Em vez de falhar a fila inteira
-de uma vez, a fila PAUSA: o pedido volta a pendente daqui a
+⚠️ A guarda local antiga (`_ja_entregue`: lead já entregue não era mandado
+de novo, e o `person_id` guardado era reusado) SAIU de propósito (spec §3):
+o card anotado aqui pode ter sido ganho ou perdido lá, e o lead que converte
+de novo precisa chegar ao vendedor. E nenhum `person_id` guardado é reusado
+sem buscar — os do receptor de teste eram inventados e podem colidir com
+pessoas reais do CRM.
+
+⚠️ Revisão final do 8D (I3): 401/403/404 são configuração (credencial,
+endereço ou lista errados), a mesma para todos os pedidos. Em vez de falhar a
+fila inteira de uma vez, a fila PAUSA: o pedido volta a pendente daqui a
 `ESPERA_DA_PAUSA`, a tentativa não conta, e o ciclo para. O estado aparece em
-`GET /config/growthhs` (`fila.pausada`). 422 continua falhando o pedido — é o
-corpo daquele lead.
+`GET /config/growthhs` (`fila.pausada`). Outro 4xx (400, 422) falha o pedido
+— é o dado daquele lead (ex.: e-mail que lá só existe em `email_alternative`,
+que a busca não acha e o `POST /persons` recusa com 400).
 
-⚠️ Round 1 de revisão (achado I1): um 2xx do GrowthHS JÁ criou o card — dali
-em diante NUNCA se re-tenta, mesmo que o que vem depois (gravar identidade,
-linha do tempo) falhe. Por isso o sucesso grava em DUAS sessões: a primeira
-marca `entregue` sozinha; a segunda (identidade + evento) só loga se falhar,
-nunca desfaz a primeira.
+⚠️ Round 1 de revisão (achado I1): um 2xx do `POST /cards` ou do PUT JÁ mudou
+o lado de lá — dali em diante NUNCA se re-tenta por defeito de registro
+(gravar identidade, linha do tempo). Por isso o sucesso grava em DUAS
+sessões: a primeira marca `entregue` sozinha, blindada; a segunda
+(identidade + evento) só loga se falhar, nunca desfaz a primeira.
 """
 
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
+from app.config import settings
 from app.crm import growthhs
 from app.database import sessao
 from app.jornadas import modo_teste
@@ -50,7 +66,7 @@ ESPERA_BASE = timedelta(minutes=1)
 ESPERA_MAXIMA = timedelta(minutes=60)
 PRAZO_MINIMO_DA_REIVINDICACAO = timedelta(minutes=5)
 # A pausa de configuração (I3): quanto a fila espera antes de tentar de novo
-# com a chave/endereço que o GrowthHS recusou.
+# com a credencial/endereço que o GrowthHS recusou.
 STATUS_DE_CONFIGURACAO = frozenset({401, 403, 404})
 ESPERA_DA_PAUSA = timedelta(minutes=10)
 # `erro` de um pedido pausado começa com isto — é por este prefixo que
@@ -59,6 +75,9 @@ PREFIXO_PAUSA = "Pausa de configuração"
 MOTIVO_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — "
                 "pedido registrado no contrato (docs/contratos/"
                 "2026-09-02-endpoint-card-comercial-growthhs.md).")
+# Um pedido custa várias chamadas agora (token, pessoa, cards de cada board,
+# card, PUT, nota) — o prazo da reivindicação conta com isso.
+CHAMADAS_POR_PEDIDO = 6
 
 _COLUNAS_LEAD = """id::text AS id, nome, email, whatsapp, phone_normalized, empresa,
     cargo, faturamento, funcionarios, desafios, indicacao, utm_source, utm_medium,
@@ -116,13 +135,17 @@ async def enfileirar(conn, lead_id: str, origem: str, *, acao: str = "criar",
 
 async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict]:
     """O prazo da reivindicação escala com o tamanho do lote (achado I2 do
-    round 1): um lote de 20 pedidos, cada um podendo levar até `TIMEOUT`
-    segundos de rede mais alguns segundos de escrita, não pode expirar antes
-    do worker terminar de processá-lo — senão o pedido é reivindicado de novo
-    NO MEIO do processamento do primeiro worker, e dois pedirem o mesmo card.
-    `× 2` é folga; o piso de 5 min cobre o caso comum de lote pequeno."""
+    round 1): um lote de 20 pedidos, cada um com várias chamadas de até
+    `TIMEOUT` segundos mais alguns segundos de escrita, não pode expirar
+    antes do worker terminar de processá-lo — senão o pedido é reivindicado
+    de novo NO MEIO do processamento do primeiro worker, e dois pedirem o
+    mesmo card. `× 2` é folga; o piso de 5 min cobre o caso comum de lote
+    pequeno.
+
+    Devolve `criado_em` do pedido: é contra ele que a entrega reconhece o
+    card que uma tentativa anterior deste pedido criou (ver `_escolher`)."""
     prazo = max(PRAZO_MINIMO_DA_REIVINDICACAO,
-               timedelta(seconds=(growthhs.TIMEOUT + 5) * 2 * limite))
+               timedelta(seconds=(growthhs.TIMEOUT * CHAMADAS_POR_PEDIDO + 5) * 2 * limite))
     async with sessao(role="service_role") as conn:
         linhas = await conn.fetch(
             """UPDATE crm_handoffs SET visivel_em = now() + $2::interval,
@@ -133,7 +156,7 @@ async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict
                               ORDER BY visivel_em LIMIT $1
                               FOR UPDATE SKIP LOCKED)
             RETURNING id, lead_id::text AS lead_id, acao, origem, rule_id::text AS rule_id,
-                      journey_run_id::text AS journey_run_id, tentativas""",
+                      journey_run_id::text AS journey_run_id, tentativas, criado_em""",
             limite, prazo, somente_lead)
     return [dict(l) for l in linhas]
 
@@ -177,27 +200,12 @@ async def _falhar(pedido: dict, lead: dict | None, erro: str) -> None:
                                      "erro": erro[:400]})
 
 
-async def _ja_entregue(conn, lead: dict) -> dict | None:
-    """O card que esta PESSOA já tem no GrowthHS, se tiver (revisão final do
-    8D, I2 — a origem olhava a pessoa, não o lead). Nesta ordem: entrega do
-    próprio lead; entrega de outro lead com o mesmo `dnia_id` (fusão de
-    contatos — inclusive lead já apagado: o card dele continua lá); o card
-    anotado na identidade."""
-    anterior = await conn.fetchrow(
-        """SELECT card_id, person_id FROM crm_handoffs h
-            WHERE h.acao = 'criar' AND h.status = 'entregue'
-              AND (h.lead_id = $1::uuid
-                   OR ($2::uuid IS NOT NULL
-                       AND h.lead_id IN (SELECT id FROM leads WHERE dnia_id = $2::uuid)))
-            ORDER BY (h.lead_id = $1::uuid) DESC, h.id LIMIT 1""",
-        lead["id"], lead["dnia_id"])
-    if anterior is None and lead["dnia_id"]:
-        anterior = await conn.fetchrow(
-            """SELECT growthhs_card_id AS card_id, growthhs_person_id AS person_id
-                 FROM ecosystem_identities
-                WHERE dnia_id = $1::uuid AND growthhs_card_id IS NOT NULL""",
-            lead["dnia_id"])
-    return dict(anterior) if anterior else None
+async def _adiar(pedido: dict, erro: Exception) -> None:
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            """UPDATE crm_handoffs SET visivel_em = now() + $2::interval, erro = $3,
+                      atualizado_em = now() WHERE id = $1""",
+            pedido["id"], espera_transitoria(pedido["tentativas"]), str(erro)[:1000])
 
 
 async def _lista_do_pedido(conn, pedido: dict):
@@ -221,12 +229,101 @@ async def _marcar_entregue(pedido_id: int, card_id: int | None, person_id: int |
             pedido_id, card_id, person_id)
 
 
-async def _entregar(pedido: dict, cfg: growthhs.Config, transporte) -> str:
+def _id_inteiro(valor) -> int | None:
+    return valor if isinstance(valor, int) and not isinstance(valor, bool) else None
+
+
+def _aberto(card: dict) -> bool:
+    return (_id_inteiro(card.get("id")) is not None
+            and not card.get("is_won") and not card.get("is_lost"))
+
+
+def _escolher(abertos: list[dict],
+              criado_em: datetime | None) -> tuple[dict | None, dict | None]:
+    """(o card que ESTE pedido já criou, o card aberto a atualizar) — no
+    máximo um dos dois.
+
+    O primeiro é um aberto com `created_at >= crm_handoffs.criado_em`: uma
+    tentativa anterior deste pedido criou e a resposta se perdeu (§6 de lá).
+    ⚠️ Card sem `created_at` legível nunca é "o nosso": na dúvida, atualiza
+    (um bloco a mais no card do vendedor) em vez de calar a conversão. Sem o
+    nosso, o aberto de `created_at` mais recente — sem data conta como o
+    mais antigo de todos."""
+    datados = [(growthhs.criado_em_utc(c), c) for c in abertos]
+    if criado_em is not None:
+        nossos = [(d, c) for d, c in datados if d is not None and d >= criado_em]
+        if nossos:
+            return min(nossos, key=lambda par: (par[0], par[1]["id"]))[1], None
+    if not datados:
+        return None, None
+    piso = datetime.min.replace(tzinfo=timezone.utc)
+    return None, max(datados, key=lambda par: (par[0] or piso, par[1]["id"]))[1]
+
+
+async def _tratar_erro(pedido: dict, lead: dict, erro: Exception) -> str:
+    """A política de erro, a mesma em todo passo ANTES do 2xx que muda o lado
+    de lá: 401/403/404 pausam a fila; outro 4xx falha o pedido; transitório
+    adia até `MAX_TENTATIVAS`."""
+    if isinstance(erro, growthhs.ErroDefinitivo):
+        if erro.status in STATUS_DE_CONFIGURACAO:
+            # Revisão final do 8D (I3): configuração, não o lead — pausa.
+            await _devolver([pedido], ESPERA_DA_PAUSA,
+                            f"{PREFIXO_PAUSA} — o GrowthHS respondeu {erro}. Confira o "
+                            f"client_id, o segredo, o endereço da API e a lista de entrada "
+                            f"em Configurações → GrowthHS; nova tentativa a cada "
+                            f"{int(ESPERA_DA_PAUSA.total_seconds() // 60)} min.")
+            return "pausadas"
+        await _falhar(pedido, lead, str(erro))
+        return "falhas"
+    if pedido["tentativas"] >= MAX_TENTATIVAS:
+        await _falhar(pedido, lead, f"{erro} (desistiu após {pedido['tentativas']} tentativas)")
+        return "falhas"
+    await _adiar(pedido, erro)
+    return "adiadas"
+
+
+async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: int | None,
+                    titulo: str, extra: dict) -> None:
+    """O lado de lá JÁ mudou (card criado, reconhecido ou atualizado).
+
+    Achado I1(a) do round 1: `entregue` grava SOZINHO, numa sessão curta e à
+    parte — não pode falhar por causa do que vem depois e devolver o pedido a
+    'pendente' (seria o segundo card, ou o segundo bloco e a segunda nota).
+    Revisão final do 8D (I5): e blindado (`asyncio.shield`) — o worker
+    parando, ou desistindo de esperar e cancelando a tarefa, não corta a
+    gravação entre o 2xx e o `entregue`.
+
+    O resto é registro, não é a entrega: se falhar (gatilho de evento, banco
+    fora do ar no meio, o que for), só loga — nunca re-tenta por isso."""
+    await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id))
+    try:
+        async with sessao(role="service_role") as conn:
+            if lead["dnia_id"]:
+                # M2: 2xx sem `id` não apaga o card já anotado.
+                await conn.execute(
+                    """UPDATE ecosystem_identities
+                          SET growthhs_card_id = coalesce($2, growthhs_card_id),
+                              growthhs_person_id = coalesce($3, growthhs_person_id)
+                        WHERE dnia_id = $1::uuid""", lead["dnia_id"], card_id, person_id)
+            await _registrar_evento(conn, lead, "crm_handoff", titulo,
+                                    {"origem": pedido["origem"], "rule_id": pedido["rule_id"],
+                                     "card_id": card_id, "person_id": person_id, **extra})
+    except Exception:
+        logger.exception("[crm] pedido %s: entregue, mas falhou ao gravar "
+                         "identidade/linha do tempo", pedido["id"])
+
+
+def texto_da_nota(conversao: dict | None, quando: datetime) -> str:
+    return (f"Lead converteu de novo pelo MarketingHS "
+            f"({growthhs.origem_do_card_texto(conversao)}) em "
+            f"{growthhs.data_do_vendedor(quando)}. Descrição do card atualizada.")
+
+
+async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
     async with sessao(role="service_role") as conn:
         lead = await conn.fetchrow(
             f"SELECT {_COLUNAS_LEAD} FROM leads WHERE id = $1::uuid", pedido["lead_id"])
         lead = dict(lead) if lead else None
-        anterior = await _ja_entregue(conn, lead) if lead else None
         conversao, consentimento = (await origem_do_card(conn, pedido["lead_id"])
                                     if lead else (None, None))
         lista = await _lista_do_pedido(conn, pedido) if lead else None
@@ -237,106 +334,80 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, transporte) -> str:
     if not modo_teste.na_lista(lista, lead["email"]):
         # A5 (pergunta 66): a segunda trava do modo teste, a mesma do e-mail,
         # do aviso e do webhook. O nó já conferiu; a lista pode ter mudado
-        # entre o nó e a saída. Nem o card antigo é reaproveitado.
+        # entre o nó e a saída. O GrowthHS nem é consultado.
         await _falhar(pedido, lead, "modo teste: fora da lista da jornada")
         return "falhas"
     if pedido["acao"] == "mover":
         await _falhar(pedido, lead, MOTIVO_MOVER)
         return "falhas"
-    if anterior:
-        # Minor 4 (round 1): isto NÃO é um erro — `erro` fica NULL — e o
-        # clique manual (ou a regra, ou a jornada) que caiu aqui deixa rastro
-        # na linha do tempo, com `ja_entregue: true` para diferenciar do
-        # envio original.
-        async with sessao(role="service_role") as conn:
-            await conn.execute(
-                """UPDATE crm_handoffs SET status = 'entregue', card_id = $2, person_id = $3,
-                          erro = NULL, atualizado_em = now()
-                    WHERE id = $1""", pedido["id"], anterior["card_id"], anterior["person_id"])
-            # Revisão final do 8D (M2): a gravação da identidade no sucesso é
-            # só registro e pode ter falhado — aqui ela é preenchida, se
-            # estiver vazia. Nunca sobrescreve um card já anotado.
-            if lead["dnia_id"] and anterior["card_id"] is not None:
-                await conn.execute(
-                    """UPDATE ecosystem_identities SET growthhs_card_id = $2,
-                              growthhs_person_id = coalesce(growthhs_person_id, $3)
-                        WHERE dnia_id = $1::uuid AND growthhs_card_id IS NULL""",
-                    lead["dnia_id"], anterior["card_id"], anterior["person_id"])
-            await _registrar_evento(conn, lead, "crm_handoff",
-                                    "Já estava no comercial (GrowthHS)",
-                                    {"origem": pedido["origem"], "rule_id": pedido["rule_id"],
-                                     "card_id": anterior["card_id"], "ja_entregue": True})
-        return "ja_entregues"
 
+    frontend_url = settings.FRONTEND_URL
+    quando = datetime.now(timezone.utc)
     try:
-        corpo = growthhs.montar_card(lead, cfg.board_id, conversao=conversao,
-                                     consentimento=consentimento)
-        resposta = await growthhs.criar_card(cfg, corpo, transporte=transporte)
-    except growthhs.ErroDefinitivo as erro:
-        if erro.status in STATUS_DE_CONFIGURACAO:
-            # Revisão final do 8D (I3): configuração, não o lead — pausa.
-            await _devolver([pedido], ESPERA_DA_PAUSA,
-                            f"{PREFIXO_PAUSA} — o GrowthHS respondeu {erro}. Confira a chave, "
-                            f"o endereço da API e o ID do funil em Configurações → GrowthHS; "
-                            f"nova tentativa a cada {int(ESPERA_DA_PAUSA.total_seconds() // 60)} min.")
-            return "pausadas"
-        await _falhar(pedido, lead, str(erro))
-        return "falhas"
+        person_id = await cliente.achar_ou_criar_pessoa(lead)
+        abertos = [c for c in await cliente.cards_da_pessoa(person_id) if _aberto(c)]
+        nosso, alvo = _escolher(abertos, pedido.get("criado_em"))
+        if nosso is not None:
+            # O card já nasceu com a descrição deste pedido: nem atualiza nem
+            # anota.
+            await _concluir(pedido, lead, nosso["id"], person_id,
+                            "Enviado ao comercial (GrowthHS)", {"recuperado": True})
+            return "entregues"
+        if alvo is None:
+            resposta = await cliente.criar_card(growthhs.montar_card(
+                lead, cfg, conversao=conversao, consentimento=consentimento,
+                person_id=person_id, frontend_url=frontend_url))
+        else:
+            card_id = alvo["id"]
+            descricao = (await cliente.ler_card(card_id)).get("description") or ""
+            # Review Focus 1: a tentativa anterior deste pedido pode ter feito
+            # o PUT e perdido a resposta — a marca no cabeçalho diz que sim, e
+            # o segundo bloco não entra.
+            if not growthhs.bloco_ja_aplicado(descricao, pedido["id"]):
+                await cliente.atualizar_descricao(card_id, descricao + growthhs.bloco_de_atualizacao(
+                    lead, conversao=conversao, consentimento=consentimento,
+                    frontend_url=frontend_url, pedido_id=pedido["id"], quando=quando))
+    except (growthhs.ErroDefinitivo, growthhs.ErroTransitorio) as erro:
+        return await _tratar_erro(pedido, lead, erro)
+
+    if alvo is None:
+        # Achado I1(b) do round 1: `resposta` é sempre um dict (o cliente
+        # nunca levanta num 2xx do `POST /cards`), mas o CONTEÚDO pode vir
+        # torto. `id` que não é inteiro vira NULL, com aviso — nunca motivo
+        # para não gravar `entregue`. O `person_id` é o achado, não o da
+        # resposta: sobrevive ao corpo torto.
+        card_id = _id_inteiro(resposta.get("id"))
+        if card_id is None and resposta.get("id") is not None:
+            logger.warning("[crm] pedido %s: id do GrowthHS não é inteiro (%r) — "
+                           "gravando entregue sem card_id", pedido["id"], resposta.get("id"))
+        await _concluir(pedido, lead, card_id, person_id, "Enviado ao comercial (GrowthHS)", {})
+        return "entregues"
+
+    # A descrição já está atualizada (agora ou numa tentativa anterior). A
+    # nota é o aviso ao vendedor.
+    erro_da_nota = None
+    try:
+        await cliente.anotar(card_id, texto_da_nota(conversao, quando))
     except growthhs.ErroTransitorio as erro:
-        if pedido["tentativas"] >= MAX_TENTATIVAS:
-            await _falhar(pedido, lead, f"{erro} (desistiu após {pedido['tentativas']} tentativas)")
-            return "falhas"
-        async with sessao(role="service_role") as conn:
-            await conn.execute(
-                """UPDATE crm_handoffs SET visivel_em = now() + $2::interval, erro = $3,
-                          atualizado_em = now() WHERE id = $1""",
-                pedido["id"], espera_transitoria(pedido["tentativas"]), str(erro)[:1000])
-        return "adiadas"
-
-    # Achado I1(b) do round 1: `resposta` já é sempre um dict (growthhs.py
-    # nunca levanta num 2xx — ver o comentário lá), mas o CONTEÚDO pode vir
-    # torto (id como string, ausente, etc.). Parse defensivo ANTES de
-    # qualquer escrita: id/person_id que não são inteiros viram NULL, com um
-    # aviso — nunca um motivo para não gravar `entregue`.
-    card_id, person_id = resposta.get("id"), resposta.get("person_id")
-    if card_id is not None and not isinstance(card_id, int):
-        logger.warning("[crm] pedido %s: id do GrowthHS não é inteiro (%r) — "
-                       "gravando entregue sem card_id", pedido["id"], card_id)
-        card_id = None
-    if person_id is not None and not isinstance(person_id, int):
-        logger.warning("[crm] pedido %s: person_id do GrowthHS não é inteiro (%r) — "
-                       "gravando entregue sem person_id", pedido["id"], person_id)
-        person_id = None
-
-    # Achado I1(a) do round 1: o card JÁ existe do lado do GrowthHS neste
-    # ponto. Esta escrita marca `entregue` SOZINHA, numa sessão curta e à
-    # parte — ela não pode falhar por causa do que vem depois (identidade,
-    # linha do tempo) e devolver o pedido a 'pendente', porque isso re-enviaria
-    # e criaria um SEGUNDO card.
-    # Revisão final do 8D (I5): e roda blindada (`asyncio.shield`) — o worker
-    # parando, ou desistindo de esperar e cancelando a tarefa, não corta a
-    # gravação entre o 2xx e o `entregue`.
-    await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id))
-
-    # O resto é registro, não é a entrega: se falhar aqui (gatilho de evento,
-    # banco fora do ar no meio, o que for), só loga. O pedido já está
-    # 'entregue' na escrita acima — nunca re-tenta por causa disto.
-    try:
-        async with sessao(role="service_role") as conn:
-            if lead["dnia_id"]:
-                # M2: 2xx sem `id` não apaga o card já anotado.
-                await conn.execute(
-                    """UPDATE ecosystem_identities
-                          SET growthhs_card_id = coalesce($2, growthhs_card_id),
-                              growthhs_person_id = coalesce($3, growthhs_person_id)
-                        WHERE dnia_id = $1::uuid""", lead["dnia_id"], card_id, person_id)
-            await _registrar_evento(conn, lead, "crm_handoff", "Enviado ao comercial (GrowthHS)",
-                                    {"origem": pedido["origem"], "rule_id": pedido["rule_id"],
-                                     "card_id": card_id, "created": resposta.get("created")})
-    except Exception:
-        logger.exception("[crm] pedido %s: entregue, mas falhou ao gravar "
-                         "identidade/linha do tempo", pedido["id"])
-    return "entregues"
+        if pedido["tentativas"] < MAX_TENTATIVAS:
+            # No retry a marca evita o segundo bloco e só a nota sai.
+            await _adiar(pedido, erro)
+            return "adiadas"
+        erro_da_nota = f"{erro} (desistiu após {pedido['tentativas']} tentativas)"
+    except growthhs.ErroDefinitivo as erro:
+        # ⚠️ Falhar o pedido mentiria: a descrição do card JÁ mudou. Entrega,
+        # e o erro da nota fica na linha do tempo. Vale também para 401/403/
+        # 404 aqui: pausar re-tentaria um pedido cujo efeito principal já
+        # aconteceu.
+        erro_da_nota = str(erro)
+    extra = {"ja_entregue": True, "atualizado": True}
+    if erro_da_nota:
+        logger.warning("[crm] pedido %s: card %s atualizado, mas a nota falhou: %s",
+                       pedido["id"], card_id, erro_da_nota)
+        extra["erro_da_nota"] = erro_da_nota[:400]
+    await _concluir(pedido, lead, card_id, person_id,
+                    "Card atualizado no comercial (GrowthHS)", extra)
+    return "atualizadas"
 
 
 async def rodar_entregas(*, limite: int = 20, cfg: growthhs.Config | None = None,
@@ -344,6 +415,9 @@ async def rodar_entregas(*, limite: int = 20, cfg: growthhs.Config | None = None
                          parar: asyncio.Event | None = None) -> dict:
     """Um ciclo do worker. Sem configuração, NÃO reivindica — o pedido fica
     pendente, e quem configurar vê a fila andar (mesmo desenho do Resend).
+
+    Um `growthhs.Cliente` só por ciclo: o token do primeiro pedido serve aos
+    outros (e fica no cache de módulo para o próximo ciclo).
 
     ⚠️ `somente_lead` (um id ou uma lista) existe para os testes: eles rodam
     contra o banco de produção, e um ciclo sem filtro reivindicaria os pedidos
@@ -355,41 +429,45 @@ async def rodar_entregas(*, limite: int = 20, cfg: growthhs.Config | None = None
     cfg = cfg or await growthhs.ler_config()
     if not cfg.configurado:
         return {"desligado": True}
-    contagem = {"entregues": 0, "ja_entregues": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
+    contagem = {"entregues": 0, "atualizadas": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
     if parar is not None and parar.is_set():
         return contagem
     if isinstance(somente_lead, str):
         somente_lead = [somente_lead]
     pedidos = await _reivindicar(limite, somente_lead)
-    for i, pedido in enumerate(pedidos):
-        if parar is not None and parar.is_set():
-            await _devolver(pedidos[i:], timedelta(0))
-            break
-        try:
-            resultado = await _entregar(pedido, cfg, transporte)
-        except Exception:
-            # Defeito nosso (não do GrowthHS): por padrão o prazo da
-            # reivindicação vence e o pedido volta, para tentar de novo depois
-            # que o defeito for corrigido. Logar é o mínimo — não engolir
-            # calado.
-            logger.exception("[crm] pedido %s quebrou na entrega", pedido["id"])
-            # Achado I1(c) do round 1: mas se já eram as últimas tentativas,
-            # deixar 'pendente' para sempre É a falha silenciosa que este
-            # projeto mais teve — mesmo teto do erro transitório, para não
-            # martelar em loop um defeito que não é do GrowthHS.
-            if pedido["tentativas"] >= MAX_TENTATIVAS:
-                await _falhar(pedido, None,
-                              f"defeito interno na entrega (desistiu após "
-                              f"{pedido['tentativas']} tentativas)")
-                contagem["falhas"] += 1
-            continue
-        contagem[resultado] += 1
-        if resultado == "pausadas":
-            # I3: a mesma chave/endereço vale para os outros pedidos do lote
-            # — tentá-los só repetiria a recusa. Voltam junto, sem gastar
-            # tentativa.
-            restantes = pedidos[i + 1:]
-            await _devolver(restantes, ESPERA_DA_PAUSA)
-            contagem["pausadas"] += len(restantes)
-            break
+    if not pedidos:
+        return contagem
+    async with growthhs.Cliente(cfg, transporte=transporte) as cliente:
+        for i, pedido in enumerate(pedidos):
+            if parar is not None and parar.is_set():
+                await _devolver(pedidos[i:], timedelta(0))
+                break
+            try:
+                resultado = await _entregar(pedido, cfg, cliente)
+            except Exception:
+                # Defeito nosso (não do GrowthHS): por padrão o prazo da
+                # reivindicação vence e o pedido volta, para tentar de novo
+                # depois que o defeito for corrigido. Logar é o mínimo — não
+                # engolir calado.
+                logger.exception("[crm] pedido %s quebrou na entrega", pedido["id"])
+                # Achado I1(c) do round 1: mas se já eram as últimas
+                # tentativas, deixar 'pendente' para sempre É a falha
+                # silenciosa que este projeto mais teve — mesmo teto do erro
+                # transitório, para não martelar em loop um defeito que não é
+                # do GrowthHS.
+                if pedido["tentativas"] >= MAX_TENTATIVAS:
+                    await _falhar(pedido, None,
+                                  f"defeito interno na entrega (desistiu após "
+                                  f"{pedido['tentativas']} tentativas)")
+                    contagem["falhas"] += 1
+                continue
+            contagem[resultado] += 1
+            if resultado == "pausadas":
+                # I3: a mesma credencial/endereço vale para os outros pedidos
+                # do lote — tentá-los só repetiria a recusa. Voltam junto,
+                # sem gastar tentativa.
+                restantes = pedidos[i + 1:]
+                await _devolver(restantes, ESPERA_DA_PAUSA)
+                contagem["pausadas"] += len(restantes)
+                break
     return contagem
