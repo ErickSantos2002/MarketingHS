@@ -5,32 +5,30 @@ import pathlib
 import pytest
 
 from app.crm import growthhs
-from growthhs_banco import aplicar_029, banco_growthhs  # noqa: F401 — fixture
+from growthhs_banco import banco_growthhs  # noqa: F401 — fixture
 
 MIGRATION = (pathlib.Path(__file__).parent.parent / "migrations"
              / "029_growthhs_real.sql")
 
 
 async def test_029_reaplicavel(conexao):
-    """Aplica o SQL duas vezes. Com a 029 ainda fora do banco, roda sobre a
-    cópia temporária (ver `aplicar_029`); depois de aplicada, sobre a real."""
-    sql = MIGRATION.read_text()
-    if await aplicar_029(conexao):
-        sql = sql.replace("public.growthhs_config", "pg_temp.growthhs_config")
-        tabela_schema = "pg_temp"
-    else:
-        tabela_schema = "public"
-    await conexao.execute(sql)  # segunda aplicação (a primeira foi a fixture)
+    """Prova a reaplicação numa temporária PRÓPRIA, com a forma da tabela antes
+    da 029 — independe de a real já ter as colunas (e de quem é o dono: o
+    Postgres checa ownership até no `IF NOT EXISTS`)."""
+    await conexao.execute(
+        """CREATE TEMP TABLE growthhs_config_prova (
+               id uuid, base_url text, board_id bigint, app_url text
+           ) ON COMMIT DROP""")
+    sql = MIGRATION.read_text().replace("public.growthhs_config",
+                                        "pg_temp.growthhs_config_prova")
     await conexao.execute(sql)
-    if tabela_schema == "public":
-        pytest.skip("029 já aplicada: reaplicação provada, DDL real é do dono")
-    tipos = {r["column_name"]: (r["data_type"], r["udt_name"]) for r in
+    await conexao.execute(sql)
+    tipos = {r["attname"]: (r["tipo"], r["typname"]) for r in
              await conexao.fetch(
-                 """SELECT a.attname AS column_name,
-                           format_type(a.atttypid, NULL) AS data_type,
-                           t.typname AS udt_name
+                 """SELECT a.attname, format_type(a.atttypid, NULL) AS tipo,
+                           t.typname
                       FROM pg_attribute a JOIN pg_type t ON t.oid = a.atttypid
-                     WHERE a.attrelid = 'pg_temp.growthhs_config'::regclass
+                     WHERE a.attrelid = 'pg_temp.growthhs_config_prova'::regclass
                        AND a.attnum > 0 AND NOT a.attisdropped""")}
     assert tipos["client_id"][0] == "text"
     assert tipos["list_id"][0] == "bigint"

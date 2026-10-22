@@ -39,9 +39,9 @@ async def aplicar_029(conexao):
     schema. Devolve True se usou a cópia temporária.
     """
     ja_tem = await conexao.fetchval(
-        """SELECT EXISTS (SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'growthhs_config'
-              AND column_name = 'client_id')""")
+        """SELECT EXISTS (SELECT 1 FROM pg_attribute
+            WHERE attrelid = to_regclass('public.growthhs_config')
+              AND attname = 'client_id' AND NOT attisdropped)""")
     if ja_tem:
         return False
     await conexao.execute(
