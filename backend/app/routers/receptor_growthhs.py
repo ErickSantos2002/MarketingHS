@@ -14,6 +14,12 @@ MESMA que o MarketingHS manda (`GROWTHHS_API_KEY`, de `integration_secrets`):
 um pedido sem ela é 401, como o GrowthHS faria.
 
 Contrato: `docs/contratos/2026-09-02-endpoint-card-comercial-growthhs.md`.
+
+O `id` devolvido é um por `external_id` (o lead), estável na repetição. Na
+prova (22/10) quatro leads ficaram com o mesmo `card_id`: eles tinham o mesmo
+`dnia_id` (mesmo telefone = mesma pessoa), e a entrega (`crm/entrega.py`,
+`_ja_entregue`) reaproveita o card da pessoa sem chamar o receptor — só um
+pedido chegou aqui. É o desejado: um card por pessoa, não por e-mail.
 """
 
 import hmac

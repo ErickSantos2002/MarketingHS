@@ -373,6 +373,28 @@ async def test_receptor_cria_201_e_repete_200_mesmo_id(cliente, receptor):
         await _limpar_pedidos(external_id)
 
 
+async def test_receptor_card_distinto_por_external_id(cliente, receptor):
+    """A3 (achado da prova, 22/10: "o receptor devolve o mesmo `card_id` para
+    leads diferentes"). O receptor dá um card por `external_id`. O que a prova
+    viu foi outra coisa: os 4 leads do teste tinham o MESMO `dnia_id` (mesmo
+    telefone → mesma pessoa no `resolve_ecosystem_identity`), e a entrega
+    (`_ja_entregue`) reaproveita o card da pessoa sem chamar o GrowthHS — só
+    1 pedido chegou ao receptor (`vezes = 1`). Comportamento desejado: um
+    card por pessoa."""
+    a, b = str(uuid.uuid4()), str(uuid.uuid4())
+    cab = {"X-API-Key": CHAVE_DO_RECEPTOR}
+    url = "/teste/growthhs/api/v1/integration/cards"
+    try:
+        ra = await cliente.post(url, json=_card(a), headers=cab)
+        rb = await cliente.post(url, json=_card(b), headers=cab)
+        assert ra.status_code == rb.status_code == 201
+        assert ra.json()["id"] != rb.json()["id"]
+        ra2 = await cliente.post(url, json=_card(a), headers=cab)
+        assert ra2.status_code == 200 and ra2.json()["id"] == ra.json()["id"]
+    finally:
+        await _limpar_pedidos(a, b)
+
+
 async def test_receptor_lista_pedidos_so_admin(cliente, receptor, token_admin, token_usuario):
     r = await cliente.get("/teste/growthhs/pedidos", headers=_auth(token_usuario))
     assert r.status_code == 403
