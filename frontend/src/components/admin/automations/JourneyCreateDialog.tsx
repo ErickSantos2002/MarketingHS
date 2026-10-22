@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle } from 'lucide-react';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
-import { EVENT_OPTIONS, EVENTO_COM_PAGINA, entryEventConfig, type Journey } from '@/lib/journeys';
+import { EVENT_OPTIONS, EVENTO_COM_PAGINA, buildEntryConfig, lerListaDeEmails, type Journey } from '@/lib/journeys';
 import { EntryPageSelect } from './EntryPageSelect';
+import { ModoTesteCampo, EntryFormIdsCampo, lerFormIds } from './ModoTesteCampo';
 
 interface Props {
   open: boolean;
@@ -23,13 +24,17 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
   const [excludedSegmentIds, setExcludedSegmentIds] = useState<string[]>([]);
   const [eventType, setEventType] = useState('');
   const [pageSlug, setPageSlug] = useState('');
+  const [formIds, setFormIds] = useState('');
+  const [modoTeste, setModoTeste] = useState('');
   const [reentry, setReentry] = useState<'once' | 'allowed'>('once');
   // C1: cooldown em DIAS na UI (mais legível que horas); convertido para
   // reentry_cooldown_hours no envio. 7 dias casa com o DEFAULT do banco.
   const [cooldownDays, setCooldownDays] = useState(7);
   const [saving, setSaving] = useState(false);
 
-  const canSave = name.trim() && (entryType === 'segment' ? segmentIds.length > 0 : !!eventType);
+  const listaTeste = lerListaDeEmails(modoTeste);
+  const canSave = name.trim() && (entryType === 'segment' ? segmentIds.length > 0 : !!eventType)
+    && listaTeste.invalidos.length === 0;
   const showReentryWarning = entryType === 'segment' && reentry === 'allowed';
 
   const handleSave = async () => {
@@ -39,7 +44,9 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
       entry_type: entryType,
       entry_config: entryType === 'segment'
         ? { segment_ids: segmentIds, excluded_segment_ids: excludedSegmentIds }
-        : entryEventConfig(eventType, pageSlug),
+        : buildEntryConfig(eventType, pageSlug, lerFormIds(formIds)),
+      // Vazia na criação = sem modo teste (o campo nunca foi preenchido).
+      allowed_emails: listaTeste.validos.length ? listaTeste.validos : null,
       reentry,
       reentry_cooldown_hours: Math.max(1, Math.round(cooldownDays * 24)),
       nodes: [],
@@ -50,7 +57,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Novo fluxo</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -108,7 +115,12 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
                   </SelectContent>
                 </Select>
               </div>
-              {eventType === EVENTO_COM_PAGINA && <EntryPageSelect value={pageSlug} onChange={setPageSlug} />}
+              {eventType === EVENTO_COM_PAGINA && (
+                <>
+                  <EntryPageSelect value={pageSlug} onChange={setPageSlug} />
+                  <EntryFormIdsCampo id="novo-form-ids" value={formIds} onChange={setFormIds} />
+                </>
+              )}
             </div>
           )}
 
@@ -141,6 +153,8 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
               </p>
             </div>
           )}
+
+          <ModoTesteCampo id="novo-modo-teste" value={modoTeste} onChange={setModoTeste} />
 
           {showReentryWarning && (
             <div className="flex gap-2 text-xs text-[--on-tint-warning] bg-[--tint-warning] border border-warning/30 rounded-md p-2.5">

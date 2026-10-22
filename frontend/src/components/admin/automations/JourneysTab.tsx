@@ -9,6 +9,7 @@ import { GitBranch, Plus, Pencil, Trash2, Play, Pause, Archive, ArchiveRestore, 
 import { useJourneys } from '@/hooks/useJourneys';
 import { JourneyCreateDialog } from './JourneyCreateDialog';
 import { JourneyContactsDrawer } from './JourneyContactsDrawer';
+import { SeloModoTeste } from './ModoTesteCampo';
 import { STATUS_LABELS, readEntrySegments, type Journey } from '@/lib/journeys';
 import { useSegmentAudience } from '@/hooks/useSegmentAudience';
 
@@ -39,6 +40,8 @@ export function JourneysTab() {
       reentry: j.reentry,
       reentry_cooldown_hours: j.reentry_cooldown_hours,
       entry_node_id: j.entry_node_id ?? null,
+      // A cópia de um fluxo em modo teste nasce em modo teste.
+      allowed_emails: j.allowed_emails ?? null,
       nodes: Array.isArray(j.nodes) ? j.nodes : [],
     } as Partial<Journey>);
     if (clone) navigate(`/automations/fluxos/${clone.id}`);
@@ -106,6 +109,7 @@ export function JourneysTab() {
                     <Badge variant="secondary" className="text-xs">
                       {j.entry_type === 'segment' ? 'Entrada: segmento' : 'Entrada: evento'}
                     </Badge>
+                    <SeloModoTeste emails={j.allowed_emails} />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {j.nodes?.length ?? 0} passo(s) · {j.runs?.active ?? 0} ativo(s) ·{' '}

@@ -10,7 +10,7 @@ import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
 import { useSegments } from '@/hooks/useSegments';
 import { useLeadStatuses } from '@/hooks/useLeadStatuses';
-import { NODE_LABELS, EVENT_OPTIONS, isBranch, type JourneyNodeType } from '@/lib/journeys';
+import { NODE_LABELS, EVENT_OPTIONS, isBranch, lerListaDeEmails, webhookValido, type JourneyNodeType } from '@/lib/journeys';
 import { GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 
 // Mesmo vocabulário field/operator/value que build_segment_condition
@@ -28,7 +28,14 @@ const ATTRIBUTE_FIELD_OPTIONS = [
   { value: 'utm_source', label: 'Origem (utm)' },
   { value: 'page_slug', label: 'Página' },
   { value: 'created_at', label: 'Criado nos últimos' },
+  // Prova do RD (migration 027): `leads.campos_extras ->> key`. A chave é a
+  // do campo personalizado da landing/site (ex.: ja_faz_testagem).
+  { value: 'campo_extra', label: 'Campo personalizado' },
 ];
+
+// Chave de campo personalizado: o mesmo formato que o banco aceita
+// (build_segment_condition devolve FALSE para chave fora dele).
+const CHAVE_EXTRA = /^[a-z][a-z0-9_]{0,39}$/;
 
 // Campo antigo `etiqueta` = coluna leads.etiqueta, o MESMO dado de
 // 'qualificacao' (só muda o vocabulário: hotlead/warm/raw vs hot/warm/raw).
@@ -50,6 +57,10 @@ const ATTRIBUTE_OPERATORS: Record<string, { value: string; label: string }[]> = 
   utm_source: [{ value: 'contains', label: 'contém' }, { value: 'exact', label: 'é exatamente' }],
   page_slug: [{ value: 'exact', label: 'é exatamente' }],
   created_at: [],
+  campo_extra: [
+    { value: 'is', label: 'é' }, { value: 'is_not', label: 'não é' },
+    { value: 'contains', label: 'contém' }, { value: 'not_contains', label: 'não contém' },
+  ],
 };
 
 // Só usado pelo campo legado 'etiqueta' (coluna leads.etiqueta).
@@ -71,7 +82,13 @@ function minutesToQtyUnit(minutes: number | undefined): { qty: number; unit: Dur
   return { qty: m || 1, unit: 'minutos' };
 }
 
-interface AttrRule { field: string; operator: string; value: string }
+interface AttrRule { field: string; operator: string; value: string; key?: string }
+
+const regraCompleta = (r: AttrRule) => {
+  if (!r.field) return false;
+  if (r.field === 'campo_extra') return CHAVE_EXTRA.test(r.key ?? '') && !!r.value;
+  return !!r.value || ATTRIBUTE_OPERATORS[r.field]?.length === 0;
+};
 
 interface Props {
   open: boolean;
@@ -127,6 +144,11 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   // change_status
   const [statusName, setStatusName] = useState('');
 
+  // notify_email (aviso interno) e webhook
+  const [notifyEmails, setNotifyEmails] = useState('');
+  const [notifyAssunto, setNotifyAssunto] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
+
   // Etiquetas vinculadas aos contatos (tabela `tags`, ligada por lead_tags) —
   // as mesmas do filtro ETIQUETA de /contacts e do campo Etiqueta dos segmentos.
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
@@ -151,6 +173,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
     if (type && isBranch(type)) setCondType(type);
     setTagName(cfg.tag_name || '');
     setStatusName(cfg.status || '');
+    setNotifyEmails(Array.isArray(cfg.emails) ? cfg.emails.join('\n') : '');
+    setNotifyAssunto(cfg.assunto || '');
+    setWebhookUrl(cfg.url || '');
   }, [open, type, initialConfig]);
 
   useEffect(() => {
@@ -170,19 +195,22 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       if (patch.field) {
         next[i].operator = ATTRIBUTE_OPERATORS[patch.field]?.[0]?.value || '';
         next[i].value = '';
+        if (patch.field === 'campo_extra') next[i].key = '';
+        else delete next[i].key;
       }
       return next;
     });
   };
 
   const normalizedTag = tagName.replace(/^\/+/, '').trim().toLowerCase();
+  const avisoLido = lerListaDeEmails(notifyEmails);
 
   const isValid = (): boolean => {
     switch (effType) {
       case 'send_email': return !!templateId && !!subject.trim();
       case 'delay': return delayQty > 0;
       case 'wait_for_event': return !!eventType && timeoutQty > 0;
-      case 'branch_attribute': return rules.some((r) => r.field && (r.value || ATTRIBUTE_OPERATORS[r.field]?.length === 0));
+      case 'branch_attribute': return rules.some(regraCompleta);
       case 'branch_segment': return !!segmentId;
       case 'branch_email_event': return !!sourceNodeId && ['delivered', 'opened', 'clicked'].includes(emailCheck);
       case 'apply_tag': return !!normalizedTag;
@@ -191,6 +219,10 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
       // Sem configuração: o card entra na etapa de entrada do funil
       // configurado em Configurações → GrowthHS (decisão 7 do plano).
       case 'handoff_growthhs': return true;
+      // Endereço que não parece e-mail trava o salvar: some em silêncio, o
+      // aviso não chega a quem devia e ninguém percebe.
+      case 'notify_email': return avisoLido.validos.length > 0 && avisoLido.invalidos.length === 0;
+      case 'webhook': return webhookValido(webhookUrl);
       default: return false;
     }
   };
@@ -213,7 +245,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
         };
         break;
       case 'branch_attribute':
-        config = { rules: rules.filter((r) => r.field && (r.value || ATTRIBUTE_OPERATORS[r.field]?.length === 0)), logic };
+        config = { rules: rules.filter(regraCompleta), logic };
         break;
       case 'branch_segment':
         config = { segment_id: segmentId };
@@ -230,6 +262,15 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
         break;
       case 'handoff_growthhs':
         config = {};
+        break;
+      case 'notify_email':
+        config = {
+          emails: avisoLido.validos,
+          ...(notifyAssunto.trim() ? { assunto: notifyAssunto.trim() } : {}),
+        };
+        break;
+      case 'webhook':
+        config = { url: webhookUrl.trim() };
         break;
     }
     // Passa o subtipo real quando é uma Condição; o chamador persiste esse type.
@@ -276,7 +317,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
         </Select>
       );
     }
-    return <Input className="flex-1" value={rule.value} onChange={(e) => updateRule(i, { value: e.target.value })} placeholder="Valor" />;
+    return <Input className="flex-1" value={rule.value} onChange={(e) => updateRule(i, { value: e.target.value })} placeholder={rule.field === 'campo_extra' ? 'Valor (ex.: sim)' : 'Valor'} />;
   };
 
   return (
@@ -408,6 +449,16 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                           LEGACY_ATTRIBUTE_FIELD_OPTIONS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {rule.field === 'campo_extra' && (
+                      <Input
+                        className="w-[120px] font-mono text-xs"
+                        value={rule.key ?? ''}
+                        onChange={(e) => updateRule(i, { key: e.target.value.trim().toLowerCase() })}
+                        placeholder="chave"
+                        aria-label="Chave do campo personalizado"
+                        aria-invalid={!!rule.key && !CHAVE_EXTRA.test(rule.key)}
+                      />
+                    )}
                     {rule.field && ATTRIBUTE_OPERATORS[rule.field]?.length > 0 && (
                       <Select value={rule.operator} onValueChange={(v) => updateRule(i, { operator: v })}>
                         <SelectTrigger className="w-[100px]"><SelectValue placeholder="Op" /></SelectTrigger>
@@ -421,6 +472,13 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                   </div>
                 ))}
               </div>
+              {rules.some((r) => r.field === 'campo_extra') && (
+                <p className="text-xs text-muted-foreground">
+                  Campo personalizado: a chave é a do campo na landing ou no site (letras minúsculas, números e _,
+                  ex.: ja_faz_testagem). A comparação ignora maiúsculas; "não é" e "não contém" incluem quem não
+                  tem o campo.
+                </p>
+              )}
               <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={addRule}>
                 <Plus className="h-3 w-3" /> Adicionar condição
               </Button>
@@ -540,6 +598,56 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
               <p className="text-xs text-[--on-tint-warning]">
                 {GROWTHHS_NAO_CONFIGURADO}
               </p>
+            </div>
+          )}
+
+          {type === 'notify_email' && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="aviso-emails">Avisar estes e-mails</Label>
+                <Textarea id="aviso-emails" value={notifyEmails} onChange={(e) => setNotifyEmails(e.target.value)}
+                  placeholder={'comercial@healthsafety.com.br'} className="min-h-[64px] font-mono text-xs" />
+                <p className="text-xs text-muted-foreground">
+                  Um por linha ou separados por vírgula. O aviso leva nome, e-mail, celular, empresa, página ou
+                  formulário, mensagem e o link para a ficha do contato.
+                </p>
+                {avisoLido.invalidos.length > 0 && (
+                  <p className="text-xs text-[--on-tint-danger]" role="alert">
+                    Não parece e-mail: {avisoLido.invalidos.join(', ')}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="aviso-assunto">Assunto (opcional)</Label>
+                <Input id="aviso-assunto" value={notifyAssunto} onChange={(e) => setNotifyAssunto(e.target.value)}
+                  placeholder="[MarketingHS] Novo lead: nome — empresa" />
+              </div>
+              <div className="flex gap-2 rounded-md border border-border/40 bg-muted/20 p-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  É um aviso interno: não passa por supressão nem descadastro do contato, mas conta no teto de
+                  envio do dia. Sai em segundo plano; o fluxo segue sem esperar.
+                </p>
+              </div>
+            </>
+          )}
+
+          {type === 'webhook' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="webhook-url">URL do webhook</Label>
+              <Input id="webhook-url" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://n8n.exemplo.com/webhook/novo-lead" className="font-mono text-xs"
+                aria-invalid={!!webhookUrl.trim() && !webhookValido(webhookUrl)} />
+              {webhookUrl.trim() && !webhookValido(webhookUrl) ? (
+                <p className="text-xs text-[--on-tint-danger]" role="alert">
+                  A URL precisa começar por https:// — endereço sem criptografia não é aceito.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Recebe um POST JSON com o contato, a conversão e o fluxo. Falha temporária é tentada de novo
+                  (até 5 vezes); erro 4xx desiste na hora.
+                </p>
+              )}
             </div>
           )}
         </div>

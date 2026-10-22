@@ -38,6 +38,18 @@ class RegraIn(BaseModel):
     field: str
     operator: str
     value: str
+    # A chave do campo personalizado na regra `campo_extra` (prova do RD,
+    # migration 027: `build_segment_condition` lê `p_rule->>'key'`). Sem
+    # este campo o pydantic DESCARTAVA a chave e o segmento por campo extra
+    # salvava e contava sempre zero, sem erro. Chave fora do padrão o banco
+    # transforma em FALSE. `None` não vai para o JSON (`_regras`).
+    key: str | None = Field(default=None, max_length=40)
+
+
+def _regras(regras: list[RegraIn]) -> list[dict]:
+    """As regras como vão para o banco. `exclude_none`: regra sem `key` sai
+    exatamente como antes (sem `"key": null` em todo segmento salvo)."""
+    return [r.model_dump(exclude_none=True) for r in regras]
 
 
 class PreviaIn(BaseModel):
@@ -108,7 +120,7 @@ async def criar(dados: SegmentoIn, usuario: Usuario = Depends(admin_atual)):
                 """INSERT INTO segments (name, description, type, rules, logic)
                    VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id""",
                 dados.nome.strip(), dados.descricao, dados.tipo,
-                [r.model_dump() for r in dados.regras], dados.logica)
+                _regras(dados.regras), dados.logica)
 
             if dados.tipo == "static" and dados.lead_ids:
                 # unnest em vez de laço de lotes: uma instrução, e o banco cuida
@@ -138,7 +150,7 @@ async def editar(segmento_id: str, dados: SegmentoIn,
                                        rules = $5::jsonb, logic = $6, updated_at = now()
                     WHERE id = $1::uuid""",
                 segmento_id, dados.nome.strip(), dados.descricao, dados.tipo,
-                [x.model_dump() for x in dados.regras], dados.logica)
+                _regras(dados.regras), dados.logica)
             if r.endswith(" 0"):
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Segmento não encontrado.")
 
@@ -228,14 +240,14 @@ async def previa(dados: PreviaIn, usuario: Usuario = Depends(admin_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         total = await conn.fetchval(
             "SELECT count(*) FROM preview_segment_rules($1::jsonb, $2)",
-            [r.model_dump() for r in dados.regras], dados.logica)
+            _regras(dados.regras), dados.logica)
         amostra = await conn.fetch(
             """SELECT l.id::text, l.nome, l.etiqueta
                  FROM preview_segment_rules($1::jsonb, $2) p
                  JOIN leads l ON l.id = p.lead_id
                 WHERE l.deleted_at IS NULL
                 LIMIT 5""",
-            [r.model_dump() for r in dados.regras], dados.logica)
+            _regras(dados.regras), dados.logica)
     return {"total": total, "amostra": [dict(a) for a in amostra]}
 
 

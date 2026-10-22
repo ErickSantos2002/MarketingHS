@@ -109,3 +109,16 @@ dia no `CONTINUAR-AQUI.md`.
     confirmação) — um Enter mandava o contato à fila. **Assumido:** foco no
     título/fechar (consertado em 07/10). Alternativa extra: pedir confirmação
     no botão.
+62. **Jornada sem filtro × captura do site** (prova do RD, revisão 22/10):
+    todo lead novo vindo do snippet publica `form_submitted`; uma jornada
+    `form_submitted` **sem** filtro de página/formulário matricularia cliente
+    real do site. Hoje não há jornada nenhuma. **Assumido:** antes de colar o
+    snippet no `healthsafety.com.br`, barrar no código jornada sem filtro para
+    evento com `site_id` (ou exigir modo teste). Não bloqueia a prova interna.
+63. **Base legal do formulário do site** (spec §4.3): sem checkbox no site,
+    o registro sai `legitimo_interesse_pedido_contato`, versão provisória.
+    **Assumido** até o D3. Alternativa: pôr checkbox no site.
+64. **Consentimento obrigatório na landing** (spec §4.3). **Assumido:** sim.
+65. **Campo-isca na conversão de site:** a spec pedia, o plano tirou (o
+    formulário do site é do site; o token + `Origin` + limite seguram).
+    **Assumido:** sem campo-isca; reavaliar se aparecer spam.

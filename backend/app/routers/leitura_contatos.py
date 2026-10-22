@@ -14,6 +14,8 @@ não-admin veria a base VAZIA, sem erro. Teste:
 `tests/test_conversao_authenticated.py`.
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -299,8 +301,11 @@ async def ficha(lead_id: str, usuario: Usuario = Depends(admin_atual)):
     foi removido neste lote.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        # `campos_extras` (prova do RD, migration 027) só na ficha: a lista
+        # (`COLUNAS_LEAD`) espelha o `LEAD_COLUMNS` do front e não precisa dele.
         lead = await conn.fetchrow(
-            f"SELECT {COLUNAS_LEAD} FROM leads WHERE id = $1::uuid", lead_id)
+            f"SELECT {COLUNAS_LEAD}, campos_extras FROM leads WHERE id = $1::uuid",
+            lead_id)
         if lead is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
         tags = await conn.fetch(
@@ -325,6 +330,25 @@ async def listar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual
                       converted_at::text
                  FROM lead_conversions WHERE lead_id = $1::uuid
                 ORDER BY converted_at DESC""", lead_id)
+    return [dict(l) for l in linhas]
+
+
+@router.get("/{lead_id}/consentimentos")
+async def consentimentos(lead_id: UUID, usuario: Usuario = Depends(admin_atual)):
+    """O histórico de consentimento do contato (prova do RD), mais recente
+    primeiro — um registro por aceite, com o texto e a versão que valiam.
+
+    ⚠️ `lead_consents` tem política só de admin e GRANT de SELECT a
+    `authenticated` (migration 027); `admin_atual` transforma o "zero
+    linhas" do não-admin em 403.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """SELECT id::text, base_legal, texto, versao, provisoria, ip,
+                      user_agent, origem_tipo, page_slug, site_id::text,
+                      form_id, page_url, criado_em::text
+                 FROM lead_consents WHERE lead_id = $1::uuid
+                ORDER BY criado_em DESC, id""", str(lead_id))
     return [dict(l) for l in linhas]
 
 

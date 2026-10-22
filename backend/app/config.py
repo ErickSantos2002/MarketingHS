@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     # de NAT de operadora.
     LIMITE_REDIRECIONADOR_POR_MINUTO: int = 300
 
+    # Balde PRÓPRIO da visita do `rastreio.js` (`/publico/site/visita`, prova
+    # do RD): uma por carregamento de página, de todo visitante do site
+    # cadastrado — dividir os 30/min do balde comum com `/publico/captura`
+    # faria a navegação de um escritório atrás de NAT gastar a cota do
+    # formulário.
+    LIMITE_VISITA_POR_MINUTO: int = 120
+
+    # Receptor de teste do contrato do GrowthHS e eco do formulário de teste;
+    # desligado por padrão; liga só durante a prova (prova do RD, 21/10).
+    PROVA_RECEPTOR_TESTE: bool = False
+
     # Credencial alternativa à chave de API, para chamador máquina que não
     # tem chave própria. ⚠️ É global: vale tudo, não tem escopo nem expiração.
     # Herdado da origem; ver a pendência no ROADMAP.

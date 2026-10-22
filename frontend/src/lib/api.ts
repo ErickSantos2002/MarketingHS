@@ -4,7 +4,9 @@
 // ⚠️ VITE_API_URL é resolvida em BUILD TIME, não em runtime. Trocar a variável
 // no servidor sem rebuildar não muda nada — a URL já está dentro do bundle.
 // Isso já custou tempo no Grana. Em desenvolvimento o proxy do Vite cobre.
-export const BASE = import.meta.env.VITE_API_URL ?? '/api';
+// `?.`: fora do Vite (o `node --test` de scripts/api-erro.test.mjs) não há
+// `import.meta.env`.
+export const BASE = import.meta.env?.VITE_API_URL ?? '/api';
 
 const CHAVE_TOKEN = 'marketinghs-token';
 
@@ -20,10 +22,36 @@ export function limparToken() {
   localStorage.removeItem(CHAVE_TOKEN);
 }
 
+// Campo declarado à parte (e não `constructor(public status…)`): propriedade
+// de parâmetro não é sintaxe apagável, e o Node 24 recusaria o arquivo no
+// teste.
 export class ErroApi extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
+}
+
+/**
+ * O `detail` do FastAPI vira texto legível — nunca "[object Object]".
+ * Três formas: string (o comum); `{mensagem, campos}` (a captura e as rotas
+ * da prova do RD); a lista do 422 de validação (`[{loc, msg, type}]`).
+ */
+export function mensagemDoDetalhe(detail: unknown, padrao: string): string {
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === 'object' && typeof (d as { msg?: unknown }).msg === 'string'
+        ? (d as { msg: string }).msg : null))
+      .filter((m): m is string => !!m);
+    return msgs.length ? [...new Set(msgs)].join('; ') : padrao;
+  }
+  if (detail && typeof detail === 'object') {
+    const m = (detail as { mensagem?: unknown }).mensagem;
+    if (typeof m === 'string' && m.trim()) return m;
+  }
+  return padrao;
 }
 
 async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promise<T> {
@@ -46,11 +74,11 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
   }
 
   if (!resposta.ok) {
-    let detalhe = `Erro ${resposta.status}`;
+    let detalhe: unknown = null;
     try {
-      detalhe = (await resposta.json()).detail ?? detalhe;
+      detalhe = (await resposta.json()).detail;
     } catch { /* resposta sem corpo JSON */ }
-    throw new ErroApi(resposta.status, detalhe);
+    throw new ErroApi(resposta.status, mensagemDoDetalhe(detalhe, `Erro ${resposta.status}`));
   }
 
   return resposta.status === 204 ? (undefined as T) : resposta.json();
