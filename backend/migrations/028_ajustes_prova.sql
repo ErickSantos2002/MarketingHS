@@ -5,7 +5,11 @@
 -- nenhuma tabela, nenhum índice — os três índices únicos de envio não são
 -- tocados.
 --
--- Copiada da 027 (a versão vigente) com o mínimo mudado:
+-- Duas funções, cada uma copiada da 027 (a versão vigente) com o mínimo
+-- mudado:
+--   a. `validate_journey_graph` (A7): `branch_attribute` sem `config.rules`
+--      é recusado. Antes, `jsonb_typeof(NULL) <> 'array'` dava NULL e o IF
+--      passava calado — o nó entrava no fluxo sem regra nenhuma;
 --   b. `journey_enroll_event(uuid, text, jsonb)` (A4, pergunta 62): jornada
 --      sem `page_slug` e sem `form_ids` NÃO matricula conversão vinda de site
 --      de fora (`site_id` no metadata). Lead da landing e jornada filtrada
@@ -14,6 +18,148 @@
 -- ⚠️ ORDEM: pode ir antes ou depois do deploy — o código não muda a chamada.
 -- Mas a regra (b) só vale depois de aplicada: antes de colar o snippet no
 -- site institucional, ela TEM de estar no banco.
+
+
+-- a. ---------------------------------------------------------------------------
+-- `validate_journey_graph`: cópia FIEL da 027. Única mudança: o `coalesce` no
+-- `branch_attribute`.
+CREATE OR REPLACE FUNCTION public.validate_journey_graph(p_nodes jsonb, p_entry_node_id text) RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  v_ids   text[];
+  v_node  jsonb;
+  v_id    text;
+  v_type  text;
+  v_ref   text;
+  v_cycle boolean;
+BEGIN
+  IF p_nodes IS NULL OR jsonb_typeof(p_nodes) <> 'array' THEN
+    RAISE EXCEPTION 'journeys.nodes deve ser um array jsonb';
+  END IF;
+  IF jsonb_array_length(p_nodes) = 0 THEN
+    RETURN;
+  END IF;
+
+  SELECT array_agg(n->>'id') INTO v_ids FROM jsonb_array_elements(p_nodes) n;
+
+  IF EXISTS (SELECT 1 FROM unnest(v_ids) x WHERE x IS NULL OR btrim(x) = '') THEN
+    RAISE EXCEPTION 'todo no precisa de um "id" nao vazio';
+  END IF;
+  IF (SELECT count(*) FROM unnest(v_ids)) <> (SELECT count(DISTINCT x) FROM unnest(v_ids) x) THEN
+    RAISE EXCEPTION 'ids de no duplicados';
+  END IF;
+  IF p_entry_node_id IS NULL OR NOT (p_entry_node_id = ANY(v_ids)) THEN
+    RAISE EXCEPTION 'entry_node_id % nao existe em nodes', coalesce(p_entry_node_id, '(null)');
+  END IF;
+
+  FOR v_node IN SELECT n FROM jsonb_array_elements(p_nodes) n
+  LOOP
+    v_id   := v_node->>'id';
+    v_type := v_node->>'type';
+
+    IF v_type IS NULL OR v_type NOT IN
+       ('send_email','delay','wait_for_event','branch_attribute','branch_segment','branch_email_event','apply_tag','handoff_growthhs',
+        'change_status','remove_tag',
+        'notify_email','webhook') THEN
+      RAISE EXCEPTION 'tipo de no invalido: % (no %)', coalesce(v_type, '(null)'), v_id;
+    END IF;
+
+    FOREACH v_ref IN ARRAY ARRAY[v_node->>'next', v_node->>'next_false', v_node->>'next_timeout']
+    LOOP
+      IF v_ref IS NOT NULL AND NOT (v_ref = ANY(v_ids)) THEN
+        RAISE EXCEPTION 'no % aponta para "%" que nao existe', v_id, v_ref;
+      END IF;
+    END LOOP;
+
+    CASE v_type
+      WHEN 'send_email' THEN
+        IF coalesce(v_node#>>'{config,template_id}', '') = ''
+           OR coalesce(v_node#>>'{config,subject}', '') = '' THEN
+          RAISE EXCEPTION 'no % (send_email) exige config.template_id e config.subject', v_id;
+        END IF;
+      WHEN 'delay' THEN
+        IF coalesce((v_node#>>'{config,minutes}')::numeric, 0) <= 0 THEN
+          RAISE EXCEPTION 'no % (delay) exige config.minutes > 0', v_id;
+        END IF;
+      WHEN 'wait_for_event' THEN
+        IF coalesce(v_node#>>'{config,event_type}', '') = ''
+           OR coalesce((v_node#>>'{config,timeout_minutes}')::numeric, 0) <= 0 THEN
+          RAISE EXCEPTION 'no % (wait_for_event) exige config.event_type e config.timeout_minutes > 0', v_id;
+        END IF;
+      WHEN 'branch_attribute' THEN
+        -- 028: `coalesce` no jsonb_typeof, como no notify_email da 027: sem
+        -- ele, config sem `rules` dava NULL e o IF passava calado.
+        IF coalesce(jsonb_typeof(v_node#>'{config,rules}'), '') <> 'array'
+           OR jsonb_array_length(v_node#>'{config,rules}') = 0 THEN
+          RAISE EXCEPTION 'no % (branch_attribute) exige config.rules nao vazio', v_id;
+        END IF;
+      WHEN 'branch_segment' THEN
+        IF coalesce(v_node#>>'{config,segment_id}', '') = '' THEN
+          RAISE EXCEPTION 'no % (branch_segment) exige config.segment_id', v_id;
+        END IF;
+      WHEN 'branch_email_event' THEN
+        IF coalesce(v_node#>>'{config,source_node_id}', '') = '' THEN
+          RAISE EXCEPTION 'no % (branch_email_event) exige config.source_node_id', v_id;
+        END IF;
+        IF coalesce(v_node#>>'{config,check}', '') NOT IN ('delivered','opened','clicked') THEN
+          RAISE EXCEPTION 'no % (branch_email_event) exige config.check em (delivered,opened,clicked)', v_id;
+        END IF;
+      WHEN 'apply_tag' THEN
+        IF coalesce(v_node#>>'{config,tag_name}', '') = '' THEN
+          RAISE EXCEPTION 'no % (apply_tag) exige config.tag_name', v_id;
+        END IF;
+      -- 026: os dois nós novos (R5).
+      WHEN 'remove_tag' THEN
+        IF coalesce(v_node#>>'{config,tag_name}', '') = '' THEN
+          RAISE EXCEPTION 'no % (remove_tag) exige config.tag_name', v_id;
+        END IF;
+      WHEN 'change_status' THEN
+        IF coalesce(v_node#>>'{config,status}', '') = '' THEN
+          RAISE EXCEPTION 'no % (change_status) exige config.status', v_id;
+        END IF;
+        -- ⚠️ A existência do status em `lead_statuses` NÃO é checada aqui:
+        -- este gatilho roda em TODO UPDATE de `journeys` (pausar inclusive), e
+        -- um status apagado depois travaria até a pausa do fluxo. Quem recusa
+        -- é o executor, com o run em `failed` e o motivo à vista.
+      -- 027: os dois nós de saída (prova do RD). `coalesce` no jsonb_typeof:
+      -- sem ele, config sem `emails` daria NULL e o IF passaria calado.
+      WHEN 'notify_email' THEN
+        IF coalesce(jsonb_typeof(v_node#>'{config,emails}'), '') <> 'array'
+           OR jsonb_array_length(v_node#>'{config,emails}') = 0 THEN
+          RAISE EXCEPTION 'no % (notify_email) exige config.emails nao vazio', v_id;
+        END IF;
+      WHEN 'webhook' THEN
+        IF coalesce(v_node#>>'{config,url}', '') !~* '^https://[^/[:space:]]+' THEN
+          RAISE EXCEPTION 'no % (webhook) exige config.url com https://', v_id;
+        END IF;
+      ELSE NULL;
+    END CASE;
+  END LOOP;
+
+  WITH RECURSIVE edges AS (
+    SELECT n->>'id' AS src, e AS dst
+    FROM jsonb_array_elements(p_nodes) n
+    CROSS JOIN LATERAL (VALUES (n->>'next'), (n->>'next_false'), (n->>'next_timeout')) AS v(e)
+    WHERE e IS NOT NULL
+  ),
+  walk AS (
+    SELECT e.src, e.dst, ARRAY[e.src] AS path, false AS cyclic
+    FROM edges e
+    UNION ALL
+    SELECT w.dst, e.dst, w.path || w.dst, (e.dst = ANY(w.path || w.dst))
+    FROM walk w
+    JOIN edges e ON e.src = w.dst
+    WHERE NOT w.cyclic AND array_length(w.path, 1) < 200
+  )
+  SELECT EXISTS (SELECT 1 FROM walk WHERE cyclic) INTO v_cycle;
+
+  IF v_cycle THEN
+    RAISE EXCEPTION 'o grafo do fluxo tem ciclo';
+  END IF;
+END;
+$$;
 
 
 -- b. ---------------------------------------------------------------------------

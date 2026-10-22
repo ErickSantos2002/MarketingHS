@@ -111,6 +111,34 @@ async def test_028_landing_e_sem_origem_continuam_como_hoje(conexao):
     assert set(await _matriculas(conexao, sem_origem, [qualquer, pagina])) == {qualquer}
 
 
+async def _exigir_028_grafo(conexao):
+    tem = await conexao.fetchval(
+        "SELECT position('coalesce(jsonb_typeof(v_node#>''{config,rules}'')' in prosrc) > 0 "
+        "FROM pg_proc WHERE proname = 'validate_journey_graph'")
+    if not tem:
+        pytest.skip("migration 028 (grafo) ainda não aplicada neste banco")
+
+
+@pytest.mark.parametrize("config", [{}, {"rules": None}, {"rules": []}, {"rules": "x"}])
+async def test_028_branch_attribute_sem_regras_recusado(conexao, config):
+    """A7: sem `rules`, `jsonb_typeof(NULL) <> 'array'` dava NULL e o nó
+    passava calado — um ramo que nunca decide nada."""
+    import asyncpg
+    await _exigir_028_grafo(conexao)
+    no = {"id": "a", "type": "branch_attribute", "config": config, "next": None}
+    with pytest.raises(asyncpg.RaiseError, match="branch_attribute"):
+        async with conexao.transaction():
+            await conexao.execute("SELECT validate_journey_graph($1::jsonb, 'a')", [no])
+
+
+async def test_028_branch_attribute_com_regra_passa(conexao):
+    await _exigir_028_grafo(conexao)
+    regra = {"field": "etiqueta", "operator": "is", "value": "quente"}
+    await conexao.execute(
+        "SELECT validate_journey_graph($1::jsonb, 'a')",
+        [{"id": "a", "type": "branch_attribute", "config": {"rules": [regra]}, "next": None}])
+
+
 async def test_028_site_id_em_branco_nao_conta_como_site(conexao):
     await _exigir_028(conexao)
     qualquer = await _jornada(conexao, "028 — qualquer origem")
