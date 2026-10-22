@@ -1,5 +1,24 @@
 # Continuar aqui
 
+> ## 🔌 GrowthHS real na `main` (22/10/2026, madrugada)
+>
+> A frente `growthhs-real` trocou o receptor de teste pela API normal do
+> GrowthHS (client-credentials → pessoa por e-mail exato → card aberto nos
+> boards conferidos é atualizado + nota; senão card novo na lista 22) e
+> ganhou o webhook de volta assinado (`POST /publico/growthhs/webhook`,
+> evento amarrado à lista assinada, janela de ±10 min). Spec
+> `docs/superpowers/specs/2026-10-22-growthhs-real-design.md`; estado e
+> checklist da virada em `docs/frentes/growthhs-real.md`.
+> 029 aplicada; suíte **950 passed**; push `05eee18`.
+>
+> **Próximos passos (um por vez, Erick):** deploy de api/worker/sistema →
+> `bash ~/marketinghs-growthhs-limpar-ids-da-prova.sh` (tira o card 26
+> inventado pelo receptor de teste) → Configurações → GrowthHS apontando
+> para `https://homo-growthhsapi.healthsafetytech.com` (client 5, lista 22,
+> boards 6 e 7, reunião 28, ganho 32) + "Testar" → automações da volta no
+> board 7 da homologação → prova curta. Virada para produção = trocar a
+> config + duplicar a automação 14 com o usuário 28.
+
 > ## ✅ Ajustes da prova no ar (22/10/2026, fim do dia)
 >
 > `ajustes-prova` (A1–A8) + volta ao destino no 401 (`?de=`) + conserto das
