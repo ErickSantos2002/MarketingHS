@@ -1,5 +1,6 @@
 """O worker: drena a fila de e-mail, promove campanhas agendadas, roda as
-jornadas e entrega os leads ao GrowthHS.
+jornadas, drena a caixa de saída delas (aviso e webhook) e entrega os leads
+ao GrowthHS.
 
 Substitui o `pg_cron` por um laço `asyncio`, no padrão do `guardiao_crons.py` do
 HS.OS. Roda como processo separado (`python -m app.worker`) porque reiniciar a
@@ -19,6 +20,7 @@ from app import fila, integracoes, ritmo
 from app.config import settings
 from app.crm import entrega
 from app.database import close_db, init_db, sessao
+from app.jornadas import modo_teste
 from app.email import resend
 from app.email.montagem import (
     aplicar_merge_tags,
@@ -100,6 +102,11 @@ async def _remetente() -> str:
     return (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
 
+# A regra do modo teste mora em `app/jornadas/modo_teste.py` — a mesma do
+# executor e da caixa de saída.
+_na_lista_do_modo_teste = modo_teste.na_lista
+
+
 async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
                      segredo_descadastro: str, por_segundo: float) -> None:
     """Processa uma mensagem. Levanta se o envio falhar — quem chama devolve.
@@ -154,7 +161,8 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
         # E-mail de fluxo: o conteúdo vem do template apontado pelo nó.
         conteudo = await conn.fetchrow(
             """SELECT n->'config'->>'subject' AS subject,
-                      t.html AS body
+                      t.html AS body,
+                      to_jsonb(j)->'allowed_emails' AS allowed_emails
                  FROM journey_runs r
                  JOIN journeys j ON j.id = r.journey_id
                  CROSS JOIN LATERAL jsonb_array_elements(j.nodes) AS n
@@ -162,6 +170,17 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
                         ON t.id = (n->'config'->>'template_id')::uuid
                 WHERE r.id = $1::uuid AND n->>'id' = $2""",
             envio["journey_run_id"], envio["journey_node_id"])
+        if conteudo is not None and not _na_lista_do_modo_teste(
+                conteudo["allowed_emails"], envio["email"]):
+            # A segunda trava do modo teste (a primeira é o executor, que nem
+            # cria a linha). A lista pode ter mudado entre o nó e o envio, ou
+            # a linha ter nascido por outro caminho: o Resend não é chamado.
+            await conn.execute(
+                """UPDATE campaign_sends SET status = 'failed', sent_at = now(),
+                       error = 'modo teste: fora da lista'
+                    WHERE id = $1::uuid AND status = 'pending'""", m.send_id)
+            await fila.concluir(conn, m.fila_id)
+            return
         if conteudo is None or not (conteudo["body"] or "").strip():
             # Sem template resolvido não há o que enviar. Falha visível: um
             # e-mail vazio saindo seria pior que um envio marcado como falho.
@@ -256,12 +275,14 @@ async def _tick() -> int:
             return 0
         # ⚠️ O teto limita o que se REIVINDICA. O que passa dele continua na
         # fila, intocado, e sai na hora ou no dia seguinte — nunca 'failed'.
+        # ⚠️ A trava da cota: o laço das saídas (aviso por e-mail) mede e
+        # reivindica sob a MESMA chave. Medir sem ela deixaria os dois
+        # gastarem a última vaga do teto. Solta no fim desta transação, com a
+        # reivindicação já gravada (e contada em `uso.reservados`).
+        await ritmo.travar_cota(conn)
         uso = await ritmo.medir(conn)
-        limite = ritmo.cota(
-            r, uso.hoje, uso.primeiro_dia,
-            enviados_hora=uso.enviados_hora, enviados_dia=uso.enviados_dia,
-            lote=settings.FILA_LOTE,
-            visibilidade=settings.FILA_VISIBILIDADE_SEGUNDOS)
+        limite = ritmo.cota_de(r, uso, lote=settings.FILA_LOTE,
+                               visibilidade=settings.FILA_VISIBILIDADE_SEGUNDOS)
         _registrar_teto(limite <= 0, uso, r)
         if limite <= 0:
             return 0
@@ -506,11 +527,37 @@ async def _laco_entregas() -> None:
             pass
 
 
+async def _laco_saidas() -> None:
+    """A caixa de saída das jornadas (aviso por e-mail e webhook, prova do
+    RD), num laço PRÓPRIO pelo mesmo motivo do `_laco_entregas`: um webhook
+    lento (até `saidas.TIMEOUT_WEBHOOK` por pedido) não pode atrasar o envio
+    de e-mail nem as jornadas.
+
+    O `_compasso` é o MESMO do laço principal: o aviso também sai pelo
+    Resend, e um 429 segura os dois. O teto é medido em cada passada
+    (`ritmo.SQL_USO` já conta os avisos).
+    """
+    from app.jornadas import saidas
+
+    while not _parar.is_set():
+        try:
+            resultado = await saidas.rodar_saidas(parar=_parar, compasso=_compasso)
+            if any(resultado.values()):
+                logger.info("[saidas] jornadas: %s", resultado)
+        except Exception:  # noqa: BLE001 — este laço não pode morrer
+            logger.exception("falha na passada da caixa de saída das jornadas")
+        try:
+            await asyncio.wait_for(_parar.wait(), timeout=JORNADAS_INTERVALO)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def principal() -> None:
     await init_db()
     logger.info("worker no ar — lote de %s, intervalo de %ss",
                 settings.FILA_LOTE, settings.WORKER_INTERVALO_SEGUNDOS)
     tarefa_entregas = asyncio.create_task(_laco_entregas())
+    tarefa_saidas = asyncio.create_task(_laco_saidas())
     proximo_agendador = 0.0
     proximo_jornadas = 0.0
     try:
@@ -554,10 +601,11 @@ async def principal() -> None:
         # inofensivo (idempotente) e cobre o caso raro do laço principal
         # sair por outro motivo que não o sinal de parada.
         _parar.set()
-        try:
-            await asyncio.wait_for(tarefa_entregas, timeout=30)
-        except asyncio.TimeoutError:
-            tarefa_entregas.cancel()
+        for tarefa in (tarefa_entregas, tarefa_saidas):
+            try:
+                await asyncio.wait_for(tarefa, timeout=30)
+            except asyncio.TimeoutError:
+                tarefa.cancel()
         await close_db()
         logger.info("worker encerrado")
 

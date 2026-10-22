@@ -15,6 +15,11 @@ condicionais. Este módulo é a máquina de estados que costura tudo.
    até W2, e sem o escopo a guarda de W2 leria aquilo como timeout genuíno —
    mandando o e-mail de "não clicou" em segundos, sem nunca dar ao contato os
    dias de espera configurados.
+
+⚠️ Modo teste (prova do RD, 027 — antimeta nº 1: nenhum e-mail para fora da
+lista). Com `journeys.allowed_emails` preenchida, nenhum nó de
+`NOS_COM_EFEITO` age sobre contato fora dela: o passo vira `skipped` com o
+motivo e o fluxo segue. O worker confere de novo antes do Resend.
 """
 
 import json
@@ -27,6 +32,11 @@ MAX_PASSOS_POR_RUN = 50
 MAX_TENTATIVAS_POR_NO = 3
 RETENTATIVA_MINUTOS = 5
 TIMEOUT_PADRAO_MINUTOS = 1440
+
+# Os nós que mandam algo para alguém (e-mail, aviso interno, card no CRM,
+# webhook). São os únicos que o modo teste barra.
+NOS_COM_EFEITO = frozenset({"send_email", "handoff_growthhs", "notify_email", "webhook"})
+MOTIVO_MODO_TESTE = "modo teste: contato fora da lista"
 
 
 class ErroDefinitivo(ValueError):
@@ -189,6 +199,41 @@ async def _mudar_status(conn, run: dict, bruto: str) -> dict:
     return {"status": novo, "anterior": anterior, "mudou": True}
 
 
+async def contato_permitido(conn, run: dict) -> bool:
+    """O contato do run pode receber o efeito de um nó? Lido uma vez por run
+    (guardado em `run["_permitido"]`): uma invocação não muda de ideia no meio.
+
+    - lista NULL (ou jornada sem a linha, ou a 027 ainda não aplicada) → `True`;
+    - senão, `lower(btrim(leads.email))` precisa estar na lista, aparada e sem
+      caixa também (a rota já normaliza; escrita direta no banco, não);
+    - lista vazia gravada no banco (`{}`) → ninguém passa. Só a rota transforma
+      `[]` em "sem modo teste", gravando NULL — nunca o executor por dedução.
+
+    ⚠️ `to_jsonb(j)->'allowed_emails'` em vez da coluna: sem a 027 a coluna não
+    existe, e o fluxo segue como antes em vez de quebrar todo nó com efeito.
+    """
+    if "_permitido" in run:
+        return run["_permitido"]
+    linha = await conn.fetchrow(
+        """SELECT to_jsonb(j)->'allowed_emails' AS lista,
+                  (SELECT lower(btrim(l.email)) FROM leads l
+                    WHERE l.id = $2::uuid) AS email
+             FROM journeys j WHERE j.id = $1::uuid""",
+        run["journey_id"], run["lead_id"])
+    lista = linha["lista"] if linha is not None else None
+    if isinstance(lista, str):
+        lista = json.loads(lista)
+    if lista is None:
+        permitido = True
+    elif not isinstance(lista, list):
+        permitido = False  # forma inesperada: na dúvida, ninguém passa
+    else:
+        email = linha["email"]
+        permitido = bool(email) and email in {str(e).strip().lower() for e in lista}
+    run["_permitido"] = permitido
+    return permitido
+
+
 def _contexto(run: dict) -> dict:
     ctx = run.get("context")
     if isinstance(ctx, str):
@@ -200,6 +245,12 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
     """Executa um nó. Devolve {'tipo': 'avancar'|'parar', 'proximo': id|None}."""
     cfg = no.get("config") or {}
     tipo = no.get("type")
+
+    if tipo in NOS_COM_EFEITO and not await contato_permitido(conn, run):
+        # Nada é criado: nem linha em campaign_sends, nem pedido ao CRM, nem
+        # saída. O fluxo segue — o resto dele pode ser só tag e espera.
+        await registrar_passo(conn, run, no, "skipped", {"motivo": MOTIVO_MODO_TESTE})
+        return {"tipo": "avancar", "proximo": no.get("next")}
 
     if tipo == "send_email":
         # ⚠️ A função do banco é quem cria a linha e enfileira. O índice
@@ -312,6 +363,42 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
                                   journey_run_id=str(run["run_id"]))
         await registrar_passo(conn, run, no, "enqueued",
                               {"handoff_id": pedido, "ja_na_fila": pedido is None})
+        return {"tipo": "avancar", "proximo": no.get("next")}
+
+    if tipo == "notify_email":
+        # Aviso interno pela caixa de saída (app/jornadas/saidas.py). O retrato
+        # do lead é tirado AGORA, no nó — o aviso diz o que o contato era
+        # quando converteu, não quando o worker drenou.
+        from app.jornadas import saidas
+        from app.texto import html_para_texto
+
+        emails = [str(e).strip() for e in (cfg.get("emails") or []) if str(e).strip()]
+        if not emails:
+            raise ErroDefinitivo("avisar por e-mail sem destinatário")
+        lead, conversao = await saidas.dados_do_lead(conn, run["lead_id"])
+        assunto, html = saidas.montar_aviso(lead, conversao,
+                                            saidas.url_da_ficha(run["lead_id"]),
+                                            cfg.get("assunto"))
+        saida = await saidas.enfileirar(
+            conn, run, no, "aviso_email", ",".join(emails),
+            {"assunto": assunto, "html": html, "texto": html_para_texto(html)})
+        await registrar_passo(conn, run, no, "enqueued",
+                              {"saida_id": saida, "ja_na_fila": saida is None})
+        return {"tipo": "avancar", "proximo": no.get("next")}
+
+    if tipo == "webhook":
+        from app.jornadas import saidas
+
+        url = str(cfg.get("url") or "").strip()
+        try:
+            saidas.conferir_forma_da_url(url)
+        except saidas.DestinoRecusado as e:
+            raise ErroDefinitivo(str(e)) from None
+        lead, conversao = await saidas.dados_do_lead(conn, run["lead_id"])
+        saida = await saidas.enfileirar(conn, run, no, "webhook", url,
+                                        saidas.montar_webhook(lead, conversao, run, no))
+        await registrar_passo(conn, run, no, "enqueued",
+                              {"saida_id": saida, "ja_na_fila": saida is None})
         return {"tipo": "avancar", "proximo": no.get("next")}
 
     raise ErroDefinitivo(f"tipo de nó desconhecido: {tipo}")
