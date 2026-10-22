@@ -2,6 +2,7 @@
 e a tags — dois dos 68 pontos que a spec mandou fechar."""
 
 import re
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -796,24 +797,116 @@ async def gravar_config_ia(dados: IAIn, _: Usuario = Depends(admin_atual)):
 
 
 # ============================================================================
-# GrowthHS — para onde vai o lead qualificado (lote 8D)
+# GrowthHS — para onde vai o lead qualificado (lote 8D; API real em 22/10)
 # ============================================================================
+
+# Os dois segredos que a tela grava e `limpar` aceita apagar. Os nomes da
+# esquerda são os campos da API; os da direita, as chaves em integration_secrets.
+_SEGREDOS_GROWTHHS = {"client_secret": "GROWTHHS_CLIENT_SECRET",
+                      "webhook_secret": "GROWTHHS_WEBHOOK_SECRET"}
+EVENTOS_WEBHOOK_GROWTHHS = ("meeting_scheduled", "deal_won")
+MAX_LISTA_GROWTHHS = 10
+MAX_ID_GROWTHHS = 9223372036854775807  # bigint
+MIN_SEGREDO_WEBHOOK = 16
+MAX_DETALHE_TESTE = 200
+
+
+def _vazio_e_none(valor):
+    """String vazia (ou só espaço) é "não mexi", não "apague" — mesma regra
+    do Resend. ⚠️ O resto passa por `strip()`: o GrowthHS faz strip do segredo
+    dele antes de assinar/comparar, então um espaço colado aqui seria 401
+    eterno — e a mensagem de lá não diz que o problema é o espaço."""
+    if valor is None:
+        return None
+    valor = valor.strip()
+    return valor or None
+
 
 class GrowthHSIn(BaseModel):
     base_url: str | None = None
-    board_id: int | None = Field(default=None, gt=0, le=2147483647)
     app_url: str | None = None
-    api_key: str | None = None
+    client_id: str | None = Field(default=None, max_length=200)
+    client_secret: str | None = None
+    list_id: int | None = Field(default=None, gt=0, le=MAX_ID_GROWTHHS)
+    boards_conferidos: list[int] | None = None
+    listas_reuniao: list[int] | None = None
+    listas_ganho: list[int] | None = None
+    webhook_secret: str | None = None
+    # `list[str]`, não `Literal`: campo desconhecido devolve 400 com o nome
+    # dele (como no 8D), em vez do 422 genérico do pydantic.
     limpar: list[str] = Field(default_factory=list)
 
     @field_validator("base_url", "app_url")
     @classmethod
     def _endereco(cls, valor):
+        """Só http/https, com host, sem usuário/senha, sem query string, sem
+        fragmento e com porta válida (revisão final, M5: `?x=1` iria colado
+        na frente de todo caminho da API, e porta inválida só estourava na
+        fila, pedido a pedido).
+
+        ⚠️ IP privado NÃO é recusado: a API do GrowthHS pode ser legítima
+        pelo nome interno do EasyPanel (`http://erick_hsgrowth-api:8000`). A
+        defesa contra virar leitor de URL interna é outra: nenhuma resposta
+        de lá volta crua (`growthhs.texto_do_erro`). Credencial na URL
+        apareceria inteira no GET desta tela — por isso sai."""
         if valor is None or not valor.strip():
             return None
         valor = valor.strip().rstrip("/")
-        if not re.match(r"^https?://[^/\s]+", valor, re.I):
+        try:
+            partes = urlsplit(valor)
+            host = partes.hostname
+            partes.port  # ⚠️ porta fora de 0–65535 ou não numérica levanta aqui
+        except ValueError:
+            raise ValueError("endereço inválido") from None
+        if partes.scheme.lower() not in ("http", "https") or not host or re.search(r"\s", valor):
             raise ValueError("use o endereço completo, com https://")
+        if partes.username or partes.password or "@" in partes.netloc:
+            raise ValueError("não coloque usuário ou senha no endereço")
+        if partes.fragment or "#" in valor:
+            raise ValueError("o endereço não pode ter # (fragmento)")
+        if partes.query or "?" in valor:
+            raise ValueError("o endereço não pode ter ? (parâmetros)")
+        return valor
+
+    @field_validator("client_id", "client_secret")
+    @classmethod
+    def _sem_espaco(cls, valor):
+        return _vazio_e_none(valor)
+
+    @field_validator("webhook_secret")
+    @classmethod
+    def _segredo_webhook(cls, valor):
+        valor = _vazio_e_none(valor)
+        if valor is not None and len(valor) < MIN_SEGREDO_WEBHOOK:
+            raise ValueError(f"o segredo do webhook precisa de pelo menos "
+                             f"{MIN_SEGREDO_WEBHOOK} caracteres")
+        return valor
+
+    @field_validator("boards_conferidos", "listas_reuniao", "listas_ganho")
+    @classmethod
+    def _ids(cls, valor):
+        """Ids do GrowthHS: inteiros > 0, sem repetidos, no máximo 10.
+        ⚠️ Repetido não é inofensivo: na busca de card aberto viraria duas
+        chamadas ao mesmo board, e na tela pareceria que há dois funis."""
+        if valor is None:
+            return None
+        if len(valor) > MAX_LISTA_GROWTHHS:
+            raise ValueError(f"no máximo {MAX_LISTA_GROWTHHS} ids")
+        if any(v <= 0 or v > MAX_ID_GROWTHHS for v in valor):
+            raise ValueError("cada id precisa ser um número maior que zero")
+        if len(set(valor)) != len(valor):
+            raise ValueError("há id repetido")
+        return valor
+
+    @field_validator("listas_reuniao", "listas_ganho")
+    @classmethod
+    def _ao_menos_uma(cls, valor):
+        """⚠️ Lista vazia aqui faria o webhook de volta ignorar TODO evento em
+        silêncio (nenhuma lista prova reunião/ganho) — 200 para o GrowthHS e
+        nada no contato. `null` continua sendo "não mexi"; `boards_conferidos`
+        vazio é aceito (só deixa `configurado` falso, e isso aparece)."""
+        if valor is not None and not valor:
+            raise ValueError("informe ao menos uma lista")
         return valor
 
 
@@ -826,11 +919,20 @@ _FALHA_EM_ABERTO = """h.status = 'falhou'
                        AND e.status = 'entregue' AND e.id > h.id)"""
 
 
+def urls_do_webhook_growthhs(base: str) -> dict:
+    """As URLs que se cadastram na automação do GrowthHS, uma por evento.
+    Saem do `FRONTEND_URL`, pelo mesmo motivo de `url_do_webhook_resend`
+    (atrás do proxy o request chega em `http` e sem o `/api/`)."""
+    raiz = f"{base.rstrip('/')}/api/publico/growthhs/webhook?evento="
+    return {e: raiz + e for e in EVENTOS_WEBHOOK_GROWTHHS}
+
+
 async def _estado_growthhs() -> dict:
     from app.crm import entrega, growthhs
 
     cfg = await growthhs.ler_config()
-    chave = cfg.api_key or ""
+    segredo = cfg.client_secret or ""
+    webhook = await ler_segredo(growthhs.SEGREDO_WEBHOOK)
     async with sessao(role="service_role") as conn:
         pendentes = await conn.fetchval(
             "SELECT count(*) FROM crm_handoffs WHERE status = 'pendente'")
@@ -848,11 +950,18 @@ async def _estado_growthhs() -> dict:
                  FROM crm_handoffs
                 WHERE status = 'pendente' AND erro LIKE $1 || '%'""",
             entrega.PREFIXO_PAUSA)
+    # ⚠️ Nenhum valor de segredo sai daqui: do client_secret, só os 4 últimos
+    # (para saber QUAL está gravado); do segredo do webhook, nem isso — ele é
+    # a única coisa que separa um POST forjado de "venda realizada".
     return {
-        "base_url": cfg.base_url, "board_id": cfg.board_id, "app_url": cfg.app_url,
-        "api_key": {"configurado": bool(chave),
-                    "ultimos4": chave[-4:] if len(chave) >= 4 else None},
+        "base_url": cfg.base_url, "app_url": cfg.app_url, "client_id": cfg.client_id,
+        "list_id": cfg.list_id, "boards_conferidos": list(cfg.boards_conferidos),
+        "listas_reuniao": list(cfg.listas_reuniao), "listas_ganho": list(cfg.listas_ganho),
+        "client_secret": {"configurado": bool(segredo),
+                          "ultimos4": segredo[-4:] if len(segredo) >= 4 else None},
+        "webhook_secret": {"configurado": bool(webhook)},
         "configurado": cfg.configurado,
+        "webhook_urls": urls_do_webhook_growthhs(settings.FRONTEND_URL),
         "fila": {"pendentes": pendentes, "falhas": falhas,
                  "ultimas_falhas": [dict(l) for l in ultimas],
                  "pausada": ({"motivo": pausa["motivo"], "desde": pausa["desde"]}
@@ -864,60 +973,103 @@ async def _estado_growthhs() -> dict:
 async def ler_config_growthhs(_: Usuario = Depends(admin_atual)):
     """O que está configurado, e como anda a fila de entrega.
 
-    ⚠️ A chave NUNCA volta inteira — ela cria card no funil de vendas. As
-    falhas aparecem aqui porque falha de entrega é o tipo de coisa que ninguém
-    vê: o lead "foi para o comercial" e não foi."""
+    ⚠️ Nenhum segredo volta — o client_secret cria card no funil de vendas, o
+    do webhook marca reunião e venda. As falhas aparecem aqui porque falha de
+    entrega é o tipo de coisa que ninguém vê: o lead "foi para o comercial" e
+    não foi."""
     return await _estado_growthhs()
+
+
+# Colunas de growthhs_config que o PUT grava (só as que vieram no corpo).
+# ⚠️ `board_id` fica na tabela (o receptor desligado ainda lê), mas saiu da API.
+_COLUNAS_GROWTHHS = ("base_url", "app_url", "client_id", "list_id", "boards_conferidos",
+                     "listas_reuniao", "listas_ganho")
+# As de lista são NOT NULL na 029: `null` explícito no corpo é "não mexi".
+_COLUNAS_LISTA = ("boards_conferidos", "listas_reuniao", "listas_ganho")
 
 
 @router.put("/config/growthhs")
 async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(admin_atual)):
-    """Grava só o que veio; `limpar: ["api_key"]` apaga a chave."""
-    from app.crm import growthhs
-    from app.integracoes import apagar_segredo, gravar_segredo
+    """Grava só o que veio; `limpar: ["client_secret" | "webhook_secret"]`
+    apaga o segredo. Campo desconhecido em `limpar` → 400, antes de gravar
+    qualquer coisa."""
+    from app.integracoes import apagar_segredo
 
-    desconhecidos = [c for c in dados.limpar if c != "api_key"]
+    desconhecidos = [c for c in dados.limpar if c not in _SEGREDOS_GROWTHHS]
     if desconhecidos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Campos desconhecidos: {', '.join(desconhecidos)}")
-    if "api_key" in dados.limpar:
-        await apagar_segredo(growthhs.SEGREDO_CHAVE)
-    elif dados.api_key and dados.api_key.strip():
-        await gravar_segredo(growthhs.SEGREDO_CHAVE, dados.api_key.strip())
+    if dados.listas_reuniao is not None or dados.listas_ganho is not None:
+        # ⚠️ Revisão final (M4): a mesma lista em "reunião" e em "ganho" faria
+        # o webhook de volta marcar venda num card que só teve reunião (ou o
+        # contrário). Quando só uma vem no PUT, a outra é a salva. Antes de
+        # gravar qualquer coisa, segredo inclusive.
+        from app.crm import growthhs
 
-    campos = {c: v for c, v in dados.model_dump(exclude_unset=True).items()
-              if c in ("base_url", "board_id", "app_url")}
+        salvo = (await growthhs.ler_config()
+                 if dados.listas_reuniao is None or dados.listas_ganho is None else None)
+        reuniao = set(dados.listas_reuniao if dados.listas_reuniao is not None
+                      else salvo.listas_reuniao)
+        ganho = set(dados.listas_ganho if dados.listas_ganho is not None
+                    else salvo.listas_ganho)
+        if reuniao & ganho:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "A mesma lista não pode valer como reunião e como ganho: "
+                + ", ".join(str(i) for i in sorted(reuniao & ganho)))
+    for campo, nome in _SEGREDOS_GROWTHHS.items():
+        if campo in dados.limpar:
+            await apagar_segredo(nome)
+        elif getattr(dados, campo):
+            # Já vem sem espaço (validador) — o GrowthHS faz strip do dele.
+            await gravar_segredo(nome, getattr(dados, campo))
+
+    vindos = dados.model_dump(exclude_unset=True)
+    campos = {c: vindos[c] for c in _COLUNAS_GROWTHHS if c in vindos
+              and not (c in _COLUNAS_LISTA and vindos[c] is None)}
     if campos:
+        nomes = list(campos)
+        # Os nomes vêm da tupla fechada acima, nunca do corpo.
+        valores = ", ".join(f"${i + 2}" for i in range(len(nomes)))
+        atualiza = ", ".join(f"{c} = EXCLUDED.{c}" for c in nomes)
         async with sessao(role="service_role") as conn:
             await conn.execute(
-                """INSERT INTO growthhs_config (base_url, board_id, app_url, updated_by)
-                   VALUES ($1, $2, $3, $7::uuid)
-                   ON CONFLICT ((true)) DO UPDATE SET
-                     base_url   = CASE WHEN $4 THEN EXCLUDED.base_url ELSE growthhs_config.base_url END,
-                     board_id   = CASE WHEN $5 THEN EXCLUDED.board_id ELSE growthhs_config.board_id END,
-                     app_url    = CASE WHEN $6 THEN EXCLUDED.app_url ELSE growthhs_config.app_url END,
-                     updated_by = EXCLUDED.updated_by,
-                     updated_at = now()""",
-                campos.get("base_url"), campos.get("board_id"), campos.get("app_url"),
-                "base_url" in campos, "board_id" in campos, "app_url" in campos, admin.id)
+                f"""INSERT INTO growthhs_config ({', '.join(nomes)}, updated_by)
+                    VALUES ({valores}, $1::uuid)
+                    ON CONFLICT ((true)) DO UPDATE SET {atualiza},
+                      updated_by = EXCLUDED.updated_by, updated_at = now()""",
+                admin.id, *(campos[c] for c in nomes))
     return await _estado_growthhs()
 
 
 @router.post("/config/growthhs/testar")
 async def testar_config_growthhs(_: Usuario = Depends(admin_atual)):
-    """Confere que a API do GrowthHS responde. ⚠️ NÃO confere a chave
-    (decisão 10 do plano do 8D) — a tela diz isso."""
+    """Pede um token com a credencial SALVA (`client-credentials`, §1 do doc do
+    GrowthHS): 200 com token = credencial válida. É a mesma config que a fila
+    usa — testar a digitada na tela daria um "ok" que a fila não tem.
+
+    Recusa do GrowthHS (401 etc.) não é erro desta rota: 200 com
+    `valido: false`, o status e um detalhe curto. Fora do ar → 502.
+    ⚠️ Sem endereço, Client ID ou Client secret → 400 antes de chamar: o
+    cliente HTTP não monta URL sem `base_url`."""
     from app.crm import growthhs
 
     cfg = await growthhs.ler_config()
-    if not cfg.base_url:
+    if not (cfg.base_url and cfg.client_id and cfg.client_secret):
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Preencha o endereço da API do GrowthHS antes de testar.")
+                            "Salve o endereço da API, o Client ID e o Client secret "
+                            "antes de testar.")
     try:
-        codigo = await growthhs.testar(cfg)
+        await growthhs.testar(cfg)
+    except growthhs.ErroDefinitivo as erro:
+        # ⚠️ O detalhe é o que o GrowthHS respondeu — o segredo não vai no
+        # corpo de lá, mas corta mesmo assim: resposta de proxy pode ser uma
+        # página HTML inteira.
+        return {"valido": False, "status": erro.status,
+                "detalhe": str(erro)[:MAX_DETALHE_TESTE]}
     except growthhs.ErroTransitorio as erro:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(erro))
-    return {"alcancavel": codigo < 500, "status": codigo}
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(erro)[:MAX_DETALHE_TESTE])
+    return {"valido": True}
 
 
 @router.post("/config/growthhs/reenfileirar")
@@ -927,8 +1079,12 @@ async def reenfileirar_falhas_growthhs(_: Usuario = Depends(admin_atual)):
 
     Um pedido por lead (o mais recente), só de criar card — `mover` falharia
     de novo, pelo mesmo motivo —, só de lead que não foi apagado, não tem
-    entrega `entregue` e não tem pedido pendente (o índice único de pendente
-    recusaria o segundo). Tentativas zeradas, visível na hora."""
+    pedido pendente (o índice único de pendente recusaria o segundo) e não
+    foi entregue DEPOIS da falha — o mesmo critério de `_FALHA_EM_ABERTO`.
+    ⚠️ Revisão final (I2): excluir o lead com QUALQUER `entregue` deixava de
+    fora a falha de reconversão (entregue em setembro, converteu de novo,
+    falhou) — o painel contava a falha e o botão não a pegava. Tentativas
+    zeradas, visível na hora."""
     async with sessao(role="service_role") as conn:
         ids = await conn.fetch(
             """UPDATE crm_handoffs h
@@ -941,7 +1097,8 @@ async def reenfileirar_falhas_growthhs(_: Usuario = Depends(admin_atual)):
                          AND l.deleted_at IS NULL
                          AND NOT EXISTS (SELECT 1 FROM crm_handoffs e
                                           WHERE e.lead_id = f.lead_id AND e.acao = 'criar'
-                                            AND e.status IN ('entregue', 'pendente'))
+                                            AND (e.status = 'pendente'
+                                                 OR (e.status = 'entregue' AND e.id > f.id)))
                        ORDER BY f.lead_id, f.id DESC)
             RETURNING h.id""")
     return {"reenfileirados": len(ids)}
