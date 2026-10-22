@@ -21,7 +21,7 @@ from rodada import ENVIO
 # Duas suítes inteiras (duas frentes, ou a suíte e um arquivo solto) rodam ao
 # mesmo tempo contra o MESMO banco. O que um processo COMITA o outro vê — e
 # aí uma rodada derruba a outra: a configuração global que uma fixture troca e
-# devolve (`segredo`, `segredos_resend`, `config_ab`, `config_growthhs`), a
+# devolve (`segredo`, `segredos_resend`, `config_ab`), a
 # limpeza por prefixo (`limpar_ab`, tags, campanhas), a contagem da tabela
 # inteira (`test_conversao_authenticated`), o reenfileirar de TODAS as falhas
 # (`test_config_growthhs`). O levantamento de 01/10 achou dezenas desses; a
@@ -43,7 +43,7 @@ CHAVE_DA_TRAVA = 7_270_010_027  # "rodada de pytest do MarketingHS"
 # `item.fixturenames` já é o fecho transitivo).
 FIXTURES_QUE_COMITAM = frozenset({
     "cliente", "envio", "segredo", "segredos_resend", "config_ab",
-    "config_growthhs", "limpar_ab", "chave_de", "token_admin", "token_usuario",
+    "limpar_ab", "chave_de", "token_admin", "token_usuario",
 })
 
 
@@ -484,33 +484,3 @@ async def limpar_ab():
     await limpar()
     yield PREFIXO_AB
     await limpar()
-
-
-@pytest_asyncio.fixture
-async def config_growthhs():
-    """Põe `growthhs_config` num estado conhecido e devolve o que havia.
-
-    ⚠️ Linha única, de PRODUÇÃO — a que diz para onde vão os cards. A chave
-    (`GROWTHHS_API_KEY`) não passa por aqui: quem precisa grava e apaga com
-    `integracoes`, e devolve o que havia.
-    """
-    await db.init_db()
-    if db._pool is None:
-        pytest.skip("sem DATABASE_URL")
-    async with db.sessao(role="service_role") as conn:
-        antes = await conn.fetchrow(
-            "SELECT base_url, board_id, app_url FROM growthhs_config LIMIT 1")
-
-    async def gravar(base_url, board_id, app_url=None):
-        async with db.sessao(role="service_role") as conn:
-            await conn.execute("DELETE FROM growthhs_config")
-            if base_url is not None or board_id is not None or app_url is not None:
-                await conn.execute(
-                    "INSERT INTO growthhs_config (base_url, board_id, app_url) "
-                    "VALUES ($1, $2, $3)", base_url, board_id, app_url)
-
-    yield gravar
-    if antes:
-        await gravar(antes["base_url"], antes["board_id"], antes["app_url"])
-    else:
-        await gravar(None, None)

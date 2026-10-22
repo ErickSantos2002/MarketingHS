@@ -102,7 +102,10 @@ app.add_middleware(
     # `rastreio.js` manda uma por carregamento de página do site inteiro, e
     # dividir o balde com `/publico/captura` gastaria a cota do formulário.
     # A CONVERSÃO de site (`/publico/site/conversao`) fica no balde comum.
-    isentos=("/publico/webhook/", "/publico/validar-email",
+    # ⚠️ `/publico/growthhs/webhook` (a volta do CRM) também é isento: lá, um
+    # 429 conta como falha e 5 seguidas DESLIGAM a automação do GrowthHS. A
+    # rota se defende sozinha — HMAC, teto de corpo, janela de tempo.
+    isentos=("/publico/webhook/", "/publico/growthhs/webhook", "/publico/validar-email",
              "/publico/ab/go", "/publico/ab/eventos",
              "/publico/descadastro/um-clique", "/publico/site/visita"),
 )
