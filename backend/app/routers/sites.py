@@ -17,6 +17,7 @@ visita precisa de site OU página) — ver a pergunta no arquivo da frente.
 import re
 import secrets
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -146,7 +147,7 @@ async def criar(dados: SiteIn, usuario: Usuario = Depends(admin_atual)):
 
 
 @router.patch("/{site_id}")
-async def atualizar(site_id: str, dados: SitePatch, usuario: Usuario = Depends(admin_atual)):
+async def atualizar(site_id: UUID, dados: SitePatch, usuario: Usuario = Depends(admin_atual)):
     """⚠️ Os nomes de coluna saem das chaves DECLARADAS em `SitePatch`, nunca
     do corpo (molde de `paginas.py`)."""
     campos = dados.model_dump(exclude_unset=True)
@@ -160,7 +161,7 @@ async def atualizar(site_id: str, dados: SitePatch, usuario: Usuario = Depends(a
         linha = await conn.fetchrow(
             f"""UPDATE sites SET {atribuicoes}, atualizado_em = now()
                  WHERE id = $1::uuid RETURNING {COLUNAS}""",
-            site_id, *campos.values())
+            str(site_id), *campos.values())
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Site não encontrado.")
     _esquecer_caches()
@@ -168,14 +169,14 @@ async def atualizar(site_id: str, dados: SitePatch, usuario: Usuario = Depends(a
 
 
 @router.post("/{site_id}/token")
-async def rotacionar_token(site_id: str, usuario: Usuario = Depends(admin_atual)):
+async def rotacionar_token(site_id: UUID, usuario: Usuario = Depends(admin_atual)):
     """Token novo; o antigo deixa de valer (neste processo na hora; nos
     outros, em até 60 s do cache). O snippet do site precisa ser trocado."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"""UPDATE sites SET token = $2, atualizado_em = now()
                  WHERE id = $1::uuid RETURNING {COLUNAS}""",
-            site_id, _novo_token())
+            str(site_id), _novo_token())
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Site não encontrado.")
     _esquecer_caches()

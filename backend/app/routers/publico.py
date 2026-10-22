@@ -9,6 +9,7 @@ import hmac
 import json
 import logging
 import re
+from uuid import UUID
 
 import asyncpg
 
@@ -200,6 +201,14 @@ async def receber_evento(dados: EventoIn, _: ChaveApi = Depends(chave_api("write
     acertou a lista do banco; aqui o pattern do pydantic recusa cedo, com
     mensagem melhor.
     """
+    # `dnia_id` vai para `$1::uuid` nos dois caminhos: texto que não é uuid
+    # virava 500 (erro de cast do banco). É erro de quem chama → 400.
+    if dados.dnia_id is not None:
+        try:
+            dados.dnia_id = str(UUID(str(dados.dnia_id)))
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "dnia_id precisa ser um uuid.")
     if dados.source_app == "growthhs":
         return await _evento_do_growthhs(dados)
     if not any((dados.phone, dados.email, dados.dnia_id)):
@@ -268,14 +277,14 @@ async def _evento_do_growthhs(dados: EventoIn) -> dict:
     `agendamento` do teste A/B.
     """
     from app.crm.retorno import ESTAGIO_POR_EVENTO, avancar_status
-    from app.routers.api_contato import _lead_por_identificador
+    from app.routers.api_contato import lead_do_crm
 
     if not any((dados.lead_id, dados.email, dados.dnia_id)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "Informe lead_id, email ou dnia_id.")
     async with sessao(role="service_role") as conn:
-        lead = await _lead_por_identificador(
-            conn, dados.dnia_id, dados.email, None, lead_id=dados.lead_id)
+        lead = await lead_do_crm(conn, lead_id=dados.lead_id, email=dados.email,
+                                 dnia_id=dados.dnia_id)
         if lead is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
         lead_id, dnia_id = lead["id"], lead["dnia_id"]

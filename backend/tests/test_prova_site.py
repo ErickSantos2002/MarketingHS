@@ -126,6 +126,49 @@ async def test_tokens_inventados_nao_aumentam_o_cache(monkeypatch):
     assert len(rastreio._cache) == 0
 
 
+class _PedidoFalso:
+    """O mínimo de `Request` que `_ler_corpo` usa, contando o que foi lido."""
+
+    def __init__(self, cabecalhos, pedacos):
+        self.headers = cabecalhos
+        self._pedacos = pedacos
+        self.lidos = 0
+
+    async def body(self):
+        raise AssertionError("não pode ler o corpo inteiro de uma vez")
+
+    async def stream(self):
+        for pedaco in self._pedacos:
+            self.lidos += 1
+            yield pedaco
+
+
+async def test_corpo_recusado_pelo_content_length_sem_ler():
+    import fastapi
+    from app.routers import rastreio
+    pedido = _PedidoFalso({"content-length": str(16 * 1024 + 1)}, [b"{}"])
+    with pytest.raises(fastapi.HTTPException) as erro:
+        await rastreio._ler_corpo(pedido)
+    assert erro.value.status_code == 413 and pedido.lidos == 0
+    pedido = _PedidoFalso({"content-length": "abc"}, [b"{}"])
+    with pytest.raises(fastapi.HTTPException) as erro:
+        await rastreio._ler_corpo(pedido)
+    assert erro.value.status_code == 400
+
+
+async def test_corpo_sem_content_length_para_de_ler_no_teto():
+    import fastapi
+    from app.routers import rastreio
+    pedacos = [b"x" * 4096] * 100          # 400 KB se lesse tudo
+    pedido = _PedidoFalso({}, pedacos)
+    with pytest.raises(fastapi.HTTPException) as erro:
+        await rastreio._ler_corpo(pedido)
+    assert erro.value.status_code == 413
+    assert pedido.lidos == 5               # 5 × 4 KB = 20 KB > 16 KB: parou
+    pedido = _PedidoFalso({}, [b'{"a":', b' 1}'])
+    assert await rastreio._ler_corpo(pedido) == {"a": 1}
+
+
 async def test_cache_tem_teto_e_despeja_o_mais_antigo(monkeypatch):
     import secrets
     from app.routers import rastreio
@@ -369,6 +412,28 @@ async def test_visita_grava_canal_visitor_e_primeiro_toque(cliente, site):
     assert _json(v["primeiro_toque"])["referrer"] == "https://www.google.com/"
 
 
+async def test_visita_filtra_o_primeiro_toque(cliente, site):
+    """O `primeiro_toque` vem do cookie do visitante — é entrada anônima. Passa
+    pelo mesmo filtro do toque da conversão: só as chaves do script, UTMs da
+    lista, textos cortados."""
+    corpo = {"token": site, "visitor_id": VISITANTE, "url": ORIGEM, "utm": {},
+             "primeiro_toque": {"utm": {"utm_source": "google", "lixo": "x"},
+                                "gclid": "g" * 900, "referrer": "https://www.google.com/",
+                                "url": f"{ORIGEM}/a", "ts": "2026-10-21T10:00:00.000Z",
+                                "qualquer": {"coisa": "x" * 5000}}}
+    r = await _postar(cliente, "/publico/site/visita", corpo)
+    assert r.status_code == 202, r.text
+    async with db.sessao(role="service_role") as conn:
+        pt = _json(await conn.fetchval(
+            "SELECT primeiro_toque FROM visitas WHERE visitor_id = $1", VISITANTE))
+    assert set(pt) == {"utm", "gclid", "fbclid", "referrer", "url", "ts"}
+    assert pt["utm"] == {"utm_source": "google"}
+    assert len(pt["gclid"]) == 500 and pt["url"] == f"{ORIGEM}/a"
+    r = await _postar(cliente, "/publico/site/visita",
+                      {**corpo, "primeiro_toque": "não é objeto"})
+    assert r.status_code == 202
+
+
 async def test_visita_por_pagina_exige_origin_do_frontend(cliente, site):
     from app.config import settings
     corpo = {"pagina": SLUG, "visitor_id": VISITANTE, "url": f"{settings.FRONTEND_URL}/p/{SLUG}",
@@ -441,6 +506,16 @@ async def test_token_rotacionado_invalida_o_antigo(cliente, site, token_admin):
     assert novo != site and novo.startswith("pub_")
     assert (await _postar(cliente, "/publico/site/conversao", _conversao(site))).status_code == 403
     assert (await _postar(cliente, "/publico/site/conversao", _conversao(novo))).status_code == 202
+
+
+async def test_uuid_invalido_na_url_nao_e_500(cliente, token_admin):
+    cab = {"Authorization": f"Bearer {token_admin}"}
+    r = await cliente.patch("/sites/nao-e-uuid", headers=cab, json={"ativo": False})
+    assert r.status_code == 422, r.text
+    r = await cliente.post("/sites/nao-e-uuid/token", headers=cab)
+    assert r.status_code == 422, r.text
+    r = await cliente.post("/sites/00000000-0000-0000-0000-000000000000/token", headers=cab)
+    assert r.status_code == 404
 
 
 async def test_recebido_desligado_da_404(cliente, monkeypatch):

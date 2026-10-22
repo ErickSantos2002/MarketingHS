@@ -323,8 +323,10 @@ leva 403.
 ```
 
 - O lead é achado por `lead_id` (o `external_id` que o MarketingHS mandou no
-  card), depois `email`, depois `dnia_id`. Um dos três é obrigatório (400);
-  nenhum casa → **404** (o MarketingHS não cria contato a partir do CRM).
+  card), depois `email`, depois `dnia_id` — cada um só é tentado se o
+  anterior não achou ninguém: um `lead_id` que não existe mais cai para o
+  e-mail. Mande os que tiver. Um dos três é obrigatório (400); nenhum casa →
+  **404** (o MarketingHS não cria contato a partir do CRM).
 - `occurred_at` (ISO 8601) e `description` são opcionais.
 
 Resposta `200`:
