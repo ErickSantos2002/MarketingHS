@@ -69,7 +69,7 @@ function AdminLayoutInner() {
   // Rotas que não filtram leads: Contatos tem o próprio painel unificado;
   // Templates edita conteúdo de email; Segmentos e Campanhas definem a
   // própria audiência (regras do segmento), não a do dashboard.
-  const HIDE_GLOBAL_FILTERS = ['/contacts', '/templates', '/segments', '/campaigns', '/settings', '/automations', '/experiments'];
+  const HIDE_GLOBAL_FILTERS = ['/contacts', '/templates', '/segments', '/campaigns', '/settings', '/automations', '/experiments', '/pages'];
   const hideGlobalFilters = HIDE_GLOBAL_FILTERS.some((p) => location.pathname.startsWith(p));
 
   const titulo = tituloDaRota(location.pathname);
