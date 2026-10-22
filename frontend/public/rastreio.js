@@ -5,6 +5,9 @@
  *   <script src="https://<app>/rastreio.js" async data-token="pub_…" data-api="https://<app>/api"></script>
  * Na landing do próprio MarketingHS a casca põe:
  *   <script src="/rastreio.js" defer data-pagina="<slug>" data-api="/api" data-captura="off"></script>
+ * (a prévia do editor de páginas abre a landing com `?previa=1`: a casca nem
+ * põe o script, e se ele vier mesmo assim, na landing com `?previa=1` não
+ * registra visita — quem edita não é visitante.)
  *
  * O que faz (JS puro, sem dependência):
  *  - Registra UMA visita por carregamento em POST <api>/publico/site/visita
@@ -247,7 +250,10 @@
       primeiro_toque: primeiro,
     };
     if (token) visita.token = token; else visita.pagina = pagina;
-    mandar(api + '/publico/site/visita', visita);
+    var previa = false;
+    try { previa = !token && new URL(href).searchParams.get('previa') === '1'; } catch (e) { /* nada */ }
+    if (previa) log('prévia do editor: sem visita');
+    else mandar(api + '/publico/site/visita', visita);
 
     if (!captura) return;
 

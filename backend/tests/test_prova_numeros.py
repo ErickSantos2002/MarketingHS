@@ -189,6 +189,23 @@ async def test_casca_carrega_rastreio_com_a_pagina(cliente, semeado):
             'data-captura="off"></script>') in corpo
 
 
+async def test_casca_da_previa_nao_carrega_rastreio(cliente, semeado):
+    # A2: a prévia do editor (`?previa=1`) não conta visita.
+    from app.routers import landing
+    await _casca(cliente, {})
+    landing._limpar_cache()
+    r = await cliente.get(f"/p/{SLUG}?previa=1")
+    assert r.status_code == 200
+    assert "rastreio.js" not in r.text
+    assert 'id="config-da-pagina"' in r.text
+
+
+def test_montar_casca_previa_sem_rastreio():
+    from app.routers.landing import montar_casca
+    assert "rastreio.js" in montar_casca("x", {})
+    assert "rastreio.js" not in montar_casca("x", {}, previa=True)
+
+
 def test_casca_escapa_o_slug_do_rastreio():
     from app.routers.landing import montar_casca
     corpo = montar_casca('a"><script>x</script>', {})

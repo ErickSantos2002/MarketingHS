@@ -129,7 +129,7 @@ def _json_seguro(dados: dict) -> str:
                  .replace("&", "\\u0026"))
 
 
-def montar_casca(slug: str, config: dict) -> str:
+def montar_casca(slug: str, config: dict, *, previa: bool = False) -> str:
     """⚠️ Todo valor que sai daqui veio de campo EDITÁVEL na tela de Páginas.
     `html.escape(..., quote=True)` em tudo — inclusive, e principalmente, no que
     vai dentro de atributo, que é onde as `og:*` vivem."""
@@ -146,6 +146,12 @@ def montar_casca(slug: str, config: dict) -> str:
     # caminho do site (`javascript:` no link da política) sai aqui, mesmo
     # se já estava gravada antes da regra de `paginas.py`.
     config = config_com_urls_seguras(config)
+    # A prévia do editor de páginas (`?previa=1`) não carrega o `rastreio.js`:
+    # quem edita a página não é visitante (achado da prova, 22/10). A
+    # conversão pela prévia continua possível — o formulário é o mesmo.
+    rastreio = ("" if previa else
+                f'<script src="/rastreio.js" defer data-pagina="{slug_seguro}" '
+                'data-api="/api" data-captura="off"></script>\n')
 
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -164,8 +170,7 @@ def montar_casca(slug: str, config: dict) -> str:
 <div id="landing" data-slug="{slug_seguro}"></div>
 <script type="application/json" id="config-da-pagina">{_json_seguro(config)}</script>
 <script type="module" src="/landing/main.js"></script>
-<script src="/rastreio.js" defer data-pagina="{slug_seguro}" data-api="/api" data-captura="off"></script>
-</body>
+{rastreio}</body>
 </html>"""
 
 
@@ -185,8 +190,8 @@ _HTML_404 = """<!doctype html>
 
 
 @router.get("/p/{slug}", response_class=HTMLResponse)
-async def landing(slug: str):
+async def landing(slug: str, previa: str | None = None):
     config = await _config_da_pagina(slug)
     if config is None:
         return HTMLResponse(_HTML_404, status_code=404)
-    return HTMLResponse(montar_casca(slug, config))
+    return HTMLResponse(montar_casca(slug, config, previa=previa == "1"))

@@ -619,7 +619,7 @@ export default function PageConfigEditor() {
             {hasRoute ? (
               <iframe
                 ref={iframeRef}
-                src={caminhoDaLanding(page.slug)}
+                src={`${caminhoDaLanding(page.slug)}?previa=1`}
                 className="w-full border-0"
                 style={{ height: '520px' }}
                 title="Preview"

@@ -372,6 +372,19 @@ test("instalado duas vezes não escuta duas vezes", () => {
   assert.equal(visitas(nav).length, 1);
 });
 
+test("prévia do editor (?previa=1) na landing não registra visita", () => {
+  const nav = rodar(navegador({
+    dados: { pagina: "phoebus-prova", api: "/api", captura: "off" },
+    url: "https://marketinghs.exemplo.com/p/phoebus-prova?previa=1",
+  }));
+  assert.equal(visitas(nav).length, 0);
+});
+
+test("previa=1 num site de fora (token) não desliga a visita", () => {
+  const nav = rodar(navegador({ url: "https://site.exemplo.com.br/phoebus.cfm?previa=1" }));
+  assert.equal(visitas(nav).length, 1);
+});
+
 test("site-teste tem prova_cap_phoebus com os names do site", () => {
   const html = readFileSync(SITE_TESTE, "utf8");
   const cap = /<form[^>]*id="prova_cap_phoebus"[^>]*>([\s\S]*?)<\/form>/.exec(html);
