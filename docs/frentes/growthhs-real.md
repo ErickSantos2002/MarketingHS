@@ -13,6 +13,13 @@ leitura). Branch `worktree-agent-a2ad3dda1ef7391df` (subagente com worktree).
 - [x] Tarefa 4 — receptor do webhook de volta (`ea5d015`, `536aaa1`)
 - [x] Tarefa 5 — rota e tela de configuração (`f07f0a5`, `b43771a`)
 - [x] Bloco "substituído" no topo do contrato antigo (`63fef7d`)
+- [x] Revisão final da branch: 3 importantes e 5 menores corrigidos
+  (`04f5c8b`, `b7273ca`, `a67a4ff`) — erro no `client-credentials` (qualquer
+  status) e URL inválida pausam a fila; reenfileirar pega falha de
+  reconversão; worker sem `somente_lead` ignora lead de teste
+  (`tipo='teste'` com e-mail nulo ou `@exemplo.invalid`); teto do webhook
+  512 KB; folga de 5 min no reconhecimento; listas de reunião e ganho sem id
+  em comum; URL sem query e com porta válida.
 - Cada tarefa passou por revisão; quatro rodadas de correção de segurança
   pedidas pela coordenadora entraram (ver abaixo).
 - **A 029 NÃO foi aplicada.** Ela precisa entrar ANTES do deploy (ver "Para a
@@ -128,3 +135,26 @@ do receptor para copiar. "Testar" = `client-credentials`.
    duplicada no GrowthHS (telefone não é único lá). Risco baixo.
 7. **Nota duplicada** se a resposta do `POST /card-notes` se perder (não é
    idempotente). Aceito.
+8. **Lead real com `tipo='teste'` só com telefone** (possível pelo
+   `/publico/identidade`, `IdentidadeIn.source_app` sem `pattern`) ficaria
+   pendente para sempre (o worker ignora lead de teste), visível só como
+   número em `fila.pendentes`. Teórico. Saída: validar `source_app` contra
+   `SOURCE_APPS` (fora do meu território).
+9. **Erro no `client-credentials` agora pausa** (3xx, 405, 400 inclusive) em
+   vez de falhar pedido a pedido: aparece em `fila.pausada`, de 10 em 10 min.
+10. **E-mail gigante** que o httpx recuse na URL da busca viraria "URL
+    inválida" e pausaria a fila. Teórico (nada limita o tamanho do e-mail na
+    captura).
+
+## Antes de LIGAR (checklist da virada, não do merge)
+
+1. 029 aplicada (dono do banco), duas vezes.
+2. Script de limpeza dos ids do receptor de teste: zerar
+   `crm_handoffs.card_id/person_id` e `ecosystem_identities.growthhs_card_id/
+   growthhs_person_id` gravados na prova (21–22/10); `crm_handoffs.erro`
+   antigos com corpo cru. Sem isso, "Ver no GrowthHS" aponta card de outra
+   pessoa (a entrega só preenche identidade vazia, nunca corrige).
+3. `/publico/growthhs/webhook` fora do balde de 30/min (`main.py`).
+4. Remover `config_growthhs` do `conftest.py` (apagaria as colunas novas da
+   linha real se alguém a usar).
+5. Na homologação: `listas_reuniao`/`listas_ganho` com os ids de lá.
