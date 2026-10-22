@@ -15,6 +15,7 @@ import hmac
 import itertools
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -45,13 +46,19 @@ def _assinar(corpo: bytes, segredo: str = SEGREDO) -> str:
     return "sha256=" + hmac.new(segredo.encode(), corpo, hashlib.sha256).hexdigest()
 
 
-def _corpo(card_id=CARD, email=None, **extra_card) -> bytes:
-    card = {"id": card_id, "title": "Card de teste", "list_id": 28,
-            "list_name": "Reunião Agendada", "board_id": 7,
+def _agora(**delta) -> str:
+    """Como o GrowthHS escreve: `utcnow().isoformat() + "Z"`."""
+    return (datetime.now(timezone.utc) + timedelta(**delta)).replace(
+        tzinfo=None).isoformat() + "Z"
+
+
+def _corpo(card_id=CARD, email=None, *, lista=28, timestamp=None,
+           event="card.list_changed", **extra_card) -> bytes:
+    card = {"id": card_id, "title": "Card de teste", "list_id": lista,
+            "list_name": "Reunião Agendada" if lista == 28 else "Ganho", "board_id": 7,
             "person": {"id": 1180, "name": "Sonda", "email": email}}
     card.update(extra_card)
-    payload = {"event": "card.list_changed", "timestamp": "2026-10-22T13:00:00Z",
-               "card": card}
+    payload = {"event": event, "timestamp": timestamp or _agora(), "card": card}
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
 
 
@@ -124,6 +131,11 @@ async def test_assinatura_errada_ou_ausente_401(cliente, com_segredo):
     assert r.status_code == 401
     r = await _postar(cliente, corpo, assinatura="sha256=nao-e-hex")
     assert r.status_code == 401
+    # Não-ASCII: `compare_digest` em str levantava TypeError → 500.
+    r = await _postar(cliente, corpo, assinatura="sha256=é".encode())
+    assert r.status_code == 401
+    assert volta.assinatura_confere(corpo, SEGREDO, "sha256=é") is False
+    assert volta.assinatura_confere(corpo, SEGREDO, "sha256=" + "é" * 64) is False
     # Hex certo sem o prefixo também não vale.
     r = await _postar(cliente, corpo, assinatura=_assinar(corpo)[len("sha256="):])
     assert r.status_code == 401
@@ -163,14 +175,15 @@ async def test_reuniao_pelo_card_id_avanca_para_mql(cliente, com_segredo):
     assert meta["card_id"] == CARD and meta["via"] == "webhook"
     assert meta["list_id"] == 28 and meta["list_name"] == "Reunião Agendada"
     assert meta["board_id"] == 7 and meta["evento_growthhs"] == "card.list_changed"
+    assert meta["timestamp_growthhs"]
     assert len(await _eventos(conn, lead_id, "contact_updated")) == 1
 
 
 async def test_venda_pelo_email_da_pessoa(cliente, com_segredo):
     conn = await com_segredo()
     lead_id, email = await _lead(conn, handoff=False)
-    r = await _postar(cliente, _corpo(card_id=987_654_321_012, email=email.upper()),
-                      evento="deal_won")
+    r = await _postar(cliente, _corpo(card_id=987_654_321_012, email=email.upper(),
+                                      lista=32), evento="deal_won")
     assert r.status_code == 200, r.text
     assert r.json()["status_atual"] == VENDA and r.json()["mudou"] is True
     assert await _status(conn, lead_id) == VENDA
@@ -210,16 +223,18 @@ async def test_evento_desconhecido_200_ignorado(cliente, com_segredo):
     for evento in ("card_lost", ""):
         r = await _postar(cliente, _corpo(email=email), evento=evento)
         assert r.status_code == 200 and r.json() == {"ignorado": True}
-    r = await cliente.post(ROTA, content=_corpo(email=email),
-                           headers={"X-HSGrowth-Signature": _assinar(_corpo(email=email)),
-                                    **_ip()})
+    corpo = _corpo(email=email)
+    r = await cliente.post(ROTA, content=corpo,
+                           headers={"X-HSGrowth-Signature": _assinar(corpo), **_ip()})
     assert r.status_code == 200 and r.json() == {"ignorado": True}
     assert await _status(conn, lead_id) == "Lead"
 
 
 async def test_json_invalido_assinado_200_ignorado(cliente, com_segredo):
     await com_segredo()
-    for corpo in (b"{nao e json", b"", b"[1,2]", "\xff".encode("latin-1")):
+    # O último estoura o parser com RecursionError (aninhamento), dentro dos 64 KB.
+    for corpo in (b"{nao e json", b"", b"[1,2]", "\xff".encode("latin-1"),
+                  b"[" * 60_000):
         r = await _postar(cliente, corpo)
         assert r.status_code == 200 and r.json() == {"ignorado": True}, corpo
 
@@ -238,7 +253,8 @@ async def test_card_id_com_email_diferente_cai_para_o_email(cliente, com_segredo
     assert await _status(conn, velho) == "Lead"
 
     # E sem lead com aquele e-mail: ignorado, nunca o lead do handoff.
-    r = await _postar(cliente, _corpo(email="outra-pessoa-webhook@exemplo.invalid"))
+    r = await _postar(cliente, _corpo(email="outra-pessoa-webhook@exemplo.invalid",
+                                      timestamp=_agora(seconds=1)))
     assert r.status_code == 200 and r.json() == {"ignorado": True}
     assert await _status(conn, velho) == "Lead"
 
@@ -281,8 +297,8 @@ async def test_assinatura_sobre_bytes_crus(cliente, com_segredo):
     outros espaços ou com acento escapado) mudaria o HMAC."""
     conn = await com_segredo()
     lead_id, email = await _lead(conn)
-    payload = {"event": "card.list_changed",
-               "card": {"id": CARD, "title": "Reunião — São Paulo",
+    payload = {"event": "card.list_changed", "timestamp": _agora(),
+               "card": {"id": CARD, "title": "Reunião — São Paulo", "list_id": 28,
                         "person": {"email": email, "name": "João Ação"}}}
     corpo = json.dumps(payload, ensure_ascii=False, indent=2).encode()
     assert corpo != json.dumps(json.loads(corpo), ensure_ascii=False,
@@ -290,3 +306,83 @@ async def test_assinatura_sobre_bytes_crus(cliente, com_segredo):
     r = await _postar(cliente, corpo)
     assert r.status_code == 200, r.text
     assert r.json()["lead_id"] == lead_id
+
+
+# --- Rodada de correção 1: o evento amarrado ao corpo assinado, e replay ---
+
+
+async def test_reuniao_em_lista_que_nao_e_de_reuniao_ignorado(cliente, com_segredo):
+    conn = await com_segredo()
+    lead_id, email = await _lead(conn)
+    r = await _postar(cliente, _corpo(email=email, lista=99))
+    assert r.status_code == 200 and r.json() == {"ignorado": True}
+    assert await _status(conn, lead_id) == "Lead"
+
+
+async def test_corpo_de_reuniao_com_evento_de_venda_ignorado(cliente, com_segredo):
+    """O `?evento=` não é assinado: o corpo de reunião (lista 28) reenviado
+    com `?evento=deal_won` não pode marcar venda."""
+    conn = await com_segredo()
+    lead_id, email = await _lead(conn)
+    r = await _postar(cliente, _corpo(email=email, lista=28), evento="deal_won")
+    assert r.status_code == 200 and r.json() == {"ignorado": True}
+    assert await _status(conn, lead_id) == "Lead"
+    assert await _eventos(conn, lead_id, "deal_won") == []
+    # E o contrário: corpo da lista de ganho com `?evento=meeting_scheduled`.
+    r = await _postar(cliente, _corpo(email=email, lista=32))
+    assert r.status_code == 200 and r.json() == {"ignorado": True}
+    assert await _status(conn, lead_id) == "Lead"
+
+
+async def test_listas_vem_da_config(cliente, com_segredo):
+    conn = await com_segredo()
+    await conn.execute("DELETE FROM growthhs_config")
+    await conn.execute(
+        """INSERT INTO growthhs_config (base_url, listas_reuniao, listas_ganho)
+           VALUES ('https://g.exemplo.invalid', '{40}', '{41}')""")
+    lead_id, email = await _lead(conn)
+    r = await _postar(cliente, _corpo(email=email, lista=28))
+    assert r.json() == {"ignorado": True}
+    r = await _postar(cliente, _corpo(email=email, lista=40))
+    assert r.json()["status_atual"] == MQL
+    r = await _postar(cliente, _corpo(email=email, lista=41), evento="deal_won")
+    assert r.json()["status_atual"] == VENDA
+
+
+async def test_event_diferente_ignorado(cliente, com_segredo):
+    conn = await com_segredo()
+    lead_id, email = await _lead(conn)
+    for event in ("card.created", ""):
+        r = await _postar(cliente, _corpo(email=email, event=event))
+        assert r.status_code == 200 and r.json() == {"ignorado": True}, event
+    assert await _status(conn, lead_id) == "Lead"
+
+
+async def test_timestamp_fora_da_janela_ignorado(cliente, com_segredo):
+    conn = await com_segredo()
+    lead_id, email = await _lead(conn)
+    for ts in (_agora(minutes=-11), _agora(minutes=11), "ontem", "   "):
+        r = await _postar(cliente, _corpo(email=email, timestamp=ts))
+        assert r.status_code == 200 and r.json() == {"ignorado": True}, ts
+    # Sem `timestamp` nenhum.
+    payload = json.loads(_corpo(email=email))
+    del payload["timestamp"]
+    r = await _postar(cliente, json.dumps(payload).encode())
+    assert r.json() == {"ignorado": True}
+    assert await _status(conn, lead_id) == "Lead"
+    # Sem fuso é UTC: dentro da janela, vale.
+    sem_fuso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    r = await _postar(cliente, _corpo(email=email, timestamp=sem_fuso))
+    assert r.json()["status_atual"] == MQL
+
+
+async def test_mesmo_corpo_duas_vezes_repetido(cliente, com_segredo):
+    conn = await com_segredo()
+    lead_id, email = await _lead(conn)
+    corpo = _corpo(email=email)
+    r = await _postar(cliente, corpo)
+    assert r.json()["mudou"] is True
+    r = await _postar(cliente, corpo)
+    assert r.status_code == 200
+    assert r.json() == {"ignorado": True, "repetido": True}
+    assert len(await _eventos(conn, lead_id, "meeting_scheduled")) == 1

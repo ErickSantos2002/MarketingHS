@@ -380,15 +380,19 @@ async def webhook_do_growthhs(request: Request,
         return {"ignorado": True}
     try:
         payload = json.loads(corpo)
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        # `RecursionError`: 64 KB de `[[[[...` aninhado estoura o parser.
         return {"ignorado": True}
     if not isinstance(payload, dict):
         return {"ignorado": True}
     try:
+        # A config ANTES da transação: `ler_config` abre a própria sessão, e
+        # dentro dela seriam duas conexões da pool por webhook.
+        cfg = await growthhs.ler_config()
         # Transação curta, na hora: o envio de lá é síncrono (o vendedor que
         # arrastou o card espera) e tem 10 s de timeout.
         async with sessao(role="service_role") as conn:
-            return await volta.aplicar(conn, evento, payload)
+            return await volta.aplicar(conn, evento, payload, cfg=cfg)
     except Exception:
         logger.exception("webhook do GrowthHS: evento %s não aplicado", evento)
         return {"erro": True}

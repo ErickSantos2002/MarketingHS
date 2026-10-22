@@ -61,6 +61,10 @@ MAX_VALOR_EXTRA = 500
 VALIDADE_PADRAO_TOKEN = 8 * 3600
 FOLGA_TOKEN = 5 * 60
 CAMPOS_EMAIL = ("email", "email_commercial", "email_personal", "email_alternative")
+# Produção do GrowthHS: "Reunião Agendada" é a lista 28; ganhar o card o MOVE
+# para a lista de ganho (is_done_stage), a 32. São os padrões da 029.
+LISTAS_REUNIAO_PADRAO = (28,)
+LISTAS_GANHO_PADRAO = (32,)
 
 
 @dataclass(frozen=True)
@@ -71,6 +75,10 @@ class Config:
     list_id: int | None
     boards_conferidos: tuple[int, ...]
     app_url: str | None
+    # As listas que o webhook de volta exige no corpo assinado (migration 029).
+    # Com padrão: quem constrói `Config` à mão (testes, entrega) não muda.
+    listas_reuniao: tuple[int, ...] = LISTAS_REUNIAO_PADRAO
+    listas_ganho: tuple[int, ...] = LISTAS_GANHO_PADRAO
 
     @property
     def configurado(self) -> bool:
@@ -95,7 +103,8 @@ async def ler_config() -> Config:
         async with sessao(role="service_role") as conn:
             linha = await conn.fetchrow(
                 """SELECT base_url, client_id, list_id, boards_conferidos,
-                          app_url FROM growthhs_config LIMIT 1""")
+                          app_url, listas_reuniao, listas_ganho
+                     FROM growthhs_config LIMIT 1""")
     except Exception:
         logger.exception("[growthhs] não foi possível ler growthhs_config")
         linha = None
@@ -105,7 +114,13 @@ async def ler_config() -> Config:
         client_secret=await ler_segredo(SEGREDO_CLIENTE),
         list_id=linha["list_id"] if linha else None,
         boards_conferidos=tuple(linha["boards_conferidos"] or ()) if linha else (),
-        app_url=linha["app_url"] if linha else None)
+        app_url=linha["app_url"] if linha else None,
+        listas_reuniao=(tuple(linha["listas_reuniao"]) if linha
+                        and linha["listas_reuniao"] is not None
+                        else LISTAS_REUNIAO_PADRAO),
+        listas_ganho=(tuple(linha["listas_ganho"]) if linha
+                      and linha["listas_ganho"] is not None
+                      else LISTAS_GANHO_PADRAO))
 
 
 def normalizar_faturamento(valor: str | None) -> str | None:

@@ -33,6 +33,13 @@ async def test_029_reaplicavel(conexao):
     assert tipos["client_id"][0] == "text"
     assert tipos["list_id"][0] == "bigint"
     assert tipos["boards_conferidos"][1] == "_int8"
+    assert tipos["listas_reuniao"][1] == "_int8"
+    assert tipos["listas_ganho"][1] == "_int8"
+    # Linha nova nasce com as listas de produção (28 reunião, 32 ganho).
+    await conexao.execute("INSERT INTO pg_temp.growthhs_config_prova (base_url) VALUES ('x')")
+    linha = await conexao.fetchrow(
+        "SELECT listas_reuniao, listas_ganho FROM pg_temp.growthhs_config_prova")
+    assert (linha["listas_reuniao"], linha["listas_ganho"]) == ([28], [32])
     assert "board_id" in tipos
 
 
@@ -54,6 +61,19 @@ async def test_ler_config_le_colunas_novas_e_segredo(banco_growthhs):
         client_secret="segredo-x", list_id=22, boards_conferidos=(6, 7),
         app_url="https://app.exemplo.invalid")
     assert cfg.configurado is True
+
+
+async def test_ler_config_listas_do_webhook(banco_growthhs):
+    conn = banco_growthhs
+    await conn.execute("DELETE FROM growthhs_config")
+    cfg = await growthhs.ler_config()
+    # Sem linha de config: os padrões de produção, nunca "nenhuma lista".
+    assert (cfg.listas_reuniao, cfg.listas_ganho) == ((28,), (32,))
+    await conn.execute(
+        """INSERT INTO growthhs_config (base_url, listas_reuniao, listas_ganho)
+           VALUES ('https://g.exemplo.invalid', '{28,40}', '{32,41}')""")
+    cfg = await growthhs.ler_config()
+    assert (cfg.listas_reuniao, cfg.listas_ganho) == ((28, 40), (32, 41))
 
 
 @pytest.mark.parametrize("campo", ["base_url", "client_id", "client_secret",

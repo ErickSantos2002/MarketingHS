@@ -10,6 +10,12 @@
 -- • list_id: a etapa (lista) de entrada onde o card nasce.
 -- • boards_conferidos: os funis onde se procura card aberto da pessoa antes de
 --   criar outro (card aberto é atualizado, não duplicado).
+-- • listas_reuniao / listas_ganho: as listas do GrowthHS que provam, DENTRO do
+--   corpo assinado do webhook de volta, que o card foi para "Reunião
+--   Agendada" (28) ou para a lista de ganho (32, is_done_stage).
+--   ⚠️ O `?evento=` da URL não é coberto pela assinatura: sem conferir a
+--   lista, um corpo assinado de reunião reenviado com `?evento=deal_won`
+--   marcaria venda.
 --
 -- ⚠️ `board_id` FICA. O receptor desligado e o worker de produção (código da
 -- main) ainda o leem; tirar a coluna derrubaria a leitura da config.
@@ -19,4 +25,6 @@
 ALTER TABLE public.growthhs_config
     ADD COLUMN IF NOT EXISTS client_id         text,
     ADD COLUMN IF NOT EXISTS list_id           bigint,
-    ADD COLUMN IF NOT EXISTS boards_conferidos bigint[] NOT NULL DEFAULT '{}';
+    ADD COLUMN IF NOT EXISTS boards_conferidos bigint[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS listas_reuniao    bigint[] NOT NULL DEFAULT '{28}',
+    ADD COLUMN IF NOT EXISTS listas_ganho      bigint[] NOT NULL DEFAULT '{32}';

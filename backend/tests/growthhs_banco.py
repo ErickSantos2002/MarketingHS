@@ -41,7 +41,7 @@ async def aplicar_029(conexao):
     ja_tem = await conexao.fetchval(
         """SELECT EXISTS (SELECT 1 FROM pg_attribute
             WHERE attrelid = to_regclass('public.growthhs_config')
-              AND attname = 'client_id' AND NOT attisdropped)""")
+              AND attname = 'listas_ganho' AND NOT attisdropped)""")
     if ja_tem:
         return False
     await conexao.execute(
