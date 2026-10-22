@@ -599,6 +599,40 @@ def test_texto_do_erro_sem_corpo(resposta, esperado):
     assert growthhs.texto_do_erro(resposta) == esperado
 
 
+@pytest.mark.parametrize("codigo", [308, 405, 400, 422, 401])
+async def test_erro_do_token_e_sempre_de_configuracao(codigo):
+    """I1 da revisão final: o pedido de token não depende do lead — todo erro
+    definitivo dele é configuração (a entrega pausa). O mesmo status numa
+    chamada de dado (aqui, `ler_card`) NÃO é."""
+    api = Api({TOKEN: [httpx.Response(codigo, json={"detail": "x"})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroDefinitivo) as erro:
+            await cli.ler_card(1)
+    assert erro.value.status == codigo and erro.value.de_configuracao is True
+
+    api = Api({("GET", "/api/v1/cards/1"): [httpx.Response(400, json={"detail": "x"})]})
+    growthhs.limpar_tokens()
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroDefinitivo) as erro:
+            await cli.ler_card(1)
+    assert erro.value.status == 400 and erro.value.de_configuracao is False
+
+
+async def test_url_invalida_e_erro_de_configuracao_sem_a_url():
+    cfg = Config(base_url="https://growthhs.exemplo.invalid:porta", client_id="hsg",
+                 client_secret="segredo-teste", list_id=22, boards_conferidos=(6,),
+                 app_url=None)
+    async with Cliente(cfg, transporte=Api({}).transporte()) as cli:
+        with pytest.raises(ErroDefinitivo) as erro:
+            await cli.ler_card(1)
+    assert erro.value.de_configuracao is True and "porta" not in str(erro.value)
+
+
+def test_texto_do_3xx_diz_para_usar_o_endereco_final():
+    assert growthhs.texto_do_erro(httpx.Response(308)) == (
+        "308: o endereço redireciona — use o endereço final, com https://")
+
+
 async def test_sem_resposta_nao_ecoa_o_texto_do_httpx():
     def quebra(request):
         raise httpx.ConnectError(f"falhou {request.url} segredo-interno")

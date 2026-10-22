@@ -169,11 +169,20 @@ class ErroDefinitivo(Exception):
 
     `status` viaja no erro (revisão final do 8D, I3): 401/403/404 são
     configuração — a mesma para todos os pedidos — e pausam a fila; 422 é o
-    corpo daquele lead e falha só o pedido dele."""
+    corpo daquele lead e falha só o pedido dele.
 
-    def __init__(self, detalhe: str, status: int | None = None):
+    `de_configuracao` (revisão final da growthhs-real, I1): o erro não
+    depende do lead — nasceu no `client-credentials` (qualquer status: um
+    301/308 do proxy http→https, um 405, um 400 são o endereço ou a
+    credencial, iguais para todos os pedidos) ou numa URL que o httpx nem
+    monta. A entrega PAUSA nesse caso, como no 401/403/404; tratá-lo como
+    defeito do lead derrubaria a fila inteira, pedido por pedido."""
+
+    def __init__(self, detalhe: str, status: int | None = None, *,
+                 de_configuracao: bool = False):
         super().__init__(detalhe)
         self.status = status
+        self.de_configuracao = de_configuracao
 
 
 class ErroTransitorio(Exception):
@@ -453,6 +462,9 @@ MENSAGENS_POR_STATUS = {
     422: "o GrowthHS recusou os dados do contato",
 }
 MENSAGEM_FORA_DO_AR = "GrowthHS fora do ar ou ocupado"
+# 3xx: o httpx não segue redirecionamento — o caso real é o proxy mandando
+# http → https. A mensagem diz o que corrigir na tela.
+MENSAGEM_REDIRECIONA = "o endereço redireciona — use o endereço final, com https://"
 MAX_DETAIL = 200
 
 
@@ -480,6 +492,8 @@ def texto_do_erro(resposta: httpx.Response) -> str:
     codigo = resposta.status_code
     if codigo >= 500 or codigo == 429:
         mensagem = MENSAGEM_FORA_DO_AR
+    elif 300 <= codigo < 400:
+        mensagem = MENSAGEM_REDIRECIONA
     else:
         mensagem = MENSAGENS_POR_STATUS.get(codigo, MENSAGENS_POR_STATUS[400])
     detail = _detail_da_resposta(resposta)
@@ -543,6 +557,14 @@ class Cliente:
     async def _enviar(self, metodo: str, url: str, **kw) -> httpx.Response:
         try:
             return await self._http.request(metodo, url, **kw)
+        except (httpx.InvalidURL, httpx.UnsupportedProtocol) as erro:
+            # ⚠️ Endereço que o httpx nem monta (porta inválida, esquema sem
+            # suporte) é configuração, não rede nem defeito interno: pausa a
+            # fila (I1 da revisão final). `InvalidURL` nem é `HTTPError` — sem
+            # este ramo, virava "defeito interno" e esgotava as tentativas.
+            raise ErroDefinitivo(
+                f"endereço da API do GrowthHS inválido ({type(erro).__name__})",
+                de_configuracao=True) from erro
         except httpx.HTTPError as erro:
             # ⚠️ Só o nome da classe: o texto do httpx pode trazer a URL.
             raise ErroTransitorio(
@@ -558,7 +580,15 @@ class Cliente:
             "POST", self._url(CAMINHO_TOKEN),
             json={"client_id": self.cfg.client_id, "client_secret": self.cfg.client_secret,
                   "grant_type": "client_credentials"})
-        _classificar(resposta)
+        try:
+            _classificar(resposta)
+        except ErroDefinitivo as erro:
+            # ⚠️ I1 da revisão final: o pedido de token não leva nada do lead
+            # — todo não-2xx definitivo aqui é configuração (308 do proxy
+            # http→https, 405 de endereço errado, 400 de credencial mal
+            # formada) e pausa a fila, qualquer que seja o status.
+            erro.de_configuracao = True
+            raise
         corpo = _objeto(resposta)
         token = corpo.get("access_token")
         if not token:
@@ -639,8 +669,12 @@ class Cliente:
             raise
         criada = _objeto(resposta).get("id")
         if criada is None:
-            # Criou lá, mas não sabemos o id: a re-tentativa cai no 400 de
-            # e-mail repetido e acha pela busca.
+            # Criou lá, mas não sabemos o id. Com e-mail, a re-tentativa acha
+            # a pessoa pela busca (ou cai no 400 de e-mail repetido e busca de
+            # novo). ⚠️ SEM e-mail não há busca nem 400: o id nunca chegou ao
+            # pedido, e a re-tentativa cria uma SEGUNDA pessoa (só telefone).
+            # Aceito — 2xx sem id é defeito de lá, raro; perder o lead seria
+            # pior que uma pessoa duplicada que o vendedor funde.
             raise ErroTransitorio("POST /persons sem id na resposta")
         return int(criada)
 

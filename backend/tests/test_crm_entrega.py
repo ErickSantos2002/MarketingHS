@@ -3,8 +3,8 @@ atualizar).
 
 O modo de falhar: o lead "vai para o comercial" e não vai (falha silenciosa),
 vira dois cards (entrega repetida, ou retry depois de um 201 que se perdeu),
-o card aberto ganha dois blocos "Atualizado pelo MarketingHS" (retry depois
-de um PUT que se perdeu), ou uma chave errada é re-tentada para sempre.
+o card aberto ganha dois blocos "— Nova conversão pelo MarketingHS" (retry
+depois de um PUT que se perdeu), ou uma chave errada é re-tentada para sempre.
 Nenhum aparece em tela; o vendedor descobre.
 
 Nenhum teste fala com a rede: `GrowthHSFalso` é o GrowthHS inteiro em
@@ -851,6 +851,45 @@ async def test_403_e_404_tambem_pausam(lead_8d, codigo):
     assert pedido["status"] == "pendente" and pedido["tentativas"] == 0
 
 
+@pytest.mark.parametrize("codigo", [308, 301, 405, 400])
+async def test_erro_no_token_pausa_qualquer_status(lead_8d, gemeo, codigo):
+    """Revisão final da growthhs-real (I1): o `client-credentials` não leva
+    nada do lead. Um 308 (o proxy mandando http → https), um 405 ou um 400 no
+    token são o endereço ou a credencial — iguais para todos. Antes, só
+    401/403/404 pausavam e o resto derrubava a fila pedido por pedido."""
+    api = GrowthHSFalso()
+    api.forcar[("POST", "/api/v1/auth/client-credentials")] = [
+        httpx.Response(codigo, headers={"location": "https://growthhs.exemplo.invalid/"})]
+    await _enfileirar(lead_8d["lead_id"])
+    await _enfileirar(gemeo)
+    resultado = await _rodar([lead_8d["lead_id"], gemeo], api)
+    assert resultado == {**ZERO, "pausadas": 2}
+    assert len(api.pedidos) == 1
+    async with db.sessao(role="service_role") as conn:
+        pedidos = await conn.fetch(
+            "SELECT status, tentativas FROM crm_handoffs WHERE lead_id = ANY($1::uuid[])",
+            [lead_8d["lead_id"], gemeo])
+    assert [(p["status"], p["tentativas"]) for p in pedidos] == [("pendente", 0)] * 2
+    assert await _eventos(lead_8d["lead_id"], "crm_handoff_falhou") == []
+
+
+async def test_url_invalida_pausa_e_nao_vira_defeito_interno(lead_8d):
+    """I1: porta que não é número — o httpx nem monta a URL (`InvalidURL`,
+    que nem é `HTTPError`). É configuração: pausa, sem gastar tentativa."""
+    api = GrowthHSFalso()
+    cfg = Config(base_url="https://growthhs.exemplo.invalid:porta", client_id="hsg_8d",
+                 client_secret="segredo-8d", list_id=LISTA_DE_ENTRADA,
+                 boards_conferidos=(6, 7), app_url=None)
+    await _enfileirar(lead_8d["lead_id"])
+    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=cfg,
+                                             transporte=api.transporte())
+    assert resultado == {**ZERO, "pausadas": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "pendente" and pedido["tentativas"] == 0
+    assert pedido["erro"].startswith(entrega.PREFIXO_PAUSA)
+    assert "porta" not in pedido["erro"]  # só o nome da classe, nunca a URL
+
+
 def test_transitorio_espera_com_teto_e_desiste_depois_de_um_dia():
     """I3: a fila desistia em ~31 min — um GrowthHS fora do ar numa noite
     derrubava todos os pedidos. Agora a espera dobra até 60 min e o total
@@ -972,3 +1011,64 @@ async def test_handoff_de_jornada_na_lista_sai(lead_8d, monkeypatch):
     monkeypatch.setattr(entrega, "_lista_do_pedido", lista)
     await _enfileirar(lead_8d["lead_id"], "jornada")
     assert (await _rodar(lead_8d["lead_id"], GrowthHSFalso()))["entregues"] == 1
+
+
+# ── Folga de relógio no reconhecimento (revisão final, M2) ──────────────────
+
+def test_card_um_pouco_mais_velho_que_o_pedido_ainda_e_candidato():
+    """O `created_at` vem do relógio do GrowthHS; o `criado_em`, do nosso
+    banco. Relógio de lá uns minutos atrasado não pode esconder o card que o
+    201 perdido criou (seria o segundo card). Fora da folga, não é candidato
+    — e mesmo dentro dela só vira "o nosso" com a assinatura."""
+    pedido = datetime(2026, 10, 22, 13, 0, tzinfo=timezone.utc)
+    dentro = {"id": 1, "created_at": _ingenuo_utc(pedido - timedelta(minutes=3))}
+    fora = {"id": 2, "created_at": _ingenuo_utc(pedido - timedelta(minutes=10))}
+    candidatos, ordem = entrega._separar([dentro, fora], pedido)
+    assert candidatos == [dentro]
+    assert ordem == [dentro, fora]
+
+
+async def test_201_perdido_com_relogio_de_la_atrasado_nao_vira_segundo_card(lead_8d):
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    pedido = await _pedido(lead_8d["lead_id"])
+    api.agora = _ingenuo_utc(pedido["criado_em"] - timedelta(minutes=2))
+    api.perder[("POST", CARDS)] = 1
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "adiadas": 1}
+    await _tornar_visivel(pedido["id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    assert len(api.de("POST", CARDS)) == 1 and api.puts() == []
+
+
+# ── O worker nunca pega pedido de lead de teste (revisão final, I3) ─────────
+
+async def test_predicado_de_lead_de_teste(conexao):
+    """⚠️ Prova o predicado, não o worker: rodar `_reivindicar` sem
+    `somente_lead` aqui reivindicaria os pedidos REAIS. Transação revertida —
+    os leads nunca existem para o worker de produção. Só `tipo = 'teste'`
+    COM e-mail nulo ou `@exemplo.invalid` fica de fora; contato real marcado
+    `teste` à mão continua sendo entregue."""
+    casos = {
+        "teste-invalid": ("teste", "i3-predicado@exemplo.invalid"),
+        "teste-maiusculo": ("teste", "I3-Predicado-2@EXEMPLO.INVALID"),
+        "teste-sem-email": ("teste", None),
+        "teste-email-real": ("teste", "i3-predicado@empresa.com.br"),
+        "real-invalid": ("lead", "i3-predicado-3@exemplo.invalid"),
+    }
+    ids = {}
+    for nome, (tipo, email) in casos.items():
+        ids[await conexao.fetchval(
+            "INSERT INTO leads (nome, email, tipo) VALUES ($1, $2, $3) RETURNING id::text",
+            f"I3 {nome}", email, tipo)] = nome
+    de_teste = {ids[r["id"]] for r in await conexao.fetch(
+        f"SELECT l.id::text AS id FROM leads l WHERE l.id = ANY($1::uuid[]) "
+        f"AND {entrega.LEAD_DE_TESTE}", list(ids))}
+    assert de_teste == {"teste-invalid", "teste-maiusculo", "teste-sem-email"}
+
+
+def test_reivindicar_sem_filtro_usa_o_predicado():
+    """O predicado provado acima é o que o UPDATE da reivindicação usa (sem
+    rodar a reivindicação sem filtro contra o banco de produção)."""
+    import inspect
+    fonte = inspect.getsource(entrega._reivindicar)
+    assert "$3::uuid[] IS NOT NULL OR NOT EXISTS" in fonte and "{LEAD_DE_TESTE}" in fonte

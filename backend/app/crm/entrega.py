@@ -39,9 +39,11 @@ já gravados.
 ⚠️ A guarda local antiga (`_ja_entregue`: lead já entregue não era mandado
 de novo, e o `person_id` guardado era reusado) SAIU de propósito (spec §3):
 o card anotado aqui pode ter sido ganho ou perdido lá, e o lead que converte
-de novo precisa chegar ao vendedor. E nenhum `person_id` guardado é reusado
-sem buscar — os do receptor de teste eram inventados e podem colidir com
-pessoas reais do CRM.
+de novo precisa chegar ao vendedor. E nenhum `person_id` guardado na
+identidade é reusado sem buscar — os do receptor de teste eram inventados e
+podem colidir com pessoas reais do CRM. A única exceção é o lead SEM e-mail:
+o retry reusa o `crm_handoffs.person_id` que ESTE pedido gravou ao criar a
+pessoa (ver acima) — não há e-mail para buscar, e criar outra duplicaria.
 
 ⚠️ Revisão final do 8D (I3): 401/403/404 são configuração (credencial,
 endereço ou lista errados), a mesma para todos os pedidos. Em vez de falhar a
@@ -91,6 +93,19 @@ MOTIVO_MOVER = ("O GrowthHS ainda não tem rota para mover card de etapa — "
 # POST /persons (+ nova busca no 400), cards nos 2 boards, leitura do card,
 # PUT e nota — umas 10 chamadas de até `TIMEOUT` segundos cada.
 CHAMADAS_POR_PEDIDO = 10
+
+# ⚠️ Pedido de lead DE TESTE nunca sai por um ciclo sem `somente_lead` (o do
+# worker de produção). Os testes de entrega gravam pedidos FORA de transação
+# no banco de produção, com transporte falso; o worker rodando ao lado
+# reivindicaria o pedido antes do teste e mandaria ao GrowthHS REAL — pessoa
+# e card de verdade para um "Entrega 8D sem e-mail". É a mesma lição de
+# 22/10 de `saidas.NO_DE_TESTE` (medido: sem a marca, o worker pegava a linha
+# antes do teste). O lead de teste é `tipo = 'teste'` E e-mail nulo ou
+# `@exemplo.invalid` — as duas condições, para um contato real marcado
+# `teste` à mão (com e-mail de verdade) continuar sendo entregue. `l` é o
+# alias de `leads`.
+LEAD_DE_TESTE = """(l.tipo = 'teste'
+    AND (l.email IS NULL OR lower(l.email) LIKE '%@exemplo.invalid'))"""
 
 _COLUNAS_LEAD = """id::text AS id, nome, email, whatsapp, phone_normalized, empresa,
     cargo, faturamento, funcionarios, desafios, indicacao, utm_source, utm_medium,
@@ -156,6 +171,9 @@ async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict
     caso comum de lote pequeno. O custo: pedido de worker que morreu volta
     só quando o prazo vence (até ~1 h com lote de 20).
 
+    Sem `somente_lead` (o worker), pedido de lead de teste fica de fora —
+    ver `LEAD_DE_TESTE`.
+
     Devolve `criado_em` (contra ele a entrega procura o card que uma
     tentativa anterior criou, ver `_separar`) e `person_id` (a pessoa que
     uma tentativa anterior criou para lead SEM e-mail, ver `_entregar`)."""
@@ -163,11 +181,15 @@ async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict
                timedelta(seconds=(growthhs.TIMEOUT * CHAMADAS_POR_PEDIDO + 5) * 2 * limite))
     async with sessao(role="service_role") as conn:
         linhas = await conn.fetch(
-            """UPDATE crm_handoffs SET visivel_em = now() + $2::interval,
+            f"""UPDATE crm_handoffs SET visivel_em = now() + $2::interval,
                       tentativas = tentativas + 1, atualizado_em = now()
                 WHERE id IN (SELECT id FROM crm_handoffs
                               WHERE status = 'pendente' AND visivel_em <= now()
                                 AND ($3::uuid[] IS NULL OR lead_id = ANY($3::uuid[]))
+                                AND ($3::uuid[] IS NOT NULL OR NOT EXISTS (
+                                      SELECT 1 FROM leads l
+                                       WHERE l.id = crm_handoffs.lead_id
+                                         AND {LEAD_DE_TESTE}))
                               ORDER BY visivel_em LIMIT $1
                               FOR UPDATE SKIP LOCKED)
             RETURNING id, lead_id::text AS lead_id, acao, origem, rule_id::text AS rule_id,
@@ -254,11 +276,20 @@ def _aberto(card: dict) -> bool:
             and not card.get("is_won") and not card.get("is_lost"))
 
 
+# Folga de relógio entre o GrowthHS (que dá o `created_at` do card) e o nosso
+# banco (que dá o `criado_em` do pedido): o card do 201 perdido pode parecer
+# até uns minutos MAIS VELHO que o pedido. A trava continua sendo a
+# assinatura `Pedido MarketingHS: <id>` — a folga só alarga quem é lido.
+FOLGA_DE_RELOGIO = timedelta(minutes=5)
+
+
 def _separar(abertos: list[dict], criado_em: datetime | None) -> tuple[list[dict], list[dict]]:
     """(candidatos a "o card que ESTE pedido criou", todos os abertos do mais
     recente ao mais antigo).
 
-    Candidato é aberto com `created_at >= crm_handoffs.criado_em`; ele só
+    Candidato é aberto com `created_at >= crm_handoffs.criado_em -
+    FOLGA_DE_RELOGIO` (revisão final, M2: relógio de lá atrasado não pode
+    esconder o card que ESTE pedido criou e virar o segundo card); ele só
     vira "o nosso" depois que `ler_card` confirma a assinatura
     (`growthhs.card_do_pedido`). ⚠️ Data sozinha não basta: o card que a
     automação do RD, o vendedor à mão durante uma pausa ou o gêmeo criou
@@ -267,7 +298,8 @@ def _separar(abertos: list[dict], criado_em: datetime | None) -> tuple[list[dict
     conta como o mais antigo de todos."""
     datados = [(growthhs.criado_em_utc(c), c) for c in abertos]
     candidatos = sorted(((d, c) for d, c in datados
-                         if criado_em is not None and d is not None and d >= criado_em),
+                         if criado_em is not None and d is not None
+                         and d >= criado_em - FOLGA_DE_RELOGIO),
                         key=lambda par: (par[0], par[1]["id"]))
     piso = datetime.min.replace(tzinfo=timezone.utc)
     ordem = sorted(datados, key=lambda par: (par[0] or piso, par[1]["id"]), reverse=True)
@@ -286,11 +318,16 @@ async def _gravar_pessoa_do_pedido(pedido_id: int, person_id: int) -> None:
 
 async def _tratar_erro(pedido: dict, lead: dict, erro: Exception) -> str:
     """A política de erro, a mesma em todo passo ANTES do 2xx que muda o lado
-    de lá: 401/403/404 pausam a fila; outro 4xx falha o pedido; transitório
-    adia até `MAX_TENTATIVAS`."""
+    de lá: 401/403/404 — e qualquer erro marcado `de_configuracao` (o
+    `client-credentials`, a URL inválida) — pausam a fila; outro 4xx falha o
+    pedido; transitório adia até `MAX_TENTATIVAS`."""
     if isinstance(erro, growthhs.ErroDefinitivo):
-        if erro.status in STATUS_DE_CONFIGURACAO:
+        if erro.de_configuracao or erro.status in STATUS_DE_CONFIGURACAO:
             # Revisão final do 8D (I3): configuração, não o lead — pausa.
+            # Revisão final da growthhs-real (I1): e todo erro do
+            # `client-credentials` ou de URL que não se monta, QUALQUER
+            # status (308 do proxy http→https, 405, 400) — o token não leva
+            # nada do lead, então falhar pedido a pedido derrubaria a fila.
             await _devolver([pedido], ESPERA_DA_PAUSA,
                             f"{PREFIXO_PAUSA} — o GrowthHS respondeu {erro}. Confira o "
                             f"client_id, o segredo, o endereço da API e a lista de entrada "

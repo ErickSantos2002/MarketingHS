@@ -388,10 +388,11 @@ async def test_receptor_card_distinto_por_external_id(cliente, receptor):
     """A3 (achado da prova, 22/10: "o receptor devolve o mesmo `card_id` para
     leads diferentes"). O receptor dá um card por `external_id`. O que a prova
     viu foi outra coisa: os 4 leads do teste tinham o MESMO `dnia_id` (mesmo
-    telefone → mesma pessoa no `resolve_ecosystem_identity`), e a entrega
-    (`_ja_entregue`) reaproveita o card da pessoa sem chamar o GrowthHS — só
-    1 pedido chegou ao receptor (`vezes = 1`). Comportamento desejado: um
-    card por pessoa."""
+    telefone → mesma pessoa no `resolve_ecosystem_identity`), e a entrega da
+    época (a guarda `_ja_entregue`, que saiu em 22/10 com a API normal do
+    GrowthHS) reaproveitava o card da pessoa sem chamar o GrowthHS — só 1
+    pedido chegou ao receptor (`vezes = 1`). Hoje a pessoa é buscada a cada
+    entrega e o card aberto dela é atualizado: continua um card por pessoa."""
     a, b = str(uuid.uuid4()), str(uuid.uuid4())
     cab = {"X-API-Key": CHAVE_DO_RECEPTOR}
     url = "/teste/growthhs/api/v1/integration/cards"
