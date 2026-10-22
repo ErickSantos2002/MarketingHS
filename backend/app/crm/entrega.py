@@ -68,11 +68,21 @@ _COLUNAS_LEAD = """id::text AS id, nome, email, whatsapp, phone_normalized, empr
 
 async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
     """(última conversão, último consentimento) do lead, para o card (prova
-    do RD). `converted_at`/`criado_em` em ISO 8601, como o resto do corpo."""
+    do RD). `converted_at`/`criado_em` em ISO 8601, como o resto do corpo.
+
+    `gclid` (API normal do GrowthHS, 22/10): o da visita MAIS RECENTE com
+    gclid do mesmo `visitor_id` da conversão. ⚠️ "Com gclid" importa: a
+    última visita costuma ser a volta direta, sem clique pago — pegar a
+    última de todas apagaria a atribuição do anúncio. Conversão sem
+    visitante (envio manual, base importada) → `None`."""
     conversao = await conn.fetchrow(
         """SELECT lc.page_slug, lc.form_id, s.nome AS site_nome, lc.page_url,
                   to_char(lc.converted_at AT TIME ZONE 'UTC',
-                          'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS converted_at, lc.canal
+                          'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS converted_at, lc.canal,
+                  (SELECT v.gclid FROM visitas v
+                    WHERE lc.visitor_id IS NOT NULL AND v.visitor_id = lc.visitor_id
+                      AND v.gclid IS NOT NULL
+                    ORDER BY v.criado_em DESC LIMIT 1) AS gclid
              FROM lead_conversions lc LEFT JOIN sites s ON s.id = lc.site_id
             WHERE lc.lead_id = $1::uuid
             ORDER BY lc.converted_at DESC LIMIT 1""", lead_id)

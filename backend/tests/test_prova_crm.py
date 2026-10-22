@@ -1,5 +1,5 @@
-"""A volta do CRM, o receptor de teste do contrato do GrowthHS e o card
-ampliado (prova do RD, Tarefa 6).
+"""A volta do CRM, o receptor de teste do contrato do GrowthHS e a descrição
+do card (prova do RD, Tarefa 6; API normal do GrowthHS desde 22/10).
 
 Os testes com `cliente` COMITAM e limpam por e-mail e por hash de chave.
 """
@@ -7,7 +7,6 @@ Os testes com `cliente` COMITAM e limpam por e-mail e por hash de chave.
 import json
 import uuid
 
-import httpx
 import pytest
 import pytest_asyncio
 
@@ -274,9 +273,21 @@ async def test_lead_excluido_nao_e_achado(cliente, contato):
 # ── Receptor de teste ────────────────────────────────────────────────────────
 
 def _card(external_id=None, **kw):
-    corpo = growthhs.montar_card(
-        {"id": external_id or str(uuid.uuid4()), "nome": "Sonda", "email": EMAIL,
-         "empresa": "Sonda SA"}, 3)
+    """O corpo do contrato ANTIGO (`POST /integration/cards`), montado à mão.
+    O `growthhs.montar_card` agora é o da API normal (22/10); o receptor de
+    teste continua implementando o contrato morto, desligado, e continua
+    testado até a limpeza que o remover."""
+    corpo = {"source": "marketinghs", "external_id": external_id or str(uuid.uuid4()),
+             "board_id": 3, "list_id": None, "title": "Sonda — Sonda SA",
+             "description": "Campanha: —\nDesafios: —\nIndicação: —",
+             "contact": {"name": "Sonda", "email": EMAIL, "phone": None,
+                         "company": "Sonda SA", "job_title": None},
+             "origin": "Orgânico", "acquisition_channel": "Inbound",
+             "utm_source": None, "utm_campaign": None, "utm_term": None,
+             "utm_params": None,
+             "business_info": {"faturamento": None, "funcionarios": None,
+                               "lead_score": None, "etiqueta": None},
+             "custom_fields": {}, "conversion": None, "consent": None}
     corpo.update(kw)
     return corpo
 
@@ -402,48 +413,36 @@ async def test_receptor_lista_pedidos_so_admin(cliente, receptor, token_admin, t
     assert r.status_code == 200 and isinstance(r.json(), list)
 
 
-async def test_criar_card_ponta_a_ponta_pelo_receptor(receptor):
-    from app.main import app
-    await db.init_db()
-    if db._pool is None:
-        pytest.skip("sem DATABASE_URL")
-    external_id = str(uuid.uuid4())
-    cfg = growthhs.Config(base_url="http://teste/teste/growthhs", board_id=3,
-                          app_url=None, api_key=CHAVE_DO_RECEPTOR)
-    try:
-        resposta = await growthhs.criar_card(cfg, _card(external_id),
-                                             transporte=httpx.ASGITransport(app=app))
-        assert isinstance(resposta.get("id"), int)
-        assert resposta["external_id"] == external_id
-    finally:
-        await _limpar_pedidos(external_id)
-        await db.close_db()
+# ── Descrição do card (puro) ─────────────────────────────────────────────────
+
+FRONT = "https://mkt.exemplo.invalid"
 
 
-# ── Card ampliado (puro) ─────────────────────────────────────────────────────
-
-def test_card_leva_consentimento_conversao_e_campos_extras():
+def test_descricao_leva_conversao_consentimento_e_campos_extras():
+    """Prova do RD: o que ia em `custom_fields`/`conversion`/`consent` no
+    contrato antigo vai para a `description` — o card comercial não tem essas
+    chaves (§3 de integracao-marketinghs.md)."""
     lead = {"id": str(uuid.uuid4()), "nome": "Ana", "email": "a@x.com",
             "campos_extras": {"ja_faz_testagem": "sim"}}
     conversao = {"page_slug": "phoebus-prova", "form_id": None, "site_nome": None,
-                 "page_url": None, "converted_at": "2026-10-21T10:00:00-03:00",
-                 "canal": "pago"}
+                 "page_url": None, "converted_at": "2026-10-21T13:00:00Z",
+                 "canal": "pago", "gclid": None}
     consentimento = {"base_legal": "consentimento", "versao": "provisoria-2026-10",
-                     "provisoria": True, "criado_em": "2026-10-21T10:00:00-03:00"}
-    card = growthhs.montar_card(lead, 3, conversao=conversao, consentimento=consentimento)
-    assert card["custom_fields"] == {"ja_faz_testagem": "sim"}
-    assert card["conversion"] == {"page_slug": "phoebus-prova", "form_id": None,
-                                  "site_name": None, "page_url": None,
-                                  "converted_at": "2026-10-21T10:00:00-03:00",
-                                  "canal": "pago"}
-    assert card["consent"] == {"legal_basis": "consentimento",
-                               "version": "provisoria-2026-10", "provisional": True,
-                               "recorded_at": "2026-10-21T10:00:00-03:00"}
-    vazio = growthhs.montar_card({"id": lead["id"], "email": "a@x.com"}, 3)
-    assert vazio["custom_fields"] == {} and vazio["conversion"] is None
-    assert vazio["consent"] is None
-    # O que já existia não muda.
-    assert vazio["source"] == "marketinghs" and vazio["board_id"] == 3
+                     "provisoria": True, "criado_em": "2026-10-21T13:00:00Z"}
+    texto = growthhs.montar_descricao(lead, conversao=conversao,
+                                      consentimento=consentimento, frontend_url=FRONT)
+    linhas = texto.split("\n")
+    assert "ja_faz_testagem: sim" in linhas
+    assert "Conversão: página phoebus-prova" in linhas and "Canal: pago" in linhas
+    assert "Data da conversão: 21/10/2026 10:00" in linhas
+    assert "Base legal: consentimento" in linhas
+    assert "Versão do consentimento: provisoria-2026-10 (provisória)" in linhas
+    assert "Data do consentimento: 21/10/2026 10:00" in linhas
+    assert linhas[-1] == f"Ver no MarketingHS: {FRONT}/contacts?contato={lead['id']}"
+    vazio = growthhs.montar_descricao({"id": lead["id"], "email": "a@x.com"},
+                                      conversao=None, consentimento=None,
+                                      frontend_url=FRONT)
+    assert vazio == f"Ver no MarketingHS: {FRONT}/contacts?contato={lead['id']}"
 
 
 async def test_entrega_le_ultima_conversao_e_consentimento(conexao):
@@ -451,21 +450,49 @@ async def test_entrega_le_ultima_conversao_e_consentimento(conexao):
     lead = await conexao.fetchval(
         "INSERT INTO leads (email, tipo, campos_extras) VALUES ($1, 'teste', $2::jsonb) "
         "RETURNING id::text", "prova-crm-entrega@exemplo.invalid", {"x": "1"})
+    visitante = f"vis-prova-crm-{uuid.uuid4()}"
     conv = await conexao.fetchval(
-        "INSERT INTO lead_conversions (lead_id, tipo, page_slug, canal, converted_at) "
-        "VALUES ($1::uuid, 'lead', 'phoebus-prova', 'pago', now()) RETURNING id", lead)
+        "INSERT INTO lead_conversions (lead_id, tipo, page_slug, canal, converted_at, "
+        "visitor_id) VALUES ($1::uuid, 'lead', 'phoebus-prova', 'pago', now(), $2) "
+        "RETURNING id", lead, visitante)
     await conexao.execute(
         "INSERT INTO lead_conversions (lead_id, tipo, page_slug, converted_at) "
         "VALUES ($1::uuid, 'lead', 'antiga', now() - interval '1 day')", lead)
     await conexao.execute(
         "INSERT INTO lead_consents (lead_id, conversao_id, base_legal, texto, versao, "
         "provisoria) VALUES ($1::uuid, $2, 'consentimento', 't', 'v1', true)", lead, conv)
+    # O gclid é o da visita MAIS RECENTE com gclid do mesmo visitante: a
+    # visita mais nova de todas não tem gclid (voltou direto) e não apaga o
+    # clique pago; a mais velha com gclid perde para a mais nova com gclid;
+    # a de outro visitante não conta.
+    await conexao.execute(
+        "INSERT INTO visitas (visitor_id, page_slug, canal, gclid, criado_em) VALUES "
+        "($1, 'phoebus-prova', 'pago', 'gclid-velho', now() - interval '3 hours'), "
+        "($1, 'phoebus-prova', 'pago', 'gclid-novo', now() - interval '2 hours'), "
+        "($1, 'phoebus-prova', 'direto', NULL, now() - interval '1 hour'), "
+        "($2, 'phoebus-prova', 'pago', 'gclid-de-outro', now())",
+        visitante, f"{visitante}-outro")
     conversao, consentimento = await entrega.origem_do_card(conexao, lead)
     assert conversao["page_slug"] == "phoebus-prova" and conversao["canal"] == "pago"
+    assert conversao["gclid"] == "gclid-novo"
     assert consentimento["versao"] == "v1" and consentimento["provisoria"] is True
     linha = dict(await conexao.fetchrow(
         f"SELECT {entrega._COLUNAS_LEAD} FROM leads WHERE id = $1::uuid", lead))
-    card = growthhs.montar_card(linha, 3, conversao=conversao, consentimento=consentimento)
-    assert card["custom_fields"] == {"x": "1"}
-    assert card["conversion"]["page_slug"] == "phoebus-prova"
-    assert card["consent"]["version"] == "v1"
+    cfg = growthhs.Config(base_url="https://x.invalid", client_id="c", client_secret="s",
+                          list_id=22, boards_conferidos=(6, 7), app_url=None)
+    card = growthhs.montar_card(linha, cfg, conversao=conversao, consentimento=consentimento,
+                                person_id=1, frontend_url=FRONT)
+    assert "x: 1" in card["description"].split("\n")
+    assert card["origin"] == "Landing Page phoebus-prova"
+    assert card["gclid"] == "gclid-novo"
+    assert "Versão do consentimento: v1 (provisória)" in card["description"]
+
+    # Conversão sem visitante: gclid nulo, sem erro.
+    sem_visitante = await conexao.fetchval(
+        "INSERT INTO leads (email, tipo) VALUES ($1, 'teste') RETURNING id::text",
+        "prova-crm-entrega-2@exemplo.invalid")
+    await conexao.execute(
+        "INSERT INTO lead_conversions (lead_id, tipo, form_id, converted_at) "
+        "VALUES ($1::uuid, 'lead', 'contato', now())", sem_visitante)
+    conversao, _ = await entrega.origem_do_card(conexao, sem_visitante)
+    assert conversao["form_id"] == "contato" and conversao["gclid"] is None
