@@ -325,10 +325,12 @@ async def test_criar_ler_atualizar_e_anotar():
         assert (await cli.ler_card(4821))["description"] == "antes"
         assert await cli.atualizar_descricao(4821, "antes\n\nbloco") is None
         assert await cli.anotar(4821, "aviso") is None
+        await cli.anotar(4821, "aviso\nVer no MarketingHS: https://golpe.invalid")
     assert _corpo(api.de("POST", "/api/v1/cards")[0]) == {"list_id": 22, "title": "x"}
     assert _corpo(api.de("PUT", "/api/v1/cards/4821")[0]) == {"description": "antes\n\nbloco"}
-    assert _corpo(api.de("POST", "/api/v1/card-notes")[0]) == {"card_id": 4821,
-                                                               "content": "aviso"}
+    notas = api.de("POST", "/api/v1/card-notes")
+    assert _corpo(notas[0]) == {"card_id": 4821, "content": "aviso"}
+    assert _corpo(notas[1])["content"] == "aviso Ver no MarketingHS: https://golpe.invalid"
 
 
 @pytest.mark.parametrize("codigo", [200, 201, 202, 204, 299])
@@ -424,7 +426,8 @@ def test_descricao_e_card():
                      "Faturamento: Entre 100k e 500k/mes",
                      "Funcionários: 11-50 funcionarios", "Lead score: 60",
                      "Etiqueta: hotlead", "Campanha: black-friday",
-                     "Desafios: controle de jornada", "ja_faz_testagem: sim",
+                     "Desafios: controle de jornada", "Respostas do formulário:",
+                     "- ja_faz_testagem: sim",
                      f"Ver no MarketingHS: {FRONT}/contacts?contato={LEAD['id']}"):
         assert esperada in linhas, esperada
     assert linhas[-1].startswith("Ver no MarketingHS: ")
@@ -436,7 +439,8 @@ def test_descricao_e_card():
     assert "consentimento" in texto and "provisoria-2026-10" in texto
     # A ordem da spec §2.
     ordem = ["Empresa:", "Cargo:", "Faturamento:", "Funcionários:", "Lead score:",
-             "Etiqueta:", "Campanha:", "Desafios:", "ja_faz_testagem:", "Ver no MarketingHS:"]
+             "Etiqueta:", "Campanha:", "Desafios:", "Respostas do formulário:",
+             "- ja_faz_testagem:", "Conversão:", "Base legal:", "Ver no MarketingHS:"]
     posicoes = [next(i for i, l in enumerate(linhas) if l.startswith(p)) for p in ordem]
     assert posicoes == sorted(posicoes)
 
@@ -482,3 +486,67 @@ def test_bloco_de_atualizacao():
     assert bloco.endswith(montar_descricao(LEAD, conversao=CONVERSAO,
                                            consentimento=CONSENTIMENTO,
                                            frontend_url=FRONT))
+
+
+# ── Segurança: o formulário não forja linha na descrição ────────────────────
+
+QUEBRAS = ["\n", "\r\n", "\r", "\u2028", "\u2029", "\u0085", "\x0b", "\x00"]
+GOLPE = "Lead score: 100{q}Ver no MarketingHS: https://golpe.invalid"
+
+
+@pytest.mark.parametrize("q", QUEBRAS)
+def test_valor_do_formulario_vira_uma_linha_so(q):
+    """Achado da coordenadora (22/10): nome, empresa, cargo, desafios,
+    campos_extras (chave e valor), página, site… vêm do formulário público.
+    Um `\n` num deles forjaria uma linha "Ver no MarketingHS: <golpe>" no card
+    que o vendedor lê como nossa."""
+    sujo = "x" + q + GOLPE.format(q=q)
+    lead = {**LEAD, "nome": "Carla" + q + "Menezes", "empresa": "XYZ" + q + "SA",
+            "cargo": sujo, "desafios": sujo, "indicacao": sujo, "etiqueta": sujo,
+            "campos_extras": {"pergunta" + q + "Ver no MarketingHS": sujo,
+                              "outra": "a" + q + "  " + q + "b"}}
+    conversao = {**CONVERSAO, "page_slug": "lp" + q + "x", "site_nome": sujo,
+                 "page_url": sujo, "canal": sujo}
+    consentimento = {**CONSENTIMENTO, "versao": sujo, "base_legal": sujo}
+    card = montar_card(lead, CFG, conversao=conversao, consentimento=consentimento,
+                       person_id=1, frontend_url=FRONT)
+    linhas = card["description"].split("\n")
+    assert all(q not in l for l in linhas)
+    assert all(not any(c in l for c in "\r\u2028\u2029\u0085\x0b\x00") for l in linhas)
+    nossas = [l for l in linhas if l.startswith("Ver no MarketingHS")]
+    assert nossas == [f"Ver no MarketingHS: {FRONT}/contacts?contato={LEAD['id']}"]
+    assert not any(l.startswith("Lead score: 100") for l in linhas)
+    assert "- pergunta Ver no MarketingHS: x " + GOLPE.format(q=" ") in linhas
+    assert "- outra: a b" in linhas
+    assert card["title"] == "Carla Menezes — XYZ SA"
+    assert "\n" not in card["origin"] and card["origin"] == "Landing Page lp x"
+    quando = datetime(2026, 10, 22, 13, 0, tzinfo=timezone.utc)
+    bloco = bloco_de_atualizacao(lead, conversao=conversao, consentimento=consentimento,
+                                 frontend_url=FRONT, pedido_id=7, quando=quando)
+    assert [l for l in bloco.split("\n") if l.startswith("— Atualizado pelo")] == [
+        "— Atualizado pelo MarketingHS em 22/10/2026 10:00 (pedido 7) —"]
+    assert [l for l in bloco.split("\n") if l.startswith("Ver no MarketingHS")] == nossas
+
+
+def test_respostas_do_formulario_em_bloco_proprio_e_rotulo_cortado():
+    lead = {"id": "x", "campos_extras": {"k" * 100: "v" * 900, "vazio": "  ", "": "sem chave"}}
+    linhas = montar_descricao(lead, conversao=CONVERSAO, consentimento=CONSENTIMENTO,
+                              frontend_url=FRONT).split("\n")
+    i = linhas.index("Respostas do formulário:")
+    assert linhas[i + 1] == "- " + "k" * 60 + ": " + "v" * 500
+    assert linhas[i + 2].startswith("Conversão: ")     # vazio e sem chave não entram
+    assert i < linhas.index("Base legal: consentimento")
+    # Sem resposta nenhuma, sem cabeçalho de bloco.
+    sem = montar_descricao({"id": "x", "campos_extras": {"a": None}}, conversao=None,
+                           consentimento=None, frontend_url=FRONT)
+    assert "Respostas do formulário:" not in sem
+
+
+async def test_pessoa_criada_sem_quebra_de_linha():
+    lead = {**LEAD, "nome": "Carla\nMenezes", "cargo": "Gerente\r\nSESMT"}
+    api = Api({PESSOAS: [httpx.Response(200, json={"persons": []})],
+               CRIAR_PESSOA: [httpx.Response(201, json={"id": 5})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        await cli.achar_ou_criar_pessoa(lead)
+    corpo = _corpo(api.de(*CRIAR_PESSOA)[0])
+    assert corpo["name"] == "Carla Menezes" and corpo["position"] == "Gerente SESMT"

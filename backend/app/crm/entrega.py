@@ -74,14 +74,15 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
     gclid do mesmo `visitor_id` da conversão. ⚠️ "Com gclid" importa: a
     última visita costuma ser a volta direta, sem clique pago — pegar a
     última de todas apagaria a atribuição do anúncio. Conversão sem
-    visitante (envio manual, base importada) → `None`."""
+    visitante (envio manual, base importada) → `None`. Visita DEPOIS da
+    conversão não conta: não foi o clique que trouxe o lead."""
     conversao = await conn.fetchrow(
         """SELECT lc.page_slug, lc.form_id, s.nome AS site_nome, lc.page_url,
                   to_char(lc.converted_at AT TIME ZONE 'UTC',
                           'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS converted_at, lc.canal,
                   (SELECT v.gclid FROM visitas v
                     WHERE lc.visitor_id IS NOT NULL AND v.visitor_id = lc.visitor_id
-                      AND v.gclid IS NOT NULL
+                      AND v.gclid IS NOT NULL AND v.criado_em <= lc.converted_at
                     ORDER BY v.criado_em DESC LIMIT 1) AS gclid
              FROM lead_conversions lc LEFT JOIN sites s ON s.id = lc.site_id
             WHERE lc.lead_id = $1::uuid

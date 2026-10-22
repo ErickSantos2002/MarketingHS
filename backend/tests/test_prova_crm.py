@@ -432,7 +432,7 @@ def test_descricao_leva_conversao_consentimento_e_campos_extras():
     texto = growthhs.montar_descricao(lead, conversao=conversao,
                                       consentimento=consentimento, frontend_url=FRONT)
     linhas = texto.split("\n")
-    assert "ja_faz_testagem: sim" in linhas
+    assert "Respostas do formulário:" in linhas and "- ja_faz_testagem: sim" in linhas
     assert "Conversão: página phoebus-prova" in linhas and "Canal: pago" in linhas
     assert "Data da conversão: 21/10/2026 10:00" in linhas
     assert "Base legal: consentimento" in linhas
@@ -464,12 +464,14 @@ async def test_entrega_le_ultima_conversao_e_consentimento(conexao):
     # O gclid é o da visita MAIS RECENTE com gclid do mesmo visitante: a
     # visita mais nova de todas não tem gclid (voltou direto) e não apaga o
     # clique pago; a mais velha com gclid perde para a mais nova com gclid;
-    # a de outro visitante não conta.
+    # a de outro visitante não conta; a visita DEPOIS da conversão não foi o
+    # clique que a trouxe.
     await conexao.execute(
         "INSERT INTO visitas (visitor_id, page_slug, canal, gclid, criado_em) VALUES "
         "($1, 'phoebus-prova', 'pago', 'gclid-velho', now() - interval '3 hours'), "
         "($1, 'phoebus-prova', 'pago', 'gclid-novo', now() - interval '2 hours'), "
         "($1, 'phoebus-prova', 'direto', NULL, now() - interval '1 hour'), "
+        "($1, 'phoebus-prova', 'pago', 'gclid-depois', now() + interval '1 hour'), "
         "($2, 'phoebus-prova', 'pago', 'gclid-de-outro', now())",
         visitante, f"{visitante}-outro")
     conversao, consentimento = await entrega.origem_do_card(conexao, lead)
@@ -482,7 +484,7 @@ async def test_entrega_le_ultima_conversao_e_consentimento(conexao):
                           list_id=22, boards_conferidos=(6, 7), app_url=None)
     card = growthhs.montar_card(linha, cfg, conversao=conversao, consentimento=consentimento,
                                 person_id=1, frontend_url=FRONT)
-    assert "x: 1" in card["description"].split("\n")
+    assert "- x: 1" in card["description"].split("\n")
     assert card["origin"] == "Landing Page phoebus-prova"
     assert card["gclid"] == "gclid-novo"
     assert "Versão do consentimento: v1 (provisória)" in card["description"]

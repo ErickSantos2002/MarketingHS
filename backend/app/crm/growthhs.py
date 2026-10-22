@@ -23,6 +23,7 @@ origem, portadas literalmente; no card comercial elas vão na `description`
 import logging
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -54,6 +55,8 @@ MAX_TITULO = 500
 MAX_NOME_PESSOA = 200
 MAX_TELEFONE = 50
 MAX_DESAFIOS = 500
+MAX_ROTULO_EXTRA = 60
+MAX_VALOR_EXTRA = 500
 # §1 de lá: o token vale 8 h; renova 5 min antes para não morrer no meio.
 VALIDADE_PADRAO_TOKEN = 8 * 3600
 FOLGA_TOKEN = 5 * 60
@@ -165,15 +168,33 @@ class ErroTransitorio(Exception):
 
 # ── Texto do card (puro) ─────────────────────────────────────────────────────
 
+def uma_linha(valor) -> str:
+    """Qualquer valor numa linha só: todo caractere de controle/formatação
+    (categoria Unicode C*: `\r`, `\n`, `\x0b`, U+0085, zero-width…) e os
+    separadores de linha/parágrafo (U+2028/U+2029) viram espaço; espaços
+    seguidos colapsam; strip.
+
+    ⚠️ Segurança (achado da coordenadora, 22/10): nome, empresa, cargo,
+    desafios, `campos_extras` (chave E valor), página e site vêm do
+    formulário PÚBLICO. Um `\n` num deles forjaria, na descrição que o
+    vendedor lê, uma linha "Lead score: 100" ou "Ver no MarketingHS: <golpe>"
+    indistinguível das nossas. Todo texto de fora passa por aqui antes de
+    virar linha, título, nome de pessoa ou nota."""
+    if valor is None:
+        return ""
+    texto = "".join(
+        " " if unicodedata.category(c)[0] == "C" or c in "\u2028\u2029" else c
+        for c in str(valor))
+    return " ".join(texto.split())
+
+
 def _tem(valor) -> bool:
-    return valor is not None and str(valor).strip() != ""
+    return uma_linha(valor) != ""
 
 
 def _cortar(valor, limite: int):
-    """Corta texto no limite da coluna de lá; `None`/vazio viram `None`."""
-    if not _tem(valor):
-        return None
-    return str(valor).strip()[:limite]
+    """Uma linha só, cortada no limite da coluna de lá; vazio vira `None`."""
+    return uma_linha(valor)[:limite] or None
 
 
 def _ler_iso(valor) -> datetime | None:
@@ -201,7 +222,7 @@ def _data_do_vendedor(valor) -> str | None:
     """`dd/mm/aaaa hh:mm` em São Paulo — é o vendedor quem lê."""
     data = _ler_iso(valor)
     if data is None:
-        return str(valor).strip() if _tem(valor) else None
+        return uma_linha(valor) or None
     return data.astimezone(FUSO_VENDEDOR).strftime("%d/%m/%Y %H:%M")
 
 
@@ -217,9 +238,9 @@ def origem_do_card_texto(conversao: dict | None) -> str:
     importada — suposição, pergunta 70). Pago × orgânico já vai pelos UTMs."""
     conversao = conversao or {}
     if _tem(conversao.get("page_slug")):
-        texto = f"Landing Page {str(conversao['page_slug']).strip()}"
+        texto = f"Landing Page {uma_linha(conversao['page_slug'])}"
     elif _tem(conversao.get("form_id")):
-        texto = f"Captura pelo site [{str(conversao['form_id']).strip()}]"
+        texto = f"Captura pelo site [{uma_linha(conversao['form_id'])}]"
     else:
         texto = "MarketingHS"
     return texto[:MAX_ORIGEM]
@@ -230,12 +251,19 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
     """A `description` do card: uma linha por item, SÓ os que têm valor (o
     "—" do contrato antigo poluía o card), na ordem da spec §2. O card
     comercial não tem `business_info`/`custom_fields`/`conversion`/`consent`
-    (§3 de lá) — o que o vendedor precisa ver vem para cá."""
+    (§3 de lá) — o que o vendedor precisa ver vem para cá.
+
+    ⚠️ Todo valor passa por `uma_linha` (ver lá o porquê). E o que é
+    resposta livre do formulário (`campos_extras`, chave e valor) vai num
+    bloco próprio, "Respostas do formulário:", com cada linha prefixada por
+    "- " — nenhuma delas pode começar como uma linha nossa ("Lead score",
+    "Ver no MarketingHS", o cabeçalho do bloco de atualização)."""
     linhas: list[str] = []
 
     def item(rotulo, valor):
-        if _tem(valor):
-            linhas.append(f"{rotulo}: {str(valor).strip()}")
+        texto = uma_linha(valor)
+        if texto:
+            linhas.append(f"{rotulo}: {texto}")
 
     item("Empresa", lead.get("empresa"))
     item("Cargo", lead.get("cargo"))
@@ -252,8 +280,15 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
     # Fora da lista da spec §2, mas estava na descrição do contrato antigo:
     # não sai sem alguém decidir.
     item("Indicação", lead.get("indicacao"))
+    respostas = []
     for chave, valor in dict(lead.get("campos_extras") or {}).items():
-        item(chave, valor)
+        rotulo = _cortar(chave, MAX_ROTULO_EXTRA)
+        texto = _cortar(valor, MAX_VALOR_EXTRA)
+        if rotulo and texto:
+            respostas.append(f"- {rotulo}: {texto}")
+    if respostas:
+        linhas.append("Respostas do formulário:")
+        linhas.extend(respostas)
     if conversao:
         if _tem(conversao.get("page_slug")):
             item("Conversão", f"página {conversao['page_slug']}")
@@ -265,7 +300,7 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
         item("Data da conversão", _data_do_vendedor(conversao.get("converted_at")))
     if consentimento:
         item("Base legal", consentimento.get("base_legal"))
-        versao = str(consentimento.get("versao") or "").strip()
+        versao = uma_linha(consentimento.get("versao"))
         if consentimento.get("provisoria"):
             versao = f"{versao} (provisória)".strip()
         item("Versão do consentimento", versao)
@@ -279,7 +314,8 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
 def _titulo(lead: dict) -> str:
     nome = (_cortar(lead.get("nome"), MAX_TITULO) or _cortar(lead.get("email"), MAX_TITULO)
             or _cortar(lead.get("phone_normalized"), MAX_TITULO) or "Sem nome")
-    titulo = f"{nome} — {str(lead['empresa']).strip()}" if _tem(lead.get("empresa")) else nome
+    empresa = _cortar(lead.get("empresa"), MAX_TITULO)
+    titulo = f"{nome} — {empresa}" if empresa else nome
     return titulo[:MAX_TITULO]
 
 
@@ -461,7 +497,7 @@ class Cliente:
         rede. ⚠️ 400 no POST com e-mail é corrida (alguém criou a pessoa
         entre a busca e o POST): busca de novo e usa a achada."""
         email = (lead.get("email") or "").strip().lower()
-        telefone = (lead.get("phone_normalized") or "").strip()
+        telefone = uma_linha(lead.get("phone_normalized"))
         if not email and not telefone:
             raise ErroDefinitivo("lead sem e-mail e sem telefone: o GrowthHS recusa "
                                  "pessoa assim (422)", 422)
@@ -476,7 +512,7 @@ class Cliente:
         if telefone:
             corpo["phone"] = corpo["phone_whatsapp"] = telefone[:MAX_TELEFONE]
         if _tem(lead.get("cargo")):
-            corpo["position"] = str(lead["cargo"]).strip()
+            corpo["position"] = uma_linha(lead["cargo"])
         try:
             resposta = await self._chamar("POST", CAMINHO_PESSOAS, json=corpo)
         except ErroDefinitivo as erro:
@@ -553,8 +589,10 @@ class Cliente:
 
     async def anotar(self, card_id: int, texto: str) -> None:
         """A nota é o "aviso" ao vendedor (o GrowthHS não manda push de nota;
-        fica no histórico do card)."""
-        await self._chamar("POST", CAMINHO_NOTAS, json={"card_id": card_id, "content": texto})
+        fica no histórico do card). Uma linha só: a nota leva a origem da
+        conversão, que vem de fora (ver `uma_linha`)."""
+        await self._chamar("POST", CAMINHO_NOTAS,
+                           json={"card_id": card_id, "content": uma_linha(texto)})
 
 
 async def testar(cfg: Config, *,
