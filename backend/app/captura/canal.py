@@ -1,6 +1,6 @@
 """O canal de um toque (visita ou conversão) — prova do RD, 21/10/2026.
 
-Um de `pago | social | email | organico | referencia | direto`. É a régua dos
+Um de `pago | social | email | organico | referencia | campanha | direto`. É a régua dos
 números por página (Tarefa 5): a mesma função classifica a visita e a
 conversão, senão a taxa por canal compara coisas diferentes.
 
@@ -11,7 +11,10 @@ A ordem importa e é a do plano:
 3. `fbclid`, `utm_source` ou referrer de rede social → `social`;
 4. referrer de buscador → `organico`;
 5. referrer de outro host → `referencia`;
-6. o resto — sem referrer, ou referrer do próprio host → `direto`.
+6. `utm_source` ou `utm_medium` presente que não caiu em nada acima →
+   `campanha` (achado da prova, 22/10: `utm_source=teste` caía em "direto",
+   e link marcado de propósito não é tráfego direto);
+7. o resto — sem referrer, ou referrer do próprio host → `direto`.
 """
 
 from urllib.parse import urlsplit
@@ -71,4 +74,6 @@ def canal_do_toque(*, utm_source: str | None, utm_medium: str | None,
     proprio = (host_da_pagina or "").strip().lower()
     if host and host != proprio:
         return "referencia"
+    if fonte or meio:
+        return "campanha"
     return "direto"

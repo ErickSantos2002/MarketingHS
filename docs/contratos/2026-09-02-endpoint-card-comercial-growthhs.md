@@ -284,7 +284,7 @@ estava acima muda.**
 - `conversion`: a **última** conversão do lead — página da landing
   (`page_slug`) ou formulário de outro site (`form_id`, `site_name`,
   `page_url`), com o canal (`pago`, `social`, `email`, `organico`,
-  `referencia`, `direto`). `null` quando não há.
+  `referencia`, `campanha`, `direto`). `null` quando não há.
 - `consent`: o **último** registro de consentimento (LGPD). `legal_basis` é
   `consentimento` (a pessoa marcou a caixa na landing) ou
   `legitimo_interesse_pedido_contato` (formulário do site sem caixa: a pessoa

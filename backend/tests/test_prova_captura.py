@@ -66,6 +66,23 @@ def test_canal_referencia():
     assert _canal(referrer="https://blog.exemplo.org/post") == "referencia"
 
 
+def test_canal_campanha_utm_que_nao_casa_com_nada():
+    # Achado da prova (22/10): `utm_source=teste` caía em "direto".
+    assert _canal(utm_source="teste") == "campanha"
+    assert _canal(utm_medium="banner", utm_source="parceiro") == "campanha"
+    assert _canal(utm_medium="qrcode") == "campanha"
+    assert _canal(utm_source="teste",
+                  referrer="https://marketinghs.exemplo.com/p/outra") == "campanha"
+    # UTM em branco não é UTM.
+    assert _canal(utm_source="  ") == "direto"
+    # As categorias de antes continuam vencendo.
+    assert _canal(utm_source="google", utm_medium="cpc") == "pago"
+    assert _canal(utm_source="resend", utm_medium="email") == "email"
+    assert _canal(utm_source="instagram", utm_medium="bio") == "social"
+    assert _canal(utm_source="teste", referrer="https://www.google.com/") == "organico"
+    assert _canal(utm_source="teste", referrer="https://blog.exemplo.org/") == "referencia"
+
+
 # ── URLs da config (puro) ────────────────────────────────────────────────────
 
 def test_url_segura():

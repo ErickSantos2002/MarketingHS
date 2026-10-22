@@ -58,6 +58,7 @@ const NOME_DO_CANAL: Record<string, string> = {
   email: 'E-mail',
   organico: 'Orgânico',
   referencia: 'Referência',
+  campanha: 'Campanha',
   direto: 'Direto',
   desconhecido: 'Desconhecido',
 };
