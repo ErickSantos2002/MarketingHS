@@ -121,6 +121,12 @@ async def test_limpar_campo_desconhecido_e_400(cliente, banco_growthhs, token_ad
 @pytest.mark.parametrize("corpo", [
     {"base_url": "growthhs.exemplo.invalid"},
     {"app_url": "ftp://app.exemplo.invalid"},
+    {"base_url": "ftp://growthhs.exemplo.invalid"},
+    {"base_url": "https://"},
+    {"base_url": "https://u:p@growthhs.exemplo.invalid"},
+    {"base_url": "https://u@growthhs.exemplo.invalid"},
+    {"app_url": "https://app.exemplo.invalid/#/x"},
+    {"base_url": "https://growthhs.exemplo.invalid/a b"},
     {"list_id": 0},
     {"boards_conferidos": [0]},
     {"boards_conferidos": [6, 6]},
@@ -128,6 +134,9 @@ async def test_limpar_campo_desconhecido_e_400(cliente, banco_growthhs, token_ad
     {"listas_reuniao": [-1]},
     {"listas_ganho": [32, 32]},
     {"listas_reuniao": list(range(1, 12))},
+    # Vazia = o webhook ignoraria todo evento em silêncio.
+    {"listas_reuniao": []},
+    {"listas_ganho": []},
     {"webhook_secret": "curto-demais"},
     {"client_id": "x" * 201},
 ])
@@ -192,6 +201,95 @@ async def test_testar_fora_do_ar_e_502(cliente, banco_growthhs, token_admin, mon
     monkeypatch.setattr(growthhs, "testar", falso)
     r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
     assert r.status_code == 502
+
+
+async def test_aceita_endereco_interno(cliente, banco_growthhs, token_admin, monkeypatch):
+    """O nome interno do EasyPanel é legítimo — IP/host privado não se recusa."""
+    await _zerar(banco_growthhs, monkeypatch)
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={"base_url": "http://erick_hsgrowth-api:8000",
+                                # Boards vazio é aceito: só deixa `configurado` falso.
+                                "boards_conferidos": []})
+    assert r.status_code == 200, r.text
+    assert r.json()["base_url"] == "http://erick_hsgrowth-api:8000"
+    assert r.json()["boards_conferidos"] == [] and r.json()["configurado"] is False
+
+
+# ⚠️ Segurança (achado da coordenadora): o `base_url` aponta para onde o admin
+# quiser, inclusive endereço interno. Se o corpo da resposta voltasse no
+# "Testar" (ou em `crm_handoffs.erro`, que esta tela mostra), a integração
+# seria um leitor de URL interna.
+CORPOS_SECRETOS = [
+    (404, {"content": b"<html>segredo-interno</html>",
+           "headers": {"content-type": "text/html"}}, "segredo-interno",
+     "404: endereço não parece a API do GrowthHS"),
+    (500, {"text": "token=abc"}, "token=abc", "500: GrowthHS fora do ar ou ocupado"),
+    (422, {"content": b"<pre>DATABASE_URL=postgres://x</pre>"}, "DATABASE_URL",
+     "422: o GrowthHS recusou os dados do contato"),
+]
+
+
+def _transporte(status, kw):
+    return httpx.MockTransport(lambda r: httpx.Response(status, **kw))
+
+
+def _testar_com(monkeypatch, transporte):
+    real = growthhs.testar
+
+    async def com_transporte(cfg, **_):
+        await real(cfg, transporte=transporte)
+
+    monkeypatch.setattr(growthhs, "testar", com_transporte)
+
+
+@pytest.mark.parametrize("status,kw,secreto,esperado", CORPOS_SECRETOS)
+async def test_testar_nunca_ecoa_o_corpo(cliente, banco_growthhs, token_admin, monkeypatch,
+                                         status, kw, secreto, esperado):
+    await _configurar(banco_growthhs, monkeypatch, client_id=f"hsg_eco_{status}")
+    growthhs.limpar_tokens()
+    _testar_com(monkeypatch, _transporte(status, kw))
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+    assert secreto not in r.text
+    if status >= 500:
+        assert r.status_code == 502 and r.json()["detail"] == esperado
+    else:
+        assert r.status_code == 200, r.text
+        assert r.json() == {"valido": False, "status": status, "detalhe": esperado}
+
+
+async def test_testar_mostra_o_detail_json_de_la(cliente, banco_growthhs, token_admin,
+                                                 monkeypatch):
+    await _configurar(banco_growthhs, monkeypatch, client_id="hsg_eco_json")
+    growthhs.limpar_tokens()
+    _testar_com(monkeypatch, _transporte(401, {"json": {"detail": "Credenciais\ninválidas"}}))
+    r = await cliente.post(f"{ROTA}/testar", headers=_auth(token_admin))
+    assert r.json()["detalhe"] == ("401: client_id ou client_secret recusados — "
+                                   "Credenciais inválidas")
+
+
+@pytest.mark.parametrize("status,kw,secreto,esperado", CORPOS_SECRETOS)
+async def test_erro_da_fila_nunca_ecoa_o_corpo(cliente, banco_growthhs, token_admin,
+                                               monkeypatch, status, kw, secreto, esperado):
+    """404 pausa, 500 adia, 422 falha — nos três, o `erro` gravado (e o que o
+    GET mostra) tem o status e a mensagem, nunca o corpo."""
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    monkeypatch.setattr(entrega, "sessao", configuracao.sessao)
+    lead = await _lead(conn, f"fila-eco-{status}@exemplo.invalid")
+    await entrega.enfileirar(conn, lead, "manual")
+    cfg = growthhs.Config(base_url="https://growthhs.exemplo.invalid",
+                          client_id=f"hsg_fila_eco_{status}", client_secret="segredo-x",
+                          list_id=22, boards_conferidos=(6,), app_url=None)
+    growthhs.limpar_tokens()
+    await entrega.rodar_entregas(somente_lead=lead, cfg=cfg, transporte=_transporte(status, kw))
+    erro = await conn.fetchval(
+        "SELECT erro FROM crm_handoffs WHERE lead_id = $1::uuid", lead)
+    assert secreto not in erro and esperado in erro
+    eventos = await conn.fetch(
+        "SELECT metadata::text FROM contact_events WHERE lead_id = $1::uuid", lead)
+    assert all(secreto not in e["metadata"] for e in eventos)
+    r = await cliente.get(ROTA, headers=_auth(token_admin))
+    assert secreto not in r.text
 
 
 @pytest.mark.parametrize("falta", ["base_url", "client_id", "segredo"])

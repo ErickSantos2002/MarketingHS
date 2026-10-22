@@ -445,12 +445,53 @@ def limpar_tokens() -> None:
     _TOKENS.clear()
 
 
+MENSAGENS_POR_STATUS = {
+    400: "o GrowthHS recusou o pedido",
+    401: "client_id ou client_secret recusados",
+    403: "o usuário de integração não tem permissão",
+    404: "endereço não parece a API do GrowthHS",
+    422: "o GrowthHS recusou os dados do contato",
+}
+MENSAGEM_FORA_DO_AR = "GrowthHS fora do ar ou ocupado"
+MAX_DETAIL = 200
+
+
+def _detail_da_resposta(resposta: httpx.Response) -> str | None:
+    """O `detail` do FastAPI de lá, se a resposta for um objeto JSON com
+    `detail` string — numa linha, cortado. Qualquer outra coisa: nada."""
+    try:
+        corpo = resposta.json()
+    except ValueError:
+        return None
+    if isinstance(corpo, dict) and isinstance(corpo.get("detail"), str):
+        return uma_linha(corpo["detail"])[:MAX_DETAIL] or None
+    return None
+
+
+def texto_do_erro(resposta: httpx.Response) -> str:
+    """`"<status>: <mensagem genérica>"` (+ ` — <detail>` do JSON de lá).
+
+    ⚠️ Segurança (achado da coordenadora, 22/10): NUNCA o corpo cru. O
+    `base_url` é escolhido na tela de admin e pode apontar para qualquer
+    endereço interno; ecoar o corpo no "Testar conexão" (ou em
+    `crm_handoffs.erro`, que a tela mostra) transformaria a integração num
+    leitor de URL interna. Só o status, a mensagem da faixa e, no máximo, o
+    `detail` de um objeto JSON."""
+    codigo = resposta.status_code
+    if codigo >= 500 or codigo == 429:
+        mensagem = MENSAGEM_FORA_DO_AR
+    else:
+        mensagem = MENSAGENS_POR_STATUS.get(codigo, MENSAGENS_POR_STATUS[400])
+    detail = _detail_da_resposta(resposta)
+    return f"{codigo}: {mensagem}" + (f" — {detail}" if detail else "")
+
+
 def _classificar(resposta: httpx.Response) -> None:
     """Não-2xx → exceção. 5xx/429 transitório; outro 4xx definitivo com o
     status (401/403/404 pausam a fila em `entrega.py`; 422 falha o pedido)."""
     if 200 <= resposta.status_code < 300:
         return
-    detalhe = f"{resposta.status_code}: {resposta.text[:400]}"
+    detalhe = texto_do_erro(resposta)
     if resposta.status_code >= 500 or resposta.status_code == 429:
         raise ErroTransitorio(detalhe)
     raise ErroDefinitivo(detalhe, resposta.status_code)
@@ -464,7 +505,9 @@ def _objeto(resposta: httpx.Response) -> dict:
     except ValueError:
         corpo = None
     if not isinstance(corpo, dict):
-        raise ErroTransitorio(f"resposta inesperada do GrowthHS: {resposta.text[:200]}")
+        # ⚠️ Sem o corpo: ver `texto_do_erro`.
+        raise ErroTransitorio(f"{resposta.status_code}: resposta inesperada do GrowthHS "
+                              f"(não é objeto JSON)")
     return corpo
 
 
@@ -501,7 +544,9 @@ class Cliente:
         try:
             return await self._http.request(metodo, url, **kw)
         except httpx.HTTPError as erro:
-            raise ErroTransitorio(f"sem resposta do GrowthHS: {erro}") from erro
+            # ⚠️ Só o nome da classe: o texto do httpx pode trazer a URL.
+            raise ErroTransitorio(
+                f"sem resposta do GrowthHS ({type(erro).__name__})") from erro
 
     async def _token(self, *, renovar: bool = False) -> str:
         chave = self._chave_token()

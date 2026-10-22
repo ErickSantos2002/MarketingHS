@@ -48,8 +48,11 @@ const MIN_SEGREDO_WEBHOOK = 16;
 
 /** "6, 7" → [6, 7]. Devolve a mensagem de erro em vez da lista quando o texto
  *  não é uma lista de ids válida (número > 0, sem repetido, até 10). */
-function lerIds(texto: string): number[] | string {
+function lerIds(texto: string, exigir = false): number[] | string {
   const partes = texto.split(/[\s,;]+/).filter(Boolean);
+  // Listas de reunião/ganho vazias fariam o webhook de volta ignorar todo
+  // evento em silêncio — o backend recusa (422); aqui só se avisa antes.
+  if (exigir && partes.length === 0) return 'Informe ao menos uma lista.';
   if (partes.some((p) => !/^\d+$/.test(p) || Number(p) <= 0)) {
     return 'Use números maiores que zero, separados por vírgula.';
   }
@@ -164,8 +167,8 @@ export default function GrowthHSCard() {
   };
 
   const boards = lerIds(boardsInput);
-  const reuniao = lerIds(reuniaoInput);
-  const ganho = lerIds(ganhoInput);
+  const reuniao = lerIds(reuniaoInput, true);
+  const ganho = lerIds(ganhoInput, true);
   const webhookCurto =
     webhookSecretInput.trim().length > 0 && webhookSecretInput.trim().length < MIN_SEGREDO_WEBHOOK;
   const listaInvalida =

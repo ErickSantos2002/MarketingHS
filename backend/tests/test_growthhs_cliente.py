@@ -575,3 +575,45 @@ async def test_pessoa_criada_sem_quebra_de_linha():
         await cli.achar_ou_criar_pessoa(lead)
     corpo = _corpo(api.de(*CRIAR_PESSOA)[0])
     assert corpo["name"] == "Carla Menezes" and corpo["position"] == "Gerente SESMT"
+
+
+# ── Texto do erro: nunca o corpo cru (achado de segurança, 22/10) ───────────
+# O `base_url` é escolhido pelo admin e pode ser qualquer endereço interno: o
+# corpo de lá nunca vira texto de erro (que vai para o "Testar" e para
+# `crm_handoffs.erro`). Só status + mensagem da faixa + `detail` JSON.
+
+@pytest.mark.parametrize("resposta,esperado", [
+    (httpx.Response(404, html="<html>segredo-interno</html>"),
+     "404: endereço não parece a API do GrowthHS"),
+    (httpx.Response(500, text="token=abc"), "500: GrowthHS fora do ar ou ocupado"),
+    (httpx.Response(429, text="token=abc"), "429: GrowthHS fora do ar ou ocupado"),
+    (httpx.Response(403, json={"erro": "segredo-interno"}),
+     "403: o usuário de integração não tem permissão"),
+    (httpx.Response(409, json=["segredo-interno"]), "409: o GrowthHS recusou o pedido"),
+    (httpx.Response(400, json={"detail": [{"msg": "segredo-interno"}]}),
+     "400: o GrowthHS recusou o pedido"),
+    (httpx.Response(422, json={"detail": "E-mail\ninválido " + "x" * 300}),
+     "422: o GrowthHS recusou os dados do contato — E-mail inválido " + "x" * 184),
+])
+def test_texto_do_erro_sem_corpo(resposta, esperado):
+    assert growthhs.texto_do_erro(resposta) == esperado
+
+
+async def test_sem_resposta_nao_ecoa_o_texto_do_httpx():
+    def quebra(request):
+        raise httpx.ConnectError(f"falhou {request.url} segredo-interno")
+
+    growthhs.limpar_tokens()
+    async with Cliente(CFG, transporte=httpx.MockTransport(quebra)) as cli:
+        with pytest.raises(ErroTransitorio) as erro:
+            await cli.ler_card(1)
+    assert str(erro.value) == "sem resposta do GrowthHS (ConnectError)"
+
+
+async def test_2xx_que_nao_e_objeto_nao_ecoa_o_corpo():
+    api = Api({TOKEN: [httpx.Response(200, text="segredo-interno")]})
+    growthhs.limpar_tokens()
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroTransitorio) as erro:
+            await cli.ler_card(1)
+    assert "segredo-interno" not in str(erro.value)

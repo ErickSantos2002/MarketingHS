@@ -2,6 +2,7 @@
 e a tags — dois dos 68 pontos que a spec mandou fechar."""
 
 import re
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -838,11 +839,27 @@ class GrowthHSIn(BaseModel):
     @field_validator("base_url", "app_url")
     @classmethod
     def _endereco(cls, valor):
+        """Só http/https, com host, sem usuário/senha e sem fragmento.
+
+        ⚠️ IP privado NÃO é recusado: a API do GrowthHS pode ser legítima
+        pelo nome interno do EasyPanel (`http://erick_hsgrowth-api:8000`). A
+        defesa contra virar leitor de URL interna é outra: nenhuma resposta
+        de lá volta crua (`growthhs.texto_do_erro`). Credencial na URL
+        apareceria inteira no GET desta tela — por isso sai."""
         if valor is None or not valor.strip():
             return None
         valor = valor.strip().rstrip("/")
-        if not re.match(r"^https?://[^/\s]+", valor, re.I):
+        try:
+            partes = urlsplit(valor)
+            host = partes.hostname
+        except ValueError:
+            raise ValueError("endereço inválido") from None
+        if partes.scheme.lower() not in ("http", "https") or not host or re.search(r"\s", valor):
             raise ValueError("use o endereço completo, com https://")
+        if partes.username or partes.password or "@" in partes.netloc:
+            raise ValueError("não coloque usuário ou senha no endereço")
+        if partes.fragment or "#" in valor:
+            raise ValueError("o endereço não pode ter # (fragmento)")
         return valor
 
     @field_validator("client_id", "client_secret")
@@ -873,6 +890,17 @@ class GrowthHSIn(BaseModel):
             raise ValueError("cada id precisa ser um número maior que zero")
         if len(set(valor)) != len(valor):
             raise ValueError("há id repetido")
+        return valor
+
+    @field_validator("listas_reuniao", "listas_ganho")
+    @classmethod
+    def _ao_menos_uma(cls, valor):
+        """⚠️ Lista vazia aqui faria o webhook de volta ignorar TODO evento em
+        silêncio (nenhuma lista prova reunião/ganho) — 200 para o GrowthHS e
+        nada no contato. `null` continua sendo "não mexi"; `boards_conferidos`
+        vazio é aceito (só deixa `configurado` falso, e isso aparece)."""
+        if valor is not None and not valor:
+            raise ValueError("informe ao menos uma lista")
         return valor
 
 
