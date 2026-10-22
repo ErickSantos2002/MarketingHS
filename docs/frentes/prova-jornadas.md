@@ -9,7 +9,8 @@ n 18 · Vite 8098 · backend 8118. Branch `prova-jornadas`.
 - [x] Tarefa 8 — nós "avisar por e-mail" e "enviar para webhook" pela caixa de saída (`d95caf6`)
 - [x] Tarefa 9 — PDF para a ficha técnica (`d1cd202`)
 - [x] Correção de segurança pedida pela coordenadora: SSRF no webhook (`7ee3a0e`)
-- [x] Segunda rodada: DNS rebinding — o POST vai para o IP conferido (ver abaixo)
+- [x] Segunda rodada: DNS rebinding — o POST vai para o IP conferido (`b5af490`)
+- [x] Revisão da branch, 7 itens (`20f917e`…`75f7c21`, um commit por item — ver abaixo)
 - **Pronto para merge.**
 
 ## O que entrou
@@ -30,7 +31,8 @@ mesmo `_compasso` do envio. `ritmo.SQL_USO`/`SQL_PRIMEIRO_DIA` contam os
 avisos enviados (um por id do Resend).
 
 **Tarefa 9.** `POST /arquivos`, `GET /arquivos`, `GET /publico/arquivo/{id}`
-em `routers/imagens.py`, com os cabeçalhos do plano.
+em `routers/imagens.py`. Desde a revisão (item 6) o PDF sai como
+`attachment` com `nosniff`, sem `CSP: sandbox`.
 
 **SSRF (pedido da coordenadora).** `saidas.conferir_forma_da_url` (sem DNS: rota
 e nó) e `saidas.conferir_destino` (com DNS: worker, antes de conectar). Recusa
@@ -47,6 +49,36 @@ entre colchetes) com `Host: <nome original>` e `extensions={"sni_hostname":
 extensão em `_async/connection.py`). Teste com resolvedor que responde IP
 público na 1ª consulta e interno nas seguintes: o pedido sai para o IP público,
 com Host/SNI do nome, e o nome é resolvido uma vez só.
+
+**Revisão da branch (21/10, noite) — um commit por item, todos com teste.**
+1. `20f917e` — reivindicação só com `tentativas < MAX_TENTATIVAS`; pendente
+   vencida que esgotou vira `falhou` (falha depois da chamada, ex.
+   `_marcar_enviado` estourando, não reenvia sem fim).
+2. `b578625` — teto do Resend: aviso reivindicado por **destinatários** que
+   faltam; `SQL_USO` conta aviso com `resend_email_id` mesmo sem
+   `enviado_em` (`coalesce(enviado_em, atualizado_em)`); `Uso.reservados`
+   (fila de e-mail reivindicada + destinatários de aviso reivindicado) e
+   `ritmo.cota_de`, que desconta; `ritmo.travar_cota`
+   (`pg_advisory_xact_lock(7270027018)`) em volta de medir + reivindicar no
+   `worker._tick` **e** no laço das saídas.
+3. `e92189d` — modo teste ligado: cada destinatário do `notify_email` tem de
+   estar na lista. A rota (POST e PATCH, com lista e nós **em vigor**)
+   responde 400 `nó <id>: com o modo teste ligado, o aviso só pode ir para
+   e-mails da lista — fora dela: …`; `_mandar_aviso` relê a lista, pula quem
+   está fora (`payload.pulados`) e falha se não sobrar ninguém. Sem modo
+   teste, qualquer endereço. Regra única em `app/jornadas/modo_teste.py`.
+4. `363f0e6` — aviso e webhook reconferem o **contato** na hora de sair
+   (`modo_teste.na_lista` sobre a lista em vigor): fora, `falhou` com `modo
+   teste: contato fora da lista`. **A entrega ao CRM (`app/crm/entrega.py`)
+   é da `prova-captura`** — não mexi; ver pergunta 4.
+5. `ef90a12` — webhook por `stream`, só o status (corpo nunca lido; sair do
+   bloco fecha); prazo total `asyncio.wait_for(…, 15)`; avisos drenados
+   antes dos webhooks.
+6. `75f7c21` — PDF: `Content-Disposition: attachment`, `nosniff`, sem CSP.
+7. **Rotas admin de PDF continuam em `service_role`:** `email_assets` não tem
+   RLS nem política, e `authenticated` não tem GRANT nela (conferido no banco
+   pelo perfil de leitura: `relrowsecurity = false`, 0 políticas). Trocar para
+   `authenticated` derrubaria a rota. Ver pergunta 5.
 
 ## Desvios do plano (todos pequenos, todos para o lado seguro)
 
@@ -68,13 +100,14 @@ com Host/SNI do nome, e o nome é resolvido uma vez só.
    O mesmo vale para erro HTTP do Resend no aviso (4xx falha, 5xx reagenda).
 5. **A rota de imagem deixa de servir o que está em `pasta = 'arquivos'`**
    (espelho do "a rota de arquivo não serve imagem"): sem isso o PDF sairia
-   por `/publico/imagem/<id>` sem `nosniff` nem `sandbox`.
+   por `/publico/imagem/<id>` sem `nosniff` nem `attachment`.
 6. **Lista vazia gravada direto no banco (`{}`) não libera ninguém.** Só a
    rota transforma `[]` em "sem modo teste" (NULL) — Review Focus 4.
 
 ## Portão
 
-- `count(*) FROM leads`: **2.107 antes**, ver abaixo depois.
+- `count(*) FROM leads`: **2.107 antes e 2.107 depois** de cada tentativa de
+  suíte (inclusive as interrompidas).
 - 027 aplicada em produção (conferido `to_regclass('public.journey_saidas')`
   pelo perfil de leitura): os testes desta frente rodaram **sem pular**.
 - Arquivos tocados, no banco de produção: `test_prova_jornadas.py` 25 passed;
@@ -83,7 +116,17 @@ com Host/SNI do nome, e o nome é resolvido uma vez só.
   (antes do SSRF); `test_prova_arquivos.py` 15 passed. Num Postgres 17 local
   descartável com 000…027: os mesmos, mais `test_migracao_027`, 123 passed;
   depois do SSRF, `test_prova_saidas` + `test_prova_jornadas` 86 passed.
-- Suíte inteira: ver abaixo.
+- Arquivos tocados depois da revisão (Postgres 17 local com 000…027):
+  `test_prova_saidas` + `test_prova_jornadas` 108 passed; `test_prova_arquivos`
+  15 passed; `test_prova_saidas` + `test_worker_ritmo` + `test_ritmo` +
+  `test_ritmo_envio` + `test_worker_aviso` 120 passed (no item 2).
+- **Suíte inteira: NÃO fechou nesta frente.** 1ª tentativa morta no
+  `timeout 3600` (rodou em paralelo com a da `prova-captura`); 2ª interrompida
+  por mim (SIGINT, a pedido, para a revisão) com 74 passed; 3ª (17:08 de 21/10,
+  sozinha ao começar) parou com a suspensão da máquina à noite e foi morta pela
+  coordenadora (`saida=143`), ~25% feita, tudo verde até ali. Por ordem da
+  coordenadora, a suíte inteira da branch fica com ela (uma por vez, com a
+  suspensão bloqueada).
 - Nada em `frontend/`: `tsc`, guarda e builds não se aplicam a esta frente.
 
 ## Perguntas / fora do território
@@ -95,4 +138,16 @@ com Host/SNI do nome, e o nome é resolvido uma vez só.
 3. A tela (`prova-telas`) precisa saber: `allowed_emails` volta em
    `GET /jornadas` e no detalhe; `PATCH` com `[]` desliga o modo teste; a rota
    recusa webhook interno com 400 e `detail` começando por `nó <id>: webhook
-   recusado: …`; `POST /arquivos` devolve `url_publica` para pôr no e-mail.
+   recusado: …`, e aviso para fora da lista do modo teste com 400 `nó <id>:
+   com o modo teste ligado, …`; `POST /arquivos` devolve `url_publica`.
+4. **Entrega ao CRM reconferindo o modo teste na hora de sair** (item 4 da
+   revisão) — `app/crm/entrega.py` é território da `prova-captura`. Hoje o
+   nó `handoff_growthhs` já é barrado no executor para contato fora da lista
+   (nada é enfileirado), mas a fila `crm_handoffs` não relê a lista ao
+   entregar. Para a `prova-captura`: em `_entregar`, se `pedido.journey_run_id`
+   não for nulo, ler `journeys.allowed_emails` pelo run e falhar o pedido com
+   `modo teste: contato fora da lista` quando `modo_teste.na_lista(lista,
+   lead.email)` for falso.
+5. **RLS em `email_assets`** para as rotas admin de imagem/PDF poderem usar
+   `authenticated`: exigiria migration (política admin + GRANT), que não é
+   desta frente. Assumido: `service_role` com `admin_atual` na rota.
