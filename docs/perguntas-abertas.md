@@ -130,3 +130,12 @@ dia no `CONTINUAR-AQUI.md`.
     só lista. **Assumido:** um contato real que converteu na prova não vai
     para a lixeira.
 68. **Destinatário do aviso na prova** = 1º e-mail da lista do `semear`.
+69. **"Aviso" de card atualizado** (integração real com o GrowthHS, 22/10):
+    o Erick pediu que o card aberto seja atualizado "e deixe um aviso". O
+    GrowthHS não manda push de anotação. **Assumido:** o aviso é uma nota
+    (`POST /card-notes`) no histórico do card. Alternativa: pedir ao GrowthHS
+    notificação ao responsável quando o integracao2 anota.
+70. **`origin` de lead sem conversão** (envio manual, regra sobre a base):
+    **Assumido:** `MarketingHS`. Alternativa: `Contato pelo Site`.
+71. **Pessoa só com cards ganhos/perdidos:** **Assumido:** cria card novo
+    (nova oportunidade). Só card aberto é atualizado.

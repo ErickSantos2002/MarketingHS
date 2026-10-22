@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 22/10 (noite):** aberta `growthhs-real` — spec `docs/superpowers/specs/2026-10-22-growthhs-real-design.md`. Dona de: `backend/app/crm/`, `backend/app/routers/publico.py` (só a rota nova do webhook), um router novo se preferir, `backend/app/routers/configuracao.py` (bloco GrowthHS), `backend/migrations/029_growthhs_real.sql`, `frontend/src/components/admin/settings/GrowthHSCard.tsx`, testes de CRM, `docs/contratos/2026-09-02-…` (bloco do topo) e `docs/frentes/growthhs-real.md`. Não roda a suíte inteira (só os arquivos de teste de CRM/GrowthHS); não mexe em `config.py`.
+
 **Estado em 22/10 (fim do dia):** `ajustes-prova` ✅ mergeada e no ar (`6550ab8`, deploy de api, worker e sistema; migration 028 aplicada). A primeira suíte deu 3 falhas: o **worker de produção reivindicava as linhas de teste** de `journey_saidas`, que os testes gravam fora da transação revertida. Consertado com `saidas.NO_DE_TESTE`, que a passada sem `somente=` nunca pega. Depois do deploy: **804 passed**, banco limpo. Nenhuma frente aberta.
 
 **Estado em 22/10 (tarde, depois da prova):** aberta `ajustes-prova` (sobras da prova; dona da migration 028). A suíte inteira é da coordenadora.
