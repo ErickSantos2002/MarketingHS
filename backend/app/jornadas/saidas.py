@@ -55,6 +55,11 @@ LOTE = 20
 REMETENTE_PADRAO = "MarketingHS <noreply@localhost>"
 # 4xx que não são "o pedido está errado": tempo esgotado e limite de taxa.
 STATUS_TRANSITORIOS = frozenset({408, 429})
+# ⚠️ Os testes de `rodar_saidas` gravam linha de verdade no banco de produção
+# (fora da transação revertida). Com este nó, a linha só sai por uma passada
+# com `somente=` — o worker de produção, que passa sem filtro, nunca a vê.
+# Medido em 22/10/2026: sem a marca, o worker pegava a linha antes do teste.
+NO_DE_TESTE = "__teste__"
 
 # Campos do lead que o aviso e o webhook carregam (o retrato no momento do nó).
 CAMPOS_DO_LEAD = ("id", "nome", "email", "whatsapp", "phone_normalized", "empresa",
@@ -305,8 +310,9 @@ async def reivindicar(conn, tipo: str, limite: int, *,
                          'desistiu: ' || tentativas || ' tentativas esgotadas'), 1000)
             WHERE status = 'pendente' AND visivel_em <= now() AND tipo = $1
               AND tentativas >= $2
-              AND ($3::bigint[] IS NULL OR id = ANY($3::bigint[]))""",
-        tipo, MAX_TENTATIVAS, somente)
+              AND ($3::bigint[] IS NULL OR id = ANY($3::bigint[]))
+              AND ($3::bigint[] IS NOT NULL OR journey_node_id <> $4)""",
+        tipo, MAX_TENTATIVAS, somente, NO_DE_TESTE)
     if limite <= 0:
         return []
     # ⚠️ Para aviso, `limite` é de DESTINATÁRIOS (o teto do Resend conta
@@ -323,6 +329,7 @@ async def reivindicar(conn, tipo: str, limite: int, *,
                 WHERE status = 'pendente' AND visivel_em <= now()
                   AND tipo = $1 AND tentativas < $5
                   AND ($4::bigint[] IS NULL OR id = ANY($4::bigint[]))
+                  AND ($4::bigint[] IS NOT NULL OR journey_node_id <> $7)
                 ORDER BY visivel_em, id LIMIT $6
                 FOR UPDATE SKIP LOCKED),
            escolhidas AS (
@@ -334,7 +341,8 @@ async def reivindicar(conn, tipo: str, limite: int, *,
             WHERE id IN (SELECT id FROM escolhidas)
         RETURNING id, tipo, destino, payload, tentativas, resend_email_id,
                   journey_id::text AS journey_id, lead_id::text AS lead_id""",
-        tipo, limite, PRAZO_DA_REIVINDICACAO, somente, MAX_TENTATIVAS, LOTE)
+        tipo, limite, PRAZO_DA_REIVINDICACAO, somente, MAX_TENTATIVAS, LOTE,
+        NO_DE_TESTE)
     return [{**dict(l), "payload": _como_dict(l["payload"]) or {}} for l in linhas]
 
 

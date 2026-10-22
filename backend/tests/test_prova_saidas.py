@@ -227,7 +227,8 @@ async def saida():
 
     async def criar(tipo, destino, payload=None, **colunas):
         nomes = ["journey_run_id", "journey_node_id", "tipo", "destino", "payload", *colunas]
-        marcas = ["gen_random_uuid()", "'n1'", "$1", "$2", "$3::jsonb"] + [
+        # `NO_DE_TESTE`: o worker de produção nunca reivindica esta linha.
+        marcas = ["gen_random_uuid()", f"'{saidas.NO_DE_TESTE}'", "$1", "$2", "$3::jsonb"] + [
             f"${i}" for i in range(4, 4 + len(colunas))]
         async with db.sessao(role="service_role") as conn:
             novo = await conn.fetchval(
@@ -332,6 +333,30 @@ async def test_webhook_sem_https_na_saida_falha_sem_chamar(saida):
     chamadas = []
     r = await saidas.rodar_saidas(transporte=_transporte(200, chamadas), somente=[sid])
     assert r["falhos"] == 1 and chamadas == []
+
+
+async def test_passada_sem_filtro_nao_pega_linha_de_teste(conexao):
+    """A passada do worker (sem `somente`) nunca reivindica a linha marcada
+    com `NO_DE_TESTE` — nem a vencida, nem a que esgotou as tentativas.
+    Transação revertida: o que a passada pegar de real volta no rollback."""
+    await _exigir_027(conexao)
+    marcadas = []
+    for tentativas in (0, saidas.MAX_TENTATIVAS):
+        marcadas.append(await conexao.fetchval(
+            "INSERT INTO journey_saidas (journey_run_id, journey_node_id, tipo, destino, "
+            "payload, visivel_em, tentativas) VALUES (gen_random_uuid(), $1, 'webhook', "
+            "'https://exemplo.invalid/x', '{}'::jsonb, '2000-01-01', $2) RETURNING id",
+            saidas.NO_DE_TESTE, tentativas))
+    pegas = await saidas.reivindicar(conexao, "webhook", saidas.LOTE)
+    assert not {p["id"] for p in pegas} & set(marcadas)
+    status = await conexao.fetch(
+        "SELECT status, tentativas FROM journey_saidas WHERE id = ANY($1::bigint[]) ORDER BY id",
+        marcadas)
+    assert [(s["status"], s["tentativas"]) for s in status] == [
+        ("pendente", 0), ("pendente", saidas.MAX_TENTATIVAS)]
+    # com `somente`, a mesma linha sai normalmente
+    pegas = await saidas.reivindicar(conexao, "webhook", saidas.LOTE, somente=marcadas[:1])
+    assert [p["id"] for p in pegas] == marcadas[:1]
 
 
 async def test_saida_reivindicada_nao_volta_antes_do_prazo(saida):
