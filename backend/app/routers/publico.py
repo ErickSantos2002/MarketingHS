@@ -353,7 +353,8 @@ async def webhook_do_growthhs(request: Request,
 
     Sem chave de API: quem prova a origem é a assinatura
     `X-HSGrowth-Signature` com `GROWTHHS_WEBHOOK_SECRET`. Sem segredo
-    configurado → 503 (a rota não liga aberta); corpo > 64 KB → 413;
+    configurado → 503 (a rota não liga aberta); corpo > 512 KB
+    (`volta.CORPO_MAXIMO`) → 413;
     assinatura ausente/errada → 401. Daí em diante, TUDO é 200.
 
     ⚠️ Por que 200 até no erro: a automação de lá se desliga sozinha depois
@@ -381,7 +382,7 @@ async def webhook_do_growthhs(request: Request,
     try:
         payload = json.loads(corpo)
     except (ValueError, UnicodeDecodeError, RecursionError):
-        # `RecursionError`: 64 KB de `[[[[...` aninhado estoura o parser.
+        # `RecursionError`: `[[[[...` aninhado estoura o parser bem antes do teto.
         return {"ignorado": True}
     if not isinstance(payload, dict):
         return {"ignorado": True}

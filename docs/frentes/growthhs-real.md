@@ -43,7 +43,7 @@ cabeçalho). A guarda local antiga (`_ja_entregue`) saiu. Contagem do ciclo:
 `entregues`, `atualizadas`, `adiadas`, `falhas`, `pausadas`.
 
 **Volta (`app/crm/volta.py`, `POST /publico/growthhs/webhook?evento=`).**
-Segredo `GROWTHHS_WEBHOOK_SECRET` (sem ele 503), corpo ≤ 64 KB (413), HMAC
+Segredo `GROWTHHS_WEBHOOK_SECRET` (sem ele 503), corpo ≤ 512 KB (413), HMAC
 sobre os bytes crus em tempo constante (401). Depois disso sempre 200. O evento
 só vale se o corpo assinado bater: `event = card.list_changed` e `card.list_id`
 em `listas_reuniao` (reunião) ou `listas_ganho` (venda). Timestamp do corpo a
@@ -113,9 +113,10 @@ do receptor para copiar. "Testar" = `client-credentials`.
    mesma pessoa convertendo de novo nunca vira pedido (jornada e manual sim).
    Tirar a guarda traria de volta um bloco a cada mudança de etiqueta.
    **Assumido:** não mexer; a saída provável é enfileirar na conversão.
-2. **Teto de 64 KB do webhook** contra card com descrição longa (cada
-   reconversão anexa um bloco). **Assumido:** 64 KB (spec); subir para
-   256 KB se aparecer 413 no log.
+2. **Teto do corpo do webhook** contra card com descrição longa (cada
+   reconversão anexa um bloco). Era 64 KB (spec); a revisão final (M1) subiu
+   para **512 KB** — um 413 conta como falha lá e 5 seguidas desligam a
+   automação.
 3. **`person_id` guardado como atalho** (spec §3): **não** reusado — a pessoa
    é sempre buscada por e-mail (ids do receptor de teste). Exceção: lead sem
    e-mail reusa a pessoa que o próprio pedido criou.

@@ -157,6 +157,19 @@ async def test_corpo_grande_413(cliente, com_segredo):
     assert r.status_code == 413
 
 
+async def test_card_com_descricao_grande_nao_e_413(cliente, com_segredo):
+    """Revisão final (M1): a descrição do card cresce um bloco por
+    reconversão, e vem inteira no corpo. 413 conta como falha lá — 5 seguidas
+    desligam a automação. 300 KB (bem acima do teto antigo de 64 KB) passa."""
+    conn = await com_segredo()
+    lead_id, email = await _lead(conn)
+    corpo = _corpo(email=email, description="bloco de reconversão\n" * 15_000)
+    assert 256 * 1024 < len(corpo) < volta.CORPO_MAXIMO
+    r = await _postar(cliente, corpo)
+    assert r.status_code == 200, r.text
+    assert r.json()["lead_id"] == lead_id
+
+
 async def test_reuniao_pelo_card_id_avanca_para_mql(cliente, com_segredo):
     conn = await com_segredo()
     lead_id, email = await _lead(conn)
@@ -232,7 +245,7 @@ async def test_evento_desconhecido_200_ignorado(cliente, com_segredo):
 
 async def test_json_invalido_assinado_200_ignorado(cliente, com_segredo):
     await com_segredo()
-    # O último estoura o parser com RecursionError (aninhamento), dentro dos 64 KB.
+    # O último estoura o parser com RecursionError (aninhamento), dentro do teto.
     for corpo in (b"{nao e json", b"", b"[1,2]", "\xff".encode("latin-1"),
                   b"[" * 60_000):
         r = await _postar(cliente, corpo)

@@ -30,9 +30,12 @@ EVENTOS = {
     "deal_won": "Venda fechada no GrowthHS",
 }
 
-# O corpo do GrowthHS tem uns poucos KB (um card, sem histórico); 64 KB é
-# folga larga e corta quem tenta encher a memória por uma rota anônima.
-CORPO_MAXIMO = 64 * 1024
+# O corpo do GrowthHS é um card, sem histórico — mas com a `description`
+# inteira, e a entrega ANEXA um bloco a cada reconversão (revisão final, M1):
+# um card de cliente antigo cresce sem teto. 64 KB era pouco: um 413 conta
+# como falha lá, e 5 seguidas DESLIGAM a automação (§8.5 do doc de lá). 512 KB
+# ainda corta quem tenta encher a memória por uma rota anônima.
+CORPO_MAXIMO = 512 * 1024
 
 # O único `event` que a automação `send_webhook` manda (formato fixo, doc do
 # GrowthHS §4) — vale para mover E para ganhar, porque ganhar MOVE o card para
