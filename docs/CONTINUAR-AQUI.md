@@ -9,7 +9,7 @@
 >
 > ⚠️ **Achado:** os testes de `rodar_saidas` gravam linha de verdade em
 > `journey_saidas`, e o worker de produção (sem filtro) as pegava antes do
-> teste. Ele chegou a tentar webhooks de teste para `exemplo.invalid`/`gancho.exemplo.com`.
+> teste. Pode ter tentado webhooks de teste para `exemplo.invalid`/`gancho.exemplo.com` (sem log para confirmar).
 > No Resend não saiu nada da suíte (conferido pelo Erick). Agora a linha de
 > teste nasce com `journey_node_id = saidas.NO_DE_TESTE` e só sai com `somente=`.
 > **Regra:** teste que grava fora da transação revertida precisa de uma marca
