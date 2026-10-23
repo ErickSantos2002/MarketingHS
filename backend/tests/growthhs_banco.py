@@ -13,16 +13,21 @@ import pathlib
 
 import pytest_asyncio
 
-MIGRATION = (pathlib.Path(__file__).parent.parent / "migrations"
-             / "029_growthhs_real.sql")
+MIGRATIONS = pathlib.Path(__file__).parent.parent / "migrations"
+MIGRATION = MIGRATIONS / "029_growthhs_real.sql"
+MIGRATION_030 = MIGRATIONS / "030_growthhs_ambientes.sql"
+# As tabelas que a 030 altera — copiadas para `pg_temp` enquanto ela não está
+# no banco de verdade.
+TABELAS_030 = ("growthhs_config", "crm_handoffs", "ecosystem_identities")
 
 # Módulos que fazem `from app.database import sessao` — o desvio precisa ser
 # feito no próprio módulo. `app.crm.volta` ainda pode não existir.
 MODULOS = ("app.crm.growthhs", "app.integracoes", "app.routers.configuracao",
            "app.routers.publico", "app.routers.leitura_contatos",
-           "app.crm.volta")
+           "app.crm.volta", "app.routers.automacoes", "app.crm.entrega")
 
-SEGREDOS = ("GROWTHHS_CLIENT_SECRET", "GROWTHHS_WEBHOOK_SECRET")
+SEGREDOS = tuple(f"GROWTHHS_{tipo}_SECRET_{amb}" for tipo in ("CLIENT", "WEBHOOK")
+                 for amb in ("HOMOLOGACAO", "PRODUCAO"))
 
 
 async def aplicar_029(conexao):
@@ -52,6 +57,50 @@ async def aplicar_029(conexao):
     return True
 
 
+async def tem_030(conexao) -> bool:
+    return await conexao.fetchval(
+        """SELECT EXISTS (SELECT 1 FROM pg_attribute
+            WHERE attrelid = to_regclass('public.growthhs_config')
+              AND attname = 'ambiente' AND NOT attisdropped)""")
+
+
+def sql_030_em(nomes: dict[str, str]) -> str:
+    """O SQL da 030 com `public.<tabela>` trocado por `nomes[tabela]`.
+    ⚠️ `public.growthhs_config_linha_unica` (o índice da 018) vira
+    `<nome>_linha_unica` pela mesma troca — quem cria a cópia dá esse nome
+    ao índice de linha única dela."""
+    sql = MIGRATION_030.read_text()
+    for tabela, nome in nomes.items():
+        sql = sql.replace(f"public.{tabela}", nome)
+    return sql
+
+
+async def aplicar_030(conexao):
+    """Garante a forma da 030 NESTA transação, sem tocar as tabelas reais —
+    o mesmo desenho de `aplicar_029`: se a 030 ainda não está no banco, as
+    três tabelas que ela altera ganham uma cópia TEMPORÁRIA com o mesmo nome
+    (que vem antes de `public` no search_path) e o SQL da migration é
+    aplicado nas cópias. Consultas SEM schema enxergam a cópia. Depois que a
+    030 for aplicada de verdade, nada disso roda. Devolve True se copiou.
+
+    ⚠️ `growthhs_config` é copiada SEM os índices (o `LIKE ... INCLUDING ALL`
+    daria outro nome ao índice de linha única, e a 030 não o acharia para
+    apagar): o índice é recriado com o nome que a troca de `sql_030_em` dá.
+    """
+    if await tem_030(conexao):
+        return False
+    await conexao.execute(
+        "CREATE TEMP TABLE growthhs_config (LIKE public.growthhs_config "
+        "INCLUDING DEFAULTS INCLUDING CONSTRAINTS) ON COMMIT DROP")
+    await conexao.execute(
+        "CREATE UNIQUE INDEX growthhs_config_linha_unica ON pg_temp.growthhs_config ((true))")
+    for tabela in ("crm_handoffs", "ecosystem_identities"):
+        await conexao.execute(
+            f"CREATE TEMP TABLE {tabela} (LIKE public.{tabela} INCLUDING ALL) ON COMMIT DROP")
+    await conexao.execute(sql_030_em({t: f"pg_temp.{t}" for t in TABELAS_030}))
+    return True
+
+
 @pytest_asyncio.fixture
 async def banco_growthhs(cliente, conexao, monkeypatch):
     # ⚠️ `cliente` antes de `conexao`: a pool só fecha depois que a conexão
@@ -59,6 +108,7 @@ async def banco_growthhs(cliente, conexao, monkeypatch):
     from app import integracoes
 
     await aplicar_029(conexao)
+    await aplicar_030(conexao)
 
     @contextlib.asynccontextmanager
     async def falsa(*, role=None, user_id=None, **_):

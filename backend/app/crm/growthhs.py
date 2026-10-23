@@ -36,8 +36,22 @@ from app.integracoes import ler_segredo
 
 logger = logging.getLogger(__name__)
 
-SEGREDO_CLIENTE = "GROWTHHS_CLIENT_SECRET"
-SEGREDO_WEBHOOK = "GROWTHHS_WEBHOOK_SECRET"
+# Dois GrowthHS salvos lado a lado (migration 030): cada um com a própria
+# linha em `growthhs_config` e os próprios segredos. Só o ATIVO recebe lead.
+AMBIENTES = ("homologacao", "producao")
+NOME_DO_AMBIENTE = {"homologacao": "Homologação", "producao": "Produção"}
+
+
+def segredo_cliente(ambiente: str) -> str:
+    """`GROWTHHS_CLIENT_SECRET_HOMOLOGACAO` / `..._PRODUCAO`."""
+    return f"GROWTHHS_CLIENT_SECRET_{ambiente.upper()}"
+
+
+def segredo_webhook(ambiente: str) -> str:
+    """`GROWTHHS_WEBHOOK_SECRET_HOMOLOGACAO` / `..._PRODUCAO`."""
+    return f"GROWTHHS_WEBHOOK_SECRET_{ambiente.upper()}"
+
+
 TIMEOUT = 15
 CAMINHO_TOKEN = "/api/v1/auth/client-credentials"
 CAMINHO_PESSOAS = "/api/v1/persons"
@@ -79,11 +93,19 @@ class Config:
     # Com padrão: quem constrói `Config` à mão (testes, entrega) não muda.
     listas_reuniao: tuple[int, ...] = LISTAS_REUNIAO_PADRAO
     listas_ganho: tuple[int, ...] = LISTAS_GANHO_PADRAO
+    # De qual GrowthHS é esta configuração (migration 030). É o carimbo que a
+    # entrega grava ao lado de todo card_id/person_id — sem ele, o id não vale.
+    ambiente: str | None = None
+
+    @property
+    def completo(self) -> bool:
+        """Os campos que a entrega precisa — o que "Usar este ambiente" exige."""
+        return bool(self.base_url and self.client_id and self.client_secret
+                    and self.list_id and self.boards_conferidos)
 
     @property
     def configurado(self) -> bool:
-        return bool(self.base_url and self.client_id and self.client_secret
-                    and self.list_id and self.boards_conferidos)
+        return self.completo and self.ambiente in AMBIENTES
 
     def url_do_card(self, card_id) -> str | None:
         """O link "Ver no GrowthHS" (rota `/cards/:cardId` do app dele)."""
@@ -92,26 +114,17 @@ class Config:
         return f"{self.app_url.rstrip('/')}/cards/{card_id}"
 
 
-async def ler_config() -> Config:
-    """Nunca levanta: banco fora vira "não configurado", e a fila espera.
+_COLUNAS_CONFIG = """ambiente, base_url, client_id, list_id, boards_conferidos,
+    app_url, listas_reuniao, listas_ganho"""
 
-    ⚠️ Modo de falhar: erro de leitura da tabela ou coluna ausente (migration
-    029 não aplicada) devolve tudo vazio, nunca exceção — o worker não pode
-    cair por causa de configuração.
-    """
-    try:
-        async with sessao(role="service_role") as conn:
-            linha = await conn.fetchrow(
-                """SELECT base_url, client_id, list_id, boards_conferidos,
-                          app_url, listas_reuniao, listas_ganho
-                     FROM growthhs_config LIMIT 1""")
-    except Exception:
-        logger.exception("[growthhs] não foi possível ler growthhs_config")
-        linha = None
+
+async def _config_da_linha(linha, ambiente: str | None) -> Config:
+    """Sem linha: tudo vazio, mas as listas do webhook são as padrão de
+    produção — nunca "nenhuma lista"."""
     return Config(
         base_url=linha["base_url"] if linha else None,
         client_id=linha["client_id"] if linha else None,
-        client_secret=await ler_segredo(SEGREDO_CLIENTE),
+        client_secret=await ler_segredo(segredo_cliente(ambiente)) if ambiente else None,
         list_id=linha["list_id"] if linha else None,
         boards_conferidos=tuple(linha["boards_conferidos"] or ()) if linha else (),
         app_url=linha["app_url"] if linha else None,
@@ -120,7 +133,40 @@ async def ler_config() -> Config:
                         else LISTAS_REUNIAO_PADRAO),
         listas_ganho=(tuple(linha["listas_ganho"]) if linha
                       and linha["listas_ganho"] is not None
-                      else LISTAS_GANHO_PADRAO))
+                      else LISTAS_GANHO_PADRAO),
+        ambiente=ambiente)
+
+
+async def ler_config() -> Config:
+    """A configuração do ambiente ATIVO. Nunca levanta: nenhum ativo, banco
+    fora ou coluna ausente (030 não aplicada) viram "não configurado"
+    (`ambiente=None`), e a fila espera — o worker não pode cair por causa de
+    configuração."""
+    try:
+        async with sessao(role="service_role") as conn:
+            linha = await conn.fetchrow(
+                f"SELECT {_COLUNAS_CONFIG} FROM growthhs_config WHERE ativo LIMIT 1")
+    except Exception:
+        logger.exception("[growthhs] não foi possível ler growthhs_config")
+        linha = None
+    return await _config_da_linha(linha, linha["ambiente"] if linha else None)
+
+
+async def ler_config_do_ambiente(ambiente: str) -> Config:
+    """A configuração de UM ambiente, ativo ou não (a tela e o "Testar").
+    Levanta `ValueError` para ambiente fora de `AMBIENTES`. Erro de banco
+    sobe — quem chama é rota de admin, não o worker."""
+    if ambiente not in AMBIENTES:
+        raise ValueError(f"ambiente desconhecido: {ambiente!r}")
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            f"SELECT {_COLUNAS_CONFIG} FROM growthhs_config WHERE ambiente = $1", ambiente)
+    return await _config_da_linha(linha, ambiente)
+
+
+async def ambiente_ativo() -> str | None:
+    """Só o nome do ambiente ativo (ou `None`)."""
+    return (await ler_config()).ambiente
 
 
 def normalizar_faturamento(valor: str | None) -> str | None:

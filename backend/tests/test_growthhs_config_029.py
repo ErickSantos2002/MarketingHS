@@ -2,8 +2,6 @@
 
 import pathlib
 
-import pytest
-
 from app.crm import growthhs
 from growthhs_banco import banco_growthhs  # noqa: F401 — fixture
 
@@ -48,18 +46,18 @@ async def test_ler_config_le_colunas_novas_e_segredo(banco_growthhs):
     await conn.execute("DELETE FROM growthhs_config")
     await conn.execute(
         """INSERT INTO growthhs_config
-               (base_url, client_id, list_id, boards_conferidos, app_url)
-           VALUES ('https://g.exemplo.invalid', 'hsg_x', 22, '{6,7}',
+               (ambiente, ativo, base_url, client_id, list_id, boards_conferidos, app_url)
+           VALUES ('producao', true, 'https://g.exemplo.invalid', 'hsg_x', 22, '{6,7}',
                    'https://app.exemplo.invalid')""")
     await conn.execute(
         """INSERT INTO public.integration_secrets (name, value, updated_at)
-           VALUES ('GROWTHHS_CLIENT_SECRET', 'segredo-x', now())
+           VALUES ('GROWTHHS_CLIENT_SECRET_PRODUCAO', 'segredo-x', now())
            ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value""")
     cfg = await growthhs.ler_config()
     assert cfg == growthhs.Config(
         base_url="https://g.exemplo.invalid", client_id="hsg_x",
         client_secret="segredo-x", list_id=22, boards_conferidos=(6, 7),
-        app_url="https://app.exemplo.invalid")
+        app_url="https://app.exemplo.invalid", ambiente="producao")
     assert cfg.configurado is True
 
 
@@ -70,17 +68,10 @@ async def test_ler_config_listas_do_webhook(banco_growthhs):
     # Sem linha de config: os padrões de produção, nunca "nenhuma lista".
     assert (cfg.listas_reuniao, cfg.listas_ganho) == ((28,), (32,))
     await conn.execute(
-        """INSERT INTO growthhs_config (base_url, listas_reuniao, listas_ganho)
-           VALUES ('https://g.exemplo.invalid', '{28,40}', '{32,41}')""")
+        """INSERT INTO growthhs_config (ambiente, ativo, base_url, listas_reuniao, listas_ganho)
+           VALUES ('homologacao', true, 'https://g.exemplo.invalid', '{28,40}', '{32,41}')""")
     cfg = await growthhs.ler_config()
     assert (cfg.listas_reuniao, cfg.listas_ganho) == ((28, 40), (32, 41))
 
 
-@pytest.mark.parametrize("campo", ["base_url", "client_id", "client_secret",
-                                   "list_id", "boards_conferidos"])
-def test_configurado_exige_tudo(campo):
-    completo = dict(base_url="https://g", client_id="c", client_secret="s",
-                    list_id=1, boards_conferidos=(1,), app_url=None)
-    assert growthhs.Config(**completo).configurado is True
-    vazio = () if campo == "boards_conferidos" else None
-    assert growthhs.Config(**{**completo, campo: vazio}).configurado is False
+# `configurado` por ambiente: `test_growthhs_ambientes.py`.
