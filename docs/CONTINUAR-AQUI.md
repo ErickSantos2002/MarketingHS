@@ -1,5 +1,24 @@
 # Continuar aqui
 
+> ## ✅ GrowthHS real provado na homologação (23/10/2026)
+>
+> MarketingHS de produção → GrowthHS de homologação (ambiente ativo:
+> homologação; produção cadastrada, inativa, sem segredo do webhook).
+> - "Enviar ao comercial" de `healthsafetyti@gmail.com` → card **11239**
+>   novo (pessoa 6425), em 13 s.
+> - `ti@healthsafety.com.br` (mesma pessoa 6425 lá) → atualizou o card
+>   aberto 11240 + nota; depois de o Erick desvincular a pessoa do card,
+>   criou o **11241** — a busca é pela pessoa, confirmado.
+> - Card 11241 → lista 28: lead "MQL - Reunião agendada"; ganho: "Venda
+>   realizada" (automações da volta no board 7, webhook `/homologacao`).
+> - Em aberto: de onde veio o 11240 (não fomos nós); origem
+>   `Landing Page <slug>` ainda não vista (só envio manual, origem
+>   `MarketingHS`); `ti@healthsafety.com.br` ficou "Venda realizada".
+>
+> **Virada para produção:** suíte inteira → segredo do webhook de produção +
+> automações da volta no GrowthHS de produção → automação 14 duplicada com o
+> usuário 28 → "Usar este ambiente" na aba Produção.
+
 > ## 🔀 GrowthHS: homologação e produção salvos lado a lado (23/10/2026)
 >
 > Configurações → Integrações → GrowthHS tem duas abas (Homologação e
