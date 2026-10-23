@@ -196,7 +196,7 @@ async def _reivindicar(limite: int, somente_lead: list[str] | None) -> list[dict
                               FOR UPDATE SKIP LOCKED)
             RETURNING id, lead_id::text AS lead_id, acao, origem, rule_id::text AS rule_id,
                       journey_run_id::text AS journey_run_id, tentativas, criado_em,
-                      person_id""",
+                      person_id, ambiente""",
             limite, prazo, somente_lead)
     return [dict(l) for l in linhas]
 
@@ -261,12 +261,15 @@ async def _lista_do_pedido(conn, pedido: dict):
     return await modo_teste.lista_da_jornada(conn, jornada)
 
 
-async def _marcar_entregue(pedido_id: int, card_id: int | None, person_id: int | None) -> None:
+async def _marcar_entregue(pedido_id: int, card_id: int | None, person_id: int | None,
+                           ambiente: str) -> None:
+    """`ambiente` (030): de qual GrowthHS são o card e a pessoa — o card 26 da
+    homologação não é o card 26 da produção."""
     async with sessao(role="service_role") as conn:
         await conn.execute(
             """UPDATE crm_handoffs SET status = 'entregue', card_id = $2, person_id = $3,
-                      erro = NULL, atualizado_em = now() WHERE id = $1""",
-            pedido_id, card_id, person_id)
+                      ambiente = $4, erro = NULL, atualizado_em = now() WHERE id = $1""",
+            pedido_id, card_id, person_id, ambiente)
 
 
 def _id_inteiro(valor) -> int | None:
@@ -308,14 +311,16 @@ def _separar(abertos: list[dict], criado_em: datetime | None) -> tuple[list[dict
     return [c for _, c in candidatos], [c for _, c in ordem]
 
 
-async def _gravar_pessoa_do_pedido(pedido_id: int, person_id: int) -> None:
+async def _gravar_pessoa_do_pedido(pedido_id: int, person_id: int, ambiente: str) -> None:
     """Lead sem e-mail: a pessoa que ESTE pedido criou fica no pedido logo
     depois de criada — no retry (201 do card perdido, transitório) é ela que
-    se reusa, em vez de criar uma segunda pessoa."""
+    se reusa, em vez de criar uma segunda pessoa. Com o ambiente (030): se
+    trocarem de ambiente entre uma tentativa e outra, a pessoa é de OUTRO
+    GrowthHS e não se reusa."""
     async with sessao(role="service_role") as conn:
         await conn.execute(
-            "UPDATE crm_handoffs SET person_id = $2, atualizado_em = now() WHERE id = $1",
-            pedido_id, person_id)
+            "UPDATE crm_handoffs SET person_id = $2, ambiente = $3, atualizado_em = now() "
+            "WHERE id = $1", pedido_id, person_id, ambiente)
 
 
 async def _tratar_erro(pedido: dict, lead: dict, erro: Exception) -> str:
@@ -346,8 +351,9 @@ async def _tratar_erro(pedido: dict, lead: dict, erro: Exception) -> str:
 
 
 async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: int | None,
-                    titulo: str, extra: dict) -> None:
-    """O lado de lá JÁ mudou (card criado, reconhecido ou atualizado).
+                    titulo: str, extra: dict, ambiente: str) -> None:
+    """O lado de lá JÁ mudou (card criado, reconhecido ou atualizado) no
+    GrowthHS `ambiente`.
 
     Achado I1(a) do round 1: `entregue` grava SOZINHO, numa sessão curta e à
     parte — não pode falhar por causa do que vem depois e devolver o pedido a
@@ -358,23 +364,31 @@ async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: in
 
     O resto é registro, não é a entrega: se falhar (gatilho de evento, banco
     fora do ar no meio, o que for), só loga — nunca re-tenta por isso."""
-    await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id))
+    await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id, ambiente))
     try:
         async with sessao(role="service_role") as conn:
             if lead["dnia_id"]:
-                # ⚠️ Segurança (coordenadora, 22/10, B2): só PREENCHE. O card e
-                # a pessoa já gravados na identidade não são trocados por uma
-                # entrega que atualizou outro card — o que o formulário
-                # público disser não reescreve o vínculo da pessoa (e 2xx sem
-                # `id`, M2, também não apaga nada).
+                # ⚠️ Segurança (coordenadora, 22/10, B2): no MESMO ambiente, só
+                # PREENCHE. O card e a pessoa já gravados na identidade não são
+                # trocados por uma entrega que atualizou outro card — o que o
+                # formulário público disser não reescreve o vínculo da pessoa
+                # (e 2xx sem `id`, M2, também não apaga nada).
+                # Ids de OUTRO ambiente (ou sem ambiente, os da prova de
+                # 21–22/10) não valem neste GrowthHS: são sobrescritos, com o
+                # carimbo do ambiente desta entrega (030).
                 await conn.execute(
                     """UPDATE ecosystem_identities
-                          SET growthhs_card_id = coalesce(growthhs_card_id, $2),
-                              growthhs_person_id = coalesce(growthhs_person_id, $3)
-                        WHERE dnia_id = $1::uuid""", lead["dnia_id"], card_id, person_id)
+                          SET growthhs_card_id = CASE WHEN growthhs_ambiente = $4
+                                  THEN coalesce(growthhs_card_id, $2) ELSE $2 END,
+                              growthhs_person_id = CASE WHEN growthhs_ambiente = $4
+                                  THEN coalesce(growthhs_person_id, $3) ELSE $3 END,
+                              growthhs_ambiente = $4
+                        WHERE dnia_id = $1::uuid""",
+                    lead["dnia_id"], card_id, person_id, ambiente)
             await _registrar_evento(conn, lead, "crm_handoff", titulo,
                                     {"origem": pedido["origem"], "rule_id": pedido["rule_id"],
-                                     "card_id": card_id, "person_id": person_id, **extra})
+                                     "card_id": card_id, "person_id": person_id,
+                                     "ambiente": ambiente, **extra})
     except Exception:
         logger.exception("[crm] pedido %s: entregue, mas falhou ao gravar "
                          "identidade/linha do tempo", pedido["id"])
@@ -419,14 +433,17 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
             # inventados).
             person_id = await cliente.achar_ou_criar_pessoa(lead)
             abertos = [c for c in await cliente.cards_da_pessoa(person_id) if _aberto(c)]
-        elif pedido.get("person_id") is not None:
+        elif (pedido.get("person_id") is not None
+              and pedido.get("ambiente") == cfg.ambiente):
             # Sem e-mail, retry: a pessoa é a que ESTE pedido criou; os cards
             # dela só servem para reconhecer o nosso — nunca para atualizar.
+            # ⚠️ Só no MESMO ambiente (030): trocaram de ambiente entre as
+            # tentativas, a pessoa gravada é de outro GrowthHS — cria outra.
             person_id = pedido["person_id"]
             abertos = [c for c in await cliente.cards_da_pessoa(person_id) if _aberto(c)]
         else:
             person_id = await cliente.achar_ou_criar_pessoa(lead)  # sem e-mail: cria
-            await _gravar_pessoa_do_pedido(pedido["id"], person_id)
+            await _gravar_pessoa_do_pedido(pedido["id"], person_id, cfg.ambiente)
             abertos = []  # pessoa recém-criada não tem card
         candidatos, ordem = _separar(abertos, pedido.get("criado_em"))
         lidos: dict[int, str] = {}
@@ -437,7 +454,8 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
                 # O card já nasceu com a descrição deste pedido: nem
                 # atualiza nem anota.
                 await _concluir(pedido, lead, candidato["id"], person_id,
-                                "Enviado ao comercial (GrowthHS)", {"recuperado": True})
+                                "Enviado ao comercial (GrowthHS)", {"recuperado": True},
+                                cfg.ambiente)
                 return "entregues"
         # ⚠️ Sem e-mail não há "a pessoa do lead" lá — só a que este pedido
         # criou. Atualizar card dela que não é nosso seria escrever no card
@@ -482,7 +500,8 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
         if card_id is None and resposta.get("id") is not None:
             logger.warning("[crm] pedido %s: id do GrowthHS não é inteiro (%r) — "
                            "gravando entregue sem card_id", pedido["id"], resposta.get("id"))
-        await _concluir(pedido, lead, card_id, person_id, "Enviado ao comercial (GrowthHS)", {})
+        await _concluir(pedido, lead, card_id, person_id, "Enviado ao comercial (GrowthHS)", {},
+                        cfg.ambiente)
         return "entregues"
 
     # A descrição já está atualizada (agora ou numa tentativa anterior). A
@@ -513,7 +532,7 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
                        pedido["id"], card_id, erro_da_nota)
         extra["erro_da_nota"] = erro_da_nota[:400]
     await _concluir(pedido, lead, card_id, person_id,
-                    "Card atualizado no comercial (GrowthHS)", extra)
+                    "Card atualizado no comercial (GrowthHS)", extra, cfg.ambiente)
     return "atualizadas"
 
 
