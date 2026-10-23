@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 23/10 (noite):** `growthhs-ambientes` ✅ mergeada (`3b785b8`); 030 aplicada pelo Erick (2×, 4 colunas). Testes de CRM/GrowthHS + os 2 de fora que a 030 tocava: **294 passed**, banco limpo; `tsc` 0. ⚠️ **Suíte inteira NÃO rodou** (decisão do Erick, falta de tempo) — rodar antes da virada para produção. Pergunta 72 aberta. Nenhuma frente aberta.
+
 **Estado em 23/10:** aberta `growthhs-ambientes` — spec `docs/superpowers/specs/2026-10-23-growthhs-dois-ambientes-design.md`. Dona de: `backend/app/crm/`, `backend/app/routers/publico.py` (rota do webhook), `backend/app/routers/configuracao.py` (bloco GrowthHS), `backend/app/routers/leitura_contatos.py` e `backend/app/routers/automacoes.py` (só a leitura do card id), `backend/app/main.py` (só a isenção do webhook), `backend/migrations/030_growthhs_ambientes.sql`, `frontend/src/components/admin/settings/GrowthHSCard.tsx` (+ `frontend/src/lib/api*` se precisar de tipo), testes de CRM/GrowthHS e `docs/frentes/growthhs-ambientes.md`. Não roda a suíte inteira.
 
 **Estado em 22/10 (madrugada):** `growthhs-real` ✅ mergeada (`4a994ed`) + dois consertos da coordenadora (`b2b90ba`: webhook da volta fora do limite por IP; `05eee18`: trocar o endereço sem secret apaga o secret, descrição do card com teto de 20.000). Migration 029 aplicada. Suíte do integrado **950 passed**, banco limpo; `tsc` 0; push. Worktree da frente removida. Falta: deploy de api, worker e sistema → limpar o card 26 da prova (`~/marketinghs-growthhs-limpar-ids-da-prova.sh`) → configurar apontando para a homologação → automações da volta → prova curta. Nenhuma frente aberta.

@@ -139,3 +139,11 @@ dia no `CONTINUAR-AQUI.md`.
     **Assumido:** `MarketingHS`. Alternativa: `Contato pelo Site`.
 71. **Pessoa só com cards ganhos/perdidos:** **Assumido:** cria card novo
     (nova oportunidade). Só card aberto é atualizado.
+72. **Lead entregue na homologação depois da troca para produção** (frente
+    `growthhs-ambientes`, 23/10): o gatilho de regra (020/023) não
+    reenfileira lead já `entregue` em ambiente nenhum, mas a prévia agora só
+    conta `entregue` do ambiente ativo. **Assumido:** (c) deixar — trocar de
+    ambiente não reenvia nada (decisão 7 da spec); os poucos leads da prova
+    vão por jornada ou pelo botão "Enviar ao comercial". Alternativas: (a)
+    uma 031 em que o gatilho olha só o ambiente ativo; (b) a prévia volta a
+    imitar o gatilho.

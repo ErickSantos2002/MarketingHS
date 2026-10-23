@@ -1,5 +1,17 @@
 # Continuar aqui
 
+> ## 🔀 GrowthHS: homologação e produção salvos lado a lado (23/10/2026)
+>
+> Configurações → Integrações → GrowthHS tem duas abas (Homologação e
+> Produção), cada uma com campos, "Testar" e URLs do webhook próprios
+> (`/publico/growthhs/webhook/{ambiente}`, segredo por ambiente), e o botão
+> "Usar este ambiente" com confirmação. Card id carimbado com o ambiente
+> (030). Spec `docs/superpowers/specs/2026-10-23-growthhs-dois-ambientes-design.md`;
+> registro em `docs/frentes/growthhs-ambientes.md`.
+> 030 aplicada; testes do GrowthHS **294 passed**.
+> ⚠️ **Suíte inteira pendente** — o Erick adiou (23/10); rodar antes da
+> virada para produção.
+
 > ## 🔌 GrowthHS real na `main` (22/10/2026, madrugada)
 >
 > A frente `growthhs-real` trocou o receptor de teste pela API normal do
