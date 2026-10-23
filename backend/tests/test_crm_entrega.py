@@ -54,15 +54,19 @@ ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _banco_da_030(request, monkeypatch):
+async def _banco_da_030(request):
     """Enquanto a migration 030 não está no banco de produção, a entrega (que
     grava `crm_handoffs.ambiente` e `ecosystem_identities.growthhs_ambiente`)
     não tem onde gravar. Então, SÓ nesse caso, todo `sessao` deste arquivo —
     o da entrega e o dos fixtures — vira UMA conexão em transação revertida,
     com cópias temporárias das tabelas da 030 (`growthhs_banco.aplicar_030`).
     Uma trava põe as sessões em fila (uma conexão não roda duas consultas ao
-    mesmo tempo). Depois que a 030 for aplicada, nada disso roda e o arquivo
-    volta a gravar fora de transação, como antes."""
+    mesmo tempo); ela NÃO é reentrante — `sessao` aberta dentro de outra no
+    mesmo task estoura o `timeout` de 60 s. Depois que a 030 for aplicada,
+    nada disso roda e o arquivo volta a gravar fora de transação, como antes.
+
+    ⚠️ O gatilho de regras de `leads` grava em `public.crm_handoffs` (com
+    schema), não na cópia: teste de regra aqui não veria o pedido do gatilho."""
     import contextlib
 
     from app import integracoes
@@ -96,13 +100,16 @@ async def _banco_da_030(request, monkeypatch):
             finally:
                 trava.release()
 
-        for modulo in (db, entrega, growthhs, integracoes):
-            monkeypatch.setattr(modulo, "sessao", falsa)
-        try:
-            yield
-        finally:
-            monkeypatch.undo()
-            await tr.rollback()
+        # Um MonkeyPatch próprio: desfazer o do teste aqui desfaria também os
+        # patches dos outros fixtures.
+        with pytest.MonkeyPatch.context() as mp:
+            for modulo in (db, entrega, growthhs, integracoes):
+                mp.setattr(modulo, "sessao", falsa)
+            try:
+                yield
+            finally:
+                mp.undo()
+                await tr.rollback()
 
 
 @pytest.fixture(autouse=True)

@@ -399,6 +399,12 @@ async def webhook_do_growthhs(request: Request, ambiente: str,
         # A config ANTES da transação: `ler_config` abre a própria sessão, e
         # dentro dela seriam duas conexões da pool por webhook.
         cfg = await growthhs.ler_config()
+        if cfg.ambiente is None:
+            # Nenhum ativo — ou `growthhs_config` ilegível (`ler_config` não
+            # levanta). Evento assinado perdido: aviso, não rotina.
+            logger.warning("webhook do GrowthHS: evento %s da %s descartado — sem "
+                           "ambiente ativo ou configuração ilegível", evento, ambiente)
+            return {"ignorado": True, "inativo": True}
         if cfg.ambiente != ambiente:
             logger.info("webhook do GrowthHS: evento %s da %s, que não é o ambiente "
                         "ativo (%s) — ignorado", evento, ambiente, cfg.ambiente)

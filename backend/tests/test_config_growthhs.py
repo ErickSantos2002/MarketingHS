@@ -640,3 +640,25 @@ async def test_ambiente_desconhecido_e_404(cliente, banco_growthhs, token_admin,
     r = await cliente.request(metodo, rota, json=corpo, headers=_auth(token_admin))
     assert r.status_code == 404, r.text
     assert await banco_growthhs.fetchval("SELECT count(*) FROM growthhs_config") == 0
+
+
+async def test_ativar_solta_a_pausa_do_ambiente_anterior(cliente, banco_growthhs, token_admin,
+                                                         monkeypatch):
+    """A pausa (401/403/404) era do GrowthHS de antes: trocando de ambiente,
+    os pedidos pausados tentam na hora e a faixa "Fila pausada" some."""
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    lead = await _lead(conn, "fila-pausa-troca@exemplo.invalid")
+    await conn.execute(
+        "INSERT INTO crm_handoffs (lead_id, origem, status, erro, visivel_em) "
+        "VALUES ($1::uuid, 'manual', 'pendente', $2, now() + interval '10 minutes')",
+        lead, f"{entrega.PREFIXO_PAUSA} — o GrowthHS respondeu 401")
+    await cliente.put(f"{ROTA}/producao", headers=_auth(token_admin), json=COMPLETO)
+    r = await cliente.post(f"{ROTA}/ativar", headers=_auth(token_admin),
+                           json={"ambiente": "producao"})
+    assert r.status_code == 200, r.text
+    assert r.json()["fila"]["pausada"] is None
+    linha = await conn.fetchrow(
+        "SELECT erro, visivel_em <= now() AS visivel FROM crm_handoffs "
+        "WHERE lead_id = $1::uuid", lead)
+    assert (linha["erro"], linha["visivel"]) == (None, True)

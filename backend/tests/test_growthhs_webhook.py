@@ -514,3 +514,12 @@ def test_isencao_do_limite_cobre_os_dois_enderecos():
     assert isentos
     for amb in growthhs.AMBIENTES:
         assert any(f"{BASE}/{amb}".startswith(i) for i in isentos[0]), amb
+
+
+async def test_sem_ambiente_ativo_200_e_nao_muda(cliente, com_segredo):
+    conn = await com_segredo()
+    await conn.execute("UPDATE growthhs_config SET ativo = false")
+    lead_id, email = await _lead(conn)
+    r = await _postar(cliente, _corpo(email=email))
+    assert r.status_code == 200 and r.json() == {"ignorado": True, "inativo": True}
+    assert await _status(conn, lead_id) == "Lead"

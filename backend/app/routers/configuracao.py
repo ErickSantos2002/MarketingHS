@@ -1,6 +1,7 @@
 """Configuração do sistema. Tira do navegador o acesso direto a scoring_config
 e a tags — dois dos 68 pontos que a spec mandou fechar."""
 
+import os
 import re
 from urllib.parse import urlsplit
 
@@ -1030,6 +1031,10 @@ _COLUNAS_GROWTHHS = ("base_url", "app_url", "client_id", "list_id", "boards_conf
 _COLUNAS_LISTA = ("boards_conferidos", "listas_reuniao", "listas_ganho")
 
 
+# A trava consultiva que põe em fila o "Usar este ambiente" e o "Salvar".
+_TRAVA_GROWTHHS = "growthhs-ativo"
+
+
 class AtivarGrowthHSIn(BaseModel):
     ambiente: str
 
@@ -1043,7 +1048,7 @@ async def ativar_ambiente_growthhs(dados: AtivarGrowthHSIn,
     ⚠️ Ambiente incompleto → 400 com o que falta, sem trocar nada: ativá-lo
     pararia a fila em silêncio (`configurado` falso), e quem clicou acharia
     que os leads estão indo."""
-    from app.crm import growthhs
+    from app.crm import entrega, growthhs
 
     ambiente = _ambiente_growthhs(dados.ambiente)
     cfg = await growthhs.ler_config_do_ambiente(ambiente)
@@ -1055,8 +1060,32 @@ async def ativar_ambiente_growthhs(dados: AtivarGrowthHSIn,
     async with sessao(role="service_role") as conn:
         # Dois admins trocando ao mesmo tempo: a trava os põe em fila (sem
         # ela, o índice único parcial `WHERE ativo` daria 500 a quem
-        # chegasse segundo).
-        await conn.execute("SELECT pg_advisory_xact_lock(hashtext('growthhs-ativo'))")
+        # chegasse segundo). O PUT toma a MESMA trava: um "Salvar" que troca
+        # o endereço (e apaga o secret) não passa entre a conferência e a
+        # troca.
+        await conn.execute(f"SELECT pg_advisory_xact_lock(hashtext('{_TRAVA_GROWTHHS}'))")
+        # Reconfere DENTRO da trava, direto no banco (o `ler_segredo` tem
+        # cache): o que foi conferido acima pode ter mudado no meio.
+        linha = await conn.fetchrow(
+            """SELECT base_url, client_id, list_id, boards_conferidos
+                 FROM growthhs_config WHERE ambiente = $1 FOR UPDATE""", ambiente)
+        nome_segredo = growthhs.segredo_cliente(ambiente)
+        tem_segredo = bool(os.environ.get(nome_segredo)) or await conn.fetchval(
+            """SELECT EXISTS (SELECT 1 FROM public.integration_secrets
+                WHERE name = $1 AND coalesce(value, '') <> '')""", nome_segredo)
+        if not (linha and linha["base_url"] and linha["client_id"] and linha["list_id"]
+                and linha["boards_conferidos"] and tem_segredo):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"A {growthhs.NOME_DO_AMBIENTE[ambiente]} mudou enquanto era ativada e "
+                "ficou incompleta. Confira e tente de novo.")
+        # A pausa de configuração era do GrowthHS de antes (credencial ou
+        # endereço recusados lá): com o outro ambiente, os pedidos pausados
+        # tentam na hora, e a faixa "Fila pausada" não fica mostrando o
+        # motivo velho.
+        await conn.execute(
+            """UPDATE crm_handoffs SET visivel_em = now(), erro = NULL, atualizado_em = now()
+                WHERE status = 'pendente' AND erro LIKE $1 || '%'""", entrega.PREFIXO_PAUSA)
         await conn.execute(
             "UPDATE growthhs_config SET ativo = false, updated_at = now() "
             "WHERE ativo AND ambiente <> $1", ambiente)
@@ -1069,6 +1098,16 @@ async def ativar_ambiente_growthhs(dados: AtivarGrowthHSIn,
 @router.put("/config/growthhs/{ambiente}")
 async def gravar_config_growthhs(ambiente: str, dados: GrowthHSIn,
                                  admin: Usuario = Depends(admin_atual)):
+    """Ver `_gravar_growthhs`. Roda sob a trava do "Usar este ambiente":
+    trocar o endereço (que apaga o secret) não passa no meio de uma
+    ativação."""
+    _ambiente_growthhs(ambiente)
+    async with sessao(role="service_role") as trava:
+        await trava.execute(f"SELECT pg_advisory_xact_lock(hashtext('{_TRAVA_GROWTHHS}'))")
+        return await _gravar_growthhs(ambiente, dados, admin)
+
+
+async def _gravar_growthhs(ambiente: str, dados: GrowthHSIn, admin: Usuario):
     """Grava só o que veio, no ambiente do caminho — o outro não é tocado;
     `limpar: ["client_secret" | "webhook_secret"]` apaga o segredo DESTE
     ambiente. Campo desconhecido em `limpar` → 400, antes de gravar qualquer

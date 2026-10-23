@@ -23,6 +23,13 @@
 -- antigo não grava mais a configuração (o `ON CONFLICT ((true))` dele perde o
 -- índice). Rodar com o dono das tabelas.
 --
+-- ⚠️ Aplicar com `psql -1` (uma transação só): uma falha no meio não deixa
+-- metade aplicada. Os CHECK entram `NOT VALID` e são validados em seguida
+-- (a validação só pega trava leve). Dentro do `-1` a trava do ALTER dura até
+-- o COMMIT de qualquer jeito: `crm_handoffs` e `ecosystem_identities` são
+-- pequenas, então é coisa de instantes — mas aplique fora de horário de
+-- envio.
+--
 -- Reaplicável: rode duas vezes para provar.
 
 ALTER TABLE public.growthhs_config
@@ -52,7 +59,8 @@ ALTER TABLE public.crm_handoffs
     DROP CONSTRAINT IF EXISTS crm_handoffs_ambiente_valido;
 ALTER TABLE public.crm_handoffs
     ADD CONSTRAINT crm_handoffs_ambiente_valido
-    CHECK (ambiente IS NULL OR ambiente IN ('homologacao', 'producao'));
+    CHECK (ambiente IS NULL OR ambiente IN ('homologacao', 'producao')) NOT VALID;
+ALTER TABLE public.crm_handoffs VALIDATE CONSTRAINT crm_handoffs_ambiente_valido;
 
 ALTER TABLE public.ecosystem_identities
     ADD COLUMN IF NOT EXISTS growthhs_ambiente text;
@@ -60,4 +68,6 @@ ALTER TABLE public.ecosystem_identities
     DROP CONSTRAINT IF EXISTS ecosystem_identities_growthhs_ambiente_valido;
 ALTER TABLE public.ecosystem_identities
     ADD CONSTRAINT ecosystem_identities_growthhs_ambiente_valido
-    CHECK (growthhs_ambiente IS NULL OR growthhs_ambiente IN ('homologacao', 'producao'));
+    CHECK (growthhs_ambiente IS NULL OR growthhs_ambiente IN ('homologacao', 'producao')) NOT VALID;
+ALTER TABLE public.ecosystem_identities
+    VALIDATE CONSTRAINT ecosystem_identities_growthhs_ambiente_valido;
