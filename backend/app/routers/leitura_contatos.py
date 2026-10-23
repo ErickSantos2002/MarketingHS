@@ -194,10 +194,16 @@ async def enriquecimento(dados: EnriquecimentoIn, usuario: Usuario = Depends(adm
     cfg = await growthhs.ler_config()
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         identidades = await conn.fetch(
+            # ⚠️ O card id só vale se foi gravado no ambiente ATIVO do
+            # GrowthHS (030): o card 26 da homologação não é o card 26 da
+            # produção, e o link "Ver no GrowthHS" abriria o card de outra
+            # pessoa. Sem ambiente ativo (ou id sem carimbo, os da prova),
+            # o contato aparece como "não está no GrowthHS".
             """SELECT dnia_id::text, nexus_contact_id::text, mentoria_client_id::text,
-                      growthhs_card_id
+                      CASE WHEN growthhs_ambiente = $2 THEN growthhs_card_id END
+                        AS growthhs_card_id
                  FROM ecosystem_identities WHERE dnia_id = ANY($1::uuid[])""",
-            ids)
+            ids, cfg.ambiente)
         sinais = await conn.fetch(
             """
             WITH eventos AS (

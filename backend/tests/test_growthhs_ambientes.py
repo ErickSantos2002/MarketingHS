@@ -167,3 +167,32 @@ def test_configurado_exige_tudo_e_o_ambiente(campo):
     vazio = () if campo == "boards_conferidos" else None
     assert growthhs.Config(**{**completo, campo: vazio}).configurado is False
     assert growthhs.Config(**{**completo, "ambiente": "teste"}).configurado is False
+
+
+@pytest.mark.parametrize("ativo,do_card,esperado", [
+    ("homologacao", "homologacao", 0),   # já está no GrowthHS ativo: fora
+    ("producao", "homologacao", 1),      # card da homologação não põe na produção
+    ("producao", None, 1),               # card sem carimbo (prova) não conta
+    (None, "producao", 1),               # sem ativo, ninguém é excluído
+])
+async def test_previa_da_regra_so_exclui_card_do_ambiente_ativo(
+        cliente, banco_growthhs, token_admin, monkeypatch, ativo, do_card, esperado):
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    for amb in growthhs.AMBIENTES:
+        await _config(conn, amb, ativo=amb == ativo)
+    dnia = await conn.fetchval(
+        "INSERT INTO ecosystem_identities (email, growthhs_card_id, growthhs_ambiente) "
+        "VALUES ('previa-030@exemplo.invalid', 4821, $1) RETURNING dnia_id", do_card)
+    await conn.execute(
+        # Data no futuro isola o contato na contagem (o `lead_score` é
+        # recalculado por gatilho no INSERT, não serve de filtro).
+        "INSERT INTO leads (nome, email, tipo, dnia_id, created_at) "
+        "VALUES ('Prévia 030', 'previa-030@exemplo.invalid', 'teste', $1, "
+        "'2099-06-01T12:00:00Z')", dnia)
+    r = await cliente.post("/automacoes/previa",
+                           headers={"Authorization": f"Bearer {token_admin}"},
+                           json={"conditions": [{"type": "created_at", "operator": "after",
+                                                 "value": "2099-01-01"}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] == esperado

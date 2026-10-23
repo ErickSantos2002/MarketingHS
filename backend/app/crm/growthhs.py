@@ -164,11 +164,6 @@ async def ler_config_do_ambiente(ambiente: str) -> Config:
     return await _config_da_linha(linha, ambiente)
 
 
-async def ambiente_ativo() -> str | None:
-    """Só o nome do ambiente ativo (ou `None`)."""
-    return (await ler_config()).ambiente
-
-
 def normalizar_faturamento(valor: str | None) -> str | None:
     """`mapRevenue` do handoff-to-nexus, literal (inclusive a ordem)."""
     if not valor:

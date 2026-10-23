@@ -104,8 +104,10 @@ app.add_middleware(
     # A CONVERSÃO de site (`/publico/site/conversao`) fica no balde comum.
     # ⚠️ `/publico/growthhs/webhook` (a volta do CRM) também é isento: lá, um
     # 429 conta como falha e 5 seguidas DESLIGAM a automação do GrowthHS. A
-    # rota se defende sozinha — HMAC, teto de corpo, janela de tempo.
-    isentos=("/publico/webhook/", "/publico/growthhs/webhook", "/publico/validar-email",
+    # rota se defende sozinha — HMAC, teto de corpo, janela de tempo. Desde a
+    # 030 são dois endereços (`/publico/growthhs/webhook/{ambiente}`): a
+    # isenção é por PREFIXO (`startswith`), cobre os dois.
+    isentos=("/publico/webhook/", "/publico/growthhs/webhook/", "/publico/validar-email",
              "/publico/ab/go", "/publico/ab/eventos",
              "/publico/descadastro/um-clique", "/publico/site/visita"),
 )

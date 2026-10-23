@@ -241,12 +241,20 @@ async def previa(dados: PreviaIn, usuario: Usuario = Depends(admin_atual)):
     # novo. `dnia_id` nulo NÃO é exclusão: contato sem identidade no ecossistema
     # nunca esteve no GrowthHS. `nexus_contact_id` (agendamento "dn.nexus") não
     # entra aqui — é outro produto (restrição global do 8D).
-    fora_do_growthhs = """
+    # ⚠️ "Já está no GrowthHS" = card gravado no ambiente ATIVO (030). Card da
+    # homologação não põe ninguém na produção. O ambiente vem por parâmetro:
+    # `growthhs_config` é só do `service_role`, esta sessão é `authenticated`.
+    # Sem ambiente ativo, `= NULL` não exclui ninguém.
+    from app.crm import growthhs
+
+    params.append((await growthhs.ler_config()).ambiente)
+    fora_do_growthhs = f"""
         AND NOT EXISTS (
             SELECT 1 FROM ecosystem_identities ei
              WHERE l.dnia_id IS NOT NULL
                AND ei.dnia_id = l.dnia_id
                AND ei.growthhs_card_id IS NOT NULL
+               AND ei.growthhs_ambiente = ${len(params)}::text
         )"""
 
     async with sessao(role="authenticated", user_id=usuario.id) as conn:

@@ -346,16 +346,23 @@ async def _corpo_do_webhook(request: Request) -> bytes:
     return bytes(corpo)
 
 
-@router.post("/growthhs/webhook")
-async def webhook_do_growthhs(request: Request,
+@router.post("/growthhs/webhook/{ambiente}")
+async def webhook_do_growthhs(request: Request, ambiente: str,
                               evento: str | None = Query(default=None)) -> dict:
-    """A volta pelo webhook de automação do GrowthHS (`app/crm/volta.py`).
+    """A volta pelo webhook de automação do GrowthHS (`app/crm/volta.py`), um
+    endereço por ambiente (`/homologacao`, `/producao` — migration 030).
 
     Sem chave de API: quem prova a origem é a assinatura
-    `X-HSGrowth-Signature` com `GROWTHHS_WEBHOOK_SECRET`. Sem segredo
-    configurado → 503 (a rota não liga aberta); corpo > 512 KB
-    (`volta.CORPO_MAXIMO`) → 413;
-    assinatura ausente/errada → 401. Daí em diante, TUDO é 200.
+    `X-HSGrowth-Signature` com o segredo DAQUELE ambiente
+    (`GROWTHHS_WEBHOOK_SECRET_<AMBIENTE>`). ⚠️ O caminho sozinho não é
+    assinado: é conferir com o segredo do ambiente do caminho que amarra o
+    evento ao ambiente — o segredo da homologação não abre a produção.
+    Ambiente desconhecido → 404; sem segredo configurado → 503 (a rota não
+    liga aberta); corpo > 512 KB (`volta.CORPO_MAXIMO`) → 413; assinatura
+    ausente/errada → 401. Daí em diante, TUDO é 200 — inclusive evento
+    válido de um ambiente que NÃO é o ativo, que é ignorado
+    (`{"ignorado": true, "inativo": true}`): o GrowthHS da homologação
+    continua mandando depois da troca, e 5 recusas o desligariam.
 
     ⚠️ Por que 200 até no erro: a automação de lá se desliga sozinha depois
     de 5 respostas não-2xx seguidas e não re-tenta (doc do GrowthHS §8.5).
@@ -365,10 +372,12 @@ async def webhook_do_growthhs(request: Request,
     401 continua 4xx de propósito: só um GrowthHS desconfigurado erra a
     assinatura, e a automação desligada é o sinal visível disso.
 
-    ⚠️ Esta rota está no balde do limite de taxa de `/publico` (30/min por
-    IP, `main.py`), e 429 conta como falha lá.
+    ⚠️ Esta rota é isenta do balde de 30/min por IP de `/publico`
+    (`main.py`, pelo prefixo): 429 conta como falha lá.
     """
-    segredo = await ler_segredo(growthhs.SEGREDO_WEBHOOK)
+    if ambiente not in growthhs.AMBIENTES:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ambiente desconhecido.")
+    segredo = await ler_segredo(growthhs.segredo_webhook(ambiente))
     if not segredo:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
                             "Webhook do GrowthHS sem segredo configurado.")
@@ -390,6 +399,10 @@ async def webhook_do_growthhs(request: Request,
         # A config ANTES da transação: `ler_config` abre a própria sessão, e
         # dentro dela seriam duas conexões da pool por webhook.
         cfg = await growthhs.ler_config()
+        if cfg.ambiente != ambiente:
+            logger.info("webhook do GrowthHS: evento %s da %s, que não é o ambiente "
+                        "ativo (%s) — ignorado", evento, ambiente, cfg.ambiente)
+            return {"ignorado": True, "inativo": True}
         # Transação curta, na hora: o envio de lá é síncrono (o vendedor que
         # arrastou o card espera) e tem 10 s de timeout.
         async with sessao(role="service_role") as conn:
