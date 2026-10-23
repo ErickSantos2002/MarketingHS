@@ -1,5 +1,26 @@
 # Continuar aqui
 
+> ## ▶️ PRÓXIMA SESSÃO — combinado com o Erick (23/10/2026, fim do dia)
+>
+> Uma coisa de cada vez, nesta ordem, tudo ainda na **homologação**:
+> 1. **Automação de vendedor:** duplicar a automação 14 ("Atribuir
+>    Vendedor") com `triggered_by_user_id: 28` (integracao2) no GrowthHS de
+>    homologação — o Erick faz na tela; conferir que card novo do
+>    MarketingHS ganha vendedor.
+> 2. **Bateria completa** (`pytest` inteiro, ~1 h, sob `systemd-inhibit`) —
+>    pendente desde a `growthhs-ambientes`.
+> 3. **Rodada de testes de leads:** vários leads diferentes; duplicados com
+>    informação diferente (o card aberto é atualizado + nota?); mais
+>    movimentos (reunião, ganho, perdido, No Show → reagendar); incluir uma
+>    conversão por landing page para ver a origem `Landing Page <slug>`.
+>    Conferir cada um pelo banco e pelo card.
+> 4. Tudo certo → **virada para produção** (segredo do webhook de produção,
+>    automações da volta e de vendedor no GrowthHS de produção, "Usar este
+>    ambiente" na aba Produção).
+>
+> Pendências menores: origem do card 11240; `ti@healthsafety.com.br` ficou
+> "Venda realizada" (voltar para Lead por script, se o Erick quiser).
+
 > ## ✅ GrowthHS real provado na homologação (23/10/2026)
 >
 > MarketingHS de produção → GrowthHS de homologação (ambiente ativo:
