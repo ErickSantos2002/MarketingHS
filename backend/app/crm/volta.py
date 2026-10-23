@@ -10,6 +10,11 @@ O corpo é igual para todo gatilho, então o evento sai da URL
 Este módulo traduz: acha o lead pelo card e entrega para
 `retorno.aplicar_evento`, a mesma aplicação do evento de contato.
 
+Desde a 030 (23/10) há um endereço por ambiente
+(`/publico/growthhs/webhook/{homologacao|producao}`), cada um com o próprio
+segredo, e só o ambiente ATIVO aplica (`routers/publico.py`). Aqui, o card id
+só casa com id gravado no mesmo ambiente (`lead_do_card`).
+
 ⚠️ A automação dispara para TODO card que fizer o movimento — não só os que
 nasceram aqui — e se desliga sozinha depois de 5 respostas não-2xx seguidas.
 Por isso "não é nosso" é resposta normal (`{"ignorado": true}`), não erro.
@@ -90,10 +95,15 @@ def _email(valor) -> str:
     return valor.strip().lower() if isinstance(valor, str) else ""
 
 
-async def lead_do_card(conn, card: dict) -> dict | None:
+async def lead_do_card(conn, card: dict, ambiente: str | None) -> dict | None:
     """O lead do card: pelo `card.id` (o `crm_handoffs` entregue mais recente,
     depois `ecosystem_identities.growthhs_card_id` → lead canônico), senão
     pelo e-mail exato da pessoa do card. Excluído (`deleted_at`) nunca.
+
+    ⚠️ O id só casa se foi gravado NO MESMO `ambiente` do webhook (030): o
+    card 26 da homologação não é o card 26 da produção. Id sem carimbo (as
+    linhas da prova) ou de outro ambiente não vale — cai para o e-mail.
+    `ambiente=None`: nenhum id vale.
 
     ⚠️ O lead achado pelo id só vale se o e-mail da pessoa do card bate com o
     do lead (ou um dos dois é vazio). O receptor de teste antigo gravava
@@ -105,18 +115,19 @@ async def lead_do_card(conn, card: dict) -> dict | None:
     email = _email(pessoa.get("email")) if isinstance(pessoa, dict) else ""
     card_id = _id_do_card(card)
 
-    if card_id is not None:
+    if card_id is not None and ambiente is not None:
         candidatos = (
             await conn.fetchrow(
                 f"""SELECT {_COLUNAS} FROM crm_handoffs h JOIN leads l ON l.id = h.lead_id
-                     WHERE h.card_id = $1 AND h.status = 'entregue'
+                     WHERE h.card_id = $1 AND h.ambiente = $2 AND h.status = 'entregue'
                        AND l.deleted_at IS NULL
-                     ORDER BY h.criado_em DESC, h.id DESC LIMIT 1""", card_id),
+                     ORDER BY h.criado_em DESC, h.id DESC LIMIT 1""", card_id, ambiente),
             await conn.fetchrow(
                 f"""SELECT {_COLUNAS} FROM ecosystem_identities i
                       JOIN leads l ON l.id = i.dndash_lead_id
-                     WHERE i.growthhs_card_id = $1 AND l.deleted_at IS NULL
-                     ORDER BY i.updated_at DESC NULLS LAST LIMIT 1""", card_id),
+                     WHERE i.growthhs_card_id = $1 AND i.growthhs_ambiente = $2
+                       AND l.deleted_at IS NULL
+                     ORDER BY i.updated_at DESC NULLS LAST LIMIT 1""", card_id, ambiente),
         )
         for lead in candidatos:
             if lead is None:
@@ -187,8 +198,11 @@ async def aplicar(conn, evento: str, payload: dict, *,
 
     # Dois envios do mesmo corpo ao mesmo tempo: a trava da transação faz o
     # segundo esperar o primeiro gravar, e então ele acha o evento.
+    # O ambiente entra na chave (030): o card 26 da homologação e o da
+    # produção, movidos no mesmo segundo, são dois eventos.
+    ambiente = cfg.ambiente
     await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))",
-                       f"growthhs-webhook:{card_id}:{evento}:{momento}")
+                       f"growthhs-webhook:{ambiente}:{card_id}:{evento}:{momento}")
     # ⚠️ O recorte de 1 dia em `occurred_at` é para usar o índice
     # (event_type, occurred_at): um repetido só passa da janela de 10 min se
     # o original também passou, então o original é sempre recente.
@@ -197,18 +211,19 @@ async def aplicar(conn, evento: str, payload: dict, *,
                 WHERE source_app = 'growthhs' AND event_type = $1
                   AND occurred_at > now() - interval '1 day'
                   AND metadata->>'card_id' = $2
-                  AND metadata->>'timestamp_growthhs' = $3)""",
-            evento, str(card_id), momento):
+                  AND metadata->>'timestamp_growthhs' = $3
+                  AND metadata->>'ambiente' IS NOT DISTINCT FROM $4)""",
+            evento, str(card_id), momento, ambiente):
         logger.info("webhook do GrowthHS: card %s, %s, %s já aplicado",
                     card_id, evento, momento)
         return {"ignorado": True, "repetido": True}
 
-    lead = await lead_do_card(conn, card)
+    lead = await lead_do_card(conn, card, ambiente)
     if lead is None:
         return {"ignorado": True}
     metadata = {"card_id": card_id, "list_id": card.get("list_id"),
                 "list_name": card.get("list_name"), "board_id": card.get("board_id"),
                 "via": "webhook", "evento_growthhs": payload.get("event"),
-                "timestamp_growthhs": momento}
+                "timestamp_growthhs": momento, "ambiente": ambiente}
     return await retorno.aplicar_evento(conn, lead, event_type=evento,
                                         title=EVENTOS[evento], metadata=metadata)

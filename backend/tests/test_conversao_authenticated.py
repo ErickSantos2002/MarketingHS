@@ -249,7 +249,10 @@ async def test_automacoes_previa_bate_com_service_role(cliente, token_admin, sem
             WHERE l.created_at < ($1::date + 1)
               AND NOT EXISTS (SELECT 1 FROM ecosystem_identities ei
                                WHERE l.dnia_id IS NOT NULL AND ei.dnia_id = l.dnia_id
-                                 AND ei.growthhs_card_id IS NOT NULL)""",
+                                 AND ei.growthhs_card_id IS NOT NULL
+                                 -- 030: só o card do ambiente ativo do GrowthHS.
+                                 AND ei.growthhs_ambiente = (SELECT ambiente FROM growthhs_config
+                                                              WHERE ativo))""",
         date.fromisoformat(corte))
     assert esperado >= len(semente["leads"])
     r = await cliente.post("/automacoes/previa", headers=_auth(token_admin),

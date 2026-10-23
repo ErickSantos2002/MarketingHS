@@ -39,7 +39,11 @@ EMAIL, EMAIL_GEMEO = _EMAIL.atual, _EMAIL_GEMEO.atual
 LISTA_DE_ENTRADA, BOARD_DE_ENTRADA = 22, 6
 CFG = Config(base_url="https://growthhs.exemplo.invalid", client_id="hsg_8d",
              client_secret="segredo-8d", list_id=LISTA_DE_ENTRADA,
-             boards_conferidos=(6, 7), app_url="https://app.exemplo.invalid")
+             boards_conferidos=(6, 7), app_url="https://app.exemplo.invalid",
+             ambiente="homologacao")
+# O mesmo GrowthHS falso visto como o OUTRO ambiente (030): troca de ambiente
+# entre uma entrega e outra.
+CFG_PRODUCAO = Config(**{**CFG.__dict__, "ambiente": "producao"})
 ZERO = {"entregues": 0, "atualizadas": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
 CABECALHO = "— Nova conversão pelo MarketingHS"
 NOTA = re.compile(r"^Lead converteu de novo pelo MarketingHS \(MarketingHS\) em "
@@ -47,6 +51,65 @@ NOTA = re.compile(r"^Lead converteu de novo pelo MarketingHS \(MarketingHS\) em 
                   r"dados informados no formulário \(não verificados\)\.$")
 CARDS, NOTAS, PESSOAS = "/api/v1/cards", "/api/v1/card-notes", "/api/v1/persons"
 ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _banco_da_030(request):
+    """Enquanto a migration 030 não está no banco de produção, a entrega (que
+    grava `crm_handoffs.ambiente` e `ecosystem_identities.growthhs_ambiente`)
+    não tem onde gravar. Então, SÓ nesse caso, todo `sessao` deste arquivo —
+    o da entrega e o dos fixtures — vira UMA conexão em transação revertida,
+    com cópias temporárias das tabelas da 030 (`growthhs_banco.aplicar_030`).
+    Uma trava põe as sessões em fila (uma conexão não roda duas consultas ao
+    mesmo tempo); ela NÃO é reentrante — `sessao` aberta dentro de outra no
+    mesmo task estoura o `timeout` de 60 s. Depois que a 030 for aplicada,
+    nada disso roda e o arquivo volta a gravar fora de transação, como antes.
+
+    ⚠️ O gatilho de regras de `leads` grava em `public.crm_handoffs` (com
+    schema), não na cópia: teste de regra aqui não veria o pedido do gatilho."""
+    import contextlib
+
+    from app import integracoes
+    from growthhs_banco import aplicar_030, tem_030
+
+    if "conexao" in request.fixturenames:
+        # Já roda em transação revertida própria (e não grava as colunas da
+        # 030). ⚠️ Segurar outra conexão aqui travaria o `close_db()` da
+        # `conexao`, que espera a pool inteira voltar.
+        yield
+        return
+    await db.init_db()
+    async with db._pool.acquire() as sonda:
+        if await tem_030(sonda):
+            yield
+            return
+    async with db._pool.acquire() as conn:
+        tr = conn.transaction()
+        await tr.start()
+        await conn.execute("SET LOCAL ROLE service_role")
+        await aplicar_030(conn)
+        trava = asyncio.Lock()
+
+        @contextlib.asynccontextmanager
+        async def falsa(role="anon", user_id=None, **_):
+            async with asyncio.timeout(60):
+                await trava.acquire()
+            try:
+                async with conn.transaction():
+                    yield conn
+            finally:
+                trava.release()
+
+        # Um MonkeyPatch próprio: desfazer o do teste aqui desfaria também os
+        # patches dos outros fixtures.
+        with pytest.MonkeyPatch.context() as mp:
+            for modulo in (db, entrega, growthhs, integracoes):
+                mp.setattr(modulo, "sessao", falsa)
+            try:
+                yield
+            finally:
+                mp.undo()
+                await tr.rollback()
 
 
 @pytest.fixture(autouse=True)
@@ -612,7 +675,8 @@ async def test_identidade_ja_gravada_nao_e_sobrescrita(lead_8d):
     que atualiza outro card não troca o que já estava lá."""
     async with db.sessao(role="service_role") as conn:
         await conn.execute(
-            "UPDATE ecosystem_identities SET growthhs_card_id = 555, growthhs_person_id = 77 "
+            "UPDATE ecosystem_identities SET growthhs_card_id = 555, growthhs_person_id = 77, "
+            "growthhs_ambiente = 'homologacao' "
             "WHERE dnia_id = $1::uuid", lead_8d["dnia_id"])
     api = GrowthHSFalso()
     pessoa = api.pessoa(email=EMAIL)
@@ -895,7 +959,7 @@ async def test_url_invalida_pausa_e_nao_vira_defeito_interno(lead_8d):
     api = GrowthHSFalso()
     cfg = Config(base_url="https://growthhs.exemplo.invalid:porta", client_id="hsg_8d",
                  client_secret="segredo-8d", list_id=LISTA_DE_ENTRADA,
-                 boards_conferidos=(6, 7), app_url=None)
+                 boards_conferidos=(6, 7), app_url=None, ambiente="homologacao")
     await _enfileirar(lead_8d["lead_id"])
     resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=cfg,
                                              transporte=api.transporte())
@@ -1088,3 +1152,80 @@ def test_reivindicar_sem_filtro_usa_o_predicado():
     import inspect
     fonte = inspect.getsource(entrega._reivindicar)
     assert "$3::uuid[] IS NOT NULL OR NOT EXISTS" in fonte and "{LEAD_DE_TESTE}" in fonte
+
+
+# ── Ambiente (migration 030: homologação e produção lado a lado) ────────────
+
+async def _carimbo(lead_id, dnia_id):
+    async with db.sessao(role="service_role") as conn:
+        return (await conn.fetchval(
+                    "SELECT ambiente FROM crm_handoffs WHERE lead_id = $1::uuid "
+                    "ORDER BY id DESC LIMIT 1", lead_id),
+                await conn.fetchrow(
+                    "SELECT growthhs_card_id, growthhs_person_id, growthhs_ambiente "
+                    "FROM ecosystem_identities WHERE dnia_id = $1::uuid", dnia_id))
+
+
+async def test_entrega_carimba_o_ambiente(lead_8d):
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    [card_id] = api.cards
+    pedido_amb, ident = await _carimbo(lead_8d["lead_id"], lead_8d["dnia_id"])
+    assert pedido_amb == "homologacao"
+    assert (ident["growthhs_card_id"], ident["growthhs_ambiente"]) == (card_id, "homologacao")
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["metadata"]["ambiente"] == "homologacao"
+
+
+@pytest.mark.parametrize("ambiente_antigo", ["producao", None])
+async def test_identidade_de_outro_ambiente_e_sobrescrita(lead_8d, ambiente_antigo):
+    """Card 555 de OUTRO GrowthHS (ou sem carimbo, os da prova de 21–22/10)
+    não vale neste: a entrega o troca pelo card daqui, com o carimbo daqui."""
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE ecosystem_identities SET growthhs_card_id = 555, growthhs_person_id = 77, "
+            "growthhs_ambiente = $2 WHERE dnia_id = $1::uuid",
+            lead_8d["dnia_id"], ambiente_antigo)
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, descricao="Anotação")
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    _, ident = await _carimbo(lead_8d["lead_id"], lead_8d["dnia_id"])
+    assert (ident["growthhs_card_id"], ident["growthhs_person_id"],
+            ident["growthhs_ambiente"]) == (aberto, pessoa, "homologacao")
+
+
+async def test_trocar_de_ambiente_entre_entregas_sobrescreve_a_identidade(lead_8d):
+    """Entregue na homologação; depois a produção vira o ativo e o lead
+    converte de novo: a identidade passa a apontar para o card da produção."""
+    homo, prod = GrowthHSFalso(), GrowthHSFalso()
+    prod._ids = itertools.count(9001)  # ids que não colidem com os da homologação
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], homo) == {**ZERO, "entregues": 1}
+    await _enfileirar(lead_8d["lead_id"], "regra")
+    resultado = await entrega.rodar_entregas(somente_lead=lead_8d["lead_id"], cfg=CFG_PRODUCAO,
+                                             transporte=prod.transporte())
+    assert resultado == {**ZERO, "entregues": 1}
+    [card_prod] = prod.cards
+    pedido_amb, ident = await _carimbo(lead_8d["lead_id"], lead_8d["dnia_id"])
+    assert pedido_amb == "producao"
+    assert (ident["growthhs_card_id"], ident["growthhs_ambiente"]) == (card_prod, "producao")
+
+
+async def test_pessoa_do_pedido_de_outro_ambiente_nao_e_reusada(lead_sem_email):
+    """Lead sem e-mail: o retry reusa a pessoa que ESTE pedido criou — mas só
+    no mesmo ambiente. Trocaram de ambiente entre as tentativas: aquela
+    pessoa é de outro GrowthHS, e cria-se outra aqui."""
+    api = GrowthHSFalso()
+    lead = lead_sem_email["lead_id"]
+    pedido_id = await _enfileirar(lead)
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("UPDATE crm_handoffs SET person_id = 4242, ambiente = 'producao' "
+                           "WHERE id = $1", pedido_id)
+    assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
+    [pessoa] = api.pessoas
+    assert pessoa != 4242 and len(api.de("POST", PESSOAS)) == 1
+    pedido = await _pedido(lead)
+    assert (pedido["person_id"], pedido["ambiente"]) == (pessoa, "homologacao")

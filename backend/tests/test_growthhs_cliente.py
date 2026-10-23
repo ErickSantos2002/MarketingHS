@@ -41,7 +41,7 @@ FRONT = "https://mkt.exemplo.invalid"
 BASE = "https://growthhs.exemplo.invalid"
 CFG = Config(base_url=BASE, client_id="hsg_teste", client_secret="segredo-teste",
              list_id=22, boards_conferidos=(6, 7),
-             app_url="https://app.growthhs.exemplo.invalid")
+             app_url="https://app.growthhs.exemplo.invalid", ambiente="homologacao")
 
 
 @pytest.fixture(autouse=True)

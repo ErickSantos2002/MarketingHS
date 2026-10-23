@@ -1,6 +1,7 @@
 """Configuração do sistema. Tira do navegador o acesso direto a scoring_config
 e a tags — dois dos 68 pontos que a spec mandou fechar."""
 
+import os
 import re
 from urllib.parse import urlsplit
 
@@ -800,10 +801,13 @@ async def gravar_config_ia(dados: IAIn, _: Usuario = Depends(admin_atual)):
 # GrowthHS — para onde vai o lead qualificado (lote 8D; API real em 22/10)
 # ============================================================================
 
-# Os dois segredos que a tela grava e `limpar` aceita apagar. Os nomes da
-# esquerda são os campos da API; os da direita, as chaves em integration_secrets.
-_SEGREDOS_GROWTHHS = {"client_secret": "GROWTHHS_CLIENT_SECRET",
-                      "webhook_secret": "GROWTHHS_WEBHOOK_SECRET"}
+# Desde a 030 (23/10) há DOIS GrowthHS salvos lado a lado — homologação e
+# produção —, cada um com a própria linha em `growthhs_config` e os próprios
+# segredos; só o ATIVO recebe lead e só o webhook dele vale.
+AMBIENTES_GROWTHHS = ("homologacao", "producao")
+# Os dois segredos que a tela grava e `limpar` aceita apagar, por ambiente —
+# a chave em integration_secrets sai de `growthhs.segredo_cliente/webhook`.
+_SEGREDOS_GROWTHHS = ("client_secret", "webhook_secret")
 EVENTOS_WEBHOOK_GROWTHHS = ("meeting_scheduled", "deal_won")
 MAX_LISTA_GROWTHHS = 10
 MAX_ID_GROWTHHS = 9223372036854775807  # bigint
@@ -919,20 +923,63 @@ _FALHA_EM_ABERTO = """h.status = 'falhou'
                        AND e.status = 'entregue' AND e.id > h.id)"""
 
 
-def urls_do_webhook_growthhs(base: str) -> dict:
-    """As URLs que se cadastram na automação do GrowthHS, uma por evento.
-    Saem do `FRONTEND_URL`, pelo mesmo motivo de `url_do_webhook_resend`
-    (atrás do proxy o request chega em `http` e sem o `/api/`)."""
-    raiz = f"{base.rstrip('/')}/api/publico/growthhs/webhook?evento="
+def urls_do_webhook_growthhs(base: str, ambiente: str) -> dict:
+    """As URLs que se cadastram na automação do GrowthHS DAQUELE ambiente, uma
+    por evento. Saem do `FRONTEND_URL`, pelo mesmo motivo de
+    `url_do_webhook_resend` (atrás do proxy o request chega em `http` e sem o
+    `/api/`)."""
+    raiz = f"{base.rstrip('/')}/api/publico/growthhs/webhook/{ambiente}?evento="
     return {e: raiz + e for e in EVENTOS_WEBHOOK_GROWTHHS}
+
+
+def _ambiente_growthhs(ambiente: str) -> str:
+    if ambiente not in AMBIENTES_GROWTHHS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ambiente do GrowthHS desconhecido.")
+    return ambiente
+
+
+def _nome_do_segredo(campo: str, ambiente: str) -> str:
+    from app.crm import growthhs
+
+    return (growthhs.segredo_cliente(ambiente) if campo == "client_secret"
+            else growthhs.segredo_webhook(ambiente))
+
+
+def _faltando(cfg) -> list[str]:
+    """O que impede o ambiente de receber lead — dito na recusa do "Usar este
+    ambiente" e na tela."""
+    return [nome for ok, nome in (
+        (cfg.base_url, "endereço da API"), (cfg.client_id, "Client ID"),
+        (cfg.client_secret, "Client secret"), (cfg.list_id, "lista de entrada"),
+        (cfg.boards_conferidos, "boards conferidos")) if not ok]
+
+
+async def _estado_do_ambiente(ambiente: str, ativo: str | None) -> dict:
+    from app.crm import growthhs
+
+    cfg = await growthhs.ler_config_do_ambiente(ambiente)
+    segredo = cfg.client_secret or ""
+    webhook = await ler_segredo(growthhs.segredo_webhook(ambiente))
+    # ⚠️ Nenhum valor de segredo sai daqui: do client_secret, só os 4 últimos
+    # (para saber QUAL está gravado); do segredo do webhook, nem isso — ele é
+    # a única coisa que separa um POST forjado de "venda realizada".
+    return {
+        "ambiente": ambiente, "ativo": ambiente == ativo,
+        "base_url": cfg.base_url, "app_url": cfg.app_url, "client_id": cfg.client_id,
+        "list_id": cfg.list_id, "boards_conferidos": list(cfg.boards_conferidos),
+        "listas_reuniao": list(cfg.listas_reuniao), "listas_ganho": list(cfg.listas_ganho),
+        "client_secret": {"configurado": bool(segredo),
+                          "ultimos4": segredo[-4:] if len(segredo) >= 4 else None},
+        "webhook_secret": {"configurado": bool(webhook)},
+        "completo": cfg.completo, "faltando": _faltando(cfg),
+        "webhook_urls": urls_do_webhook_growthhs(settings.FRONTEND_URL, ambiente),
+    }
 
 
 async def _estado_growthhs() -> dict:
     from app.crm import entrega, growthhs
 
     cfg = await growthhs.ler_config()
-    segredo = cfg.client_secret or ""
-    webhook = await ler_segredo(growthhs.SEGREDO_WEBHOOK)
     async with sessao(role="service_role") as conn:
         pendentes = await conn.fetchval(
             "SELECT count(*) FROM crm_handoffs WHERE status = 'pendente'")
@@ -950,18 +997,14 @@ async def _estado_growthhs() -> dict:
                  FROM crm_handoffs
                 WHERE status = 'pendente' AND erro LIKE $1 || '%'""",
             entrega.PREFIXO_PAUSA)
-    # ⚠️ Nenhum valor de segredo sai daqui: do client_secret, só os 4 últimos
-    # (para saber QUAL está gravado); do segredo do webhook, nem isso — ele é
-    # a única coisa que separa um POST forjado de "venda realizada".
     return {
-        "base_url": cfg.base_url, "app_url": cfg.app_url, "client_id": cfg.client_id,
-        "list_id": cfg.list_id, "boards_conferidos": list(cfg.boards_conferidos),
-        "listas_reuniao": list(cfg.listas_reuniao), "listas_ganho": list(cfg.listas_ganho),
-        "client_secret": {"configurado": bool(segredo),
-                          "ultimos4": segredo[-4:] if len(segredo) >= 4 else None},
-        "webhook_secret": {"configurado": bool(webhook)},
-        "configurado": cfg.configurado,
-        "webhook_urls": urls_do_webhook_growthhs(settings.FRONTEND_URL),
+        # `ativo` é o ambiente que recebe lead (ou `None`); `configurado`, se
+        # a fila anda — ativo E completo.
+        "ativo": cfg.ambiente, "configurado": cfg.configurado,
+        "ambientes": {a: await _estado_do_ambiente(a, cfg.ambiente)
+                      for a in AMBIENTES_GROWTHHS},
+        # A fila é uma só: o pedido vai para o ambiente ativo NA HORA da
+        # entrega (spec, decisão 7).
         "fila": {"pendentes": pendentes, "falhas": falhas,
                  "ultimas_falhas": [dict(l) for l in ultimas],
                  "pausada": ({"motivo": pausa["motivo"], "desde": pausa["desde"]}
@@ -971,7 +1014,7 @@ async def _estado_growthhs() -> dict:
 
 @router.get("/config/growthhs")
 async def ler_config_growthhs(_: Usuario = Depends(admin_atual)):
-    """O que está configurado, e como anda a fila de entrega.
+    """Os dois ambientes, qual está ativo, e como anda a fila de entrega.
 
     ⚠️ Nenhum segredo volta — o client_secret cria card no funil de vendas, o
     do webhook marca reunião e venda. As falhas aparecem aqui porque falha de
@@ -988,26 +1031,105 @@ _COLUNAS_GROWTHHS = ("base_url", "app_url", "client_id", "list_id", "boards_conf
 _COLUNAS_LISTA = ("boards_conferidos", "listas_reuniao", "listas_ganho")
 
 
-@router.put("/config/growthhs")
-async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(admin_atual)):
-    """Grava só o que veio; `limpar: ["client_secret" | "webhook_secret"]`
-    apaga o segredo. Campo desconhecido em `limpar` → 400, antes de gravar
-    qualquer coisa."""
+# A trava consultiva que põe em fila o "Usar este ambiente" e o "Salvar".
+_TRAVA_GROWTHHS = "growthhs-ativo"
+
+
+class AtivarGrowthHSIn(BaseModel):
+    ambiente: str
+
+
+@router.post("/config/growthhs/ativar")
+async def ativar_ambiente_growthhs(dados: AtivarGrowthHSIn,
+                                   admin: Usuario = Depends(admin_atual)):
+    """"Usar este ambiente": daqui em diante os leads vão para ESTE GrowthHS
+    e só o webhook dele vale. Nada é reenviado (spec, decisão 7).
+
+    ⚠️ Ambiente incompleto → 400 com o que falta, sem trocar nada: ativá-lo
+    pararia a fila em silêncio (`configurado` falso), e quem clicou acharia
+    que os leads estão indo."""
+    from app.crm import entrega, growthhs
+
+    ambiente = _ambiente_growthhs(dados.ambiente)
+    cfg = await growthhs.ler_config_do_ambiente(ambiente)
+    if not cfg.completo:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"{growthhs.NOME_DO_AMBIENTE[ambiente]} incompleta — falta: "
+            + ", ".join(_faltando(cfg)) + ". Salve antes de usar este ambiente.")
+    async with sessao(role="service_role") as conn:
+        # Dois admins trocando ao mesmo tempo: a trava os põe em fila (sem
+        # ela, o índice único parcial `WHERE ativo` daria 500 a quem
+        # chegasse segundo). O PUT toma a MESMA trava: um "Salvar" que troca
+        # o endereço (e apaga o secret) não passa entre a conferência e a
+        # troca.
+        await conn.execute(f"SELECT pg_advisory_xact_lock(hashtext('{_TRAVA_GROWTHHS}'))")
+        # Reconfere DENTRO da trava, direto no banco (o `ler_segredo` tem
+        # cache): o que foi conferido acima pode ter mudado no meio.
+        linha = await conn.fetchrow(
+            """SELECT base_url, client_id, list_id, boards_conferidos
+                 FROM growthhs_config WHERE ambiente = $1 FOR UPDATE""", ambiente)
+        nome_segredo = growthhs.segredo_cliente(ambiente)
+        tem_segredo = bool(os.environ.get(nome_segredo)) or await conn.fetchval(
+            """SELECT EXISTS (SELECT 1 FROM public.integration_secrets
+                WHERE name = $1 AND coalesce(value, '') <> '')""", nome_segredo)
+        if not (linha and linha["base_url"] and linha["client_id"] and linha["list_id"]
+                and linha["boards_conferidos"] and tem_segredo):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"A {growthhs.NOME_DO_AMBIENTE[ambiente]} mudou enquanto era ativada e "
+                "ficou incompleta. Confira e tente de novo.")
+        # A pausa de configuração era do GrowthHS de antes (credencial ou
+        # endereço recusados lá): com o outro ambiente, os pedidos pausados
+        # tentam na hora, e a faixa "Fila pausada" não fica mostrando o
+        # motivo velho.
+        await conn.execute(
+            """UPDATE crm_handoffs SET visivel_em = now(), erro = NULL, atualizado_em = now()
+                WHERE status = 'pendente' AND erro LIKE $1 || '%'""", entrega.PREFIXO_PAUSA)
+        await conn.execute(
+            "UPDATE growthhs_config SET ativo = false, updated_at = now() "
+            "WHERE ativo AND ambiente <> $1", ambiente)
+        await conn.execute(
+            "UPDATE growthhs_config SET ativo = true, updated_by = $2::uuid, "
+            "updated_at = now() WHERE ambiente = $1 AND NOT ativo", ambiente, admin.id)
+    return await _estado_growthhs()
+
+
+@router.put("/config/growthhs/{ambiente}")
+async def gravar_config_growthhs(ambiente: str, dados: GrowthHSIn,
+                                 admin: Usuario = Depends(admin_atual)):
+    """Ver `_gravar_growthhs`. Roda sob a trava do "Usar este ambiente":
+    trocar o endereço (que apaga o secret) não passa no meio de uma
+    ativação."""
+    _ambiente_growthhs(ambiente)
+    async with sessao(role="service_role") as trava:
+        await trava.execute(f"SELECT pg_advisory_xact_lock(hashtext('{_TRAVA_GROWTHHS}'))")
+        return await _gravar_growthhs(ambiente, dados, admin)
+
+
+async def _gravar_growthhs(ambiente: str, dados: GrowthHSIn, admin: Usuario):
+    """Grava só o que veio, no ambiente do caminho — o outro não é tocado;
+    `limpar: ["client_secret" | "webhook_secret"]` apaga o segredo DESTE
+    ambiente. Campo desconhecido em `limpar` → 400, antes de gravar qualquer
+    coisa. Gravar não ativa: isso é `POST /config/growthhs/ativar`."""
+    from app.crm import growthhs
     from app.integracoes import apagar_segredo
 
+    ambiente = _ambiente_growthhs(ambiente)
     desconhecidos = [c for c in dados.limpar if c not in _SEGREDOS_GROWTHHS]
     if desconhecidos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Campos desconhecidos: {', '.join(desconhecidos)}")
+    # A salva só é lida quando precisa (uma lista sem a outra, troca de
+    # endereço): as duas listas vindas juntas se conferem sozinhas.
+    salvo = (await growthhs.ler_config_do_ambiente(ambiente)
+             if (dados.listas_reuniao is None) != (dados.listas_ganho is None)
+             or "base_url" in dados.model_fields_set else None)
     if dados.listas_reuniao is not None or dados.listas_ganho is not None:
         # ⚠️ Revisão final (M4): a mesma lista em "reunião" e em "ganho" faria
         # o webhook de volta marcar venda num card que só teve reunião (ou o
         # contrário). Quando só uma vem no PUT, a outra é a salva. Antes de
         # gravar qualquer coisa, segredo inclusive.
-        from app.crm import growthhs
-
-        salvo = (await growthhs.ler_config()
-                 if dados.listas_reuniao is None or dados.listas_ganho is None else None)
         reuniao = set(dados.listas_reuniao if dados.listas_reuniao is not None
                       else salvo.listas_reuniao)
         ganho = set(dados.listas_ganho if dados.listas_ganho is not None
@@ -1022,13 +1144,12 @@ async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(adm
         # ⚠️ O secret é só de escrita: ninguém o lê de volta pela tela. Trocar
         # o endereço e clicar "Testar" o mandaria (no client-credentials) ao
         # endereço novo — um admin leria o secret apontando para um servidor
-        # dele. Endereço mudou sem secret no mesmo pedido → o secret salvo cai.
-        from app.crm import growthhs
-
-        antes = (await growthhs.ler_config()).base_url
-        if (antes or "").rstrip("/") != (dados.base_url or "").rstrip("/"):
+        # dele. Endereço mudou sem secret no mesmo pedido → o secret salvo
+        # DESTE ambiente cai (o do outro fica).
+        if (salvo.base_url or "").rstrip("/") != (dados.base_url or "").rstrip("/"):
             limpar.add("client_secret")
-    for campo, nome in _SEGREDOS_GROWTHHS.items():
+    for campo in _SEGREDOS_GROWTHHS:
+        nome = _nome_do_segredo(campo, ambiente)
         if campo in limpar:
             await apagar_segredo(nome)
         elif getattr(dados, campo):
@@ -1041,23 +1162,25 @@ async def gravar_config_growthhs(dados: GrowthHSIn, admin: Usuario = Depends(adm
     if campos:
         nomes = list(campos)
         # Os nomes vêm da tupla fechada acima, nunca do corpo.
-        valores = ", ".join(f"${i + 2}" for i in range(len(nomes)))
+        valores = ", ".join(f"${i + 3}" for i in range(len(nomes)))
         atualiza = ", ".join(f"{c} = EXCLUDED.{c}" for c in nomes)
         async with sessao(role="service_role") as conn:
             await conn.execute(
-                f"""INSERT INTO growthhs_config ({', '.join(nomes)}, updated_by)
-                    VALUES ({valores}, $1::uuid)
-                    ON CONFLICT ((true)) DO UPDATE SET {atualiza},
+                f"""INSERT INTO growthhs_config (ambiente, {', '.join(nomes)}, updated_by)
+                    VALUES ($2, {valores}, $1::uuid)
+                    ON CONFLICT (ambiente) DO UPDATE SET {atualiza},
                       updated_by = EXCLUDED.updated_by, updated_at = now()""",
-                admin.id, *(campos[c] for c in nomes))
+                admin.id, ambiente, *(campos[c] for c in nomes))
     return await _estado_growthhs()
 
 
-@router.post("/config/growthhs/testar")
-async def testar_config_growthhs(_: Usuario = Depends(admin_atual)):
-    """Pede um token com a credencial SALVA (`client-credentials`, §1 do doc do
-    GrowthHS): 200 com token = credencial válida. É a mesma config que a fila
-    usa — testar a digitada na tela daria um "ok" que a fila não tem.
+@router.post("/config/growthhs/{ambiente}/testar")
+async def testar_config_growthhs(ambiente: str, _: Usuario = Depends(admin_atual)):
+    """Pede um token com a credencial SALVA daquele ambiente
+    (`client-credentials`, §1 do doc do GrowthHS): 200 com token = credencial
+    válida. Testa ativo ou não — serve para conferir um ambiente antes de
+    trocar para ele. Testar a digitada na tela daria um "ok" que a fila não
+    tem.
 
     Recusa do GrowthHS (401 etc.) não é erro desta rota: 200 com
     `valido: false`, o status e um detalhe curto. Fora do ar → 502.
@@ -1065,7 +1188,7 @@ async def testar_config_growthhs(_: Usuario = Depends(admin_atual)):
     cliente HTTP não monta URL sem `base_url`."""
     from app.crm import growthhs
 
-    cfg = await growthhs.ler_config()
+    cfg = await growthhs.ler_config_do_ambiente(_ambiente_growthhs(ambiente))
     if not (cfg.base_url and cfg.client_id and cfg.client_secret):
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "Salve o endereço da API, o Client ID e o Client secret "
