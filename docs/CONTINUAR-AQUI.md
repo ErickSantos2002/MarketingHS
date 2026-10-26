@@ -2,7 +2,13 @@
 
 > ## ▶️ PRÓXIMA SESSÃO — combinado com o Erick (26/10/2026, fim do dia)
 >
-> 1. **Primeira landing REAL, focada no Phoebus** (um aparelho só). Com
+> 1. **Primeira landing REAL, focada no Phoebus** — em andamento (26/10, tarde).
+>    Material e texto em `~/projetos/landing-phoebus/` (`texto-v1.md`,
+>    `imagens/`, prévias PNG). Frente `landing-secoes` ✅ mergeada (`29bec5d`):
+>    `config.secoes` com 8 tipos + editor; portão local **1064 passed, 9
+>    skipped**, node 84, `tsc` 0, guarda 0. Sem migration. Falta: ajustes do
+>    Erick na prévia, deploy de api e sistema, criar a página em produção.
+>    Texto original do item: (um aparelho só). Com
 >    calma: o Erick traz muito material e criamos juntos texto, imagem,
 >    formulário e jornada. O editor de hoje é de uma seção (título,
 >    subtítulo, texto, imagem, CTA, campos, WhatsApp, obrigado) — se o
