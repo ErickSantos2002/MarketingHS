@@ -158,3 +158,9 @@ dia no `CONTINUAR-AQUI.md`.
     como "informou nesta conversão" — o contato e a pessoa do GrowthHS
     continuam sem ser sobrescritos. Alternativa: sobrescrever o contato
     (reabre o furo do R1 — qualquer um que saiba o e-mail troca os dados).
+74. **Perdido e No Show voltando do GrowthHS** (teste de leads, 26/10):
+    **Respondida pelo Erick (26/10):** perdido vira status novo
+    **"Negócio perdido"** (fim do funil, evento na linha do tempo, conta no
+    painel e serve para segmento de renutrição); No Show (card movido para
+    "Reagendamento") é **só evento** na linha do tempo — o status continua
+    "MQL - Reunião agendada", e o reagendamento traz outro "Reunião agendada".
