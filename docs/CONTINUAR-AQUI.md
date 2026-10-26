@@ -7,9 +7,13 @@
 >    formulário e jornada. O editor de hoje é de uma seção (título,
 >    subtítulo, texto, imagem, CTA, campos, WhatsApp, obrigado) — se o
 >    material pedir mais, isso vira frente.
-> 2. **Deploy de `marketinghs-api` e `marketinghs-worker`** (nota de
->    abertura, `653c81e`) — ainda não feito; testar com lead NOVO pela
->    landing (e-mail novo na lista da jornada de teste).
+> 2. ✅ **Nota de abertura no ar e provada** (26/10): lead novo
+>    `healthsafetyti+lead2@gmail.com` pela `phoebus-prova` → card **11243**
+>    com vendedora (Adriana), origem `Landing Page phoebus-prova` e nota
+>    multilinha. Sobras pequenas: (a) "Respostas do formulário" mostra a
+>    CHAVE do campo extra (`ja_faz_testagem`), não o rótulo — resolver na
+>    landing do Phoebus; (b) no GrowthHS a nota aparece "3h atrás" logo
+>    depois de criada (fuso do `created_at` da nota lá — pedido ao HSGrowth).
 > 3. **Pedido ao HSGrowth** (`docs/pedido-hsgrowth-2026-10-26.md`): XSS
 >    nas anotações do card — corrigir antes da virada, numa sessão do
 >    `hsgrowth-sistema`.

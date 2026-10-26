@@ -32,3 +32,10 @@ lead digita). Do lado do MarketingHS o `<` já sai trocado por `‹` (commit
 `components/kanban/CardDetailModal.tsx`, que não é usado. O MarketingHS
 passou a mandar o resumo do lead em nota (que aparece), então isto é
 melhoria, não bloqueio.
+
+## 3. Horário da anotação 3 h adiantado no passado (pequeno)
+
+Nota criada pela API (`POST /api/v1/card-notes`, usuário integracao2) aparece
+"3h atrás" segundos depois de criada, enquanto o evento de sistema ao lado
+mostra "1 min atrás" (card 11243, 26/10 13:31). Parece `created_at` gravado
+ou lido sem fuso (UTC × America/Sao_Paulo) no caminho das notas.
