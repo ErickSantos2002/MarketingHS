@@ -26,7 +26,8 @@
 > eventos e identidades). Sobraram 7 contatos (teste, landing, CSV, 1
 > excluído). Frente `sem-datacore` ✅ na `main` (`67cf33b`): sincronização
 > fora da tela e da API, CRM recusa origem `datacore` (código + gatilho da
-> 033). Pendente: `DATACORE_*` saem do `.env` de api/worker, depois de `config.py`.
+> 033). ✅ 033 aplicada e deploy feito (26/10, 14:21); `/api/datacore/sincronizar`
+> dá 404. Pendente: `DATACORE_*` saem do `.env` de api/worker, depois de `config.py`.
 >
 > ### Combinado de 23/10 (itens 1–3 feitos em 26/10)
 >
