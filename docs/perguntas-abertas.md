@@ -164,3 +164,12 @@ dia no `CONTINUAR-AQUI.md`.
     painel e serve para segmento de renutrição); No Show (card movido para
     "Reagendamento") é **só evento** na linha do tempo — o status continua
     "MQL - Reunião agendada", e o reagendamento traz outro "Reunião agendada".
+75. **"Em contrato" recebendo perdido** (frente `growthhs-perdido`, 26/10):
+    **Assumido:** vira "Negócio perdido" (na régua da 005 vem antes da
+    venda). Se "Em contrato" for pós-venda, protegê-lo como a venda — uma
+    linha em `retorno.avancar_status`.
+76. **Lead perdido com reunião nova volta ao funil** (idem): **Assumido:**
+    sim (reunião → MQL, venda → Venda realizada). Alternativa: só a mudança
+    manual tira alguém de "Negócio perdido".
+77. **Lista 26 "Agendado" (board 6) fora de `listas_reuniao`** (só a 28):
+    anterior à frente; ver na prova se reagendamento no board 6 chega.
