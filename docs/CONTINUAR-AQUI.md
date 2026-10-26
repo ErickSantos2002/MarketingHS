@@ -20,9 +20,14 @@
 >    reconversão pela `phoebus-prova` atualizou o 11242 + nota ✅; reunião
 >    agendada ✅. Abertas as frentes `reconversao-dados` (pergunta 73: o que
 >    o lead digita na reconversão se perdia) e `growthhs-perdido` (pergunta
->    74: status "Negócio perdido" + evento de No Show). Falta, depois do
->    merge, das migrations 031/032 e das 2 automações no GrowthHS: No Show →
->    reagendar e perdido no 11242. Landing `phoebus-prova` e jornada "Aviso
+>    74: status "Negócio perdido" + evento de No Show) — ✅ as duas
+>    mergeadas, 031/032 aplicadas, deploy feito, 3 automações novas no
+>    GrowthHS de homologação. No 11242: reconversão com dados diferentes →
+>    nota com "Informou nesta conversão" ✅; Reagendamento → "No Show no
+>    GrowthHS", status mantido ✅; volta a Agendado → nova reunião ✅;
+>    Perdido (lista 33) → status "Negócio perdido" ✅. Aberta a frente
+>    `nota-do-vendedor` (pergunta 79: a descrição do card não aparece no
+>    GrowthHS — o que é do vendedor vai em nota). Landing `phoebus-prova` e jornada "Aviso
 >    ao comercial" estão LIGADAS — `bash ~/marketinghs-teste-landing.sh
 >    desligar` no fim.
 > 3b. **Próximo item, logo depois de juntar as frentes (pedido do Erick,
