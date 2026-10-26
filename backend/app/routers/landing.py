@@ -129,6 +129,21 @@ def _json_seguro(dados: dict) -> str:
                  .replace("&", "\\u0026"))
 
 
+# Plus Jakarta Sans, a fonte oficial da H&S (a mesma URL do Design System,
+# `frontend/src/design-system/tokens/typography.css`, só com os pesos que a
+# landing usa). Aqui na casca e não como `@import` no `landing.css`: o
+# `@import` só é descoberto depois que o CSS da landing baixa, e a fonte
+# chega uma ida ao servidor mais tarde; o `<link>` no `<head>` baixa em
+# paralelo, e o `preconnect` já abre a conexão com o servidor dos arquivos.
+# `display=swap`: o texto aparece na fonte do sistema e troca quando chegar.
+FONTE = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+    'family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap">\n'
+)
+
+
 def montar_casca(slug: str, config: dict, *, previa: bool = False) -> str:
     """⚠️ Todo valor que sai daqui veio de campo EDITÁVEL na tela de Páginas.
     `html.escape(..., quote=True)` em tudo — inclusive, e principalmente, no que
@@ -164,7 +179,7 @@ def montar_casca(slug: str, config: dict, *, previa: bool = False) -> str:
 <meta property="og:title" content="{titulo}">
 <meta property="og:description" content="{descricao}">
 <meta name="twitter:card" content="summary_large_image">
-{robots}<link rel="stylesheet" href="/landing/main.css">
+{robots}{FONTE}<link rel="stylesheet" href="/landing/main.css">
 </head>
 <body>
 <div id="landing" data-slug="{slug_seguro}"></div>
