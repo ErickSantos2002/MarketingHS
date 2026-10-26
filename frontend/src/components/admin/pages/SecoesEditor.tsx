@@ -40,7 +40,15 @@ export function SecoesEditor({ secoes, onChange }: {
   // trava a automação do navegador.
   const [removendo, setRemovendo] = useState<number | null>(null);
 
-  const chave = (s: unknown, i: number) => (tipoConhecido(s) && s.id ? s.id : `posicao-${i}`);
+  // A `key` do React (e a chave do "aberta"): o id da seção. Config vinda
+  // pela API pode repetir id ou não ter — repetido ganha a posição junto, e
+  // nenhuma chave se repete na lista.
+  const chaves: string[] = [];
+  for (const [i, s] of secoes.entries()) {
+    const id = tipoConhecido(s) && typeof s.id === 'string' && s.id ? s.id : `posicao-${i}`;
+    chaves.push(chaves.includes(id) ? `${id}-${i}` : id);
+  }
+  const chave = (_s: unknown, i: number) => chaves[i];
   const alternar = (k: string) => setAbertas((antes) => {
     const proximo = new Set(antes);
     if (proximo.has(k)) proximo.delete(k); else proximo.add(k);

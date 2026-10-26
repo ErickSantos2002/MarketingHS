@@ -9,13 +9,14 @@ import { BASE, ErroApi } from '@/lib/api';
 import { subirImagemDeEmail } from '@/lib/config';
 
 // A mesma régua do servidor (`app/captura/urls.py::url_segura`): http(s) com
-// host, ou caminho do próprio site — nunca `//host`. Avisar aqui poupa o 400
-// do salvamento automático, que só aparece como "Erro ao salvar".
+// host, ou caminho do próprio site — nunca `//host`; barra invertida, tab,
+// quebra de linha e NUL recusados (espaço comum, o servidor aceita). Avisar
+// aqui poupa a surpresa do 400 no salvamento automático.
 function urlAceita(url: string): boolean {
   const u = url.trim();
   if (!u) return true;
-  if (/[\\\s]/.test(u)) return false;
-  return /^https?:\/\/[^/]/i.test(u) || (u.startsWith('/') && !u.startsWith('//'));
+  if (/[\\\t\r\n\0]/.test(u)) return false;
+  return /^https?:\/\/[^/:?#@\s]/i.test(u) || (u.startsWith('/') && !u.startsWith('//'));
 }
 
 // Imagem de página: URL colada ou arquivo subido (o upload devolve o caminho
@@ -30,12 +31,18 @@ export function CampoDeImagem({ id, rotulo, valor, onChange, ajuda }: {
 }) {
   const [subindo, setSubindo] = useState(false);
   const arquivoRef = useRef<HTMLInputElement>(null);
+  // ⚠️ O upload termina segundos depois do clique. O `onChange` daquela
+  // renderização carrega a lista de seções DAQUELE momento: chamá-lo gravaria
+  // a lista velha por cima do que se digitou (ou de outro upload) enquanto
+  // isso. O ref guarda sempre o da última renderização (revisão, 26/10).
+  const onChangeAtual = useRef(onChange);
+  onChangeAtual.current = onChange;
 
   const subir = async (arquivo: File) => {
     setSubindo(true);
     try {
       const { url } = await subirImagemDeEmail(arquivo, 'campaigns');
-      onChange(url);
+      onChangeAtual.current(url);
     } catch (e) {
       toast.error(e instanceof ErroApi ? e.message : 'Erro ao subir a imagem');
     } finally {
@@ -78,7 +85,7 @@ export function CampoDeImagem({ id, rotulo, valor, onChange, ajuda }: {
       </div>
       {!aceita && (
         <p id={`${id}-erro`} className="text-xs text-[--on-tint-danger]">
-          Endereço não aceito: use https://… ou suba o arquivo. Enquanto estiver assim, a página não é salva.
+          Endereço não aceito: use https://… ou suba o arquivo. O servidor recusa, e nenhuma alteração da página é salva até corrigir.
         </p>
       )}
       {valor && aceita && (

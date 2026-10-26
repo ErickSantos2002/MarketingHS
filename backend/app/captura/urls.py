@@ -29,6 +29,9 @@ URLS_DA_CONFIG = (("redirect_url",), ("imagem_url",), ("consentimento", "link"))
 # secoes.ts`. Ao servir, seção de tipo desconhecido sai e o que passa do
 # limite é cortado: a config pode chegar pela chave de API, sem o editor, e a
 # página pública não carrega 5.000 cartões porque alguém mandou.
+# ⚠️ Aqui o corte é sobre a lista CRUA (itens vazios contam); o cliente conta
+# só os aceitos. É teto de carga, não a régua fina: pelo editor nunca se
+# passa do limite cru, então os dois só divergem em config vinda pela API.
 TIPOS_DE_SECAO = frozenset({"numeros", "comparativo", "passos", "cartoes",
                             "texto_imagem", "logos", "perguntas", "chamada"})
 LIMITE_SECOES = 20
@@ -116,7 +119,10 @@ def _secoes_seguras(secoes) -> list:
     for secao in secoes if isinstance(secoes, list) else []:
         if len(saida) >= LIMITE_SECOES:
             break
-        if not isinstance(secao, dict) or secao.get("tipo") not in TIPOS_DE_SECAO:
+        # `isinstance(str)` antes do `in`: um `tipo` lista ou objeto num
+        # frozenset levanta TypeError, e a landing daria 500 a cada acesso.
+        tipo = secao.get("tipo") if isinstance(secao, dict) else None
+        if not isinstance(tipo, str) or tipo not in TIPOS_DE_SECAO:
             continue
         copia = _sem_imagem_ruim(secao)
         if isinstance(copia.get("itens"), list):

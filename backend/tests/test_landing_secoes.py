@@ -64,6 +64,16 @@ def test_secoes_quebradas_nao_derrubam_a_regua():
         config_com_urls_seguras({"secoes": secoes})
 
 
+def test_tipo_que_nao_e_texto_nao_derruba_a_casca():
+    # `["cartoes"]` num frozenset levantaria TypeError (unhashable) e a
+    # landing daria 500 a cada acesso — a config grava sem recusa.
+    config = {"secoes": [{"tipo": ["cartoes"]}, {"tipo": {"a": 1}},
+                         {"tipo": "numeros", "itens": [{"valor": "1"}]}]}
+    assert urls_invalidas(config) == []
+    assert [s["tipo"] for s in config_com_urls_seguras(config)["secoes"]] == ["numeros"]
+    montar_casca("x", config)
+
+
 def test_config_sem_secoes_igual_a_antes():
     config = {"redirect_url": "javascript:alert(1)", "imagem_url": "/publico/imagem/1",
               "consentimento": {"texto": "x", "link": "data:text/html,oi"}}

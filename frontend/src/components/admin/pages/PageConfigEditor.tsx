@@ -26,6 +26,7 @@ import {
   camposDaConfig, camposParaGravar, textoDoConsentimentoParaGravar,
   type CampoDaPagina, type ConsentimentoDaPagina,
 } from '@/landing/campos';
+import { ErroApi } from '@/lib/api';
 import { CamposEditor } from './CamposEditor';
 import { CampoDeImagem } from './CampoDeImagem';
 import { SecoesEditor } from './SecoesEditor';
@@ -141,9 +142,11 @@ export default function PageConfigEditor() {
           iframeRef.current.src = iframeRef.current.src;
         }
       }, 1500);
-    } catch {
+    } catch (e) {
       setSaveState('unsaved');
-      toast.error('Erro ao salvar configurações');
+      // O 400 da régua de URL traz o caminho (`secoes.3.itens.0.imagem_url`):
+      // sem ele, "erro ao salvar" não diz qual imagem corrigir.
+      toast.error(e instanceof ErroApi && e.message ? e.message : 'Erro ao salvar configurações');
     }
   }, [page, updatePage]);
 

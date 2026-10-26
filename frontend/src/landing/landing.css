@@ -425,6 +425,16 @@ body {
   padding-bottom: 88px;
 }
 
+/* Palavra comprida sem espaço (URL colada num texto, nome de cliente longo
+ * no ladrilho de 2 colunas) quebra em vez de rolar a página no celular. */
+.landing-secoes {
+  overflow-wrap: anywhere;
+}
+
+.passos li > div {
+  min-width: 0;
+}
+
 .landing-topo {
   display: flex;
   justify-content: center;
