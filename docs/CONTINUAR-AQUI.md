@@ -7,8 +7,10 @@
 >    Vendedor") com `triggered_by_user_id: 28` (integracao2) no GrowthHS de
 >    homologação — o Erick faz na tela; conferir que card novo do
 >    MarketingHS ganha vendedor.
-> 2. **Bateria completa** (`pytest` inteiro, ~1 h, sob `systemd-inhibit`) —
->    pendente desde a `growthhs-ambientes`.
+> 2. ✅ **Bateria completa** (26/10): 988 passed + 1 falha em 1h13 — o
+>    `test_handoff_banco` ainda esperava a linha única de `growthhs_config`
+>    de antes da 030; corrigido para "uma por ambiente", 21 passed nos dois
+>    arquivos. Item 1 feito pelo Erick (automação duplicada com o usuário 28).
 > 3. **Rodada de testes de leads:** vários leads diferentes; duplicados com
 >    informação diferente (o card aberto é atualizado + nota?); mais
 >    movimentos (reunião, ganho, perdido, No Show → reagendar); incluir uma
