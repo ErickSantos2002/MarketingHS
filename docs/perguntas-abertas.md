@@ -187,3 +187,10 @@ dia no `CONTINUAR-AQUI.md`.
     reconversão sem a frase sobre a descrição); a descrição segue só como
     engrenagem (marca de idempotência). Pedido opcional ao HSGrowth: mostrar
     a descrição na tela do card.
+80. **Contatos do DataCore** (Erick, 26/10): **Decidido:** os 2.104
+    contatos `source = 'datacore'` saem do banco de vez (com backup em
+    `~/backups/`); nenhum deles tinha ido ao CRM, nem tinha campanha,
+    conversão ou jornada. A sincronização com o DataCore sai da tela e da
+    API, e o envio ao CRM recusa contato de origem `datacore` como segunda
+    linha. Só vai ao CRM o que veio de landing, formulário de site ou
+    import manual. Isso também encerra a questão D4 (e-mail de nota fiscal).

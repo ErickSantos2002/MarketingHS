@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 26/10 (7):** aberta `sem-datacore` (pergunta 80) — tirar a sincronização com o DataCore (rota, tela, worker se houver) e travar o envio ao CRM para `source = 'datacore'`. Dona de: `backend/app/routers/datacore.py`, `backend/app/dominio/sincronizacao_datacore.py`, `backend/app/main.py` (só o include do router), `backend/app/config.py` (só chaves DATACORE_*, se precisar), `backend/app/crm/` (só a trava), os componentes de front que chamam o DataCore, testes do DataCore/CRM e `docs/frentes/sem-datacore.md`. Testa no Postgres local (porta 5444).
+
 **Estado em 26/10 (6):** `nota-do-vendedor` ✅ mergeada (`653c81e`); portão local **1056 passed, 9 skipped**, `tsc` 0. Sem migration; falta deploy de api e worker. Achado de segurança no HSGrowth (XSS nas notas) → `docs/pedido-hsgrowth-2026-10-26.md`. Nenhuma frente aberta.
 
 **Estado em 26/10 (5):** aberta `nota-do-vendedor` (pergunta 79). Dona de: `backend/app/crm/entrega.py`, `backend/app/crm/growthhs.py` (montagem de descrição/bloco/nota), testes de CRM/entrega/reconversão e `docs/frentes/nota-do-vendedor.md`. Testa no Postgres local (porta 5443); não roda a suíte em produção.
