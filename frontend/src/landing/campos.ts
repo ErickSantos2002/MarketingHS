@@ -322,6 +322,18 @@ export function urlSegura(url: unknown, origem: string): string | null {
   }
 }
 
+/**
+ * O upload do editor devolve o caminho do backend (`/publico/imagem/<id>`,
+ * sem `/api`). Em produção o nginx só repassa `/api/` ao backend: sem o
+ * prefixo, a imagem cairia no SPA e viria quebrada. URL absoluta (ou já com
+ * `/api`) passa como está. Mora aqui, e não no `Landing.tsx`, porque o topo,
+ * as seções e o editor do admin precisam da mesma regra — e o `base` vem de
+ * fora porque este arquivo não pode ler `import.meta.env` (roda no Node).
+ */
+export function enderecoDaImagem(url: string, base: string): string {
+  return /^\/publico\//.test(url) ? `${base}${url}` : url;
+}
+
 /** O id de visitante que o `rastreio.js` grava no cookie `mhs_vid`. */
 export function lerVisitante(cookie: string): string | null {
   for (const pedaco of String(cookie ?? "").split(";")) {

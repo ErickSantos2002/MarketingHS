@@ -1,0 +1,112 @@
+{
+  "headline": "Teste de álcool na entrada, sem ninguém para aplicar.",
+  "subheadline": "O Phoebus identifica o colaborador pelo rosto ou pelo crachá, faz o teste em 5 segundos e avisa o gestor no WhatsApp a cada reprovação. Teste na sua operação por 30 dias, sem custo.",
+  "cta_text": "Quero testar 30 dias grátis",
+  "corpo": "Teste na sua operação por 30 dias, sem custo e sem compromisso.\n\n- Identificação por rosto, NFC ou RFID\n- Teste em 5 segundos, sem canudo\n- Alerta no WhatsApp a cada reprovação",
+  "campos": [
+    { "chave": "nome", "rotulo": "Nome", "tipo": "texto", "obrigatorio": true },
+    { "chave": "email", "rotulo": "E-mail corporativo", "tipo": "email", "obrigatorio": true },
+    { "chave": "whatsapp", "rotulo": "WhatsApp", "tipo": "telefone", "obrigatorio": true },
+    { "chave": "empresa", "rotulo": "Empresa", "tipo": "texto", "obrigatorio": true },
+    { "chave": "cargo", "rotulo": "Cargo", "tipo": "texto", "obrigatorio": false },
+    { "chave": "testes_por_dia", "rotulo": "Quantas pessoas passariam pelo teste por dia?", "tipo": "lista", "obrigatorio": false,
+      "opcoes": ["Até 50", "51 a 200", "201 a 1.000", "Mais de 1.000"] }
+  ],
+  "mensagem_obrigado": "Recebemos seu pedido. Um especialista da Health & Safety vai entrar em contato para combinar o envio do Phoebus e o treinamento da sua equipe.",
+  "secoes": [
+    {
+      "id": "numeros", "tipo": "numeros",
+      "itens": [
+        { "valor": "23 milhões+", "rotulo": "de testes registrados" },
+        { "valor": "165 mil+", "rotulo": "colaboradores cadastrados" },
+        { "valor": "770+", "rotulo": "aparelhos conectados" }
+      ]
+    },
+    {
+      "id": "comparativo", "tipo": "comparativo",
+      "titulo": "O teste manual depende de alguém lembrar, aplicar e anotar.",
+      "colunas": { "a": "Processo manual", "b": "Phoebus" },
+      "linhas": [
+        { "criterio": "Quem aplica", "a": "Um técnico ou porteiro, em cada turno", "b": "Ninguém: o colaborador faz sozinho" },
+        { "criterio": "Quem fez o teste", "a": "Assinatura na planilha", "b": "Rosto ou crachá, com foto do sopro" },
+        { "criterio": "Horário", "a": "Quando dá", "b": "24 horas, todos os dias" },
+        { "criterio": "Reprovação", "a": "Alguém precisa avisar", "b": "Gestor recebe no WhatsApp e no e-mail na hora" },
+        { "criterio": "Acesso", "a": "Depende de quem está na portaria", "b": "A catraca só libera depois do teste" },
+        { "criterio": "Auditoria", "a": "Pilha de formulários", "b": "Relatório pronto, com histórico completo" }
+      ]
+    },
+    {
+      "id": "passos", "tipo": "passos",
+      "titulo": "Como funciona",
+      "itens": [
+        { "titulo": "Identifica", "texto": "Reconhecimento facial, cartão NFC ou RFID. Cadastro ilimitado." },
+        { "titulo": "Testa", "texto": "Sopro à distância, sem canudo, em 5 segundos. Até 12 testes por minuto." },
+        { "titulo": "Decide", "texto": "Aprovado, a catraca libera. Reprovado, o acesso fica bloqueado e o gestor é avisado na hora." }
+      ]
+    },
+    {
+      "id": "onde-instalar", "tipo": "cartoes",
+      "titulo": "Onde instalar",
+      "itens": [
+        { "titulo": "Na parede", "texto": "Portarias, vestiários, salas de controle." },
+        { "titulo": "No pedestal", "texto": "Aço carbono, fixado no piso, para onde não há parede." },
+        { "titulo": "Na catraca", "texto": "Com o Phoebus Link, o resultado vai direto para a catraca (contato seco ou Wiegand) e libera só quem passou." },
+        { "titulo": "Na portaria de veículos (Phoebus Pro)", "texto": "Braço mecânico que leva o bocal até a janela do caminhão ou do carro. O motorista faz o teste sem descer." }
+      ]
+    },
+    {
+      "id": "plataforma", "tipo": "cartoes",
+      "titulo": "Tudo o que acontece na entrada, no seu celular.",
+      "subtitulo": "A plataforma do Phoebus",
+      "itens": [
+        { "titulo": "Registro com foto", "texto": "Do momento do sopro — sem \"fui eu que soprei pelo colega\"." },
+        { "titulo": "Alertas", "texto": "Por WhatsApp e e-mail, para quantas pessoas precisar." },
+        { "titulo": "Unidades e departamentos", "texto": "Cada gestor vê só a sua área." },
+        { "titulo": "Relatórios", "texto": "Filtrados por período, unidade, setor e resultado, prontos para auditoria." },
+        { "titulo": "Integração", "texto": "Por API e webhook com o RH, o ERP ou a portaria." },
+        { "titulo": "Sem limite", "texto": "De colaboradores, aparelhos ou histórico." }
+      ]
+    },
+    {
+      "id": "calibracao", "tipo": "texto_imagem",
+      "titulo": "Calibração sem parar a operação",
+      "texto": "O sensor fica num módulo calibrado em padrão RBC, válido por 12 meses.\n\nNa hora de calibrar, é como trocar uma bateria: solta o parafuso, tira o módulo, encaixa o novo e parafusa de volta. O Phoebus não sai da portaria e a operação não para.",
+      "lado": "direita"
+    },
+    {
+      "id": "clientes", "tipo": "logos",
+      "titulo": "Quem já usa",
+      "itens": [
+        { "nome": "CCR" }, { "nome": "Vale" }, { "nome": "Gerdau" }, { "nome": "CSN" },
+        { "nome": "Rumo" }, { "nome": "ArcelorMittal" }, { "nome": "InterCement" },
+        { "nome": "Mineração Caraíba" }
+      ]
+    },
+    {
+      "id": "perguntas", "tipo": "perguntas",
+      "titulo": "Perguntas frequentes",
+      "itens": [
+        { "pergunta": "Precisa de canudo?", "resposta": "Não. O teste padrão é passivo, à distância. O bocal com canudo descartável existe para quando a empresa quer o teste ativo." },
+        { "pergunta": "E se a internet cair?", "resposta": "O Phoebus continua testando. Ele guarda até 20.000 resultados na memória e envia tudo para a plataforma quando a conexão volta." },
+        { "pergunta": "Funciona com a catraca que já tenho?", "resposta": "Com o Phoebus Link, sim: contato seco, Wiegand (26 a 66 bits) e RS232." },
+        { "pergunta": "Como conecta?", "resposta": "Wi-Fi, cabo de rede ou 4G." },
+        { "pergunta": "Tem garantia?", "resposta": "12 meses." },
+        { "pergunta": "O reconhecimento facial está de acordo com a LGPD?", "resposta": "Sim. O rosto serve só para identificar quem fez o teste, e cada gestor vê apenas os dados da própria unidade." },
+        { "pergunta": "Enxaguante bucal pode dar positivo?", "resposta": "Pode. Enxaguante com álcool deixa resíduo na boca e o aparelho acusa. Basta esperar alguns minutos e refazer o teste." },
+        { "pergunta": "Quem instala?", "resposta": "A sua equipe. O Phoebus vai com parafusos, buchas e conectores para catraca, e no treinamento mostramos como deixar tudo funcionando." }
+      ]
+    },
+    {
+      "id": "oferta", "tipo": "chamada",
+      "titulo": "Teste o Phoebus por 30 dias na sua operação.",
+      "texto": "Enviamos o Phoebus completo, liberamos a plataforma por um mês e treinamos sua equipe para cadastrar os colaboradores e acompanhar os resultados. Sem custo e sem compromisso.",
+      "itens": [
+        "O aparelho completo, enviado até você",
+        "A plataforma liberada por 1 mês",
+        "Treinamento para cadastrar a equipe e usar a plataforma"
+      ],
+      "nota": "A instalação no local fica por conta da sua empresa.",
+      "botao": "Quero testar 30 dias grátis"
+    }
+  ]
+}
