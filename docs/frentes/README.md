@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 26/10 (9):** aberta `landing-secoes` (n 21 · Vite 8101 · backend 8121 · Postgres local 5445) — spec `docs/superpowers/specs/2026-10-26-landing-secoes-design.md`: a landing ganha `secoes` (8 tipos) e o editor, para a landing do Phoebus. Dona de: `frontend/src/landing/**`, `frontend/scripts/landing-*.test.mjs`, `frontend/src/components/admin/pages/PageConfigEditor.tsx` + componentes novos de seção na mesma pasta, `backend/app/captura/urls.py`, testes de URL/landing em `backend/tests/`, o plano `docs/superpowers/plans/2026-10-26-landing-secoes.md` e `docs/frentes/landing-secoes.md`. Sem migration; não mexe em `package.json`, `components/ui/`, `lib/api*`. Não roda a suíte inteira.
+
 **Estado em 26/10 (8):** `sem-datacore` ✅ mergeada (`67cf33b`); portão local **1054 passed, 9 skipped**, `tsc` 0. 033 NÃO aplicada; deploy de api, worker e sistema pendente. Depois: tirar `DATACORE_URL`/`DATACORE_EMAIL_DE_NOTAS` do `.env` de api e worker, e só então de `config.py`. Nenhuma frente aberta.
 
 **Estado em 26/10 (7):** aberta `sem-datacore` (pergunta 80) — tirar a sincronização com o DataCore (rota, tela, worker se houver) e travar o envio ao CRM para `source = 'datacore'`. Dona de: `backend/app/routers/datacore.py`, `backend/app/dominio/sincronizacao_datacore.py`, `backend/app/main.py` (só o include do router), `backend/app/config.py` (só chaves DATACORE_*, se precisar), `backend/app/crm/` (só a trava), os componentes de front que chamam o DataCore, testes do DataCore/CRM e `docs/frentes/sem-datacore.md`. Testa no Postgres local (porta 5444).
