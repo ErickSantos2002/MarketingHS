@@ -283,3 +283,12 @@ def test_eventos_da_volta():
     assert set(volta.EVENTOS) == {"meeting_scheduled", "deal_won", "deal_lost", "no_show"}
     assert retorno.ESTAGIO_POR_EVENTO.get("no_show") is None
     assert retorno.ESTAGIO_POR_EVENTO["deal_lost"] == PERDIDO
+
+
+def test_status_novo_nas_listas_do_backend():
+    """O portão do corte silencioso: todo lugar que lista status conhece o novo."""
+    from app.dominio.importacao import STATUS_VALIDOS
+    from app.routers.escrita_contatos import _EVENTO_POR_STATUS
+
+    assert PERDIDO in STATUS_VALIDOS
+    assert _EVENTO_POR_STATUS[PERDIDO] == ("deal_lost", "Negócio perdido")

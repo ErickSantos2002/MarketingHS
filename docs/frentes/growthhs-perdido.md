@@ -83,11 +83,26 @@ GrowthHS informados na pergunta), corrigir os campos "Listas de perdido" e
 "Listas de No Show" na aba da Homologação antes da prova — lista errada é
 ignorada em silêncio (200 `{"ignorado": true}`, nada no contato).
 
-**3. Testes.** Rodei só os tocados (números no relatório da frente). A suíte
-inteira é sua. Os testes novos aplicam a 032 numa cópia temporária de
-`growthhs_config` enquanto ela não está no banco; depois de aplicada, o
-`test_032_reaplicavel` e o `test_ler_config_sem_032_usa_os_padroes` pulam
-(explicando).
+**3. Testes** — no banco local (`scripts/banco-teste-local.sh`, depois do
+merge da `ef1266b`), nunca em produção. A suíte inteira é sua.
+
+- Com a 032 (o script aplica todas as migrations; reaplicada 2× à mão com
+  `psql -1`, sem erro, status 1×): `test_growthhs_perdido` (32 novos) +
+  `webhook`, `config_growthhs`, `ambientes`, `config_029`, `prova_crm`,
+  `leitura_growthhs` → **169 passed, 2 skipped** (os 2 são os que só fazem
+  sentido sem a 032 no banco, e pulam explicando).
+- Sem a 032 (colunas e status retirados no banco local): `perdido` +
+  `webhook` + `config_growthhs` + `ambientes` → **139 passed, 0 skipped**
+  (aí os 2 rodam: reaplicável em cópia temporária e `ler_config` com os
+  padrões).
+- `importacao`, `api_contato`, `contato_canonico` → 46 passed;
+  `perdido` + `faxina_r5` + `crm_caminhos` + `crm_entrega` → 111 passed, 2 skipped.
+- `tsc` 0; `guarda:visual` 0 em `settings/`, `contacts/`, `automations/`;
+  `node --test scripts/regra-sem-tag.test.mjs` 2/2.
+- Teste existente ajustado: `test_config_growthhs.py` usava `[32, 33]` como
+  listas de ganho — 33 é a lista de perdido padrão, e lista em dois eventos
+  agora é recusada; virou `[32, 34]`. A URL do webhook esperada ganhou
+  `deal_lost` e `no_show`.
 
 ## Perguntas / fora do território
 
