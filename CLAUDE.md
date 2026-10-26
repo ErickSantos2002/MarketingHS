@@ -105,6 +105,12 @@ docs/referencia/  /humanoseagentes, molde do fluxo de captura
 cd backend && ./.venv/bin/python -m uvicorn app.main:app --port 8100 --reload
 cd backend && ./.venv/bin/pytest -q
 
+# suíte num Postgres LOCAL (26/10): ~2 min em vez de 1h13, sem tocar produção
+bash scripts/banco-teste-local.sh [nome] [porta]   # recria do zero; imprime a DATABASE_URL
+cd backend && DATABASE_URL=<a impressa> ./.venv/bin/pytest -q -rs
+# os 7 `@pytest.mark.base_real` pulam lá (precisam da base real); frente usa
+# nome/porta próprios (ex.: marketinghs-teste-n 5440+n) e roda sem fila
+
 # frontend (127.0.0.1, padrão da casa para conferência com Playwright)
 cd frontend && npx vite --port 8080
 
