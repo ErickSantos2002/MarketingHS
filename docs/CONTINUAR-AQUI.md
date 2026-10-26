@@ -20,6 +20,12 @@
 > 4. Os 7 `base_real` contra produção, desligar a landing/jornada de teste
 >    (`bash ~/marketinghs-teste-landing.sh desligar`) e a **virada**.
 >
+> **DataCore fora (26/10, pergunta 80):** os 2.104 contatos `datacore`
+> apagados por `~/marketinghs-apagar-datacore.sh` (backup em
+> `~/backups/marketinghs-datacore-20261026-134405/`, 2.104 contatos,
+> eventos e identidades). Sobraram 7 contatos (teste, landing, CSV, 1
+> excluído). Frente `sem-datacore` tirando a sincronização e travando o CRM.
+>
 > ### Combinado de 23/10 (itens 1–3 feitos em 26/10)
 >
 > Uma coisa de cada vez, nesta ordem, tudo ainda na **homologação**:
