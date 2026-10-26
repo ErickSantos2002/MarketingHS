@@ -51,6 +51,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "trava_global: o teste lê estado comitado que outra rodada "
         "muda — anda sob a trava entre rodadas mesmo usando só `conexao`")
+    config.addinivalue_line(
+        "markers", "base_real: compara visões sobre a base de produção — "
+        "pula num banco sem leads (o Postgres local, ver `_base_real`)")
 
 
 def _precisa_da_trava(item) -> bool:
@@ -120,6 +123,62 @@ def _trava_entre_rodadas(request):
         yield
     finally:
         _trava.soltar()
+
+
+@pytest.fixture(autouse=True)
+def _base_real(request):
+    """`@pytest.mark.base_real`: o teste confere que `authenticated` vê o
+    mesmo que `service_role` sobre a base REAL (contagens > 0, > 1.000
+    leads). No Postgres local, vazio, não há o que comparar — pula dizendo
+    por quê, em vez de falhar. Contra o banco do EasyPanel continua valendo."""
+    if not request.node.get_closest_marker("base_real"):
+        yield
+        return
+    import asyncpg
+    from app.config import settings
+
+    async def _leads() -> int:
+        conn = await asyncpg.connect(settings.DATABASE_URL)
+        try:
+            await conn.execute("SET ROLE service_role")
+            return await conn.fetchval("SELECT count(*) FROM leads")
+        finally:
+            await conn.close()
+
+    if not settings.DATABASE_URL or _rodar_isolado(_leads()) < 1000:
+        pytest.skip("base_real: o banco não tem a base real (< 1.000 leads)")
+    yield
+
+
+def _rodar_isolado(coro):
+    """Roda a corrotina num laço próprio, numa thread — o fixture é síncrono
+    e o laço do pytest-asyncio pode já estar de pé."""
+    resultado = {}
+    t = threading.Thread(target=lambda: resultado.setdefault("v", asyncio.run(coro)))
+    t.start()
+    t.join()
+    return resultado["v"]
+
+
+@pytest.fixture(autouse=True)
+def _limite_de_taxa_zerado():
+    """Cada teste começa com o balde do limite de taxa vazio.
+
+    ⚠️ No banco do EasyPanel cada teste leva ~4 s e o balde de 60 s nunca
+    enchia; no Postgres local (`scripts/banco-teste-local.sh`, 26/10) a
+    suíte inteira roda em 2 min e os testes das rotas públicas levavam 429
+    uns dos outros. Quem testa o próprio limite enche o balde dentro do teste.
+    A pilha só existe depois da primeira requisição — antes disso não há o
+    que zerar."""
+    from app.main import app
+    from app.middleware.limite_taxa import LimiteTaxaMiddleware
+
+    camada = app.middleware_stack
+    while camada is not None:
+        if isinstance(camada, LimiteTaxaMiddleware):
+            camada._historico.clear()
+        camada = getattr(camada, "app", None)
+    yield
 
 
 @pytest_asyncio.fixture

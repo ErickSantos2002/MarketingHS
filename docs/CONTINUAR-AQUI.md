@@ -16,6 +16,21 @@
 >    movimentos (reunião, ganho, perdido, No Show → reagendar); incluir uma
 >    conversão por landing page para ver a origem `Landing Page <slug>`.
 >    Conferir cada um pelo banco e pelo card.
+>    **Em andamento (26/10):** card novo com vendedor ✅ (11242, Gislayne);
+>    reconversão pela `phoebus-prova` atualizou o 11242 + nota ✅; reunião
+>    agendada ✅. Abertas as frentes `reconversao-dados` (pergunta 73: o que
+>    o lead digita na reconversão se perdia) e `growthhs-perdido` (pergunta
+>    74: status "Negócio perdido" + evento de No Show). Falta, depois do
+>    merge, das migrations 031/032 e das 2 automações no GrowthHS: No Show →
+>    reagendar e perdido no 11242. Landing `phoebus-prova` e jornada "Aviso
+>    ao comercial" estão LIGADAS — `bash ~/marketinghs-teste-landing.sh
+>    desligar` no fim.
+> 3b. **Próximo item, logo depois de juntar as frentes (pedido do Erick,
+>    26/10): testes num Postgres local** (Docker, schema de produção sem
+>    dado). A suíte leva 1h13 porque cada teste fala com o banco do
+>    EasyPanel pela internet (~4 s/teste) e as frentes fazem fila para
+>    rodar. Banco local por frente tira a fila e o teste de produção;
+>    testes que dependem de dado real vão precisar de semente ou ajuste.
 > 4. Tudo certo → **virada para produção** (segredo do webhook de produção,
 >    automações da volta e de vendedor no GrowthHS de produção, "Usar este
 >    ambiente" na aba Produção).

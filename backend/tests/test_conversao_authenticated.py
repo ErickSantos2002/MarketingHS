@@ -13,6 +13,7 @@ isso cada router convertido prova duas coisas:
 import uuid
 from datetime import date, datetime
 
+import pytest
 import pytest_asyncio
 from limpeza import apagar_leads
 from rodada import EmailDeRodada
@@ -328,6 +329,7 @@ async def test_segmentos_contatos_e_audiencia_batem_com_service_role(
     assert r.status_code == 200 and r.json()["total"] == n_audiencia, r.text
 
 
+@pytest.mark.base_real
 async def test_segmentos_previa_bate_com_service_role(cliente, token_admin):
     regras = [{"field": "status", "operator": "is_not", "value": "__nenhum__"}]
     esperado = await _contar(
@@ -339,6 +341,7 @@ async def test_segmentos_previa_bate_com_service_role(cliente, token_admin):
     assert len(r.json()["amostra"]) > 0
 
 
+@pytest.mark.base_real
 async def test_segmentos_estatico_cria_edita_duplica_e_apaga(cliente, token_admin):
     """A escrita passa pelo `WITH CHECK` de `segments` e `segment_contacts`."""
     h = _auth(token_admin)
@@ -419,6 +422,7 @@ async def _semear_campanha_com_envios(n: int = 2) -> str:
     return cid
 
 
+@pytest.mark.base_real
 async def test_campanhas_lista_e_numeros_batem_com_service_role(cliente, token_admin):
     """Lista, `stats` ao vivo (que conta `campaign_sends`) e os envios de cada
     campanha. Semeada porque as 2 de produção são resíduo a ser apagado."""
@@ -449,6 +453,7 @@ async def _comparar_campanhas(cliente, token_admin):
         assert r.status_code == 200 and len(r.json()["sends"]) == min(n, 50), r.text
 
 
+@pytest.mark.base_real
 async def test_campanhas_audiencia_bate_com_service_role(cliente, token_admin):
     """Campanha sem segmento = base inteira, pela mesma função do envio."""
     await _apagar_campanhas_de_teste()
@@ -636,6 +641,7 @@ async def test_contatos_ficha_eventos_e_conversoes_batem_com_service_role(
     assert r.status_code == 200 and len(r.json()) == n_utm, r.text
 
 
+@pytest.mark.base_real
 async def test_contatos_busca_duplicatas_e_enriquecimento_batem(cliente, token_admin):
     async with db.sessao(role="service_role") as conn:
         n_busca = await conn.fetchval(
@@ -661,6 +667,7 @@ async def test_contatos_busca_duplicatas_e_enriquecimento_batem(cliente, token_a
     assert r.status_code == 200 and len(r.json()) == len(ids), r.text
 
 
+@pytest.mark.base_real
 async def test_contatos_nota_e_tag_sob_authenticated(cliente, token_admin):
     """`lead_notes` e `lead_tags` são ALL admin: a escrita passa."""
     h = _auth(token_admin)
@@ -930,6 +937,7 @@ class _Reverter(Exception):
     pass
 
 
+@pytest.mark.base_real
 async def test_recalculo_afeta_a_base_inteira_sob_authenticated(token_admin):
     """A rota reescreve TODOS os leads (e o gatilho de automação reavalia cada
     um): rodá-la de verdade no teste seria escrita em produção. O teste
