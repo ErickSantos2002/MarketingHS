@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.auth.router import router as auth_router
-from app.database import close_datacore, close_db, init_datacore, init_db
+from app.database import close_db, init_db
 from app.middleware.cors_coletor import CorsDoColetorMiddleware
 from app.middleware.cors_sites import CorsDosSitesMiddleware
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
@@ -24,7 +24,6 @@ from app.routers.chaves import router as chaves_router
 from app.routers.configuracao import router as configuracao_router
 from app.routers.contatos import router as contatos_router
 from app.routers.crm import router as crm_router
-from app.routers.datacore import router as datacore_router
 from app.routers.escrita_contatos import router as escrita_contatos_router
 from app.routers.ia import router as ia_router
 from app.routers.imagens import router as imagens_router
@@ -50,9 +49,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
     await init_db()
-    await init_datacore()
     yield
-    await close_datacore()
     await close_db()
 
 
@@ -182,7 +179,6 @@ app.include_router(envio_router)
 app.include_router(jornadas_router)
 app.include_router(automacoes_router)
 app.include_router(crm_router)
-app.include_router(datacore_router)
 app.include_router(ia_router)
 app.include_router(imagens_router)
 app.include_router(painel_router)

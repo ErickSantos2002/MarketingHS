@@ -3,8 +3,9 @@
 Decisão 6 do Erick (01/10/2026). Os dois lados:
 
 - **em massa** — recálculo de pontuação (`contatos.recalcular`) e
-  sincronização do DataCore (`sincronizar`) atualizam o dado e NÃO criam
-  pedido em `crm_handoffs` nem linha em `journey_events`;
+  importação (`importar_linhas`) atualizam o dado e NÃO criam pedido em
+  `crm_handoffs` nem linha em `journey_events` (a sincronização do DataCore
+  também era, e saiu em 26/10 — pergunta 80);
 - **individual** — captura (INSERT de lead) e mudança manual de status
   continuam criando o pedido e a linha da fila de jornada.
 
@@ -26,8 +27,6 @@ import pytest
 
 import app.database as db
 from app.dominio.automacao import MARCA, marcar_sem_automacao
-from app.dominio.datacore import ClienteErp
-from app.dominio.sincronizacao_datacore import sincronizar
 from app.routers.contatos import recalcular
 
 
@@ -101,12 +100,6 @@ async def test_mudanca_manual_de_status_dispara_regra(conexao):
 
 # ── A marca: a aplicação já a põe (vale com ou sem a 023) ────────────────────
 
-async def test_marca_da_sincronizacao(conexao):
-    assert await conexao.fetchval("SELECT current_setting($1, true)", MARCA) in (None, "")
-    await sincronizar(conexao, [])
-    assert await conexao.fetchval("SELECT current_setting($1, true)", MARCA) == "on"
-
-
 async def test_marca_morre_com_a_transacao_e_nao_vaza_pelo_pool():
     """`SET LOCAL`: a conexão volta ao pool limpa. Se a marca vazasse, o
     próximo pedido INDIVIDUAL que pegasse a mesma conexão perderia a
@@ -128,7 +121,7 @@ async def test_marca_morre_com_a_transacao_e_nao_vaza_pelo_pool():
 
 def test_so_as_operacoes_em_massa_marcam():
     """Quem chama `marcar_sem_automacao` é exatamente o recálculo e a
-    sincronização. Marcar uma rota individual (captura, status, edição)
+    importação. Marcar uma rota individual (captura, status, edição)
     calaria a automação dela — o oposto da decisão."""
     raiz = pathlib.Path(__file__).resolve().parent.parent / "app"
     chamadores = set()
@@ -142,8 +135,7 @@ def test_so_as_operacoes_em_massa_marcam():
                         and no.func.id == "marcar_sem_automacao"):
                     chamadores.add(f"{arquivo.relative_to(raiz)}:{funcao.name}")
     assert chamadores == {"routers/contatos.py:recalcular",
-                          "routers/contatos.py:importar_linhas",
-                          "dominio/sincronizacao_datacore.py:sincronizar"}
+                          "routers/contatos.py:importar_linhas"}
 
 
 # ── O lado em massa: só atualiza dado (exige a 023) ──────────────────────────
@@ -168,33 +160,11 @@ async def test_recalculo_atualiza_pontuacao_sem_disparar_regra(conexao):
     assert await _pedidos(conexao, lead) == 0
 
 
-async def test_sincronizacao_cria_e_atualiza_sem_disparar_regra_nem_jornada(conexao):
-    await _exigir_023(conexao)
-    await _regra_para_quem_nasce_agora(conexao)
-    cliente = ClienteErp(cpf_cnpj="60606060000106", nome="Decisão 6 Ltda",
-                         email="decisao6-datacore@exemplo.invalid", fone="81999990606",
-                         cidade="Recife", uf="PE", tipo_pessoa="J")
-    for _ in range(2):  # cria, depois atualiza
-        r = await sincronizar(conexao, [cliente])
-        assert not r.erros, r.erros
-    lead = await conexao.fetchval(
-        """SELECT l.id::text FROM leads l
-             JOIN ecosystem_identities i ON i.dnia_id = l.dnia_id
-            WHERE i.datacore_cliente_id = $1""", cliente.cpf_cnpj)
-    assert lead
-    assert await _pedidos(conexao, lead) == 0
-    assert await _fila_de_jornada(conexao, lead) == 0
-    # A linha do tempo NÃO perde o evento — só a cópia para a fila não é feita.
-    assert await conexao.fetchval(
-        "SELECT count(*) FROM contact_events WHERE lead_id = $1::uuid "
-        "AND event_type = 'form_submitted'", lead) == 1
-
-
 async def test_importacao_cria_e_atualiza_sem_disparar_regra_nem_jornada(conexao):
     """U3 (raio-x de 02/10): importar a base do RD pela tela matricularia cada
     contato em fluxo que entra por `form_submitted` e mandaria ao comercial
     todo contato que uma regra ativa casasse. Importação é operação em massa:
-    só grava o dado, como o recálculo e o DataCore."""
+    só grava o dado, como o recálculo."""
     from app.routers.contatos import ImportacaoIn, importar_linhas
 
     await _exigir_023(conexao)

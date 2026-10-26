@@ -41,7 +41,7 @@ Se a pergunta for ambígua, chame a ferramenta com o recorte mais provável e \
 diga qual recorte você usou. Se uma ferramenta recusar um argumento, leia a \
 mensagem: ela lista o que existe.
 
-Ao citar números, diga o recorte junto ("2.080 contatos do tipo datacore"), \
+Ao citar números, diga o recorte junto ("1.200 contatos do tipo csv_import"), \
 nunca o número sozinho.\
 """
 

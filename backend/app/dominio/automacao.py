@@ -1,9 +1,10 @@
 """A marca de "operação em massa": a transação que só atualiza dado.
 
-Decisão 6 do Erick (01/10/2026): recálculo de pontuação e sincronização do
-DataCore **não disparam automação** — nem regra de automação (entrega ao
-comercial pelo `crm_handoffs`) nem entrada em fluxo por evento. Quem dispara é
-o evento individual: captura, mudança manual de status, edição do contato.
+Decisão 6 do Erick (01/10/2026): recálculo de pontuação e importação
+(e, até 26/10/2026, a sincronização do DataCore, que saiu — pergunta 80)
+**não disparam automação** — nem regra de automação (entrega ao comercial
+pelo `crm_handoffs`) nem entrada em fluxo por evento. Quem dispara é o evento
+individual: captura, mudança manual de status, edição do contato.
 
 A automação mora em gatilhos do banco (migrations 019/020 e 010), que pegam
 TODO caminho de escrita em `leads` — de propósito, para nenhuma rota esquecer.

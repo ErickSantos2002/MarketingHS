@@ -357,10 +357,16 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
         # Enfileira e segue: quem entrega é o worker (app/crm/entrega.py), com
         # re-tentativa e falha à vista na linha do tempo do contato. O fluxo
         # não espera o GrowthHS — um CRM fora do ar não pode parar as jornadas.
-        from app.crm.entrega import enfileirar
+        from app.crm.entrega import ContatoRecusado, enfileirar
 
-        pedido = await enfileirar(conn, str(run["lead_id"]), "jornada",
-                                  journey_run_id=str(run["run_id"]))
+        try:
+            pedido = await enfileirar(conn, str(run["lead_id"]), "jornada",
+                                      journey_run_id=str(run["run_id"]))
+        except ContatoRecusado as erro:
+            # Pergunta 80: contato do DataCore não vai ao comercial. O passo
+            # diz por quê e o fluxo segue — recusa não para a jornada.
+            await registrar_passo(conn, run, no, "skipped", {"motivo": str(erro)})
+            return {"tipo": "avancar", "proximo": no.get("next")}
         await registrar_passo(conn, run, no, "enqueued",
                               {"handoff_id": pedido, "ja_na_fila": pedido is None})
         return {"tipo": "avancar", "proximo": no.get("next")}

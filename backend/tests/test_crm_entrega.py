@@ -455,6 +455,23 @@ async def test_entrega_cria_pessoa_e_card(lead_8d):
     assert "erro_da_nota" not in evento["metadata"]
 
 
+async def test_pedido_de_contato_do_datacore_falha_sem_chamar_o_growthhs(lead_8d):
+    """Pergunta 80: pedido que já estava na fila (criado antes da 033, ou
+    contato que passou a ser `datacore`) não é entregue — falha com o motivo
+    no pedido e na linha do tempo, e o GrowthHS nem é consultado."""
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("UPDATE leads SET source = 'datacore' WHERE id = $1::uuid",
+                           lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "falhas": 1}
+    assert api.pedidos == []
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert pedido["status"] == "falhou" and "DataCore" in pedido["erro"]
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff_falhou")
+    assert "DataCore" in evento["metadata"]["erro"]
+
+
 async def test_so_cards_ganhos_ou_perdidos_cria_novo(lead_8d):
     api = GrowthHSFalso()
     pessoa = api.pessoa(email=EMAIL)

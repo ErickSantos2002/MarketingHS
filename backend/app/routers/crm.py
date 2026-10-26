@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.crm.entrega import enfileirar
+from app.crm.entrega import ContatoRecusado, enfileirar
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual, usuario_atual
 
@@ -35,5 +35,10 @@ async def enviar_ao_comercial(lead_id: UUID, _: Usuario = Depends(admin_atual)):
             "SELECT 1 FROM leads WHERE id = $1::uuid AND deleted_at IS NULL", str(lead_id))
         if not existe:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Contato não encontrado.")
-        pedido = await enfileirar(conn, str(lead_id), "manual")
+        try:
+            pedido = await enfileirar(conn, str(lead_id), "manual")
+        except ContatoRecusado as erro:
+            # Pergunta 80: contato do DataCore não vai ao comercial. 409 com
+            # a frase, não 202 "na fila" — o botão diz por que não foi.
+            raise HTTPException(status.HTTP_409_CONFLICT, str(erro)) from None
     return {"handoff_id": pedido, "ja_na_fila": pedido is None}
