@@ -410,10 +410,47 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
         item("Data do consentimento", data_do_vendedor(consentimento.get("criado_em")))
     if pedido_id is not None:
         linhas.append(marca_de_criacao(pedido_id))
-    if _tem(frontend_url):
-        linhas.append(f"Ver no MarketingHS: {frontend_url.rstrip('/')}"
-                      f"/contacts?contato={lead['id']}")
+    link = link_da_ficha(frontend_url, lead.get("id"))
+    if link:
+        linhas.append(link)
     return "\n".join(linhas)
+
+
+def link_da_ficha(frontend_url: str | None, lead_id) -> str | None:
+    """A linha `Ver no MarketingHS: <ficha do contato>` — sem endereço do
+    front, nenhuma."""
+    if not _tem(frontend_url) or lead_id is None:
+        return None
+    return f"Ver no MarketingHS: {frontend_url.rstrip('/')}/contacts?contato={lead_id}"
+
+
+def linha_de_utms(lead: dict) -> str | None:
+    """`UTMs: utm_source=… · utm_medium=…` — só as que têm valor."""
+    pares = [f"{c}={_cortar(lead.get(c), MAX_UTM)}" for c in UTMS if _tem(lead.get(c))]
+    return f"UTMs: {' · '.join(pares)}" if pares else None
+
+
+def nota_de_abertura(lead: dict, *, conversao: dict | None, consentimento: dict | None,
+                     frontend_url: str, quando: datetime) -> list[str]:
+    """A primeira nota do card NOVO (pergunta 79), em linhas para
+    `Cliente.anotar`. A tela do card do GrowthHS não mostra a `description`:
+    o que o vendedor precisa ler vai aqui.
+
+    O corpo é o de `montar_descricao` inteiro — não só origem, UTMs e
+    consentimento: faixas, lead score, desafios e respostas livres também não
+    têm outro lugar visível lá, e levar só parte seria o corte silencioso. Sem
+    a marca `Pedido MarketingHS` (engrenagem da idempotência, fica só na
+    descrição). Reusar `montar_descricao` traz junto as travas do texto de
+    fora (`uma_linha`, "- " nas respostas livres)."""
+    linhas = [f"Lead enviado pelo MarketingHS ({origem_do_card_texto(conversao)}) em "
+              f"{data_do_vendedor(quando)}."]
+    corpo = montar_descricao(lead, conversao=conversao, consentimento=consentimento,
+                             frontend_url="")
+    linhas.extend(l for l in corpo.split("\n") if l)
+    for extra in (linha_de_utms(lead), link_da_ficha(frontend_url, lead.get("id"))):
+        if extra:
+            linhas.append(extra)
+    return linhas
 
 
 def _titulo(lead: dict) -> str:
@@ -542,6 +579,31 @@ MENSAGEM_FORA_DO_AR = "GrowthHS fora do ar ou ocupado"
 # http → https. A mensagem diz o que corrigir na tela.
 MENSAGEM_REDIRECIONA = "o endereço redireciona — use o endereço final, com https://"
 MAX_DETAIL = 200
+
+
+# Teto do `content` de uma nota — o mesmo da descrição (`entrega.TETO_DA_DESCRICAO`).
+TETO_DA_NOTA = 20_000
+
+
+def conteudo_da_nota(texto: str | list[str]) -> str:
+    """O `content` do `POST /card-notes`.
+
+    - `str`: uma linha só (`uma_linha`), como sempre foi.
+    - lista: cada item vira UMA linha (`uma_linha`) e elas se juntam com
+      `\\n` — a tela de lá mostra texto puro em `whitespace-pre-wrap`. A
+      única quebra é a que nós pomos entre os itens; a do lead vira espaço
+      (mesmo motivo de `uma_linha`: um `\\n` no nome forjaria uma linha
+      "Ver no MarketingHS: <golpe>"). Item vazio some.
+
+    ⚠️ `<` vira `‹` (U+2039): o `NoteRenderer` de lá trata como HTML
+    (`dangerouslySetInnerHTML`, sanitizado por regex) toda nota que tenha
+    uma `<tag>` — um nome `<img src=x onerror=…>` rodaria script na tela do
+    vendedor. Nenhum texto nosso usa `<`. Cortado em `TETO_DA_NOTA`."""
+    if isinstance(texto, str):
+        conteudo = uma_linha(texto)
+    else:
+        conteudo = "\n".join(l for l in (uma_linha(t) for t in texto) if l)
+    return conteudo.replace("<", "‹")[:TETO_DA_NOTA]
 
 
 def _detail_da_resposta(resposta: httpx.Response) -> str | None:
@@ -813,12 +875,12 @@ class Cliente:
         await self._chamar("PUT", f"{CAMINHO_CARDS}/{card_id}",
                            json={"description": descricao})
 
-    async def anotar(self, card_id: int, texto: str) -> None:
-        """A nota é o "aviso" ao vendedor (o GrowthHS não manda push de nota;
-        fica no histórico do card). Uma linha só: a nota leva a origem da
-        conversão, que vem de fora (ver `uma_linha`)."""
+    async def anotar(self, card_id: int, texto: str | list[str]) -> None:
+        """A nota é o que o vendedor lê (o GrowthHS não manda push de nota;
+        fica no histórico do card, e a tela do card NÃO mostra a
+        `description` — pergunta 79). Ver `conteudo_da_nota`."""
         await self._chamar("POST", CAMINHO_NOTAS,
-                           json={"card_id": card_id, "content": uma_linha(texto)})
+                           json={"card_id": card_id, "content": conteudo_da_nota(texto)})
 
 
 async def testar(cfg: Config, *,

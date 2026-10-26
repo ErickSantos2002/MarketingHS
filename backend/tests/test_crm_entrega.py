@@ -46,9 +46,13 @@ CFG = Config(base_url="https://growthhs.exemplo.invalid", client_id="hsg_8d",
 CFG_PRODUCAO = Config(**{**CFG.__dict__, "ambiente": "producao"})
 ZERO = {"entregues": 0, "atualizadas": 0, "adiadas": 0, "falhas": 0, "pausadas": 0}
 CABECALHO = "— Nova conversão pelo MarketingHS"
+# Pergunta 79: a nota é em linhas e não fala mais da descrição (que a tela do
+# card de lá não mostra); fecha com o link da ficha.
 NOTA = re.compile(r"^Lead converteu de novo pelo MarketingHS \(MarketingHS\) em "
-                  r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\. Descrição do card atualizada com "
-                  r"dados informados no formulário \(não verificados\)\.$")
+                  r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\.\nVer no MarketingHS: \S+"
+                  r"/contacts\?contato=[0-9a-f-]+$")
+ABERTURA = re.compile(r"^Lead enviado pelo MarketingHS \(MarketingHS\) em "
+                      r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\.\n")
 CARDS, NOTAS, PESSOAS = "/api/v1/cards", "/api/v1/card-notes", "/api/v1/persons"
 ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
 
@@ -429,7 +433,16 @@ async def test_entrega_cria_pessoa_e_card(lead_8d):
     assert (f"Ver no MarketingHS: {settings.FRONTEND_URL.rstrip('/')}"
             f"/contacts?contato={lead_8d['lead_id']}") in corpo["description"]
     [card_id] = api.cards
-    assert api.notas == [] and api.puts() == []
+    assert api.puts() == []
+    # Pergunta 79: a nota de abertura é o que o vendedor lê (a tela do card
+    # de lá não mostra a descrição). Sem a marca do pedido — engrenagem.
+    [nota] = api.notas
+    assert nota["card_id"] == card_id and ABERTURA.match(nota["content"]), nota["content"]
+    linhas = nota["content"].split("\n")
+    assert "UTMs: utm_source=google" in linhas
+    assert linhas[-1] == (f"Ver no MarketingHS: {settings.FRONTEND_URL.rstrip('/')}"
+                          f"/contacts?contato={lead_8d['lead_id']}")
+    assert marca_de_criacao(pedido_id) not in linhas
 
     pedido = await _pedido(lead_8d["lead_id"])
     assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == (
@@ -439,6 +452,7 @@ async def test_entrega_cria_pessoa_e_card(lead_8d):
     [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
     assert evento["title"] == "Enviado ao comercial (GrowthHS)"
     assert evento["metadata"]["card_id"] == card_id and evento["metadata"]["origem"] == "manual"
+    assert "erro_da_nota" not in evento["metadata"]
 
 
 async def test_so_cards_ganhos_ou_perdidos_cria_novo(lead_8d):
@@ -448,7 +462,7 @@ async def test_so_cards_ganhos_ou_perdidos_cria_novo(lead_8d):
     api.card(pessoa, board=7, is_lost=True)
     await _enfileirar(lead_8d["lead_id"])
     assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
-    assert len(api.de("POST", CARDS)) == 1 and api.puts() == [] and api.notas == []
+    assert len(api.de("POST", CARDS)) == 1 and api.puts() == [] and len(api.notas) == 1
     assert len(api.de("POST", PESSOAS)) == 0  # a pessoa achada é reusada
     assert (await _pedido(lead_8d["lead_id"]))["person_id"] == pessoa
 
@@ -464,7 +478,9 @@ async def test_mesma_pessoa_em_dois_leads_um_card(lead_8d, gemeo):
 
     await _enfileirar(gemeo, "regra")
     assert await _rodar(gemeo, api) == {**ZERO, "atualizadas": 1}
-    assert len(api.de("POST", CARDS)) == 1 and len(api.notas) == 1
+    # A de abertura (primeiro lead) e a da reconversão (gêmeo).
+    assert len(api.de("POST", CARDS)) == 1 and len(api.notas) == 2
+    assert NOTA.match(api.notas[1]["content"]), api.notas[1]["content"]
     pedido = await _pedido(gemeo)
     assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == (
         "entregue", card_id, pessoa)
@@ -536,9 +552,10 @@ async def test_reconversao_com_dados_diferentes_vai_no_bloco_e_na_nota(lead_8d, 
                                    "Cadastro no MarketingHS:"]
     assert linhas[i - 1].startswith(CABECALHO)
     [nota] = api.notas
-    assert nota["content"].endswith(
-        "Informou nesta conversão (não verificado): Empresa: Empresa Matriz; "
-        "Telefone: (11) 99999-0003.")
+    assert nota["content"].split("\n")[1:4] == [
+        "Informou nesta conversão (não verificado):",
+        "- Empresa: Empresa Matriz", "- Telefone: (11) 99999-0003"]
+    assert "Descrição do card" not in nota["content"]
 
 
 async def test_descricao_no_teto_nao_cresce_mas_anota(lead_8d):
@@ -573,7 +590,8 @@ async def test_entre_varios_abertos_atualiza_o_mais_recente(lead_8d):
 async def test_card_aberto_criado_depois_do_pedido_e_o_nosso(lead_8d):
     """O §6 de lá: um card aberto mais novo que o pedido E assinado com
     `Pedido MarketingHS: <id>` é o que uma tentativa anterior DESTE pedido
-    criou — marca entregue com ele, sem criar, atualizar nem anotar."""
+    criou — marca entregue com ele, sem criar nem atualizar. Anota a nota de
+    abertura (pergunta 79): a tentativa que criou o card não chegou nela."""
     api = GrowthHSFalso()
     await _enfileirar(lead_8d["lead_id"])
     criado_em = (await _pedido(lead_8d["lead_id"]))["criado_em"]
@@ -583,7 +601,9 @@ async def test_card_aberto_criado_depois_do_pedido_e_o_nosso(lead_8d):
     nosso = api.card(pessoa, created_at=_ingenuo_utc(criado_em + timedelta(seconds=1)),
                      descricao=f"Empresa: X\n{marca_de_criacao(pedido_id)}\nVer no MarketingHS: y")
     assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
-    assert api.de("POST", CARDS) == [] and api.puts() == [] and api.notas == []
+    assert api.de("POST", CARDS) == [] and api.puts() == []
+    [nota] = api.notas
+    assert nota["card_id"] == nosso and ABERTURA.match(nota["content"]), nota["content"]
     assert api.de("GET", f"{CARDS}/{velho}") == []
     pedido = await _pedido(lead_8d["lead_id"])
     assert (pedido["status"], pedido["card_id"], pedido["person_id"]) == (
@@ -629,6 +649,95 @@ async def test_201_perdido_nao_vira_segundo_card(lead_8d):
     assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
     assert len(api.de("POST", CARDS)) == 1 and len(api.cards) == 1
     assert (await _pedido(lead_8d["lead_id"]))["card_id"] == next(iter(api.cards))
+    # A nota de abertura sai uma vez só, no retry que reconheceu o card.
+    [nota] = api.notas
+    assert ABERTURA.match(nota["content"])
+
+
+# ── Nota de abertura do card novo (pergunta 79) ─────────────────────────────
+
+@pytest.mark.parametrize("codigo", [422, 404, 401])
+async def test_nota_de_abertura_recusada_entrega_e_registra(lead_8d, codigo):
+    """O card JÁ existe: a nota recusada não falha, não pausa, não adia — o
+    erro fica no evento. Nem 401/404 pausam: pausar re-tentaria um pedido
+    cujo efeito principal já aconteceu."""
+    api = GrowthHSFalso()
+    api.forcar[("POST", NOTAS)] = [_resposta(codigo)] * 2  # 401 renova o token e repete
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert (pedido["status"], pedido["card_id"]) == ("entregue", next(iter(api.cards)))
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["metadata"]["erro_da_nota"].startswith(str(codigo))
+    assert await _eventos(lead_8d["lead_id"], "crm_handoff_falhou") == []
+    assert await _rodar(lead_8d["lead_id"], api) == ZERO
+    assert len(api.de("POST", CARDS)) == 1
+
+
+async def test_nota_de_abertura_transitoria_tenta_de_novo_na_hora(lead_8d):
+    api = GrowthHSFalso()
+    api.forcar[("POST", NOTAS)] = [_resposta(503)]
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    assert len(api.de("POST", NOTAS)) == 2 and len(api.notas) == 1
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert "erro_da_nota" not in evento["metadata"]
+
+
+async def test_nota_de_abertura_transitoria_de_novo_nao_adia_o_card(lead_8d):
+    """Adiar depois do 2xx apostaria o "um card só" no reconhecimento do
+    retry (que falha se o vendedor fechar o card no intervalo). Card
+    duplicado é pior que nota faltando: entrega e registra."""
+    api = GrowthHSFalso()
+    api.forcar[("POST", NOTAS)] = [_resposta(503), httpx.ReadTimeout("perdida")]
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    assert api.notas == []
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert (pedido["status"], pedido["card_id"]) == ("entregue", next(iter(api.cards)))
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert "sem resposta" in evento["metadata"]["erro_da_nota"]
+    assert await _rodar(lead_8d["lead_id"], api) == ZERO
+    assert len(api.de("POST", CARDS)) == 1
+
+
+async def test_entregue_grava_antes_da_nota_de_abertura(lead_8d, monkeypatch):
+    """Parada do worker no meio da nota de abertura: o card já existe e o
+    pedido já está `entregue` — nada volta à fila para virar segundo card."""
+    original = growthhs.Cliente.anotar
+    entrou = asyncio.Event()
+
+    async def lenta(self, *args):
+        entrou.set()
+        await asyncio.sleep(5)
+        await original(self, *args)
+    monkeypatch.setattr(growthhs.Cliente, "anotar", lenta)
+
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    tarefa = asyncio.create_task(_rodar(lead_8d["lead_id"], api))
+    await asyncio.wait_for(entrou.wait(), timeout=30)
+    tarefa.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await tarefa
+    pedido = await _pedido(lead_8d["lead_id"])
+    assert (pedido["status"], pedido["card_id"]) == ("entregue", next(iter(api.cards)))
+
+
+async def test_reconhecido_no_retry_com_nota_recusada_ainda_entrega(lead_8d):
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    pedido = await _pedido(lead_8d["lead_id"])
+    api.agora = _ingenuo_utc(pedido["criado_em"] + timedelta(seconds=1))
+    api.perder[("POST", CARDS)] = 1
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "adiadas": 1}
+    await _tornar_visivel(pedido["id"])
+    api.forcar[("POST", NOTAS)] = [_resposta(422)]
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert evento["metadata"]["recuperado"] is True
+    assert evento["metadata"]["erro_da_nota"].startswith("422")
+    assert (await _pedido(lead_8d["lead_id"]))["status"] == "entregue"
 
 
 async def test_retry_nao_empilha_bloco(lead_8d):
@@ -799,7 +908,7 @@ async def test_lead_sem_email_cria_pessoa_e_card_sem_buscar(lead_sem_email):
     lead = lead_sem_email["lead_id"]
     await _enfileirar(lead)
     assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
-    assert api.de("GET", PESSOAS) == [] and api.puts() == [] and api.notas == []
+    assert api.de("GET", PESSOAS) == [] and api.puts() == [] and len(api.notas) == 1
     assert len(api.de("POST", PESSOAS)) == 1 and len(api.de("POST", CARDS)) == 1
     nova = max(api.pessoas)
     assert nova != outra
@@ -823,7 +932,7 @@ async def test_lead_sem_email_retry_reusa_a_pessoa_do_pedido(lead_sem_email):
     await _tornar_visivel(pedido["id"])
     assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
     assert len(api.de("POST", PESSOAS)) == 1 and len(api.de("POST", CARDS)) == 1
-    assert api.puts() == [] and api.notas == []
+    assert api.puts() == [] and len(api.notas) == 1
     assert (await _pedido(lead))["card_id"] == next(iter(api.cards))
 
 
@@ -841,7 +950,7 @@ async def test_lead_sem_email_retry_sem_a_marca_cria_nunca_atualiza(lead_sem_ema
                            created_at=_ingenuo_utc(pedido["criado_em"] + timedelta(seconds=1)))
     await _tornar_visivel(pedido["id"])
     assert await _rodar(lead, api) == {**ZERO, "entregues": 1}
-    assert len(api.de("POST", PESSOAS)) == 1 and api.puts() == [] and api.notas == []
+    assert len(api.de("POST", PESSOAS)) == 1 and api.puts() == [] and len(api.notas) == 1
     assert len(api.cards) == 2
     card_id = (await _pedido(lead))["card_id"]
     assert card_id != do_vendedor and card_id in api.cards
@@ -909,6 +1018,10 @@ async def test_2xx_com_corpo_invalido_ainda_entrega_e_nao_repete(lead_8d):
     assert pedido["status"] == "entregue" and pedido["card_id"] is None
     # O `person_id` é o achado, não o da resposta: sobrevive ao corpo torto.
     assert pedido["person_id"] == next(iter(api.pessoas))
+    # Sem id não há card para anotar: a falta fica no evento.
+    assert api.notas == []
+    [evento] = await _eventos(lead_8d["lead_id"], "crm_handoff")
+    assert "id do card" in evento["metadata"]["erro_da_nota"]
 
     # Segunda passada: nada pendente, nenhuma chamada nova ao GrowthHS.
     assert await _rodar(lead_8d["lead_id"], api) == ZERO

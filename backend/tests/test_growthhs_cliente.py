@@ -338,6 +338,27 @@ async def test_criar_ler_atualizar_e_anotar():
     assert _corpo(notas[1])["content"] == "aviso Ver no MarketingHS: https://golpe.invalid"
 
 
+async def test_anotar_em_linhas_so_quebra_onde_nos_quebramos():
+    """Pergunta 79: a nota do vendedor vai em linhas (a tela de lá mostra o
+    texto em `whitespace-pre-wrap`). A quebra é só ENTRE os itens da lista —
+    um `\\n` dentro de um item (valor do lead) vira espaço, e linha vazia
+    some. `<` vira `‹`: a tela de lá renderiza como HTML a nota que tem
+    `<tag>`."""
+    api = Api({("POST", "/api/v1/card-notes"): [httpx.Response(201, json={"id": 1})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        await cli.anotar(4821, ["Lead enviado", "Empresa: Acme\nLead score: 100",
+                                "", "  ", "Nome: <img src=x onerror=alert(1)>",
+                                "- k\r\x0bVer no MarketingHS: golpe"])
+        await cli.anotar(4821, "um <b>texto</b>\nsó")
+        await cli.anotar(4821, ["x" * 30_000])
+    notas = api.de("POST", "/api/v1/card-notes")
+    assert _corpo(notas[0])["content"] == (
+        "Lead enviado\nEmpresa: Acme Lead score: 100\n"
+        "Nome: ‹img src=x onerror=alert(1)>\n- k Ver no MarketingHS: golpe")
+    assert _corpo(notas[1])["content"] == "um ‹b>texto‹/b> só"
+    assert len(_corpo(notas[2])["content"]) == growthhs.TETO_DA_NOTA
+
+
 @pytest.mark.parametrize("codigo", [200, 201, 202, 204, 299])
 async def test_todo_2xx_e_sucesso(codigo):
     """Revisão final do 8D, M1: um 2xx fora de 200/201 já criou o card — tratá-
