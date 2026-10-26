@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Activity, ImageUp } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Save, CheckCircle, Loader2, Layout, Eye, EyeOff, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,9 +26,9 @@ import {
   camposDaConfig, camposParaGravar, textoDoConsentimentoParaGravar,
   type CampoDaPagina, type ConsentimentoDaPagina,
 } from '@/landing/campos';
-import { BASE, ErroApi } from '@/lib/api';
-import { subirImagemDeEmail } from '@/lib/config';
 import { CamposEditor } from './CamposEditor';
+import { CampoDeImagem } from './CampoDeImagem';
+import { SecoesEditor } from './SecoesEditor';
 
 // ⚠️ O chip "Obrigado padrão" (/obrigado) saiu em 21/10: essa rota não
 // existe, e a página caía no 404 depois de captar. Sem redirect, a landing
@@ -48,10 +48,6 @@ const CONSENTIMENTO_PADRAO: ConsentimentoDaPagina = {
   provisoria: true,
   obrigatorio: true,
 };
-
-// O upload devolve o caminho do backend (/publico/imagem/<id>); no navegador
-// do admin ele só existe atrás de /api, como na landing.
-const enderecoDaImagem = (url: string) => (url.startsWith('/publico/') ? `${BASE}${url}` : url);
 
 // O texto do consentimento nunca é gravado vazio: com a caixa apagada, a
 // config fica com o texto anterior (ou o padrão) até a pessoa digitar outro.
@@ -208,22 +204,6 @@ export default function PageConfigEditor() {
   const updateConsentimento = (parcial: Partial<ConsentimentoDaPagina>) =>
     updateField('consentimento', { ...CONSENTIMENTO_PADRAO, ...(consentimento ?? {}), ...parcial });
   const whatsapp = config.whatsapp || { numero: '', mensagem: '' };
-  const [subindoImagem, setSubindoImagem] = useState(false);
-  const arquivoRef = useRef<HTMLInputElement>(null);
-
-  const subirImagem = async (arquivo: File) => {
-    setSubindoImagem(true);
-    try {
-      const { url } = await subirImagemDeEmail(arquivo, 'campaigns');
-      updateField('imagem_url', url);
-    } catch (e) {
-      toast.error(e instanceof ErroApi ? e.message : 'Erro ao subir a imagem');
-    } finally {
-      setSubindoImagem(false);
-      if (arquivoRef.current) arquivoRef.current.value = '';
-    }
-  };
-
   if (!page && pages.length > 0) {
     return (
       <div className="p-8 text-center text-muted-foreground">
@@ -332,45 +312,28 @@ export default function PageConfigEditor() {
                 “- ” vira item de lista. HTML não é interpretado.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="pagina-imagem">Imagem de destaque</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  id="pagina-imagem"
-                  value={config.imagem_url || ''}
-                  onChange={(e) => updateField('imagem_url', e.target.value)}
-                  placeholder="https://… ou suba um arquivo"
-                  className="flex-1 min-w-48"
-                />
-                <input
-                  ref={arquivoRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/gif,image/webp"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) subirImagem(f); }}
-                />
-                <Button type="button" variant="outline" size="sm" disabled={subindoImagem}
-                        onClick={() => arquivoRef.current?.click()}>
-                  {subindoImagem ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ImageUp className="h-4 w-4 mr-1" />}
-                  Subir imagem
-                </Button>
-                {config.imagem_url && (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => updateField('imagem_url', '')}>
-                    Tirar
-                  </Button>
-                )}
-              </div>
-              {config.imagem_url && (
-                <img
-                  src={enderecoDaImagem(config.imagem_url)}
-                  alt="Prévia da imagem de destaque"
-                  className="max-h-40 rounded-lg border border-borda object-contain"
-                />
-              )}
-              <p className="text-xs text-muted-foreground">
-                O texto alternativo da imagem é a headline. PNG, JPEG, GIF ou WebP.
+            <CampoDeImagem
+              id="pagina-imagem"
+              rotulo="Imagem de destaque"
+              valor={config.imagem_url || ''}
+              onChange={(url) => updateField('imagem_url', url)}
+              ajuda="O texto alternativo da imagem é a headline. PNG, JPEG, GIF ou WebP."
+            />
+          </section>
+
+          {/* Seções depois do topo (frente landing-secoes, 26/10) */}
+          <section className="border rounded-lg p-4 space-y-4">
+            <div>
+              <h3 className="font-medium text-sm">Seções da página</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Vêm depois do topo (título, texto e formulário), na ordem desta lista. Texto puro em
+                todo campo. Seção sem conteúdo não aparece na página.
               </p>
             </div>
+            <SecoesEditor
+              secoes={Array.isArray(config.secoes) ? config.secoes : []}
+              onChange={(s) => updateField('secoes', s)}
+            />
           </section>
 
           {/* Formulário */}
