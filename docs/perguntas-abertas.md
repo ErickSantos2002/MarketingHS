@@ -173,3 +173,8 @@ dia no `CONTINUAR-AQUI.md`.
     manual tira alguém de "Negócio perdido".
 77. **Lista 26 "Agendado" (board 6) fora de `listas_reuniao`** (só a 28):
     anterior à frente; ver na prova se reagendamento no board 6 chega.
+78. **Adotar o que o lead informou** (frente `reconversao-dados`, 26/10): um
+    botão na ficha, só para admin autenticado, que copia para o contato o
+    que veio numa reconversão — o caminho seguro para atualizar dado que a
+    captura pública não sobrescreve. **Assumido:** fica para depois. Idem a
+    aba de conversões da ficha mostrar `dados_informados`.

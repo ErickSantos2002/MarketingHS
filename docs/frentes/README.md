@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 26/10 (4):** `reconversao-dados` ✅ mergeada (`bdc428c`). Portão do integrado no Postgres local: **1038 passed, 9 skipped** (7 `base_real` + 2 da 032 já aplicada), `tsc` 0, guarda 0. 031 e 032 NÃO aplicadas em produção; deploy pendente. Nenhuma frente aberta.
+
 **Estado em 26/10 (3):** `growthhs-perdido` ✅ mergeada (`f298f32`); portão no Postgres local: **1012 passed, 9 skipped** (7 `base_real` + 2 só sem a 032), `tsc` 0. 032 NÃO aplicada. `reconversao-dados` segue aberta.
 
 **Estado em 26/10 (2):** aberta também `growthhs-perdido` (pergunta 74) — eventos `deal_lost` (listas 27/33, status novo "Negócio perdido") e `no_show` (lista 25, só evento) na volta do GrowthHS. Dona de: `backend/app/crm/volta.py`, `backend/app/crm/retorno.py`, a parte de `Config`/`ler_config` de `backend/app/crm/growthhs.py` (o bloco e a nota são da `reconversao-dados`), `backend/app/routers/configuracao.py` (bloco GrowthHS), `backend/app/routers/publico.py` (só o webhook), `backend/app/dominio/importacao.py` e `sincronizacao_datacore.py` (só a lista de status), `backend/app/routers/escrita_contatos.py` e `painel.py` (só o mapa de status), `backend/migrations/032_*.sql`, `frontend/src/components/admin/settings/GrowthHSCard.tsx`, `contacts/StatusBadge.tsx`, `automations/AutomationRuleForm.tsx`, `settings/ApiDocumentation.tsx` (só a lista de status), testes de volta/retorno e `docs/frentes/growthhs-perdido.md`. Não roda a suíte inteira; não aplica a 032.
