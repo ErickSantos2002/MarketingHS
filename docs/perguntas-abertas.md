@@ -178,3 +178,12 @@ dia no `CONTINUAR-AQUI.md`.
     que veio numa reconversão — o caminho seguro para atualizar dado que a
     captura pública não sobrescreve. **Assumido:** fica para depois. Idem a
     aba de conversões da ficha mostrar `dados_informados`.
+79. **A descrição do card não aparece no GrowthHS** (Erick, 26/10): a tela
+    do card (`hsgrowth-sistema/frontend/src/pages/CardDetails.tsx`) não
+    renderiza `description` — só o `CardDetailModal`, que não é usado. Tudo
+    o que o card novo leva na descrição (conversão, UTMs, consentimento,
+    link da ficha) é invisível ao vendedor. **Decidido com o Erick:** o que
+    é para o vendedor vai em NOTA (nota de abertura no card novo; a da
+    reconversão sem a frase sobre a descrição); a descrição segue só como
+    engrenagem (marca de idempotência). Pedido opcional ao HSGrowth: mostrar
+    a descrição na tela do card.

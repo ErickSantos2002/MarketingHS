@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 26/10 (5):** aberta `nota-do-vendedor` (pergunta 79). Dona de: `backend/app/crm/entrega.py`, `backend/app/crm/growthhs.py` (montagem de descrição/bloco/nota), testes de CRM/entrega/reconversão e `docs/frentes/nota-do-vendedor.md`. Testa no Postgres local (porta 5443); não roda a suíte em produção.
+
 **Estado em 26/10 (4):** `reconversao-dados` ✅ mergeada (`bdc428c`). Portão do integrado no Postgres local: **1038 passed, 9 skipped** (7 `base_real` + 2 da 032 já aplicada), `tsc` 0, guarda 0. 031 e 032 NÃO aplicadas em produção; deploy pendente. Nenhuma frente aberta.
 
 **Estado em 26/10 (3):** `growthhs-perdido` ✅ mergeada (`f298f32`); portão no Postgres local: **1012 passed, 9 skipped** (7 `base_real` + 2 só sem a 032), `tsc` 0. 032 NÃO aplicada. `reconversao-dados` segue aberta.
