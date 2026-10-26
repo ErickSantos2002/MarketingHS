@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 26/10 (8):** `sem-datacore` ✅ mergeada (`67cf33b`); portão local **1054 passed, 9 skipped**, `tsc` 0. 033 NÃO aplicada; deploy de api, worker e sistema pendente. Depois: tirar `DATACORE_URL`/`DATACORE_EMAIL_DE_NOTAS` do `.env` de api e worker, e só então de `config.py`. Nenhuma frente aberta.
+
 **Estado em 26/10 (7):** aberta `sem-datacore` (pergunta 80) — tirar a sincronização com o DataCore (rota, tela, worker se houver) e travar o envio ao CRM para `source = 'datacore'`. Dona de: `backend/app/routers/datacore.py`, `backend/app/dominio/sincronizacao_datacore.py`, `backend/app/main.py` (só o include do router), `backend/app/config.py` (só chaves DATACORE_*, se precisar), `backend/app/crm/` (só a trava), os componentes de front que chamam o DataCore, testes do DataCore/CRM e `docs/frentes/sem-datacore.md`. Testa no Postgres local (porta 5444).
 
 **Estado em 26/10 (6):** `nota-do-vendedor` ✅ mergeada (`653c81e`); portão local **1056 passed, 9 skipped**, `tsc` 0. Sem migration; falta deploy de api e worker. Achado de segurança no HSGrowth (XSS nas notas) → `docs/pedido-hsgrowth-2026-10-26.md`. Nenhuma frente aberta.
