@@ -10,9 +10,14 @@ Desde 22/10 a entrega fala com a API NORMAL do GrowthHS (spec
 
     achar/criar a pessoa (SÓ por e-mail exato) → cards dela nos boards →
       aberto criado DEPOIS do pedido E assinado `Pedido MarketingHS: <id>`
-        → é o nosso (201 perdido): entregue, nada mais
+        → é o nosso (201 perdido): entregue + nota de abertura
       outro card aberto → anexa um bloco no fim da descrição + nota
-      nenhum aberto (inclusive só ganhos/perdidos) → cria
+      nenhum aberto (inclusive só ganhos/perdidos) → cria + nota de abertura
+
+Pergunta 79 (26/10): a tela do card do GrowthHS NÃO mostra a `description`.
+O que o vendedor lê vai em NOTA (`growthhs.nota_de_abertura`, `texto_da_nota`);
+a descrição continua sendo escrita porque é a engrenagem da idempotência (a
+assinatura do card novo, a marca do bloco).
 
 Lead SEM e-mail nunca casa com pessoa nem card existente: cria pessoa nova
 (o id fica no pedido, para o retry não criar outra) e card novo.
@@ -358,7 +363,7 @@ async def _tratar_erro(pedido: dict, lead: dict, erro: Exception) -> str:
 
 
 async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: int | None,
-                    titulo: str, extra: dict, ambiente: str) -> None:
+                    titulo: str, extra: dict, ambiente: str, *, marcar: bool = True) -> None:
     """O lado de lá JÁ mudou (card criado, reconhecido ou atualizado) no
     GrowthHS `ambiente`.
 
@@ -370,8 +375,12 @@ async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: in
     gravação entre o 2xx e o `entregue`.
 
     O resto é registro, não é a entrega: se falhar (gatilho de evento, banco
-    fora do ar no meio, o que for), só loga — nunca re-tenta por isso."""
-    await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id, ambiente))
+    fora do ar no meio, o que for), só loga — nunca re-tenta por isso.
+
+    `marcar=False`: quem chama já gravou o `entregue` (card novo, antes da
+    nota de abertura — ver `_anotar_abertura`)."""
+    if marcar:
+        await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id, ambiente))
     try:
         async with sessao(role="service_role") as conn:
             if lead["dnia_id"]:
@@ -406,14 +415,20 @@ async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: in
 MAX_VALOR_NA_NOTA = 200
 
 
-def texto_da_nota(conversao: dict | None, quando: datetime, lead: dict | None = None) -> str:
-    """A nota do card atualizado. Com `lead`, e se a conversão trouxe valores
-    diferentes dos do contato (pergunta 73), eles vão no fim — também quando
-    a descrição já está no teto e o bloco não entrou."""
-    texto = (f"Lead converteu de novo pelo MarketingHS "
-             f"({growthhs.origem_do_card_texto(conversao)}) em "
-             f"{growthhs.data_do_vendedor(quando)}. Descrição do card atualizada "
-             f"com dados informados no formulário (não verificados).")
+def texto_da_nota(conversao: dict | None, quando: datetime, lead: dict | None = None,
+                  *, frontend_url: str | None = None) -> list[str]:
+    """A nota do card atualizado, em linhas (`growthhs.Cliente.anotar`).
+
+    Pergunta 79: a tela do card do GrowthHS não mostra a `description`, então
+    a nota não fala mais dela ("Descrição do card atualizada…" saiu) — é ela
+    que o vendedor lê. Com `lead`, e se a conversão trouxe valores diferentes
+    dos do contato (pergunta 73), eles vêm um por linha ("- Rótulo: valor"),
+    também quando a descrição já está no teto e o bloco não entrou. Com
+    `lead` e `frontend_url`, o link da ficha fecha a nota: o card aberto pode
+    ter nascido no RD ou à mão, sem link nenhum para cá."""
+    linhas = [f"Lead converteu de novo pelo MarketingHS "
+              f"({growthhs.origem_do_card_texto(conversao)}) em "
+              f"{growthhs.data_do_vendedor(quando)}."]
     diferentes = (divergencias(lead, (conversao or {}).get("dados_informados"))
                   if lead is not None else [])
     itens = []
@@ -421,10 +436,64 @@ def texto_da_nota(conversao: dict | None, quando: datetime, lead: dict | None = 
         rotulo = growthhs.uma_linha(d["rotulo"])[:growthhs.MAX_ROTULO_EXTRA]
         valor = growthhs.uma_linha(d["valor"])[:MAX_VALOR_NA_NOTA]
         if rotulo and valor:
-            itens.append(f"{rotulo}: {valor}")
+            itens.append(f"- {rotulo}: {valor}")
     if itens:
-        texto += f" {growthhs.ROTULO_INFORMADOS}: {'; '.join(itens)}."
-    return texto
+        linhas.append(f"{growthhs.ROTULO_INFORMADOS}:")
+        linhas.extend(itens)
+    link = growthhs.link_da_ficha(frontend_url, lead.get("id")) if lead else None
+    if link:
+        linhas.append(link)
+    return linhas
+
+
+# Tentativas do POST da nota de abertura na hora (transitório). Depois disso o
+# erro vai para o evento — o pedido não volta à fila por causa da nota.
+TENTATIVAS_DA_NOTA_DE_ABERTURA = 2
+
+
+async def _anotar_abertura(pedido: dict, lead: dict, card_id: int | None,
+                           person_id: int | None, extra: dict, *, cfg: growthhs.Config,
+                           cliente: growthhs.Cliente, conversao: dict | None,
+                           consentimento: dict | None, frontend_url: str,
+                           quando: datetime) -> str:
+    """Card novo (criado agora, ou reconhecido no retry): grava `entregue`,
+    posta a nota de abertura e registra. Pergunta 79: a tela do card do
+    GrowthHS não mostra a `description` — a nota é o que o vendedor lê.
+
+    ⚠️ `entregue` grava ANTES da nota (blindado): com a nota no meio, uma
+    parada do worker deixaria pendente um pedido cujo card JÁ existe, e o
+    retry apostaria o "um card só" no reconhecimento — que falha se o
+    vendedor ganhar ou perder o card no intervalo. Pelo mesmo motivo a nota
+    NUNCA falha, pausa nem adia o pedido: transitório tenta de novo na hora
+    (`TENTATIVAS_DA_NOTA_DE_ABERTURA`); o que sobrar vai em `erro_da_nota`,
+    como no caminho de atualizar. ⚠️ O POST da nota não é idempotente: o
+    timeout que chegou lá e a segunda tentativa dão nota repetida — ruído
+    aceito; nota faltando é vendedor sem contexto."""
+    await asyncio.shield(_marcar_entregue(pedido["id"], card_id, person_id, cfg.ambiente))
+    erro_da_nota = None
+    if card_id is None:
+        erro_da_nota = "nota de abertura não enviada: o GrowthHS não devolveu o id do card"
+    else:
+        linhas = growthhs.nota_de_abertura(lead, conversao=conversao,
+                                           consentimento=consentimento,
+                                           frontend_url=frontend_url, quando=quando)
+        for tentativa in range(1, TENTATIVAS_DA_NOTA_DE_ABERTURA + 1):
+            try:
+                await cliente.anotar(card_id, linhas)
+                erro_da_nota = None
+                break
+            except growthhs.ErroTransitorio as erro:
+                erro_da_nota = f"{erro} ({tentativa} tentativa(s) da nota de abertura)"
+            except growthhs.ErroDefinitivo as erro:
+                erro_da_nota = str(erro)
+                break
+    if erro_da_nota:
+        logger.warning("[crm] pedido %s: card %s entregue, mas a nota de abertura falhou: %s",
+                       pedido["id"], card_id, erro_da_nota)
+        extra = {**extra, "erro_da_nota": erro_da_nota[:400]}
+    await _concluir(pedido, lead, card_id, person_id, "Enviado ao comercial (GrowthHS)",
+                    extra, cfg.ambiente, marcar=False)
+    return "entregues"
 
 
 async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
@@ -477,12 +546,14 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
             lidos[candidato["id"]] = (await cliente.ler_card(candidato["id"])).get(
                 "description") or ""
             if growthhs.card_do_pedido(lidos[candidato["id"]], pedido["id"]):
-                # O card já nasceu com a descrição deste pedido: nem
-                # atualiza nem anota.
-                await _concluir(pedido, lead, candidato["id"], person_id,
-                                "Enviado ao comercial (GrowthHS)", {"recuperado": True},
-                                cfg.ambiente)
-                return "entregues"
+                # O card já nasceu com a descrição deste pedido: não
+                # atualiza. Anota a abertura (pergunta 79): a tentativa que
+                # criou o card perdeu o 201 (ou morreu antes do `entregue`)
+                # e não chegou à nota. Se por acaso chegou, é nota repetida.
+                return await _anotar_abertura(
+                    pedido, lead, candidato["id"], person_id, {"recuperado": True},
+                    cfg=cfg, cliente=cliente, conversao=conversao,
+                    consentimento=consentimento, frontend_url=frontend_url, quando=quando)
         # ⚠️ Sem e-mail não há "a pessoa do lead" lá — só a que este pedido
         # criou. Atualizar card dela que não é nosso seria escrever no card
         # de um vendedor por um contato que nunca se provou o mesmo.
@@ -526,9 +597,10 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
         if card_id is None and resposta.get("id") is not None:
             logger.warning("[crm] pedido %s: id do GrowthHS não é inteiro (%r) — "
                            "gravando entregue sem card_id", pedido["id"], resposta.get("id"))
-        await _concluir(pedido, lead, card_id, person_id, "Enviado ao comercial (GrowthHS)", {},
-                        cfg.ambiente)
-        return "entregues"
+        return await _anotar_abertura(
+            pedido, lead, card_id, person_id, {}, cfg=cfg, cliente=cliente,
+            conversao=conversao, consentimento=consentimento, frontend_url=frontend_url,
+            quando=quando)
 
     # A descrição já está atualizada (agora ou numa tentativa anterior). A
     # nota é o aviso ao vendedor.
@@ -538,7 +610,8 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
     # o lead. A descrição, essa, não repete (a marca do bloco).
     erro_da_nota = None
     try:
-        await cliente.anotar(card_id, texto_da_nota(conversao, quando, lead))
+        await cliente.anotar(card_id, texto_da_nota(conversao, quando, lead,
+                                                    frontend_url=frontend_url))
     except growthhs.ErroTransitorio as erro:
         if pedido["tentativas"] < MAX_TENTATIVAS:
             # No retry a marca evita o segundo bloco e só a nota sai.

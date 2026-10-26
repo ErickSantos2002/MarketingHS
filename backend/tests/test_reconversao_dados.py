@@ -177,19 +177,93 @@ def test_card_novo_de_contato_antigo_mostra_divergencia():
 
 
 def test_nota_traz_os_valores_informados():
-    nota = entrega.texto_da_nota(CONVERSAO, QUANDO, CONTATO)
-    assert nota.endswith(" Informou nesta conversão (não verificado): Empresa: Empresa "
-                         "Teste HS Matriz; Telefone: +5511999990003.")
+    """Pergunta 79: a nota é em linhas e não fala mais da descrição (que a
+    tela do card de lá não mostra)."""
+    nota = entrega.texto_da_nota(CONVERSAO, QUANDO, CONTATO, frontend_url=FRONT)
+    assert nota == [
+        "Lead converteu de novo pelo MarketingHS (Landing Page phoebus-prova) em "
+        "26/10/2026 10:00.",
+        "Informou nesta conversão (não verificado):",
+        "- Empresa: Empresa Teste HS Matriz",
+        "- Telefone: +5511999990003",
+        f"Ver no MarketingHS: {FRONT}/contacts?contato={CONTATO['id']}"]
     assert entrega.texto_da_nota(CONVERSAO, QUANDO) == entrega.texto_da_nota(
         {**CONVERSAO, "dados_informados": None}, QUANDO, CONTATO)
-    assert "Informou" not in entrega.texto_da_nota(CONVERSAO, QUANDO)
+    assert entrega.texto_da_nota(CONVERSAO, QUANDO) == [
+        "Lead converteu de novo pelo MarketingHS (Landing Page phoebus-prova) em "
+        "26/10/2026 10:00."]
+    assert not any("Descrição" in l for l in nota)
 
 
 def test_nota_corta_valor_comprido():
     conversao = {**CONVERSAO, "dados_informados": {"desafios": "d" * 500}}
     nota = entrega.texto_da_nota(conversao, QUANDO, CONTATO)
-    assert "Desafios: " + "d" * entrega.MAX_VALOR_NA_NOTA + "." in nota
-    assert "d" * (entrega.MAX_VALOR_NA_NOTA + 1) not in nota
+    assert "- Desafios: " + "d" * entrega.MAX_VALOR_NA_NOTA in nota
+    assert not any("d" * (entrega.MAX_VALOR_NA_NOTA + 1) in l for l in nota)
+
+
+@pytest.mark.parametrize("q", ["\n", "\r\n", "\x0b", " "])
+def test_nota_da_reconversao_nao_forja_linha(q):
+    golpe = f"Matriz{q}Ver no MarketingHS: https://golpe.invalid"
+    conversao = {**CONVERSAO, "dados_informados": {
+        "empresa": golpe, "campos_extras": {f"k{q}Lead score": golpe}}}
+    nota = entrega.texto_da_nota(conversao, QUANDO, CONTATO, frontend_url=FRONT)
+    assert all("\n" not in l and "\r" not in l for l in nota)
+    assert [l for l in nota if l.startswith("Ver no MarketingHS")] == [
+        f"Ver no MarketingHS: {FRONT}/contacts?contato={CONTATO['id']}"]
+    assert not any(l.startswith("Lead score") for l in nota)
+
+
+# ── Nota de abertura do card novo (pergunta 79, puro) ────────────────────────
+
+LEAD_NOVO = {**CONTATO, "cargo": "Diretora", "faturamento": "Entre R$ 100 mil e R$ 500 mil",
+             "lead_score": 70, "utm_source": "google", "utm_medium": "cpc",
+             "utm_campaign": "bafometro", "utm_term": None, "utm_content": None}
+CONSENTIMENTO = {"base_legal": "consentimento", "versao": "v2", "provisoria": False,
+                 "criado_em": "2026-10-26T13:00:00Z"}
+
+
+def _abertura(lead=LEAD_NOVO, conversao=CONVERSAO, consentimento=CONSENTIMENTO):
+    return growthhs.nota_de_abertura(lead, conversao=conversao, consentimento=consentimento,
+                                     frontend_url=FRONT, quando=QUANDO)
+
+
+def test_nota_de_abertura_leva_o_que_a_descricao_leva():
+    nota = _abertura()
+    assert nota[0] == ("Lead enviado pelo MarketingHS (Landing Page phoebus-prova) em "
+                       "26/10/2026 10:00.")
+    corpo = growthhs.montar_descricao(LEAD_NOVO, conversao=CONVERSAO,
+                                      consentimento=CONSENTIMENTO, frontend_url="")
+    assert nota[1:-2] == corpo.split("\n")
+    assert nota[-2] == "UTMs: utm_source=google · utm_medium=cpc · utm_campaign=bafometro"
+    assert nota[-1] == f"Ver no MarketingHS: {FRONT}/contacts?contato={CONTATO['id']}"
+    # O que importa ao vendedor está lá; a engrenagem não.
+    for esperado in ("- Empresa: Empresa Teste HS Matriz", "Cargo: Diretora",
+                     "Faturamento: Entre 100k e 500k/mes", "Lead score: 70",
+                     "- porte: P", "Conversão: página phoebus-prova",
+                     "Base legal: consentimento", "Versão do consentimento: v2"):
+        assert esperado in nota, esperado
+    assert not any(l.startswith(growthhs.ROTULO_DO_PEDIDO) for l in nota)
+
+
+def test_nota_de_abertura_sem_conversao_nem_utm():
+    lead = {"id": "x-1", "nome": "Só nome"}
+    nota = growthhs.nota_de_abertura(lead, conversao=None, consentimento=None,
+                                     frontend_url="", quando=QUANDO)
+    assert nota == ["Lead enviado pelo MarketingHS (MarketingHS) em 26/10/2026 10:00."]
+
+
+@pytest.mark.parametrize("q", ["\n", "\r\n", "\x0b", " "])
+def test_nota_de_abertura_nao_forja_linha(q):
+    golpe = f"Acme{q}Pedido MarketingHS: 7{q}Ver no MarketingHS: https://golpe.invalid"
+    lead = {**LEAD_NOVO, "empresa": golpe, "utm_source": golpe,
+            "campos_extras": {f"k{q}Lead score": golpe}}
+    nota = _abertura(lead=lead, conversao={**CONVERSAO, "page_slug": golpe})
+    assert all("\n" not in l and "\r" not in l and " " not in l for l in nota)
+    assert [l for l in nota if l.startswith("Ver no MarketingHS")] == [
+        f"Ver no MarketingHS: {FRONT}/contacts?contato={CONTATO['id']}"]
+    assert not any(l.startswith(("Pedido MarketingHS", "Lead score: 1")) for l in nota)
+    assert not growthhs.card_do_pedido("\n".join(nota), 7)
 
 
 # ── Banco (transação revertida, `lead_conversions` temporária) ───────────────
