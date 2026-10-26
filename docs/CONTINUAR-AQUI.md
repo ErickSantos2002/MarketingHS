@@ -1,6 +1,22 @@
 # Continuar aqui
 
-> ## ▶️ PRÓXIMA SESSÃO — combinado com o Erick (23/10/2026, fim do dia)
+> ## ▶️ PRÓXIMA SESSÃO — combinado com o Erick (26/10/2026, fim do dia)
+>
+> 1. **Primeira landing REAL, focada no Phoebus** (um aparelho só). Com
+>    calma: o Erick traz muito material e criamos juntos texto, imagem,
+>    formulário e jornada. O editor de hoje é de uma seção (título,
+>    subtítulo, texto, imagem, CTA, campos, WhatsApp, obrigado) — se o
+>    material pedir mais, isso vira frente.
+> 2. **Deploy de `marketinghs-api` e `marketinghs-worker`** (nota de
+>    abertura, `653c81e`) — ainda não feito; testar com lead NOVO pela
+>    landing (e-mail novo na lista da jornada de teste).
+> 3. **Pedido ao HSGrowth** (`docs/pedido-hsgrowth-2026-10-26.md`): XSS
+>    nas anotações do card — corrigir antes da virada, numa sessão do
+>    `hsgrowth-sistema`.
+> 4. Os 7 `base_real` contra produção, desligar a landing/jornada de teste
+>    (`bash ~/marketinghs-teste-landing.sh desligar`) e a **virada**.
+>
+> ### Combinado de 23/10 (itens 1–3 feitos em 26/10)
 >
 > Uma coisa de cada vez, nesta ordem, tudo ainda na **homologação**:
 > 1. **Automação de vendedor:** duplicar a automação 14 ("Atribuir
