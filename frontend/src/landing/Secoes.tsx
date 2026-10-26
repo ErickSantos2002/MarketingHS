@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from "react";
+import { useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from "react";
 import type { Secao } from "./secoes";
 
 // Colunas da grade no desktop: o maior divisor de `n` até `teto`, para não
@@ -51,7 +51,7 @@ function Cabeca({ secao, idTitulo }: { secao: Secao; idTitulo: string }) {
   );
 }
 
-function Numeros({ secao }: { secao: DaSecao<"numeros"> }) {
+export function Numeros({ secao }: { secao: DaSecao<"numeros"> }) {
   return (
     <ul className="numeros">
       {secao.itens.map((item, i) => (
@@ -109,9 +109,13 @@ function Passos({ secao }: { secao: DaSecao<"passos"> }) {
   );
 }
 
+// Com foto, a foto manda: até 4 por linha, sem caixa em volta. Sem foto, uma
+// lista em grade com fio no topo de cada item (landing.css).
 function Cartoes({ secao }: { secao: DaSecao<"cartoes"> }) {
+  const comFoto = secao.itens.some((item) => item.imagem);
   return (
-    <ul className="cartoes" style={colunas(secao.itens.length, 3)}>
+    <ul className={comFoto ? "cartoes cartoes-com-foto" : "cartoes"}
+        style={colunas(secao.itens.length, comFoto ? 4 : 3)}>
       {secao.itens.map((item, i) => (
         <li key={i} className={item.imagem ? "cartao cartao-com-imagem" : "cartao"}>
           {/* Alt vazio: a imagem ilustra o título que vem logo abaixo. */}
@@ -143,6 +147,26 @@ function TextoImagem({ secao, idTitulo }: { secao: DaSecao<"texto_imagem">; idTi
   );
 }
 
+// Logos têm proporções muito diferentes (CCR é quadrado, Mineração Caraíba é
+// quatro vezes mais largo que alto). Mesma altura para todos faria o quadrado
+// sumir; mesma largura faria o largo gritar. A altura sai da proporção
+// (raiz quadrada, o ajuste de peso visual usual), entre 34 e 76 px.
+function alturaDoLogo(largura: number, altura: number): number {
+  if (!largura || !altura) return 44;
+  const proporcao = largura / altura;
+  return Math.round(Math.min(76, Math.max(34, 46 * Math.sqrt(2.6 / proporcao))));
+}
+
+function ImagemDeLogo({ src, nome }: { src: string; nome: string }) {
+  const [altura, setAltura] = useState<number | null>(null);
+  const aoCarregar = (e: SyntheticEvent<HTMLImageElement>) =>
+    setAltura(alturaDoLogo(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight));
+  return (
+    <img src={src} alt={nome} loading="lazy" onLoad={aoCarregar}
+         style={altura ? ({ "--altura-logo": `${altura}px` } as CSSProperties) : undefined} />
+  );
+}
+
 // Logo sem arquivo ainda aparece como o nome em texto, no mesmo ladrilho —
 // a grade fica alinhada com ou sem imagem.
 function Logos({ secao }: { secao: DaSecao<"logos"> }) {
@@ -151,7 +175,7 @@ function Logos({ secao }: { secao: DaSecao<"logos"> }) {
       {secao.itens.map((item, i) => (
         <li key={i}>
           {item.imagem
-            ? <img src={item.imagem} alt={item.nome} loading="lazy" />
+            ? <ImagemDeLogo src={item.imagem} nome={item.nome} />
             : <span>{item.nome}</span>}
         </li>
       ))}
@@ -177,15 +201,19 @@ function Perguntas({ secao }: { secao: DaSecao<"perguntas"> }) {
 function Chamada({ secao, idTitulo }: { secao: DaSecao<"chamada">; idTitulo: string }) {
   return (
     <div className="chamada">
-      <Cabeca secao={secao} idTitulo={idTitulo} />
-      {secao.texto && <p className="chamada-texto">{secao.texto}</p>}
-      {secao.itens.length > 0 && (
-        <ul className="chamada-itens">
-          {secao.itens.map((item, i) => <li key={i}>{item}</li>)}
-        </ul>
-      )}
-      <a className="chamada-botao" href="#formulario" onClick={irParaFormulario}>{secao.botao}</a>
-      {secao.nota && <p className="chamada-nota">{secao.nota}</p>}
+      <div className="chamada-texto-bloco">
+        <Cabeca secao={secao} idTitulo={idTitulo} />
+        {secao.texto && <p className="chamada-texto">{secao.texto}</p>}
+        {secao.itens.length > 0 && (
+          <ul className="chamada-itens">
+            {secao.itens.map((item, i) => <li key={i}>{item}</li>)}
+          </ul>
+        )}
+      </div>
+      <div className="chamada-acao">
+        <a className="chamada-botao" href="#formulario" onClick={irParaFormulario}>{secao.botao}</a>
+        {secao.nota && <p className="chamada-nota">{secao.nota}</p>}
+      </div>
     </div>
   );
 }

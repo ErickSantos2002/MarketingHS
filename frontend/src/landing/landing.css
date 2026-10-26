@@ -1,27 +1,60 @@
-/* landing.css
+/* landing.css — a landing pública.
  *
- * ⚠️ O design system da HS (Claude Design / DesignSync) NÃO foi consultado
- * nesta implementação — a ferramenta não estava disponível nesta sessão.
- * Este é um estilo sóbrio e neutro, deliberadamente sem identidade visual
- * elaborada, para não inventar uma decisão que é do dono do produto. Cumpre
- * só os três critérios objetivos do brief: legível no celular, alvo de
- * toque de 44px, e contraste do CTA mesmo com cta_color clara.
+ * A landing é a exceção da regra de cor: não carrega o Design System, então
+ * a paleta mora aqui, em hex, como variáveis. A fonte (Plus Jakarta Sans, a
+ * oficial da H&S) entra pela casca servida em `backend/app/routers/landing.py`.
+ *
+ * Desenho da frente landing-visual (26/10): um topo escuro com a foto do
+ * produto em uso e o formulário descendo da borda; abaixo, seções alinhadas
+ * à esquerda, alternando branco e um claro frio, e a chamada final no mesmo
+ * azul profundo do topo. Verde e vermelho são as cores do LED do aparelho
+ * (verde no zero, vermelho no positivo) e só aparecem onde querem dizer
+ * isso: o ✓ do lado bom do comparativo, os itens da chamada e o passo final.
  */
 
 :root {
-  --landing-bg: #f7f7f8;
-  --landing-fg: #1a1a1f;
-  --landing-fg-muted: #52525b;
-  /* --landing-accent não mora aqui: vem de COR_CTA_PADRAO (padroes.ts),
-   * posto no <main class="landing"> por Landing.tsx — a mesma constante
-   * que o editor de página mostra. */
+  /* Azul de ação: o mesmo COR_CTA_PADRAO do editor (padroes.ts), que entra
+   * por style no <main> como --landing-accent. Este é só o tom de hover. */
+  --acao-escuro: #145a87;
+  /* Azul profundo da marca, no mesmo matiz do azul de ação (~205°). */
+  --marinho: #0c2a44;
+  --marinho-fundo: #081e33;
+  --marinho-borda: rgba(255, 255, 255, 0.14);
+  /* Azul claro para marcadores sobre o marinho (nunca texto corrido). */
+  --celeste: #7cc4ef;
+  /* Fundos: branco e um claro frio para alternar as seções. */
+  --fundo: #ffffff;
+  --fundo-frio: #edf2f7;
+  /* Tinta: quase preto azulado; apagada passa AA no branco e no frio. */
+  --tinta: #0f1e2e;
+  --tinta-media: #3c4d5e;
+  --tinta-apagada: #566676;
+  --fio: #d3dde7;
+  --fio-forte: #b8c6d4;
+  /* LED do Phoebus. O claro é para sobre o marinho; o escuro, sobre claro
+   * e com número branco dentro (≥ 4,5:1). */
+  --led-verde: #3ad07f;
+  --led-verde-escuro: #12804a;
+  --led-vermelho: #c9302c;
+  --erro: #b3261e;
+  --erro-fundo: #fdecea;
+
+  --landing-fg: var(--tinta);
+  --landing-fg-muted: var(--tinta-apagada);
   --landing-accent-fg: #ffffff;
-  --landing-border: #d4d4d8;
-  /* O branco que o cartão do formulário já usa, com nome: é o segundo fundo
-   * da alternância das seções (frente landing-secoes). Não é cor nova. */
-  --landing-surface: #ffffff;
-  --landing-erro: #b3261e;
-  --landing-erro-bg: #fdecea;
+  --landing-border: var(--fio-forte);
+
+  /* Raios com hierarquia: cartão > foto > botão > campo. */
+  --raio-cartao: 18px;
+  --raio-foto: 14px;
+  --raio-botao: 10px;
+  --raio-campo: 8px;
+
+  --gutter: clamp(16px, 4.5vw, 56px);
+  /* = as três colunas do topo no desktop (35rem + 21rem + 400px): as
+   * seções começam na mesma margem do título. */
+  --miolo: calc(56rem + 400px);
+  --fonte: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
@@ -35,11 +68,30 @@ body {
 }
 
 body {
-  background: var(--landing-bg);
-  color: var(--landing-fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--fonte);
+  font-size: 1rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+h1,
+h2,
+h3 {
+  font-family: var(--fonte);
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* ===================================================================
+ * Página antiga: só título, subtítulo e formulário num cartão único.
+ * =================================================================== */
 
 .landing {
   min-height: 100dvh;
@@ -47,34 +99,46 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
+  background: var(--fundo-frio);
 }
 
 .hero {
   width: 100%;
   max-width: 480px;
-  background: #ffffff;
-  border: 1px solid var(--landing-border);
-  border-radius: 12px;
-  padding: 28px 20px;
+  background: var(--fundo);
+  border-radius: var(--raio-cartao);
+  padding: 32px 22px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 1px 2px rgba(12, 42, 68, 0.06), 0 12px 32px -12px rgba(12, 42, 68, 0.18);
 }
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(1.4rem, 4.5vw, 1.9rem);
-  line-height: 1.25;
-  font-weight: 700;
-  color: var(--landing-fg);
+  font-size: clamp(1.5rem, 4.8vw, 2rem);
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 .hero .sub {
-  margin: 0 0 12px;
-  font-size: clamp(0.95rem, 3vw, 1.05rem);
-  line-height: 1.5;
-  color: var(--landing-fg-muted);
+  margin: 4px 0 16px;
+  font-size: clamp(0.98rem, 3vw, 1.06rem);
+  line-height: 1.55;
+  color: var(--tinta-media);
 }
+
+@media (min-width: 640px) {
+  .hero {
+    padding: 40px 36px;
+  }
+}
+
+/* ===================================================================
+ * Formulário (o mesmo nas duas páginas)
+ * =================================================================== */
 
 .captura {
   position: relative; /* contém o campo-isca, posicionado em absoluto */
@@ -88,25 +152,32 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--landing-fg);
+  line-height: 1.35;
+  color: var(--tinta);
 }
 
 .captura input:not([type="checkbox"]):not([type="radio"]),
 .captura select,
 .captura textarea {
   /* alvo de toque de pelo menos 44px, mesmo em telas pequenas */
-  min-height: 44px;
+  min-height: 46px;
   padding: 10px 12px;
   font-size: 1rem;
   font-weight: 400;
-  border: 1px solid var(--landing-border);
-  border-radius: 8px;
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio-campo);
   background: #ffffff;
-  color: var(--landing-fg);
+  color: var(--tinta);
   font-family: inherit;
   width: 100%;
+}
+
+.captura input:hover:not([type="checkbox"]):not([type="radio"]),
+.captura select:hover,
+.captura textarea:hover {
+  border-color: #8fa3b6;
 }
 
 .captura textarea {
@@ -118,6 +189,7 @@ body {
 .captura textarea:focus {
   outline: 2px solid var(--landing-accent);
   outline-offset: 1px;
+  border-color: var(--landing-accent);
 }
 
 /* Campo-isca (Formulario.tsx). Fora da tela em vez de display:none — alguns
@@ -135,33 +207,38 @@ body {
 .captura .erro {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--landing-erro-bg);
-  color: var(--landing-erro);
+  border-radius: var(--raio-campo);
+  background: var(--erro-fundo);
+  color: var(--erro);
   font-size: 0.9rem;
   font-weight: 600;
 }
 
 .captura button {
-  min-height: 44px;
-  padding: 12px 20px;
-  margin-top: 4px;
+  min-height: 52px;
+  padding: 14px 20px;
+  margin-top: 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--raio-botao);
   background: var(--landing-accent);
   color: var(--landing-accent-fg);
-  font-size: 1rem;
+  font-family: inherit;
+  font-size: 1.02rem;
   font-weight: 700;
+  letter-spacing: 0.005em;
   cursor: pointer;
+}
 
-  /* ⚠️ config.cta_color entra por style inline no <button> e pode ser
-   * qualquer cor, inclusive clara — não há como calcular contraste real
-   * (WCAG) em CSS puro sem JS lendo a cor recebida. A saída aqui é um
-   * "halo" de sombra escura ao redor do texto branco: funciona como
-   * legenda de vídeo, mantém o texto legível tanto sobre cor escura
-   * quanto sobre cor clara, sem depender do valor exato do fundo. Um
-   * anel de contorno sutil (box-shadow) reforça a borda do botão nos
-   * casos em que cta_color se aproxima do branco da página. */
+.captura button:hover:not(:disabled) {
+  background: var(--acao-escuro);
+}
+
+/* ⚠️ config.cta_color entra por style inline no <button> e pode ser qualquer
+ * cor, inclusive clara — não há como calcular contraste real (WCAG) em CSS
+ * puro. Só nesse caso o texto ganha um "halo" escuro (como legenda de vídeo)
+ * e o botão um anel de contorno: legível sobre cor escura ou clara. Com a
+ * cor padrão (o azul de ação, ~5,3:1 com branco) o texto fica limpo. */
+.captura button[style] {
   text-shadow:
     0 0 1px rgba(0, 0, 0, 0.85),
     0 0 4px rgba(0, 0, 0, 0.65),
@@ -177,7 +254,7 @@ body {
 }
 
 .captura button:focus-visible {
-  outline: 2px solid var(--landing-fg);
+  outline: 3px solid var(--tinta);
   outline-offset: 2px;
 }
 
@@ -189,34 +266,35 @@ body {
 .captura-sucesso p {
   margin: 0;
   font-size: 1rem;
-  line-height: 1.5;
-  color: var(--landing-fg);
+  line-height: 1.55;
+  color: var(--tinta);
+}
+
+.captura-sucesso p:first-child {
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .captura-sucesso strong {
   color: var(--landing-accent);
 }
 
-@media (min-width: 640px) {
-  .hero {
-    padding: 36px 32px;
-  }
+.captura-sucesso p + p {
+  margin-top: 10px;
 }
 
-/* ---- Campos tipados (prova de substituição do RD, 21/10) ---- */
-
 .captura-obrigatorio {
-  color: var(--landing-erro);
+  color: var(--erro);
 }
 
 .captura [aria-invalid="true"] {
-  border-color: var(--landing-erro);
+  border-color: var(--erro);
 }
 
 .captura-erro-campo {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--landing-erro);
+  color: var(--erro);
 }
 
 .captura-grupo {
@@ -231,7 +309,7 @@ body {
 .captura-grupo legend {
   padding: 0;
   margin-bottom: 6px;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -253,8 +331,8 @@ body {
 
 .captura-radio {
   padding: 0 14px;
-  border: 1px solid var(--landing-border);
-  border-radius: 8px;
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio-campo);
   background: #ffffff;
 }
 
@@ -277,7 +355,7 @@ body {
   align-items: flex-start;
   font-size: 0.85rem;
   line-height: 1.45;
-  color: var(--landing-fg-muted);
+  color: var(--tinta-apagada);
 }
 
 .captura-consentimento input {
@@ -289,249 +367,469 @@ body {
   font-weight: 600;
 }
 
-.captura-sucesso p + p {
-  margin-top: 10px;
-}
+/* ===================================================================
+ * Página rica: topo largo + seções
+ * =================================================================== */
 
-/* ---- Landing com imagem e corpo ---- */
-
-.landing-completa {
-  align-items: flex-start;
-}
-
-.landing-grade {
-  width: 100%;
-  max-width: 1080px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
-}
-
-.landing-conteudo {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-.landing-conteudo h1 {
-  margin: 0;
-  font-size: clamp(1.6rem, 5vw, 2.4rem);
-  line-height: 1.2;
-  font-weight: 700;
-}
-
-.landing-conteudo .sub {
-  margin: 0;
-  font-size: clamp(1rem, 3vw, 1.15rem);
-  line-height: 1.5;
-  color: var(--landing-fg-muted);
-}
-
-.landing-imagem {
+.landing-rica {
   display: block;
-  width: 100%;
-  height: auto;
-  max-height: 420px;
-  object-fit: cover;
-  border-radius: 12px;
-  border: 1px solid var(--landing-border);
-  background: #ffffff;
+  min-height: 0;
+  padding: 0;
+  background: var(--fundo);
 }
 
-.landing-corpo {
-  font-size: 1rem;
-  line-height: 1.6;
-}
-
-.landing-corpo p {
-  margin: 0 0 12px;
-}
-
-.landing-corpo ul {
-  margin: 0 0 12px;
-  padding-left: 22px;
-}
-
-.landing-corpo li + li {
-  margin-top: 4px;
-}
-
-.landing-cartao {
-  max-width: none;
-}
-
-@media (min-width: 900px) {
-  .landing-completa {
-    padding: 48px 32px;
-  }
-
-  .landing-grade {
-    grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
-    gap: 40px;
-    align-items: start;
-  }
-
-  .landing-cartao {
-    position: sticky;
-    top: 24px;
-  }
-}
-
-/* O botão flutuante não pode cobrir o fim do formulário no celular. */
+/* O botão flutuante não pode cobrir o fim do formulário nem da página. */
 .landing-com-whatsapp {
   padding-bottom: 88px;
 }
 
-/* Botão flutuante de WhatsApp — verde da marca do WhatsApp, fora da paleta
-   de propósito: é o sinal que a pessoa reconhece. */
-.landing-whatsapp {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #25d366;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  z-index: 10;
+/* Página sem seções: o resto da janela no claro frio, para o formulário
+ * que desce do topo não terminar num vazio branco. */
+.landing-rica.landing-sem-secoes {
+  min-height: 100dvh;
+  background: var(--fundo-frio);
 }
 
-.landing-whatsapp:focus-visible {
-  outline: 3px solid var(--landing-fg);
-  outline-offset: 3px;
+.landing-rica.landing-com-whatsapp {
+  padding-bottom: 0;
 }
 
-/* ---- Seções depois do topo (frente landing-secoes, 26/10) ----
+.landing-rica.landing-com-whatsapp .landing-secoes > .secao:last-child {
+  padding-bottom: calc(clamp(56px, 8vw, 112px) + 56px);
+}
+
+/* ---- topo ----
  *
- * A landing pública não carrega o Design System (exceção da regra de cor):
- * tudo aqui sai das variáveis do :root acima e do --landing-accent. O
- * acento entra puro (números, passos, destaque) ou misturado em pouca
- * quantidade com color-mix, para o fundo da coluna destacada. */
+ * Uma grade só, de borda a borda: as colunas de fora são a margem e as de
+ * dentro o miolo, então o fundo marinho e a foto sangram até a borda da
+ * janela enquanto o texto e o formulário ficam no miolo.
+ *
+ * Celular (padrão): foto em faixa no alto, título logo abaixo, o cartão do
+ * formulário subindo sobre a borda do marinho, números por último. */
 
-.landing-com-secoes,
-.landing-com-secoes.landing-completa {
-  display: block;
-  min-height: 0;
+.topo {
+  position: relative;
+  display: grid;
+  grid-template-columns: [sangria-inicio] var(--gutter) [miolo-inicio] minmax(0, 1fr) [miolo-fim] var(--gutter) [sangria-fim];
+  grid-template-rows: auto auto auto auto;
+  color: #ffffff;
+}
+
+.topo-fundo {
+  grid-column: sangria-inicio / sangria-fim;
+  grid-row: 1 / 3;
+  background: linear-gradient(180deg, var(--marinho) 0%, var(--marinho-fundo) 100%);
+}
+
+.topo-foto {
+  grid-column: sangria-inicio / sangria-fim;
+  grid-row: 1;
+  position: relative;
+  height: clamp(210px, 58vw, 340px);
+  overflow: hidden;
+}
+
+.topo-foto img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 62% 46%;
+  /* A foto se dissolve no marinho embaixo, onde começa o título. */
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+}
+
+.topo-texto {
+  grid-column: miolo-inicio / miolo-fim;
+  grid-row: 2;
+  position: relative;
+  z-index: 1;
+  padding: 8px 0 88px;
+  min-width: 0;
+}
+
+.topo:not(.topo-com-foto) .topo-texto {
+  padding-top: clamp(48px, 7vw, 104px);
+}
+
+.topo h1 {
+  margin: 0;
+  max-width: 17ch;
+  font-size: clamp(2.125rem, 1.3rem + 2.9vw, 3.6rem);
+  line-height: 1.04;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.topo .sub {
+  margin: 18px 0 0;
+  max-width: 36em;
+  font-size: clamp(1.05rem, 0.98rem + 0.3vw, 1.2rem);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.topo-corpo {
+  margin-top: 26px;
+  max-width: 36em;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.topo-corpo p {
+  margin: 0 0 12px;
+}
+
+.topo-corpo ul {
+  list-style: none;
+  margin: 0 0 12px;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-/* Com o botão do WhatsApp, o fim da página ganha o respiro de antes. */
-.landing-com-secoes.landing-com-whatsapp {
-  padding-bottom: 88px;
+.topo-corpo li {
+  position: relative;
+  padding-left: 26px;
+  font-weight: 600;
 }
 
-/* Palavra comprida sem espaço (URL colada num texto, nome de cliente longo
- * no ladrilho de 2 colunas) quebra em vez de rolar a página no celular. */
+/* Marcador: um traço curto celeste, não um ✓ — o verde é do LED. */
+.topo-corpo li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--celeste);
+}
+
+.topo-form {
+  grid-column: miolo-inicio / miolo-fim;
+  grid-row: 3;
+  position: relative;
+  z-index: 2;
+  margin-top: -56px;
+  padding: 24px 20px 26px;
+  background: #ffffff;
+  color: var(--tinta);
+  border-radius: var(--raio-cartao);
+  box-shadow:
+    0 1px 2px rgba(8, 30, 51, 0.08),
+    0 24px 48px -20px rgba(8, 30, 51, 0.38);
+  scroll-margin-top: 16px;
+}
+
+.topo-numeros {
+  grid-column: miolo-inicio / miolo-fim;
+  grid-row: 4;
+  padding: 36px 0 8px;
+  color: var(--tinta);
+}
+
+@media (min-width: 560px) {
+  .topo-form {
+    padding: 28px 28px 30px;
+  }
+}
+
+/* Tablet: a foto continua em faixa; abaixo dela, texto e formulário lado a
+ * lado, o formulário descendo da borda do marinho sobre o branco. */
+@media (min-width: 768px) {
+  .topo {
+    grid-template-columns:
+      [sangria-inicio] var(--gutter) [miolo-inicio texto-inicio] minmax(0, 1fr)
+      [texto-fim form-inicio] minmax(300px, 360px) [form-fim miolo-fim] var(--gutter) [sangria-fim];
+    grid-template-rows: auto auto minmax(0, 1fr);
+    column-gap: 0;
+  }
+
+  .topo-fundo {
+    grid-row: 1 / 3;
+  }
+
+  /* A foto (648 px) não estica à largura da janela: fica à direita, perto
+   * do tamanho natural, dissolvida no marinho à esquerda e embaixo; o
+   * título sobe para a parte dissolvida. */
+  .topo-foto {
+    height: clamp(260px, 34vw, 340px);
+  }
+
+  .topo-foto img {
+    left: auto;
+    width: min(72%, 760px);
+    object-position: 70% 42%;
+    -webkit-mask-image:
+      linear-gradient(90deg, transparent 0%, #000 38%),
+      linear-gradient(180deg, #000 55%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(90deg, transparent 0%, #000 38%),
+      linear-gradient(180deg, #000 55%, transparent 100%);
+    mask-composite: intersect;
+  }
+
+  .topo-texto {
+    grid-column: texto-inicio / texto-fim;
+    grid-row: 2;
+    padding: 4px 40px 64px 0;
+  }
+
+  .topo-com-foto .topo-texto {
+    margin-top: -96px;
+  }
+
+  /* Sem foto não há faixa em cima: o formulário desce junto com o título. */
+  .topo:not(.topo-com-foto) .topo-form {
+    margin-top: clamp(48px, 7vw, 104px);
+  }
+
+  .topo {
+    padding-bottom: clamp(40px, 5vw, 64px);
+  }
+
+  .topo-form {
+    grid-column: form-inicio / form-fim;
+    grid-row: 2 / 4;
+    align-self: start;
+    margin-top: 0;
+  }
+
+  .topo-numeros {
+    grid-column: texto-inicio / texto-fim;
+    grid-row: 3;
+    padding: 32px 40px 0 0;
+  }
+}
+
+/* Desktop: a foto sai da faixa e fica entre o texto e o formulário, na altura
+ * inteira do marinho (sangra em cima e embaixo). Ela é quadrada e pequena
+ * (648 px): esticada à largura da janela ficaria borrada, e o formulário
+ * cobriria a boca e o aparelho. Aqui ela aparece perto do tamanho natural,
+ * dissolvida no marinho dos dois lados, com o sopro e o aparelho à vista. */
+@media (min-width: 1240px) {
+  .topo {
+    grid-template-columns:
+      [sangria-inicio] minmax(var(--gutter), 1fr)
+      [miolo-inicio texto-inicio] minmax(26rem, 35rem)
+      [texto-fim meio-inicio] minmax(11rem, 21rem)
+      [meio-fim form-inicio] minmax(360px, 400px)
+      [form-fim miolo-fim] minmax(var(--gutter), 1fr) [sangria-fim];
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  /* `--aba`: quanto o marinho termina acima do pé da linha do topo. O
+   * formulário começa no alto da linha, então desce da borda pelo menos
+   * isso, seja qual for a altura do texto. */
+  .topo {
+    --aba: 88px;
+  }
+
+  .topo-fundo {
+    grid-row: 1;
+    margin-bottom: var(--aba);
+    background: linear-gradient(90deg, var(--marinho-fundo) 0%, var(--marinho) 100%);
+  }
+
+  .topo-com-foto .topo-texto {
+    margin-top: 0;
+  }
+
+  .topo-foto {
+    grid-column: meio-inicio / meio-fim;
+    grid-row: 1;
+    height: auto;
+    margin: 0 -48px var(--aba) -160px;
+  }
+
+  /* O lado do aparelho é parede branca: um pouco menos de brilho e a
+   * dissolução começando antes, para ela não competir com o formulário. */
+  .topo-foto img {
+    left: 0;
+    width: 100%;
+    filter: brightness(0.9);
+    object-position: 84% 38%;
+    -webkit-mask-composite: source-over;
+    mask-composite: add;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 46%, #000 60%, transparent 94%);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 46%, #000 60%, transparent 94%);
+  }
+
+  /* Em janelas de 1240 a ~1350 px a nuca da foto passa por trás do fim
+   * das linhas. A dissolução já deixa o fundo ≥ metade marinho ali; a
+   * sombra difusa garante o contraste do texto branco onde sobra pele. */
+  .topo-com-foto .topo-texto {
+    text-shadow: 0 1px 18px rgba(8, 30, 51, 0.75), 0 0 2px rgba(8, 30, 51, 0.5);
+  }
+
+  .topo-com-foto .sub,
+  .topo-com-foto .topo-corpo {
+    max-width: 31em;
+  }
+
+  /* Sem foto, o texto ocupa também a coluna do meio. */
+  .topo:not(.topo-com-foto) .topo-texto {
+    grid-column: texto-inicio / meio-fim;
+    padding-right: 64px;
+  }
+
+  .topo-texto {
+    grid-row: 1;
+    padding: clamp(72px, 7vw, 104px) 24px calc(var(--aba) + clamp(48px, 5vw, 72px)) 0;
+    align-self: start;
+  }
+
+  .topo-form {
+    grid-row: 1 / 3;
+    margin-top: clamp(72px, 7vw, 104px);
+    padding: 32px 32px 34px;
+  }
+
+  .topo-numeros {
+    grid-column: texto-inicio / meio-fim;
+    grid-row: 2;
+    /* Sobe para a faixa branca da `--aba`, ao lado do formulário. */
+    margin-top: calc(var(--aba) * -1);
+    padding: 36px 32px 0 0;
+  }
+}
+
+/* ---- seções ---- */
+
+/* Palavra comprida sem espaço (URL colada num texto, nome de cliente longo)
+ * quebra em vez de rolar a página no celular. */
 .landing-secoes {
   overflow-wrap: anywhere;
 }
 
-.passos li > div {
-  min-width: 0;
-}
-
-.landing-topo {
-  display: flex;
-  justify-content: center;
-  padding: 24px 16px 48px;
-}
-
 .secao {
-  padding: 56px 16px;
-  background: var(--landing-bg);
+  padding: clamp(56px, 8vw, 112px) var(--gutter);
+  background: var(--fundo);
 }
 
-/* Alternância sutil: o topo é o cinza claro, a primeira seção é branca. */
+/* Alternância: a primeira seção depois do topo é a do claro frio, que a
+ * separa do branco onde o formulário desce. */
 .landing-secoes > .secao:nth-child(odd) {
-  background: var(--landing-surface);
-  border-top: 1px solid var(--landing-border);
-  border-bottom: 1px solid var(--landing-border);
+  background: var(--fundo-frio);
 }
 
 .secao-miolo {
   width: 100%;
-  max-width: 1080px;
+  max-width: var(--miolo);
   margin: 0 auto;
 }
 
 .secao-cabeca {
-  max-width: 760px;
-  margin: 0 auto 32px;
-  text-align: center;
+  max-width: 44rem;
+  margin: 0 0 clamp(32px, 4.5vw, 56px);
 }
 
 .secao-cabeca h2 {
   margin: 0;
-  font-size: clamp(1.5rem, 3.6vw, 2.25rem);
-  line-height: 1.2;
+  font-size: clamp(1.75rem, 1.1rem + 2.4vw, 2.75rem);
+  line-height: 1.1;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   text-wrap: balance;
 }
 
 .secao-sub {
-  margin: 12px 0 0;
-  font-size: clamp(1rem, 2.6vw, 1.15rem);
+  margin: 14px 0 0;
+  max-width: 38em;
+  font-size: clamp(1.02rem, 0.98rem + 0.25vw, 1.15rem);
   line-height: 1.55;
-  color: var(--landing-fg-muted);
+  color: var(--tinta-media);
 }
 
 .secao h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.125rem;
   line-height: 1.3;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .secao p {
   line-height: 1.6;
 }
 
-/* ---- numeros ---- */
+/* ---- numeros ----
+ * Uma faixa sóbria, alinhada à esquerda, itens separados por fio vertical.
+ * No celular cada número vira uma linha ("23 milhões+ de testes
+ * registrados"), separada por fio horizontal. */
 
 .numeros {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  gap: 28px 24px;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
 }
 
 .numeros li {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--fio);
+}
+
+.numeros li:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .numeros-valor {
-  font-size: clamp(2.25rem, 7vw, 3.25rem);
-  line-height: 1;
+  font-size: clamp(1.5rem, 1.1rem + 1vw, 2rem);
+  line-height: 1.1;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--landing-accent);
+  letter-spacing: -0.025em;
+  color: var(--marinho);
   font-variant-numeric: tabular-nums;
 }
 
 .numeros-rotulo {
-  font-size: 1rem;
-  color: var(--landing-fg-muted);
+  font-size: 0.98rem;
+  line-height: 1.4;
+  color: var(--tinta-apagada);
+}
+
+/* Na faixa, o fio do primeiro item de CADA linha (inclusive quando a faixa
+ * quebra) cai fora do recorte: a lista anda 28 px para a esquerda e corta o
+ * que sobra, então o texto de toda linha começa alinhado à margem. */
+@media (min-width: 600px) {
+  .numeros {
+    flex-direction: row;
+    flex-wrap: wrap;
+    row-gap: 24px;
+    margin-left: -26px;
+    overflow: hidden;
+  }
+
+  .numeros li,
+  .numeros li:first-child {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-left: -1px;
+    padding: 2px 26px;
+    border-top: none;
+    border-left: 1px solid var(--fio-forte);
+  }
 }
 
 /* ---- comparativo ----
- * Tabela no desktop; no celular cada linha vira um cartão e o nome da
- * coluna aparece acima do valor (data-rotulo). A rolagem, se um texto
- * enorme ainda estourar, fica contida aqui — nunca na página. */
-
-.comparativo {
-  overflow-x: auto;
-}
+ * A coluna destacada (b) é um painel marinho em pé sobre a tabela, com o ✓
+ * verde do LED; a coluna de hoje (a) fica apagada. No celular cada linha
+ * vira um par empilhado: critério → hoje → com a solução. */
 
 .comparativo table {
   width: 100%;
@@ -543,49 +841,81 @@ body {
 
 .comparativo th,
 .comparativo td {
-  padding: 14px 18px;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--landing-border);
 }
 
-.comparativo thead th {
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--landing-fg-muted);
-  border-bottom-width: 2px;
-}
-
+.comparativo thead th,
 .comparativo thead td {
-  border-bottom-width: 2px;
+  padding: 0 24px 16px 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--tinta-apagada);
+  vertical-align: bottom;
+}
+
+.comparativo tbody th,
+.comparativo tbody td {
+  padding: 18px 24px 18px 0;
+  border-top: 1px solid var(--fio-forte);
 }
 
 .comparativo tbody th {
+  width: 24%;
   font-weight: 700;
-  width: 22%;
+  color: var(--tinta);
 }
 
 .comparativo td {
-  color: var(--landing-fg-muted);
+  color: var(--tinta-apagada);
 }
 
 .comparativo .comparativo-b {
-  background: color-mix(in srgb, var(--landing-accent) 8%, transparent);
-  color: var(--landing-fg);
+  position: relative;
+  width: 42%;
+  padding-left: 60px;
+  padding-right: 28px;
+  background: var(--marinho);
+  color: #ffffff;
   font-weight: 600;
+  border-top-color: var(--marinho-borda);
 }
 
 .comparativo thead .comparativo-b {
-  background: var(--landing-accent);
-  color: var(--landing-accent-fg);
-  border-radius: 10px 10px 0 0;
-  border-bottom-color: var(--landing-accent);
+  padding: 22px 28px 16px 28px;
+  border-radius: var(--raio-cartao) var(--raio-cartao) 0 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.comparativo tbody tr:first-child .comparativo-b {
+  border-top-color: var(--marinho-borda);
 }
 
 .comparativo tbody tr:last-child .comparativo-b {
-  border-radius: 0 0 10px 10px;
+  padding-bottom: 26px;
+  border-radius: 0 0 var(--raio-cartao) var(--raio-cartao);
+}
+
+/* O ✓ verde do LED. `/ ""`: o leitor de tela não lê o símbolo. */
+.comparativo tbody .comparativo-b::after {
+  content: "✓" / "";
+  position: absolute;
+  left: 26px;
+  top: 19px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--led-verde);
+  color: var(--marinho-fundo);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 @media (max-width: 719px) {
@@ -608,156 +938,250 @@ body {
   }
 
   .comparativo tbody tr {
-    margin-bottom: 14px;
-    border: 1px solid var(--landing-border);
-    border-radius: 12px;
-    overflow: hidden;
-    background: var(--landing-surface);
+    padding: 20px 0 22px;
+    border-top: 1px solid var(--fio-forte);
+  }
+
+  .comparativo tbody tr:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .comparativo tbody th,
+  .comparativo tbody td,
+  .comparativo tbody .comparativo-b {
+    width: auto;
+    border-top: none;
+    padding: 0;
   }
 
   .comparativo tbody th {
-    width: auto;
-    padding: 12px 16px 4px;
-    border-bottom: none;
-    font-size: 1.05rem;
-  }
-
-  .comparativo tbody td {
-    padding: 8px 16px 12px;
-    border-bottom: none;
+    font-size: 1.1rem;
+    margin-bottom: 8px;
   }
 
   .comparativo tbody td::before {
     content: attr(data-rotulo);
     display: block;
-    margin-bottom: 2px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--landing-fg-muted);
+    color: var(--tinta-apagada);
   }
 
-  .comparativo tbody td.comparativo-b {
-    border-left: 4px solid var(--landing-accent);
-    padding-left: 12px;
+  .comparativo tbody td {
+    margin-bottom: 10px;
   }
 
-  .comparativo tbody td.comparativo-b::before {
-    color: var(--landing-accent);
-  }
-
+  .comparativo tbody .comparativo-b,
   .comparativo tbody tr:last-child .comparativo-b {
-    border-radius: 0;
+    margin-bottom: 0;
+    padding: 12px 16px 14px 50px;
+    border-radius: var(--raio-foto);
+  }
+
+  .comparativo tbody .comparativo-b::before {
+    color: var(--celeste);
+  }
+
+  .comparativo tbody .comparativo-b::after {
+    left: 16px;
+    top: 14px;
   }
 }
 
-/* ---- passos ---- */
+/* ---- passos ----
+ * É sequência de verdade: número e um fio ligando um passo ao outro. O
+ * último passo é a decisão — o marcador leva o verde e o vermelho do LED. */
 
 .passos {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .passos li {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  position: relative;
+  padding: 0 0 36px 68px;
+  min-height: 48px;
+}
+
+.passos li:last-child {
+  padding-bottom: 0;
+}
+
+.passos li > div {
+  min-width: 0;
+  padding-top: 10px;
+}
+
+/* O fio que liga um passo ao próximo. */
+.passos li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 52px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--fio-forte);
 }
 
 .passos-numero {
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 48px;
   height: 48px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--landing-accent);
-  color: var(--landing-accent-fg);
-  font-size: 1.25rem;
+  border: 2px solid var(--marinho);
+  background: transparent;
+  color: var(--marinho);
+  font-size: 1.15rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Metade verde, metade vermelha: as duas saídas da decisão, nas cores do
+ * LED. Só a borda, para o número continuar legível em qualquer fundo. */
+.passos li:last-child .passos-numero {
+  border-width: 3px;
+  border-color: var(--led-verde-escuro) var(--led-verde-escuro) var(--led-vermelho) var(--led-vermelho);
 }
 
 .passos h3 {
-  margin-top: 10px;
+  font-size: 1.25rem;
 }
 
 .passos p {
-  margin: 6px 0 0;
-  color: var(--landing-fg-muted);
+  margin: 8px 0 0;
+  max-width: 34em;
+  color: var(--tinta-media);
 }
 
-/* ---- cartoes ---- */
+@media (min-width: 768px) {
+  .passos {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-columns: none;
+    gap: 40px;
+  }
+
+  .passos li {
+    padding: 72px 0 0;
+  }
+
+  .passos li > div {
+    padding-top: 0;
+  }
+
+  .passos li:not(:last-child)::after {
+    left: 64px;
+    right: -28px;
+    top: 23px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+}
+
+/* ---- cartoes ----
+ * Com foto: a foto manda (grande, proporção fixa), legenda abaixo, sem
+ * caixa. Sem foto: lista em grade com fio no topo de cada item. */
 
 .cartoes {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px 32px;
 }
 
 .cartao {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--landing-border);
-  border-top: 3px solid var(--landing-accent);
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--landing-surface);
+  min-width: 0;
 }
 
-.cartao-com-imagem {
-  border-top-width: 1px;
-  border-top-color: var(--landing-border);
+.cartoes:not(.cartoes-com-foto) .cartao {
+  padding-top: 18px;
+  border-top: 2px solid var(--marinho);
 }
 
 .cartao img {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
-  background: var(--landing-bg);
-}
-
-.cartao-texto {
-  padding: 20px;
+  /* Um pouco acima do centro: em foto em pé, o aparelho costuma estar no
+   * terço de cima. */
+  object-position: 50% 30%;
+  border-radius: var(--raio-foto);
+  background: var(--fundo-frio);
+  margin-bottom: 18px;
 }
 
 .cartao p {
   margin: 8px 0 0;
-  color: var(--landing-fg-muted);
+  max-width: 34em;
+  color: var(--tinta-media);
+}
+
+@media (min-width: 600px) {
+  .cartoes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 40px 32px;
+  }
+}
+
+@media (min-width: 1000px) {
+  /* `--colunas` vem do Secoes.tsx: a quantidade que não deixa órfão. */
+  .cartoes {
+    grid-template-columns: repeat(var(--colunas, 3), minmax(0, 1fr));
+    gap: 48px 40px;
+  }
+
+  .cartoes-com-foto {
+    gap: 48px 28px;
+  }
+
+  .cartoes-com-foto .cartao img {
+    aspect-ratio: 4 / 5;
+  }
 }
 
 /* ---- texto_imagem ---- */
 
 .texto-imagem {
-  max-width: 760px;
-  margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 28px;
+  gap: 32px;
   align-items: center;
 }
 
 .texto-imagem .secao-cabeca {
-  margin: 0 0 16px;
-  text-align: left;
+  margin-bottom: 20px;
 }
 
 .texto-imagem-texto {
-  font-size: 1.05rem;
+  max-width: 36rem;
+  font-size: 1.06rem;
+  color: var(--tinta-media);
+}
+
+.texto-imagem-texto .secao-cabeca h2 {
+  color: var(--tinta);
 }
 
 .texto-imagem-texto p,
 .texto-imagem-texto ul {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
 }
 
 .texto-imagem-texto ul {
@@ -768,17 +1192,19 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 440px;
+  aspect-ratio: 16 / 10;
   object-fit: cover;
-  border-radius: 12px;
-  border: 1px solid var(--landing-border);
+  border-radius: var(--raio-cartao);
 }
 
 @media (min-width: 900px) {
   .texto-imagem-com-imagem {
-    max-width: none;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 56px;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(48px, 6vw, 88px);
+  }
+
+  .texto-imagem-esquerda {
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
   }
 
   .texto-imagem-esquerda .texto-imagem-foto {
@@ -787,72 +1213,84 @@ body {
 }
 
 /* ---- logos ----
- * Ladrilhos do mesmo tamanho, em cinza: a grade fica alinhada com logos de
- * proporções diferentes, e nenhuma marca grita mais que a outra. */
+ * Cores originais, mesma altura, sem caixa. `multiply` faz o fundo branco
+ * dos arquivos (JPG/PNG sem transparência) sumir no fundo da seção sem
+ * mexer na cor da marca. */
 
 .logos {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
-  gap: 12px;
-}
-
-@media (max-width: 479px) {
-  .logos {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px 24px;
+  align-items: center;
 }
 
 .logos li {
-  min-height: 76px;
-  padding: 12px 16px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  border: 1px solid var(--landing-border);
-  border-radius: 10px;
-  background: var(--landing-surface);
+  justify-content: flex-start;
+  min-height: 48px;
 }
 
 .logos img {
   display: block;
+  /* A altura vem do Secoes.tsx (`--altura-logo`), pela proporção do
+   * arquivo: logo largo fica mais baixo, logo quadrado mais alto, e todos
+   * pesam parecido. Sem ela (antes de carregar), 40 px. */
+  height: var(--altura-logo, 44px);
+  width: auto;
   max-width: 100%;
-  max-height: 44px;
   object-fit: contain;
-  filter: grayscale(1);
-  opacity: 0.75;
+  mix-blend-mode: multiply;
 }
 
 .logos span {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--landing-fg-muted);
+  letter-spacing: -0.01em;
+  color: var(--tinta-media);
 }
 
-/* ---- perguntas ---- */
+@media (min-width: 600px) {
+  .logos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 44px 40px;
+  }
+
+  .logos img {
+    height: calc(var(--altura-logo, 40px) * 1.1);
+  }
+}
+
+@media (min-width: 1000px) {
+  .logos {
+    grid-template-columns: repeat(var(--colunas, 4), minmax(0, 1fr));
+    gap: 56px 48px;
+  }
+}
+
+/* ---- perguntas ----
+ * No desktop o título fica à esquerda e o acordeão à direita. A única
+ * animação da página é o ícone que gira quando a pergunta abre. */
 
 .perguntas {
-  max-width: 800px;
-  margin: 0 auto;
-  border-top: 1px solid var(--landing-border);
+  border-top: 1px solid var(--fio-forte);
 }
 
 .perguntas details {
-  border-bottom: 1px solid var(--landing-border);
+  border-bottom: 1px solid var(--fio-forte);
 }
 
 .perguntas summary {
   min-height: 44px;
-  padding: 18px 40px 18px 0;
+  padding: 20px 52px 20px 0;
   position: relative;
   list-style: none;
   cursor: pointer;
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-size: 1.06rem;
+  font-weight: 700;
   line-height: 1.4;
 }
 
@@ -860,22 +1298,35 @@ body {
   display: none;
 }
 
-/* O "+" que gira para "×" quando abre. */
+/* O "+" que gira para "×" quando abre: duas barras desenhadas. */
+.perguntas summary::before,
 .perguntas summary::after {
-  content: "+";
+  content: "";
   position: absolute;
-  right: 4px;
+  right: 10px;
   top: 50%;
-  transform: translateY(-50%);
-  font-size: 1.6rem;
-  font-weight: 400;
-  line-height: 1;
-  color: var(--landing-accent);
-  transition: transform 0.15s ease;
+  width: 16px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--landing-accent);
+  transition: transform 0.18s ease;
+}
+
+.perguntas summary::after {
+  transform: rotate(90deg);
+}
+
+.perguntas details[open] summary::before {
+  transform: rotate(45deg);
 }
 
 .perguntas details[open] summary::after {
-  transform: translateY(-50%) rotate(45deg);
+  transform: rotate(135deg);
+}
+
+.perguntas summary:hover {
+  color: var(--landing-accent);
 }
 
 .perguntas summary:focus-visible {
@@ -885,62 +1336,75 @@ body {
 
 .perguntas details p {
   margin: 0;
-  padding: 0 40px 20px 0;
-  color: var(--landing-fg-muted);
+  max-width: 40em;
+  padding: 0 52px 22px 0;
+  color: var(--tinta-media);
+}
+
+@media (min-width: 900px) {
+  .secao-perguntas .secao-miolo {
+    display: grid;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    gap: clamp(40px, 6vw, 96px);
+    align-items: start;
+  }
+
+  .secao-perguntas .secao-cabeca {
+    margin-bottom: 0;
+  }
 }
 
 /* ---- chamada ----
- * A faixa do acento fecha a página; o botão é o inverso (fundo claro, texto
- * no acento) para não sumir dentro dela. */
+ * Fecha a página no marinho do topo: texto e checklist à esquerda, o botão
+ * à direita (abaixo, no celular). O botão é branco: sobre o marinho é o que
+ * mais se destaca, e o azul de ação perderia contraste aqui. */
 
 .landing-secoes > .secao.secao-chamada {
-  background: var(--landing-accent);
-  color: var(--landing-accent-fg);
-  border-color: var(--landing-accent);
+  background:
+    radial-gradient(90% 120% at 100% 100%, #123a5c 0%, transparent 60%),
+    var(--marinho-fundo);
+  color: #ffffff;
 }
 
 .chamada {
-  max-width: 720px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 36px;
 }
 
 .chamada .secao-cabeca {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .chamada .secao-sub,
 .chamada-texto {
-  color: inherit;
-  opacity: 0.92;
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .chamada-texto {
-  margin: 0 0 20px;
-  font-size: 1.05rem;
+  margin: 0 0 26px;
+  max-width: 38em;
+  font-size: 1.08rem;
 }
 
 .chamada-itens {
   list-style: none;
-  margin: 0 0 28px;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  text-align: left;
+  gap: 12px;
 }
 
 .chamada-itens li {
   position: relative;
-  padding-left: 30px;
+  padding-left: 36px;
+  font-weight: 600;
   line-height: 1.5;
 }
 
 .chamada-itens li::before {
-  content: "✓";
+  content: "✓" / "";
   position: absolute;
   left: 0;
   top: 1px;
@@ -950,69 +1414,89 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--landing-accent-fg);
-  color: var(--landing-accent);
+  background: var(--led-verde);
+  color: var(--marinho-fundo);
   font-size: 0.8rem;
   font-weight: 800;
 }
 
+.chamada-acao {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
 .chamada-botao {
-  min-height: 48px;
-  padding: 14px 28px;
+  min-height: 56px;
+  padding: 16px 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  background: var(--landing-accent-fg);
-  color: var(--landing-accent);
-  font-size: 1.05rem;
+  text-align: center;
+  border-radius: var(--raio-botao);
+  background: #ffffff;
+  color: var(--marinho);
+  font-size: 1.06rem;
   font-weight: 800;
   text-decoration: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
 .chamada-botao:hover {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  background: #e3eef7;
 }
 
 .chamada-botao:focus-visible {
-  outline: 3px solid var(--landing-accent-fg);
+  outline: 3px solid var(--celeste);
   outline-offset: 3px;
 }
 
 .chamada-nota {
-  margin: 16px 0 0;
-  font-size: 0.85rem;
-  opacity: 0.9;
-}
-
-@media (max-width: 479px) {
-  .chamada-botao {
-    width: 100%;
-  }
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 @media (min-width: 900px) {
-  .landing-topo {
-    padding: 48px 32px 72px;
+  .chamada {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+    gap: clamp(48px, 7vw, 112px);
+    align-items: end;
   }
 
-  .secao {
-    padding: 88px 32px;
-  }
-
-  .secao-cabeca {
-    margin-bottom: 48px;
-  }
-
-  /* `--colunas` vem do Secoes.tsx: a quantidade que não deixa órfão. */
-  .cartoes,
-  .logos {
-    grid-template-columns: repeat(var(--colunas, 3), minmax(0, 1fr));
+  .chamada-acao {
+    align-items: flex-start;
   }
 }
 
+/* ---- WhatsApp ----
+ * Verde da marca do WhatsApp, fora da paleta de propósito: é o sinal que a
+ * pessoa reconhece. */
+
+.landing-whatsapp {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #25d366;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 10;
+}
+
+.landing-whatsapp:focus-visible {
+  outline: 3px solid var(--tinta);
+  outline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .perguntas summary::before,
   .perguntas summary::after {
     transition: none;
   }
