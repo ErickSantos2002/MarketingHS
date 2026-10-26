@@ -147,3 +147,14 @@ dia no `CONTINUAR-AQUI.md`.
     vão por jornada ou pelo botão "Enviar ao comercial". Alternativas: (a)
     uma 031 em que o gatilho olha só o ambiente ativo; (b) a prévia volta a
     imitar o gatilho.
+73. **Reconversão com dados diferentes** (teste de leads, 26/10): o lead
+    reconverteu pela `phoebus-prova` com outra empresa e outro telefone; a
+    captura não sobrescreve (R1, certo), mas os valores digitados **não
+    ficam em lugar nenhum** — `lead_conversions` não tem as colunas, ao
+    contrário do que diz o comentário de `captura/registro.py::_atualizar`.
+    O bloco do card mostra os dados antigos do contato. O Erick: "seria bom
+    atualizar". **Assumido (o mais seguro):** guardar o que veio em cada
+    conversão (031) e mostrar no bloco e na nota do card e na linha do tempo
+    como "informou nesta conversão" — o contato e a pessoa do GrowthHS
+    continuam sem ser sobrescritos. Alternativa: sobrescrever o contato
+    (reabre o furo do R1 — qualquer um que saiba o e-mail troca os dados).
