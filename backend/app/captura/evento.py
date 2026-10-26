@@ -50,12 +50,18 @@ async def marcar_pagina(conn, page_slug: str | None, *, form_id: str | None = No
 
 async def publicar_conversao(conn, lead_id: str, page_slug: str | None, *,
                              origem: str, form_id: str | None = None,
-                             site_id: str | None = None) -> None:
+                             site_id: str | None = None,
+                             informados: list[dict] | None = None) -> None:
     """`form_submitted` com a origem, para contato que JÁ existia.
 
     `origem` vai no metadata (`captura`, `api` ou `site`) — a linha do tempo
     diz por onde a conversão entrou. Sem página (formulário de outro site), o
     título fala do formulário.
+
+    `informados` (pergunta 73): o que a pessoa informou de DIFERENTE do
+    contato (`captura.informados.divergencias`), em
+    `metadata.informados_diferentes` — a linha do tempo mostra. Sem
+    diferença, a chave não entra.
     """
     await conn.execute(
         """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
@@ -68,5 +74,7 @@ async def publicar_conversao(conn, lead_id: str, page_slug: str | None, *,
                   jsonb_build_object('page_slug', $2::text, 'reconversao', true,
                                      'origem', $3::text, 'form_id', $4::text,
                                      'site_id', $5::text)
+                  || CASE WHEN $6::jsonb IS NULL THEN '{}'::jsonb
+                          ELSE jsonb_build_object('informados_diferentes', $6::jsonb) END
              FROM leads l WHERE l.id = $1::uuid""",
-        lead_id, page_slug, origem, form_id, site_id)
+        lead_id, page_slug, origem, form_id, site_id, informados or None)
