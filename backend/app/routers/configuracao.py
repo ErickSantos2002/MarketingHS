@@ -808,8 +808,13 @@ AMBIENTES_GROWTHHS = ("homologacao", "producao")
 # Os dois segredos que a tela grava e `limpar` aceita apagar, por ambiente —
 # a chave em integration_secrets sai de `growthhs.segredo_cliente/webhook`.
 _SEGREDOS_GROWTHHS = ("client_secret", "webhook_secret")
-EVENTOS_WEBHOOK_GROWTHHS = ("meeting_scheduled", "deal_won")
+EVENTOS_WEBHOOK_GROWTHHS = ("meeting_scheduled", "deal_won", "deal_lost", "no_show")
 MAX_LISTA_GROWTHHS = 10
+# As listas que provam cada evento do webhook de volta, com o nome que a
+# recusa de cruzamento mostra (029 + 032).
+_LISTAS_DE_EVENTO = ("listas_reuniao", "listas_ganho", "listas_perdido", "listas_no_show")
+_NOME_DA_LISTA = {"listas_reuniao": "reunião", "listas_ganho": "ganho",
+                  "listas_perdido": "perdido", "listas_no_show": "no show"}
 MAX_ID_GROWTHHS = 9223372036854775807  # bigint
 MIN_SEGREDO_WEBHOOK = 16
 MAX_DETALHE_TESTE = 200
@@ -835,6 +840,8 @@ class GrowthHSIn(BaseModel):
     boards_conferidos: list[int] | None = None
     listas_reuniao: list[int] | None = None
     listas_ganho: list[int] | None = None
+    listas_perdido: list[int] | None = None
+    listas_no_show: list[int] | None = None
     webhook_secret: str | None = None
     # `list[str]`, não `Literal`: campo desconhecido devolve 400 com o nome
     # dele (como no 8D), em vez do 422 genérico do pydantic.
@@ -886,7 +893,7 @@ class GrowthHSIn(BaseModel):
                              f"{MIN_SEGREDO_WEBHOOK} caracteres")
         return valor
 
-    @field_validator("boards_conferidos", "listas_reuniao", "listas_ganho")
+    @field_validator("boards_conferidos", *_LISTAS_DE_EVENTO)
     @classmethod
     def _ids(cls, valor):
         """Ids do GrowthHS: inteiros > 0, sem repetidos, no máximo 10.
@@ -902,7 +909,7 @@ class GrowthHSIn(BaseModel):
             raise ValueError("há id repetido")
         return valor
 
-    @field_validator("listas_reuniao", "listas_ganho")
+    @field_validator(*_LISTAS_DE_EVENTO)
     @classmethod
     def _ao_menos_uma(cls, valor):
         """⚠️ Lista vazia aqui faria o webhook de volta ignorar TODO evento em
@@ -968,6 +975,7 @@ async def _estado_do_ambiente(ambiente: str, ativo: str | None) -> dict:
         "base_url": cfg.base_url, "app_url": cfg.app_url, "client_id": cfg.client_id,
         "list_id": cfg.list_id, "boards_conferidos": list(cfg.boards_conferidos),
         "listas_reuniao": list(cfg.listas_reuniao), "listas_ganho": list(cfg.listas_ganho),
+        "listas_perdido": list(cfg.listas_perdido), "listas_no_show": list(cfg.listas_no_show),
         "client_secret": {"configurado": bool(segredo),
                           "ultimos4": segredo[-4:] if len(segredo) >= 4 else None},
         "webhook_secret": {"configurado": bool(webhook)},
@@ -1026,9 +1034,9 @@ async def ler_config_growthhs(_: Usuario = Depends(admin_atual)):
 # Colunas de growthhs_config que o PUT grava (só as que vieram no corpo).
 # ⚠️ `board_id` fica na tabela (o receptor desligado ainda lê), mas saiu da API.
 _COLUNAS_GROWTHHS = ("base_url", "app_url", "client_id", "list_id", "boards_conferidos",
-                     "listas_reuniao", "listas_ganho")
-# As de lista são NOT NULL na 029: `null` explícito no corpo é "não mexi".
-_COLUNAS_LISTA = ("boards_conferidos", "listas_reuniao", "listas_ganho")
+                     *_LISTAS_DE_EVENTO)
+# As de lista são NOT NULL (029, 032): `null` explícito no corpo é "não mexi".
+_COLUNAS_LISTA = ("boards_conferidos", *_LISTAS_DE_EVENTO)
 
 
 # A trava consultiva que põe em fila o "Usar este ambiente" e o "Salvar".
@@ -1120,25 +1128,28 @@ async def _gravar_growthhs(ambiente: str, dados: GrowthHSIn, admin: Usuario):
     if desconhecidos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Campos desconhecidos: {', '.join(desconhecidos)}")
-    # A salva só é lida quando precisa (uma lista sem a outra, troca de
-    # endereço): as duas listas vindas juntas se conferem sozinhas.
+    # A salva só é lida quando precisa (alguma lista sem as outras, troca de
+    # endereço): as quatro listas vindas juntas se conferem sozinhas.
+    vindas = {c: getattr(dados, c) for c in _LISTAS_DE_EVENTO}
+    alguma = any(v is not None for v in vindas.values())
     salvo = (await growthhs.ler_config_do_ambiente(ambiente)
-             if (dados.listas_reuniao is None) != (dados.listas_ganho is None)
+             if (alguma and any(v is None for v in vindas.values()))
              or "base_url" in dados.model_fields_set else None)
-    if dados.listas_reuniao is not None or dados.listas_ganho is not None:
-        # ⚠️ Revisão final (M4): a mesma lista em "reunião" e em "ganho" faria
-        # o webhook de volta marcar venda num card que só teve reunião (ou o
-        # contrário). Quando só uma vem no PUT, a outra é a salva. Antes de
-        # gravar qualquer coisa, segredo inclusive.
-        reuniao = set(dados.listas_reuniao if dados.listas_reuniao is not None
-                      else salvo.listas_reuniao)
-        ganho = set(dados.listas_ganho if dados.listas_ganho is not None
-                    else salvo.listas_ganho)
-        if reuniao & ganho:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "A mesma lista não pode valer como reunião e como ganho: "
-                + ", ".join(str(i) for i in sorted(reuniao & ganho)))
+    if alguma:
+        # ⚠️ Revisão final (M4), estendida na 032: uma lista que prova dois
+        # eventos faria o webhook de volta marcar venda num card que só teve
+        # reunião, perdido num ganho etc. Quando uma não vem no PUT, vale a
+        # salva. Antes de gravar qualquer coisa, segredo inclusive.
+        listas = {c: set(v if v is not None else getattr(salvo, c))
+                  for c, v in vindas.items()}
+        for i, a in enumerate(_LISTAS_DE_EVENTO):
+            for b in _LISTAS_DE_EVENTO[i + 1:]:
+                if listas[a] & listas[b]:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        f"A mesma lista não pode valer como {_NOME_DA_LISTA[a]} e como "
+                        f"{_NOME_DA_LISTA[b]}: "
+                        + ", ".join(str(n) for n in sorted(listas[a] & listas[b])))
     limpar = set(dados.limpar)
     if "base_url" in dados.model_fields_set and not dados.client_secret:
         # ⚠️ O secret é só de escrita: ninguém o lê de volta pela tela. Trocar

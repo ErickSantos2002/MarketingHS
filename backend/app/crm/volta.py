@@ -5,7 +5,13 @@ O GrowthHS não chama o `/publico/evento-de-contato`: o que existe lá é a aç�
 `timestamp`, `card` com `person`) e assinatura `X-HSGrowth-Signature:
 sha256=<hex>` = HMAC-SHA256 dos bytes do corpo (doc do GrowthHS §4 e §8.5).
 O corpo é igual para todo gatilho, então o evento sai da URL
-(`?evento=meeting_scheduled` / `?evento=deal_won`), uma automação por evento.
+(`?evento=meeting_scheduled` / `deal_won` / `deal_lost` / `no_show`), uma
+automação por evento.
+
+Desde a 032 (26/10, pergunta 74): `deal_lost` (botão "Perdido" de lá, que move
+o card para a lista `is_lost_stage`) leva o contato a "Negócio perdido";
+`no_show` (card movido para "Reagendamento") é só evento na linha do tempo —
+o reagendamento chega depois como outro `meeting_scheduled`.
 
 Este módulo traduz: acha o lead pelo card e entrega para
 `retorno.aplicar_evento`, a mesma aplicação do evento de contato.
@@ -33,6 +39,8 @@ logger = logging.getLogger(__name__)
 EVENTOS = {
     "meeting_scheduled": "Reunião agendada no GrowthHS",
     "deal_won": "Venda fechada no GrowthHS",
+    "deal_lost": "Negócio perdido no GrowthHS",
+    "no_show": "No Show no GrowthHS",
 }
 
 # O corpo do GrowthHS é um card, sem histórico — mas com a `description`
@@ -149,7 +157,8 @@ async def lead_do_card(conn, card: dict, ambiente: str | None) -> dict | None:
 
 
 def _listas_do_evento(cfg: "growthhs.Config", evento: str) -> tuple[int, ...]:
-    return cfg.listas_reuniao if evento == "meeting_scheduled" else cfg.listas_ganho
+    return {"meeting_scheduled": cfg.listas_reuniao, "deal_won": cfg.listas_ganho,
+            "deal_lost": cfg.listas_perdido, "no_show": cfg.listas_no_show}[evento]
 
 
 def _momento(valor, agora: datetime) -> str | None:
@@ -173,8 +182,12 @@ async def aplicar(conn, evento: str, payload: dict, *,
 
     ⚠️ O `?evento=` da URL NÃO é coberto pela assinatura. Quem decide é o
     corpo assinado: `event == "card.list_changed"` e `card.list_id` numa das
-    listas do evento (`listas_reuniao` / `listas_ganho` da config). Sem isso,
-    um corpo de reunião reenviado com `?evento=deal_won` marcaria venda.
+    listas do evento (`listas_reuniao` / `listas_ganho` / `listas_perdido` /
+    `listas_no_show` da config). Sem isso, um corpo de reunião reenviado com
+    `?evento=deal_won` marcaria venda.
+
+    ⚠️ O evento entra na chave de repetido: o `no_show` e o `meeting_scheduled`
+    do reagendamento do mesmo card nunca se engolem.
     """
     card = payload.get("card") if isinstance(payload, dict) else None
     if evento not in EVENTOS or not isinstance(card, dict) or _id_do_card(card) is None:

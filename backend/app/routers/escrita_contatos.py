@@ -123,6 +123,8 @@ _EVENTO_POR_STATUS = {
     "Lead Qualificado": ("lead_qualified", "Lead qualificado"),
     "MQL - Reunião agendada": ("meeting_scheduled", "Reunião agendada"),
     "Venda realizada": ("deal_won", "Venda realizada"),
+    # 032 (pergunta 74). `deal_lost` já é um dos sete tipos acima.
+    "Negócio perdido": ("deal_lost", "Negócio perdido"),
 }
 
 
