@@ -64,6 +64,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
+from app.captura.informados import divergencias
 from app.config import settings
 from app.crm import growthhs
 from app.database import sessao
@@ -124,7 +125,12 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
     última visita costuma ser a volta direta, sem clique pago — pegar a
     última de todas apagaria a atribuição do anúncio. Conversão sem
     visitante (envio manual, base importada) → `None`. Visita DEPOIS da
-    conversão não conta: não foi o clique que trouxe o lead."""
+    conversão não conta: não foi o clique que trouxe o lead.
+
+    `dados_informados` (031, pergunta 73): o que o lead digitou NESTA
+    conversão. ⚠️ Lido por `to_jsonb(lc) -> 'dados_informados'`, não pela
+    coluna: sem a 031 no banco dá NULL em vez de derrubar a entrega — o
+    worker pode subir antes da migration."""
     conversao = await conn.fetchrow(
         """SELECT lc.page_slug, lc.form_id, s.nome AS site_nome, lc.page_url,
                   to_char(lc.converted_at AT TIME ZONE 'UTC',
@@ -132,7 +138,8 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
                   (SELECT v.gclid FROM visitas v
                     WHERE lc.visitor_id IS NOT NULL AND v.visitor_id = lc.visitor_id
                       AND v.gclid IS NOT NULL AND v.criado_em <= lc.converted_at
-                    ORDER BY v.criado_em DESC LIMIT 1) AS gclid
+                    ORDER BY v.criado_em DESC LIMIT 1) AS gclid,
+                  to_jsonb(lc) -> 'dados_informados' AS dados_informados
              FROM lead_conversions lc LEFT JOIN sites s ON s.id = lc.site_id
             WHERE lc.lead_id = $1::uuid
             ORDER BY lc.converted_at DESC LIMIT 1""", lead_id)
@@ -394,11 +401,30 @@ async def _concluir(pedido: dict, lead: dict, card_id: int | None, person_id: in
                          "identidade/linha do tempo", pedido["id"])
 
 
-def texto_da_nota(conversao: dict | None, quando: datetime) -> str:
-    return (f"Lead converteu de novo pelo MarketingHS "
-            f"({growthhs.origem_do_card_texto(conversao)}) em "
-            f"{growthhs.data_do_vendedor(quando)}. Descrição do card atualizada "
-            f"com dados informados no formulário (não verificados).")
+# Cada valor informado na nota (uma linha só, é o aviso — a descrição leva
+# até `growthhs.MAX_VALOR_EXTRA`).
+MAX_VALOR_NA_NOTA = 200
+
+
+def texto_da_nota(conversao: dict | None, quando: datetime, lead: dict | None = None) -> str:
+    """A nota do card atualizado. Com `lead`, e se a conversão trouxe valores
+    diferentes dos do contato (pergunta 73), eles vão no fim — também quando
+    a descrição já está no teto e o bloco não entrou."""
+    texto = (f"Lead converteu de novo pelo MarketingHS "
+             f"({growthhs.origem_do_card_texto(conversao)}) em "
+             f"{growthhs.data_do_vendedor(quando)}. Descrição do card atualizada "
+             f"com dados informados no formulário (não verificados).")
+    diferentes = (divergencias(lead, (conversao or {}).get("dados_informados"))
+                  if lead is not None else [])
+    itens = []
+    for d in diferentes:
+        rotulo = growthhs.uma_linha(d["rotulo"])[:growthhs.MAX_ROTULO_EXTRA]
+        valor = growthhs.uma_linha(d["valor"])[:MAX_VALOR_NA_NOTA]
+        if rotulo and valor:
+            itens.append(f"{rotulo}: {valor}")
+    if itens:
+        texto += f" {growthhs.ROTULO_INFORMADOS}: {'; '.join(itens)}."
+    return texto
 
 
 async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
@@ -512,7 +538,7 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
     # o lead. A descrição, essa, não repete (a marca do bloco).
     erro_da_nota = None
     try:
-        await cliente.anotar(card_id, texto_da_nota(conversao, quando))
+        await cliente.anotar(card_id, texto_da_nota(conversao, quando, lead))
     except growthhs.ErroTransitorio as erro:
         if pedido["tentativas"] < MAX_TENTATIVAS:
             # No retry a marca evita o segundo bloco e só a nota sai.

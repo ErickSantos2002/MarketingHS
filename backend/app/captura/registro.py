@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from app.ab.costura import Ab, registrar_conversao_ab
 from app.captura.evento import marcar_pagina, publicar_conversao
+from app.captura.informados import dados_informados, divergencias
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,13 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
     para o contato, e o último toque aqui, que vai para a conversão); sem ele,
     a conversão leva os UTMs de `campos`, como sempre. `canal_origem` é o
     `origem` do evento de reconversão (`captura` ou `site`).
+
+    Pergunta 73 (26/10): o que veio de contato em `campos`/`extras` fica na
+    conversão (`dados_informados`, migration 031), e no evento de reconversão
+    vai o que difere do contato (`informados_diferentes`) — o contato em si
+    continua sem ser sobrescrito (`_atualizar`).
     """
+    informados = dados_informados(campos, extras)
     # ⚠️ `lower(email)`, não `email = $1`. `leads_email_unique` é única na
     # coluna CRUA, sem `lower()` — uma linha antiga gravada como
     # `Carla@Empresa.com` não seria achada por uma captura de
@@ -121,8 +128,13 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
         await _atualizar(conn, existente, session_id, campos, extras=extras)
         # R5: contato que volta e converte de novo (o caso de "pediu
         # demonstração") também publica o evento, com a origem.
+        # Pergunta 73: e com o que a pessoa informou de diferente do contato
+        # — contra o contato DEPOIS do `_atualizar`, para o que só preencheu
+        # campo vazio não aparecer como divergência.
         await publicar_conversao(conn, lead_id, origem.page_slug, origem=canal_origem,
-                                 form_id=origem.form_id, site_id=origem.site_id)
+                                 form_id=origem.form_id, site_id=origem.site_id,
+                                 informados=await _diferentes_do_contato(
+                                     conn, lead_id, informados))
 
     await _resolver_identidade(conn, lead_id, email, campos, sql=sql_identidade)
 
@@ -142,6 +154,7 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
         RETURNING id::text""",
         *valores, origem.form_id, origem.site_id, origem.visitor_id,
         origem.page_url, origem.page_path, origem.canal)
+    await _gravar_informados(conn, conversao_id, informados)
     if consentimento is not None:
         await gravar_consentimento(conn, lead_id, conversao_id, consentimento, origem)
 
@@ -161,6 +174,43 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
         if aplicada:
             aplicadas.add(aplicada)
     return lead_id
+
+
+async def _tem_coluna_dados_informados(conn) -> bool:
+    """A 031 está no banco? ⚠️ `'lead_conversions'::regclass` SEM schema, de
+    propósito: resolve pelo `search_path`, como o INSERT acima — é a mesma
+    tabela que acabou de receber a conversão. Sem cache: o custo é uma
+    consulta ao catálogo, e um cache de processo mentiria depois de um
+    rollback (testes) ou de uma migration desfeita."""
+    return bool(await conn.fetchval(
+        """SELECT EXISTS (SELECT 1 FROM pg_attribute
+                           WHERE attrelid = 'lead_conversions'::regclass
+                             AND attname = 'dados_informados' AND NOT attisdropped)"""))
+
+
+async def _gravar_informados(conn, conversao_id: str, informados: dict | None) -> None:
+    """`lead_conversions.dados_informados` (031) da conversão que acabou de
+    nascer. ⚠️ Tolerante à ordem do deploy: sem a coluna, não grava e a
+    captura segue como antes — nenhum caminho de falha nosso pode recusar um
+    lead real, e o histórico é enriquecimento."""
+    if not informados or not await _tem_coluna_dados_informados(conn):
+        return
+    await conn.execute(
+        "UPDATE lead_conversions SET dados_informados = $2::jsonb WHERE id = $1::uuid",
+        conversao_id, informados)
+
+
+async def _diferentes_do_contato(conn, lead_id: str,
+                                 informados: dict | None) -> list[dict] | None:
+    """O que foi informado e difere do contato como ele está agora; `None`
+    sem diferença (o evento não ganha a chave)."""
+    if not informados:
+        return None
+    contato = await conn.fetchrow(
+        """SELECT nome, empresa, cargo, whatsapp, phone_normalized, faturamento,
+                  funcionarios, desafios, indicacao, campos_extras
+             FROM leads WHERE id = $1::uuid""", lead_id)
+    return divergencias(dict(contato) if contato else {}, informados) or None
 
 
 async def gravar_consentimento(conn, lead_id: str, conversao_id: str,
@@ -244,8 +294,16 @@ async def _atualizar(conn, existente, session_id: str | None, campos: dict, *,
     # ⚠️ NÃO DESTRUTIVA (R1, 02/10/2026). Esta rota é anônima: quem soubesse o
     # e-mail de um contato real trocava nome, cargo, empresa, WhatsApp e origem
     # dele mandando o formulário. Agora só se PREENCHE o que está vazio (NULL
-    # ou ''), como `/publico/identidade`. O que a pessoa digitou de diferente
-    # continua registrado onde é histórico: `lead_conversions`.
+    # ou ''), como `/publico/identidade`.
+    #
+    # ⚠️ O que a pessoa digitou de diferente NÃO fica no contato. Até 26/10 o
+    # comentário daqui dizia que ficava em `lead_conversions` — e era falso:
+    # a conversão só guardava a origem, e o valor se perdia (pergunta 73).
+    # Desde a 031 ele fica em `lead_conversions.dados_informados` (gravado
+    # por `registrar_captura`, `_gravar_informados`), e o que diverge do
+    # contato vai no `metadata.informados_diferentes` do evento de
+    # reconversão — é dali que o card do GrowthHS e a linha do tempo mostram
+    # "Informou nesta conversão (não verificado)".
     #
     # ⚠️ Os UTMs andam em BLOCO, e é isso que congela o primeiro toque: se o
     # contato já tem QUALQUER utm_*, nenhum é tocado — misturar o

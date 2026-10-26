@@ -504,6 +504,43 @@ async def test_pessoa_com_card_aberto_atualiza_e_anota_sem_criar(lead_8d):
     assert (meta["card_id"], meta["ja_entregue"], meta["atualizado"]) == (aberto, True, True)
 
 
+async def test_reconversao_com_dados_diferentes_vai_no_bloco_e_na_nota(lead_8d, monkeypatch):
+    """Pergunta 73: o lead reconverteu com outra empresa e outro telefone. O
+    contato não muda (R1), mas o vendedor vê o que foi digitado — no bloco
+    ("Informou nesta conversão (não verificado)") e na nota. O PUT continua
+    só com `description`, só anexando."""
+    conversao = {"page_slug": "phoebus-prova", "form_id": None, "site_nome": None,
+                 "page_url": None, "converted_at": "2026-10-26T13:00:00Z",
+                 "canal": "direto", "gclid": None,
+                 "dados_informados": {"nome": "entrega 8d", "empresa": "Empresa Matriz",
+                                      "whatsapp": "(11) 99999-0003"}}
+
+    async def origem(_conn, _lead_id):
+        return conversao, None
+
+    monkeypatch.setattr(entrega, "origem_do_card", origem)
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, board=7, descricao="Anotação do vendedor")
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+
+    [put] = api.puts()
+    assert set(json.loads(put.content)) == {"description"}
+    descricao = api.cards[aberto]["description"]
+    assert descricao.startswith("Anotação do vendedor\n\n")
+    linhas = descricao.split("\n")
+    i = linhas.index("Informou nesta conversão (não verificado):")
+    assert linhas[i + 1:i + 4] == ["- Empresa: Empresa Matriz",
+                                   "- Telefone: (11) 99999-0003",
+                                   "Cadastro no MarketingHS:"]
+    assert linhas[i - 1].startswith(CABECALHO)
+    [nota] = api.notas
+    assert nota["content"].endswith(
+        "Informou nesta conversão (não verificado): Empresa: Empresa Matriz; "
+        "Telefone: (11) 99999-0003.")
+
+
 async def test_descricao_no_teto_nao_cresce_mas_anota(lead_8d):
     """Reconversão em série com o e-mail de um cliente não faz a descrição do
     card dele crescer sem fim: passado o teto, só a nota sai."""

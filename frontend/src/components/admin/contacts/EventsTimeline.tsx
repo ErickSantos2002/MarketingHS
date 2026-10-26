@@ -97,12 +97,51 @@ function groupEventsByDate(events: ContactEvent[]): Record<string, ContactEvent[
   return groups;
 }
 
+// Pergunta 73 (26/10/2026): a reconversão que trouxe valores diferentes dos
+// do contato grava `metadata.informados_diferentes` (backend/app/captura/
+// informados.py). O contato NÃO é sobrescrito (captura anônima, R1) — isto
+// é só o que a pessoa escreveu no formulário, sem verificação.
+interface Informado {
+  chave: string;
+  rotulo: string;
+  valor: string;
+}
+
+const CHAVE_INFORMADOS = 'informados_diferentes';
+
+function informadosDoEvento(metadata: any): Informado[] {
+  const lista = metadata?.[CHAVE_INFORMADOS];
+  if (!Array.isArray(lista)) return [];
+  return lista.filter(
+    (i): i is Informado =>
+      i != null && typeof i.rotulo === 'string' && typeof i.valor === 'string' && i.valor !== '',
+  );
+}
+
+function InformadosNaConversao({ itens }: { itens: Informado[] }) {
+  if (itens.length === 0) return null;
+  return (
+    <div className="mt-1.5 p-2 rounded border border-border bg-muted/30 text-xs space-y-0.5">
+      <p className="text-muted-foreground font-medium">Informou nesta conversão (não verificado)</p>
+      {itens.map((i) => (
+        <div key={i.chave} className="flex gap-2">
+          <span className="text-muted-foreground">{i.rotulo}:</span>
+          <span className="text-foreground break-all">{i.valor}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MetadataExpander({ metadata }: { metadata: any }) {
   const [open, setOpen] = useState(false);
   if (!metadata || Object.keys(metadata).length === 0) return null;
 
-  // Filter out null/undefined values
-  const entries = Object.entries(metadata).filter(([, v]) => v != null && v !== '');
+  // Filter out null/undefined values. `informados_diferentes` tem quadro
+  // próprio (InformadosNaConversao) — aqui sairia "[object Object]".
+  const entries = Object.entries(metadata).filter(
+    ([k, v]) => k !== CHAVE_INFORMADOS && v != null && v !== '',
+  );
   if (entries.length === 0) return null;
 
   return (
@@ -335,6 +374,7 @@ export function EventsTimeline({ leadId, dniaId }: { leadId: string; dniaId: str
                       <span className="text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(evt.occurred_at), { addSuffix: true, locale: ptBR })}
                       </span>
+                      <InformadosNaConversao itens={informadosDoEvento(evt.metadata)} />
                       <MetadataExpander metadata={evt.metadata} />
                     </div>
                   </div>

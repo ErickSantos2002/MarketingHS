@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from app.captura.informados import divergencias
 from app.database import sessao
 from app.integracoes import ler_segredo
 
@@ -327,13 +328,32 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
     Com `pedido_id` (só no card que NASCE de um pedido — `montar_card`), a
     linha `Pedido MarketingHS: <id>` é a assinatura do card: é por ela que a
     entrega reconhece, num retry, o card que este pedido criou (ver
-    `card_do_pedido`)."""
+    `card_do_pedido`).
+
+    Pergunta 73 (26/10): se a conversão trouxe valores DIFERENTES dos do
+    contato (`conversao.dados_informados`, migration 031), a descrição abre
+    com eles — "Informou nesta conversão (não verificado):", um "- Rótulo:
+    valor" por linha, como as respostas livres — e "Cadastro no
+    MarketingHS:" separa o que é do contato. Sem divergência, a descrição é
+    a de antes, byte a byte. Vale para o card NOVO também: card novo nasce de
+    reconversão quando os cards da pessoa estão todos ganhos ou perdidos."""
     linhas: list[str] = []
 
     def item(rotulo, valor):
         texto = uma_linha(valor)
         if texto:
             linhas.append(f"{rotulo}: {texto}")
+
+    informadas = []
+    for d in divergencias(lead, (conversao or {}).get("dados_informados")):
+        rotulo = _cortar(d["rotulo"], MAX_ROTULO_EXTRA)
+        texto = _cortar(d["valor"], MAX_VALOR_EXTRA)
+        if rotulo and texto:
+            informadas.append(f"- {rotulo}: {texto}")
+    if informadas:
+        linhas.append(f"{ROTULO_INFORMADOS}:")
+        linhas.extend(informadas)
+        linhas.append("Cadastro no MarketingHS:")
 
     item("Empresa", lead.get("empresa"))
     item("Cargo", lead.get("cargo"))
@@ -419,6 +439,8 @@ def montar_card(lead: dict, cfg: Config, *, conversao: dict | None = None,
 
 
 CABECALHO_DO_BLOCO = "— Nova conversão pelo MarketingHS"
+# Pergunta 73: o que o lead digitou nesta conversão e difere do contato.
+ROTULO_INFORMADOS = "Informou nesta conversão (não verificado)"
 AVISO_NAO_VERIFICADO = "(dados informados no formulário, não verificados)"
 ROTULO_DO_PEDIDO = "Pedido MarketingHS"
 
