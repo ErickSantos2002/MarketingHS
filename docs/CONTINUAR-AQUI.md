@@ -8,6 +8,8 @@
 >    `config.secoes` com 8 tipos + editor; portão local **1064 passed, 9
 >    skipped**, node 84, `tsc` 0, guarda 0. Sem migration. Falta: ajustes do
 >    Erick na prévia, deploy de api e sistema, criar a página em produção.
+>    Frente `landing-visual` ✅ mergeada (`7508b11`): visual novo (topo marinho com foto,
+>    Plus Jakarta Sans, comparativo em painel, logos em cor); a casca carrega a fonte.
 >    Texto original do item: (um aparelho só). Com
 >    calma: o Erick traz muito material e criamos juntos texto, imagem,
 >    formulário e jornada. O editor de hoje é de uma seção (título,
