@@ -82,7 +82,7 @@ export type Secao = Cabeca & CorpoDaSecao;
 // destacada — a da casa.
 export const COLUNA_A_PADRAO = "Hoje";
 export const COLUNA_B_PADRAO = "Com a Health & Safety";
-export const BOTAO_DA_CHAMADA_PADRAO = "Quero falar com a equipe";
+export const BOTAO_DA_CHAMADA_PADRAO = "Quero falar com um especialista";
 
 function objeto(valor: unknown): Record<string, unknown> | null {
   return valor && typeof valor === "object" && !Array.isArray(valor)

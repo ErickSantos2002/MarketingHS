@@ -323,7 +323,7 @@ export function urlSegura(url: unknown, origem: string): string | null {
 }
 
 /**
- * O upload do editor devolve o caminho do backend (`/publico/imagem/<id>`,
+ * O upload do editor devolve o caminho do backend (publico/imagem/<id>,
  * sem `/api`). Em produção o nginx só repassa `/api/` ao backend: sem o
  * prefixo, a imagem cairia no SPA e viria quebrada. URL absoluta (ou já com
  * `/api`) passa como está. Mora aqui, e não no `Landing.tsx`, porque o topo,

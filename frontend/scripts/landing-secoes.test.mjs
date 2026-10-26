@@ -145,7 +145,7 @@ test("chamada: botão vazio cai no cta_text e depois no padrão; itens só texto
   assert.equal(a.botao, "Quero o teste");
   assert.deepEqual(a.itens, ["um"]);
   const [b] = ler({ secoes: [{ tipo: "chamada", titulo: "Teste", itens: "não é lista" }] });
-  assert.equal(b.botao, "Quero falar com a equipe");
+  assert.equal(b.botao, "Quero falar com um especialista");
   assert.deepEqual(b.itens, []);
   // Chamada sem nada além do botão não tem o que chamar.
   assert.deepEqual(ler({ secoes: [{ tipo: "chamada", botao: "Só botão" }] }), []);
