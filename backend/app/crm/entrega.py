@@ -115,10 +115,32 @@ CHAMADAS_POR_PEDIDO = 10
 LEAD_DE_TESTE = """(l.tipo = 'teste'
     AND (l.email IS NULL OR lower(l.email) LIKE '%@exemplo.invalid'))"""
 
+# Pergunta 80 (Erick, 26/10/2026): nada que veio do DataCore (ERP Tiny, a base
+# de clientes) vai ao comercial — só o que veio de landing, formulário de site
+# ou import manual (CSV). É a SEGUNDA linha: a sincronização saiu da tela e da
+# API e os contatos foram apagados; isto segura o que sobrar ou voltar. Três
+# camadas: `enfileirar` recusa (botão → 409, nó de jornada → passo `skipped`),
+# o gatilho da migration 033 descarta o pedido da regra de automação (que é
+# gatilho de banco e não passa por aqui), e `_entregar` falha o pedido que já
+# estava na fila. Comparação sem caixa e sem espaço, igual à 033.
+ORIGENS_RECUSADAS = ("datacore",)
+MOTIVO_ORIGEM = ("Contato de origem DataCore (base de clientes do ERP) não vai ao "
+                 "comercial — só vai o que veio de landing, formulário de site ou "
+                 "importação manual (pergunta 80).")
+
+
+class ContatoRecusado(Exception):
+    """O contato não pode ir ao comercial pela origem (ver `ORIGENS_RECUSADAS`)."""
+
+
+def origem_recusada(source: str | None) -> bool:
+    return (source or "").strip().lower() in ORIGENS_RECUSADAS
+
+
 _COLUNAS_LEAD = """id::text AS id, nome, email, whatsapp, phone_normalized, empresa,
     cargo, faturamento, funcionarios, desafios, indicacao, utm_source, utm_medium,
     utm_campaign, utm_term, utm_content, lead_score, etiqueta,
-    dnia_id::text AS dnia_id, deleted_at, campos_extras"""
+    dnia_id::text AS dnia_id, deleted_at, campos_extras, source"""
 
 
 async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
@@ -166,7 +188,14 @@ def espera_transitoria(tentativas: int) -> timedelta:
 async def enfileirar(conn, lead_id: str, origem: str, *, acao: str = "criar",
                      rule_id: str | None = None,
                      journey_run_id: str | None = None) -> int | None:
-    """Um pedido por lead e ação enquanto pendente; o segundo é absorvido."""
+    """Um pedido por lead e ação enquanto pendente; o segundo é absorvido.
+
+    Contato de origem recusada (pergunta 80) levanta `ContatoRecusado` — nem
+    chega ao INSERT. Quem chama decide o que dizer: o botão responde 409, o nó
+    de jornada registra o passo `skipped` e segue."""
+    source = await conn.fetchval("SELECT source FROM leads WHERE id = $1::uuid", lead_id)
+    if origem_recusada(source):
+        raise ContatoRecusado(MOTIVO_ORIGEM)
     return await conn.fetchval(
         """INSERT INTO crm_handoffs (lead_id, acao, origem, rule_id, journey_run_id)
            VALUES ($1::uuid, $2, $3, $4::uuid, $5::uuid)
@@ -513,6 +542,12 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
         # do aviso e do webhook. O nó já conferiu; a lista pode ter mudado
         # entre o nó e a saída. O GrowthHS nem é consultado.
         await _falhar(pedido, lead, "modo teste: fora da lista da jornada")
+        return "falhas"
+    if origem_recusada(lead.get("source")):
+        # Pergunta 80: o pedido que já estava na fila (criado antes da 033, ou
+        # o contato que passou a ser `datacore`) falha à vista, na linha do
+        # tempo — e o GrowthHS nem é consultado.
+        await _falhar(pedido, lead, MOTIVO_ORIGEM)
         return "falhas"
     if pedido["acao"] == "mover":
         await _falhar(pedido, lead, MOTIVO_MOVER)

@@ -101,16 +101,14 @@ class Settings(BaseSettings):
     ENVIO_AQUECIMENTO_DIA1: int = 50
     ENVIO_AQUECIMENTO_INICIO: str = ""
 
-    # DataCore (Tiny ERP), o banco de onde vêm os clientes. SOMENTE LEITURA:
-    # a sincronização é de mão única, o ERP manda e o MarketingHS obedece.
-    # Vazio = sincronização desligada, e a rota responde 503 em vez de estourar.
+    # ⚠️ SEM USO desde 26/10/2026 (pergunta 80): a sincronização com o
+    # DataCore (Tiny ERP) saiu da tela e da API, e nada lê estas duas chaves.
+    # Ficam declaradas só porque o .env de produção ainda as tem — tirar daqui
+    # antes de tirar de lá derruba o boot (ver o aviso no fim desta classe).
+    # Ordem para remover: 1) tirar do .env da api e do worker; 2) tirar daqui.
     DATACORE_URL: str = ""
 
-    # ⚠️ Ligado, faz a sincronização varrer e-mail de nota fiscal e conta a
-    # receber, além do cadastro do cliente. Medido em 02/09/2026: sobe o alcance
-    # de 190 para 327 clientes. É decisão do Erick e do Nicholson, não do
-    # sistema — e-mail de nota fiscal foi coletado para faturar, não para
-    # marketing. Nasce desligado de propósito.
+    # Sem uso (idem). Ligava a varredura de e-mail de nota fiscal na carga.
     DATACORE_EMAIL_DE_NOTAS: bool = False
 
     # ⚠️ Toda chave lida do ambiente PRECISA ser declarada aqui, mesmo que outro
