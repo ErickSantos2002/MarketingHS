@@ -13,6 +13,8 @@ arquivo diz **quem faz o quê agora**. Só a coordenadora edita este arquivo.
 
 ## As frentes
 
+**Estado em 26/10 (6):** `nota-do-vendedor` ✅ mergeada (`653c81e`); portão local **1056 passed, 9 skipped**, `tsc` 0. Sem migration; falta deploy de api e worker. Achado de segurança no HSGrowth (XSS nas notas) → `docs/pedido-hsgrowth-2026-10-26.md`. Nenhuma frente aberta.
+
 **Estado em 26/10 (5):** aberta `nota-do-vendedor` (pergunta 79). Dona de: `backend/app/crm/entrega.py`, `backend/app/crm/growthhs.py` (montagem de descrição/bloco/nota), testes de CRM/entrega/reconversão e `docs/frentes/nota-do-vendedor.md`. Testa no Postgres local (porta 5443); não roda a suíte em produção.
 
 **Estado em 26/10 (4):** `reconversao-dados` ✅ mergeada (`bdc428c`). Portão do integrado no Postgres local: **1038 passed, 9 skipped** (7 `base_real` + 2 da 032 já aplicada), `tsc` 0, guarda 0. 031 e 032 NÃO aplicadas em produção; deploy pendente. Nenhuma frente aberta.
