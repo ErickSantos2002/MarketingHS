@@ -1,7 +1,11 @@
 import type { CSSProperties } from "react";
 import { Formulario } from "./Formulario";
 import { COR_CTA_PADRAO } from "./padroes";
-import { linkDoWhatsapp, paragrafosDoCorpo, textoDaConfig, urlSegura, type ConfigDaPagina } from "./campos";
+import {
+  enderecoDaImagem, linkDoWhatsapp, paragrafosDoCorpo, textoDaConfig, urlSegura, type ConfigDaPagina,
+} from "./campos";
+import { Secoes } from "./Secoes";
+import { secoesDaConfig } from "./secoes";
 
 export type { ConfigDaPagina } from "./campos";
 
@@ -9,14 +13,8 @@ export type { ConfigDaPagina } from "./campos";
 // confirmação) sai da mesma constante que o editor mostra.
 const ACENTO = { "--landing-accent": COR_CTA_PADRAO } as CSSProperties;
 
+// O prefixo que a imagem do upload ganha (`enderecoDaImagem`, em campos.ts).
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
-
-// O upload do editor devolve o caminho do backend (publico/imagem/<id>, sem /api).
-// Em produção o nginx só repassa `/api/` ao backend: sem o prefixo, a imagem
-// cairia no SPA e viria quebrada. URL absoluta (ou já com /api) passa como está.
-function enderecoDaImagem(url: string): string {
-  return /^\/publico\//.test(url) ? `${BASE}${url}` : url;
-}
 
 function IconeWhatsapp() {
   return (
@@ -43,7 +41,7 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
   // inteira (o bundle da landing não tem ErrorBoundary).
   const imagemDaConfig = textoDaConfig(config.imagem_url);
   const imagem = imagemDaConfig
-    ? urlSegura(enderecoDaImagem(imagemDaConfig), window.location.origin)
+    ? urlSegura(enderecoDaImagem(imagemDaConfig, BASE), window.location.origin)
     : null;
   const numeroDoWhatsapp = textoDaConfig(config.whatsapp?.numero).replace(/\D/g, "");
   const whatsapp = numeroDoWhatsapp
@@ -51,37 +49,48 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
     : null;
   // Página antiga (sem imagem nem corpo) fica no cartão único de antes.
   const completa = !!imagem || corpo.length > 0;
+  // As seções vêm depois do topo, na ordem da config. Sem `secoes`, a lista
+  // é vazia e a página é exatamente a de antes (mesmo DOM, mesmas classes).
+  const secoes = secoesDaConfig(config, window.location.origin, BASE);
+
+  // `id="formulario"` no cartão: é para onde o botão da seção "chamada" rola.
+  const topo = completa ? (
+    <div className="landing-grade">
+      <section className="landing-conteudo">
+        <h1>{headline}</h1>
+        <p className="sub">{subheadline}</p>
+        {imagem && (
+          <img className="landing-imagem" src={imagem} alt={headline} />
+        )}
+        {corpo.length > 0 && (
+          <div className="landing-corpo">
+            {corpo.map((bloco, i) => bloco.tipo === "p"
+              ? <p key={i}>{bloco.texto}</p>
+              : <ul key={i}>{bloco.itens.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+          </div>
+        )}
+      </section>
+      <section id="formulario" className="hero landing-cartao" aria-label="Formulário de contato">
+        <Formulario slug={slug} config={config} />
+      </section>
+    </div>
+  ) : (
+    <section id="formulario" className="hero">
+      <h1>{headline}</h1>
+      <p className="sub">{subheadline}</p>
+      <Formulario slug={slug} config={config} />
+    </section>
+  );
 
   return (
-    <main className={["landing", completa && "landing-completa", whatsapp && "landing-com-whatsapp"]
-                     .filter(Boolean).join(" ")} style={ACENTO}>
-      {completa ? (
-        <div className="landing-grade">
-          <section className="landing-conteudo">
-            <h1>{headline}</h1>
-            <p className="sub">{subheadline}</p>
-            {imagem && (
-              <img className="landing-imagem" src={imagem} alt={headline} />
-            )}
-            {corpo.length > 0 && (
-              <div className="landing-corpo">
-                {corpo.map((bloco, i) => bloco.tipo === "p"
-                  ? <p key={i}>{bloco.texto}</p>
-                  : <ul key={i}>{bloco.itens.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
-              </div>
-            )}
-          </section>
-          <section className="hero landing-cartao" aria-label="Formulário de contato">
-            <Formulario slug={slug} config={config} />
-          </section>
-        </div>
-      ) : (
-        <section className="hero">
-          <h1>{headline}</h1>
-          <p className="sub">{subheadline}</p>
-          <Formulario slug={slug} config={config} />
-        </section>
-      )}
+    <main className={["landing", completa && "landing-completa", whatsapp && "landing-com-whatsapp",
+                      secoes.length > 0 && "landing-com-secoes"].filter(Boolean).join(" ")} style={ACENTO}>
+      {secoes.length > 0 ? (
+        <>
+          <div className="landing-topo">{topo}</div>
+          <Secoes secoes={secoes} />
+        </>
+      ) : topo}
       {whatsapp && (
         <a className="landing-whatsapp" href={whatsapp} target="_blank" rel="noopener noreferrer"
            aria-label="Falar no WhatsApp">
