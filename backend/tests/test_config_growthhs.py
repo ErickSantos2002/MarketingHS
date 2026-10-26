@@ -80,13 +80,13 @@ async def test_grava_parcial_e_nunca_devolve_segredos(cliente, banco_growthhs, t
         # nosso tem de ir sem — senão 401 para sempre.
         "client_secret": f"  {SEGREDO_CLIENTE}\n", "list_id": 22,
         "boards_conferidos": [6, 7], "webhook_secret": f" {SEGREDO_WEBHOOK} ",
-        "listas_reuniao": [28], "listas_ganho": [32, 33]})
+        "listas_reuniao": [28], "listas_ganho": [32, 34]})
     assert r.status_code == 200, r.text
     corpo = _amb(r)
     assert corpo["base_url"] == "https://growthhs.exemplo.invalid"
     assert corpo["client_id"] == "hsg_cliente"
     assert corpo["list_id"] == 22 and corpo["boards_conferidos"] == [6, 7]
-    assert corpo["listas_reuniao"] == [28] and corpo["listas_ganho"] == [32, 33]
+    assert corpo["listas_reuniao"] == [28] and corpo["listas_ganho"] == [32, 34]
     assert corpo["client_secret"] == {"configurado": True, "ultimos4": "1234"}
     assert corpo["webhook_secret"] == {"configurado": True}
     # Completo, mas não ATIVO: gravar não liga a fila.
@@ -106,7 +106,7 @@ async def test_grava_parcial_e_nunca_devolve_segredos(cliente, banco_growthhs, t
     corpo = _amb(r)
     assert corpo["app_url"] == "https://app.exemplo.invalid"
     assert corpo["client_id"] == "hsg_cliente" and corpo["list_id"] == 22
-    assert corpo["boards_conferidos"] == [6, 7] and corpo["listas_ganho"] == [32, 33]
+    assert corpo["boards_conferidos"] == [6, 7] and corpo["listas_ganho"] == [32, 34]
     assert corpo["client_secret"]["configurado"] and corpo["webhook_secret"]["configurado"]
 
     # String vazia é "não mexi", não "apague".
@@ -173,11 +173,13 @@ async def test_mostra_urls_do_webhook(cliente, banco_growthhs, token_admin, monk
     for amb in ("homologacao", "producao"):
         base = f"https://mkt.exemplo.invalid/api/publico/growthhs/webhook/{amb}?evento="
         assert _amb(r, amb)["webhook_urls"] == {
-            "meeting_scheduled": base + "meeting_scheduled", "deal_won": base + "deal_won"}
+            e: base + e for e in ("meeting_scheduled", "deal_won", "deal_lost", "no_show")}
         # Sem configuração: "Não configurado", com as listas padrão.
         assert _amb(r, amb)["completo"] is False and _amb(r, amb)["ativo"] is False
         assert _amb(r, amb)["listas_reuniao"] == [28]
         assert _amb(r, amb)["listas_ganho"] == [32]
+        assert _amb(r, amb)["listas_perdido"] == [27, 33]
+        assert _amb(r, amb)["listas_no_show"] == [25]
     assert r.json()["ativo"] is None and r.json()["configurado"] is False
 
 

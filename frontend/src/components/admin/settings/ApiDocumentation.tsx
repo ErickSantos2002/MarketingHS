@@ -587,10 +587,10 @@ curl -X POST \\
     method: 'PATCH / POST',
     path: '/publico/contato/status',
     title: 'Atualizar status do contato',
-    description: 'Atualiza o status do contato via dnia_id. Registra contact_updated e, para Lead Qualificado, MQL e Venda realizada, o evento específico que a listagem conta. PATCH é a rota; POST é alias com a mesma semântica.',
+    description: 'Atualiza o status do contato via dnia_id. Registra contact_updated e, para Lead Qualificado, MQL, Venda realizada e Negócio perdido, o evento específico que a listagem conta. PATCH é a rota; POST é alias com a mesma semântica.',
     params: [
       { name: 'dnia_id', type: 'uuid (body)', required: 'Sim', description: 'Identificador único do contato' },
-      { name: 'status', type: 'string (body)', required: 'Sim', description: 'Um dos status cadastrados (máx. 60 caracteres, sem diferenciar maiúscula). Status desconhecido responde 400 com a lista dos que valem — não é criado. Padrões: Lead | Iniciado | Lead Qualificado | MQL - Reunião agendada | SQL - Em negociação | Em contrato | Venda realizada' },
+      { name: 'status', type: 'string (body)', required: 'Sim', description: 'Um dos status cadastrados (máx. 60 caracteres, sem diferenciar maiúscula). Status desconhecido responde 400 com a lista dos que valem — não é criado. Padrões: Lead | Iniciado | Lead Qualificado | MQL - Reunião agendada | SQL - Em negociação | Em contrato | Venda realizada | Negócio perdido' },
     ],
     curl: `curl -X PATCH \\
   '${BASE_URL}/publico/contato/status' \\

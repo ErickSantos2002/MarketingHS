@@ -79,6 +79,11 @@ CAMPOS_EMAIL = ("email", "email_commercial", "email_personal", "email_alternativ
 # para a lista de ganho (is_done_stage), a 32. São os padrões da 029.
 LISTAS_REUNIAO_PADRAO = (28,)
 LISTAS_GANHO_PADRAO = (32,)
+# Os padrões da 032 (pergunta 74): "Perdido" move o card para a lista
+# `is_lost_stage` do board — 27 no board 6, 33 no board 7 —, e "No Show" é o
+# card ir para 25 "Reagendamento".
+LISTAS_PERDIDO_PADRAO = (27, 33)
+LISTAS_NO_SHOW_PADRAO = (25,)
 
 
 @dataclass(frozen=True)
@@ -93,6 +98,8 @@ class Config:
     # Com padrão: quem constrói `Config` à mão (testes, entrega) não muda.
     listas_reuniao: tuple[int, ...] = LISTAS_REUNIAO_PADRAO
     listas_ganho: tuple[int, ...] = LISTAS_GANHO_PADRAO
+    listas_perdido: tuple[int, ...] = LISTAS_PERDIDO_PADRAO
+    listas_no_show: tuple[int, ...] = LISTAS_NO_SHOW_PADRAO
     # De qual GrowthHS é esta configuração (migration 030). É o carimbo que a
     # entrega grava ao lado de todo card_id/person_id — sem ele, o id não vale.
     ambiente: str | None = None
@@ -114,8 +121,16 @@ class Config:
         return f"{self.app_url.rstrip('/')}/cards/{card_id}"
 
 
-_COLUNAS_CONFIG = """ambiente, base_url, client_id, list_id, boards_conferidos,
-    app_url, listas_reuniao, listas_ganho"""
+# ⚠️ A linha inteira (`*`), não uma lista de colunas: as listas da 032 são
+# lidas com `.get` e, sem a migration, ficam no padrão. Com a lista fixa, um
+# deploy antes da 032 faria a leitura falhar — e `ler_config` cair no "não
+# configurado" para a fila de entrega E para a volta.
+_COLUNAS_CONFIG = "*"
+
+
+def _listas(linha, coluna: str, padrao: tuple[int, ...]) -> tuple[int, ...]:
+    valor = linha.get(coluna) if linha else None
+    return tuple(valor) if valor is not None else padrao
 
 
 async def _config_da_linha(linha, ambiente: str | None) -> Config:
@@ -128,12 +143,10 @@ async def _config_da_linha(linha, ambiente: str | None) -> Config:
         list_id=linha["list_id"] if linha else None,
         boards_conferidos=tuple(linha["boards_conferidos"] or ()) if linha else (),
         app_url=linha["app_url"] if linha else None,
-        listas_reuniao=(tuple(linha["listas_reuniao"]) if linha
-                        and linha["listas_reuniao"] is not None
-                        else LISTAS_REUNIAO_PADRAO),
-        listas_ganho=(tuple(linha["listas_ganho"]) if linha
-                      and linha["listas_ganho"] is not None
-                      else LISTAS_GANHO_PADRAO),
+        listas_reuniao=_listas(linha, "listas_reuniao", LISTAS_REUNIAO_PADRAO),
+        listas_ganho=_listas(linha, "listas_ganho", LISTAS_GANHO_PADRAO),
+        listas_perdido=_listas(linha, "listas_perdido", LISTAS_PERDIDO_PADRAO),
+        listas_no_show=_listas(linha, "listas_no_show", LISTAS_NO_SHOW_PADRAO),
         ambiente=ambiente)
 
 

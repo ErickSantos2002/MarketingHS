@@ -10,6 +10,8 @@ export const STATUS_OPTIONS = [
   'Venda realizada',
   'Em contrato',
   'Iniciado',
+  // Fim de funil (migration 032, pergunta 74): o card perdido no GrowthHS.
+  'Negócio perdido',
 ] as const;
 
 // A cor do status é este mapa, por lugar no funil, em token do DS — em todo
@@ -24,6 +26,8 @@ export const STATUS_COLORS: Record<string, string> = {
   'Venda realizada': 'var(--color-success-600)',
   'Em contrato': 'var(--color-success-700)',
   'Iniciado': 'var(--color-primary-800)',
+  // O único vermelho do mapa: perdido é o único estágio negativo.
+  'Negócio perdido': 'var(--color-danger-600)',
 };
 
 export function corDoStatus(status: string | null | undefined): string {

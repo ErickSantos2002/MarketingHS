@@ -16,6 +16,8 @@ STATUS_VALIDOS = (
     "SQL - Em negociação",
     "Em contrato",
     "Venda realizada",
+    # Fim de funil desde a 032 (pergunta 74): o card perdido no GrowthHS.
+    "Negócio perdido",
 )
 
 MODOS = ("enriquecer", "sobrescrever")

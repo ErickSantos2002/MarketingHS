@@ -17,6 +17,18 @@ faria o indicador de agendamentos (`painel.py`, que conta
 `meeting_scheduled`) contar cada reunião do CRM em dobro. Por isso só o
 `contact_updated` (com as mesmas chaves de metadata que o painel lê) sai
 daqui.
+
+**"Negócio perdido" (032, pergunta 74) não segue a `sort_order`.** Ele é fim
+de funil, fora da régua (`sort_order` 8 só para ficar por último na lista):
+
+- o `deal_lost` leva qualquer status a "Negócio perdido" — MENOS "Venda
+  realizada": venda não é rebaixada por um card perdido (outra oportunidade
+  da mesma pessoa); o evento entra na linha do tempo e o status fica;
+- lead perdido que tem reunião nova ou venda volta para o funil: perdido
+  conta como o começo da régua. Sem isso a `sort_order` 8 o prenderia em
+  perdido para sempre, e a renutrição não teria saída.
+
+`no_show` não tem estágio: é só evento.
 """
 
 import logging
@@ -26,7 +38,11 @@ logger = logging.getLogger(__name__)
 ESTAGIO_POR_EVENTO = {
     "meeting_scheduled": "MQL - Reunião agendada",
     "deal_won": "Venda realizada",
+    "deal_lost": "Negócio perdido",
 }
+
+PERDIDO = ESTAGIO_POR_EVENTO["deal_lost"]
+VENDA = ESTAGIO_POR_EVENTO["deal_won"]
 
 DESCRICAO_CRM = "Mudança de status pelo CRM"
 
@@ -35,7 +51,9 @@ async def avancar_status(conn, lead_id: str, novo: str, *,
                          metadata_extra: dict) -> tuple[str | None, str, bool]:
     """`(anterior, atual, mudou)`. Grava só se `sort_order(novo) >
     sort_order(anterior)`; status anterior fora de `lead_statuses` (ou nulo)
-    conta como o começo do funil."""
+    conta como o começo do funil. "Negócio perdido" é a exceção do docstring
+    do módulo: para ele, só "Venda realizada" (e ele mesmo) segura; vindo
+    dele, qualquer estágio do funil avança."""
     linha = await conn.fetchrow(
         """SELECT l.status,
                   (SELECT sort_order FROM lead_statuses WHERE name = l.status) AS ordem_atual,
@@ -47,7 +65,11 @@ async def avancar_status(conn, lead_id: str, novo: str, *,
         # não inventa status — registra e não mexe.
         logger.warning("retorno do CRM: estágio %r não existe em lead_statuses", novo)
         return anterior, anterior, False
-    if linha["ordem_atual"] is not None and linha["ordem_nova"] <= linha["ordem_atual"]:
+    if novo == PERDIDO:
+        if anterior in (PERDIDO, VENDA):
+            return anterior, anterior, False
+    elif (anterior != PERDIDO and linha["ordem_atual"] is not None
+          and linha["ordem_nova"] <= linha["ordem_atual"]):
         return anterior, anterior, False
     await conn.execute("UPDATE leads SET status = $2 WHERE id = $1::uuid", lead_id, novo)
     metadata = {"de": anterior, "para": novo, "status_anterior": anterior,

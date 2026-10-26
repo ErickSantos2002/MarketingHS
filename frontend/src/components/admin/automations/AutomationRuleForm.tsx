@@ -35,7 +35,7 @@ const CONDITION_TYPES = [
   { value: 'created_at', label: 'Período (data de criação)' },
 ];
 
-const STATUS_VALUES = ['Lead', 'Lead Qualificado', 'MQL - Reunião agendada', 'SQL - Em negociação', 'Venda realizada', 'Em contrato', 'Iniciado'];
+const STATUS_VALUES = ['Lead', 'Lead Qualificado', 'MQL - Reunião agendada', 'SQL - Em negociação', 'Venda realizada', 'Em contrato', 'Iniciado', 'Negócio perdido'];
 const ETIQUETA_VALUES = ['hotlead', 'warm', 'raw'];
 
 const OPERATORS_MAP: Record<string, { value: string; label: string }[]> = {

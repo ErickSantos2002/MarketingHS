@@ -44,13 +44,15 @@ type EstadoAmbiente = {
   boards_conferidos: number[];
   listas_reuniao: number[];
   listas_ganho: number[];
+  listas_perdido: number[];
+  listas_no_show: number[];
   // Nenhum segredo volta do backend: do client_secret, só os 4 últimos.
   client_secret: { configurado: boolean; ultimos4: string | null };
   webhook_secret: { configurado: boolean };
   // Tem o que a entrega precisa — é o que "Usar este ambiente" exige.
   completo: boolean;
   faltando: string[];
-  webhook_urls: { meeting_scheduled: string; deal_won: string };
+  webhook_urls: { meeting_scheduled: string; deal_won: string; deal_lost: string; no_show: string };
 };
 
 type EstadoGrowthHS = {
@@ -80,7 +82,7 @@ const MIN_SEGREDO_WEBHOOK = 16;
  *  não é uma lista de ids válida (número > 0, sem repetido, até 10). */
 function lerIds(texto: string, exigir = false): number[] | string {
   const partes = texto.split(/[\s,;]+/).filter(Boolean);
-  // Listas de reunião/ganho vazias fariam o webhook de volta ignorar todo
+  // Listas de reunião/ganho/perdido/no show vazias fariam o webhook de volta ignorar todo
   // evento em silêncio — o backend recusa (422); aqui só se avisa antes.
   if (exigir && partes.length === 0) return 'Informe ao menos uma lista.';
   if (partes.some((p) => !/^\d+$/.test(p) || Number(p) <= 0)) {
@@ -135,6 +137,8 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
   const [boardsInput, setBoardsInput] = useState('');
   const [reuniaoInput, setReuniaoInput] = useState('');
   const [ganhoInput, setGanhoInput] = useState('');
+  const [perdidoInput, setPerdidoInput] = useState('');
+  const [noShowInput, setNoShowInput] = useState('');
   const [webhookSecretInput, setWebhookSecretInput] = useState('');
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
   // O salvo: base de "há mudança" e de "não salvo". Só muda quando ESTE
@@ -151,6 +155,8 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
     setBoardsInput(idsComoTexto(c.boards_conferidos));
     setReuniaoInput(idsComoTexto(c.listas_reuniao));
     setGanhoInput(idsComoTexto(c.listas_ganho));
+    setPerdidoInput(idsComoTexto(c.listas_perdido));
+    setNoShowInput(idsComoTexto(c.listas_no_show));
     setClientSecretInput('');
     setWebhookSecretInput('');
   };
@@ -185,10 +191,16 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
   const boards = lerIds(boardsInput);
   const reuniao = lerIds(reuniaoInput, true);
   const ganho = lerIds(ganhoInput, true);
+  const perdido = lerIds(perdidoInput, true);
+  const noShow = lerIds(noShowInput, true);
   const webhookCurto =
     webhookSecretInput.trim().length > 0 && webhookSecretInput.trim().length < MIN_SEGREDO_WEBHOOK;
   const listaInvalida =
-    typeof boards === 'string' || typeof reuniao === 'string' || typeof ganho === 'string';
+    typeof boards === 'string' ||
+    typeof reuniao === 'string' ||
+    typeof ganho === 'string' ||
+    typeof perdido === 'string' ||
+    typeof noShow === 'string';
 
   const handleSave = async () => {
     if (listaInvalida || webhookCurto) return;
@@ -202,6 +214,8 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
         boards_conferidos: boards,
         listas_reuniao: reuniao,
         listas_ganho: ganho,
+        listas_perdido: perdido,
+        listas_no_show: noShow,
       };
       if (listIdInput.trim().length > 0) corpo.list_id = Number(listIdInput.trim());
       // Segredo em branco = manter o salvo. O `trim()` importa: o GrowthHS faz
@@ -263,6 +277,8 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
     boardsInput !== idsComoTexto(salvo.boards_conferidos) ||
     reuniaoInput !== idsComoTexto(salvo.listas_reuniao) ||
     ganhoInput !== idsComoTexto(salvo.listas_ganho) ||
+    perdidoInput !== idsComoTexto(salvo.listas_perdido) ||
+    noShowInput !== idsComoTexto(salvo.listas_no_show) ||
     clientSecretInput.trim().length > 0 ||
     webhookSecretInput.trim().length > 0;
   const outro = ativoAtual && ativoAtual !== ambiente ? ativoAtual : null;
@@ -468,6 +484,16 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
           'Listas de negócio ganho (produção: 32).',
           ganhoInput, setGanhoInput, ganho, '32',
         )}
+        {campoIds(
+          `${prefixo}-listas-perdido`, 'Listas de perdido',
+          'Listas de negócio perdido (produção: 27, 33).',
+          perdidoInput, setPerdidoInput, perdido, '27, 33',
+        )}
+        {campoIds(
+          `${prefixo}-listas-no-show`, 'Listas de No Show',
+          'Listas que contam como No Show (produção: 25, Reagendamento).',
+          noShowInput, setNoShowInput, noShow, '25',
+        )}
       </div>
 
       {status === 'connected' && (
@@ -526,8 +552,8 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
           <p className="text-xs font-medium">Volta do GrowthHS (webhook) — {NOME[ambiente]}</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             No GrowthHS da {NOME[ambiente]}, cadastre uma automação para cada URL abaixo, com o
-            segredo deste ambiente. É por ela que reunião agendada e negócio ganho voltam para o
-            contato — e só valem enquanto este for o ambiente ativo.
+            segredo deste ambiente. É por ela que reunião agendada, negócio ganho, negócio perdido e
+            No Show voltam para o contato — e só valem enquanto este for o ambiente ativo.
           </p>
         </div>
 
@@ -574,6 +600,8 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
           {([
             ['Reunião agendada', dados.webhook_urls.meeting_scheduled],
             ['Negócio ganho', dados.webhook_urls.deal_won],
+            ['Negócio perdido', dados.webhook_urls.deal_lost],
+            ['No Show', dados.webhook_urls.no_show],
           ] as const).map(([rotulo, url]) => (
             <div key={rotulo} className="flex items-center gap-2 text-xs min-w-0">
               <span className="text-muted-foreground shrink-0">{rotulo}:</span>
@@ -589,6 +617,11 @@ function AmbienteGrowthHS({ dados, ativoAtual, onEstado }: PropsAmbiente) {
               </Button>
             </div>
           ))}
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Gatilho de cada automação: reunião e ganho, card movido para a lista; perdido, card
+            perdido; No Show, card movido para a lista de reagendamento. A ação é sempre enviar
+            webhook.
+          </p>
         </div>
       </div>
     </div>
