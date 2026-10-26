@@ -198,6 +198,11 @@ async def _lead_conversions_temporaria(conexao, *, com_031: bool):
     await conexao.execute(
         "CREATE TEMP TABLE lead_conversions (LIKE public.lead_conversions "
         "INCLUDING DEFAULTS) ON COMMIT DROP")
+    # A cópia nasce com a forma de ANTES da 031 — com a 031 já no `public`
+    # (banco local de teste, ou produção depois de aplicada), o LIKE traria
+    # a coluna.
+    await conexao.execute(
+        "ALTER TABLE pg_temp.lead_conversions DROP COLUMN IF EXISTS dados_informados")
     # O nome sem schema (o do `registro.py`) tem que cair na temporária.
     assert await conexao.fetchval(
         "SELECT n.nspname LIKE 'pg_temp%' FROM pg_class c JOIN pg_namespace n "

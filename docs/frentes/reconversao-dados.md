@@ -43,6 +43,18 @@ Aberta em 26/10/2026. Spec:
   revertida com `lead_conversions` TEMPORÁRIA (o `pg_temp` vem antes do
   `public`; a 031 é aplicada nela, duas vezes).
 - `tests/test_crm_entrega.py`: +1 (bloco e nota com os valores informados).
+- Rodados os 16 arquivos de captura + CRM/GrowthHS (reconversao_dados,
+  captura, prova_captura, prova_site, conversao, conversao_authenticated,
+  r5_jornadas, crm_entrega, crm_caminhos, prova_crm, growthhs_cliente,
+  growthhs_ambientes, growthhs_webhook, config_growthhs, leitura_growthhs,
+  growthhs_config_029):
+  - produção SEM a 031 (transação revertida): **471 passed** (42 min);
+  - banco local (`banco-teste-local.sh`, 031 aplicada 2×): **464 passed,
+    7 skipped** (os 7 são `base_real`, que exigem a base de produção). Um
+    teste falhou na 1ª rodada local — a cópia temporária herdava a coluna
+    do `public`; corrigido (a cópia nasce sem ela).
+- `tsc` 0; `guarda:visual` 0 em `EventsTimeline.tsx`. Suíte inteira não
+  rodada (é da coordenadora).
 
 ## Perguntas
 
