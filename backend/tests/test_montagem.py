@@ -71,6 +71,53 @@ def test_campo_vazio_vira_string_vazia_nao_a_tag_crua():
     assert saida == "<p>Olá </p>"
 
 
+# ── {{primeiro_nome}} ─────────────────────────────────────────────────────────
+# Os 25 e-mails trazidos do RD saúdam com "*|PRIMEIRO_NOME|*", que a importação
+# virou `{{primeiro_nome}}`. Sem a troca, o contato lê "Olá, {{primeiro_nome}}".
+
+def _primeiro(nome):
+    return aplicar_merge_tags("Olá, {{primeiro_nome}}!", {"nome": nome}, "https://x.test/u")
+
+
+def test_primeiro_nome_de_nome_completo():
+    assert _primeiro("Carla Souza Lima") == "Olá, Carla!"
+
+
+def test_primeiro_nome_de_nome_de_uma_palavra():
+    assert _primeiro("Carla") == "Olá, Carla!"
+
+
+def test_primeiro_nome_ignora_espacos_nas_pontas_e_preserva_a_caixa():
+    assert _primeiro("  joão   da Silva ") == "Olá, joão!"
+    assert _primeiro("\tMARIA Clara") == "Olá, MARIA!"
+
+
+def test_primeiro_nome_vazio_nulo_ou_so_espacos_vira_string_vazia():
+    for nome in ("", None, "   "):
+        assert _primeiro(nome) == "Olá, !"
+    assert aplicar_merge_tags("Olá, {{primeiro_nome}}!", {}, "u") == "Olá, !"
+
+
+def test_primeiro_nome_e_nome_convivem_no_mesmo_texto():
+    saida = aplicar_merge_tags("{{primeiro_nome}} / {{nome}}",
+                               {"nome": "Carla Souza"}, "u")
+    assert saida == "Carla / Carla Souza"
+
+
+def test_primeiro_nome_no_assunto():
+    """O worker passa o assunto pela mesma função — a tag não pode ficar crua
+    na caixa de entrada."""
+    assunto = aplicar_merge_tags("{{primeiro_nome}}, seu bafômetro está em dia?",
+                                 {"nome": "Ana Paula", "empresa": None,
+                                  "email": "a@x.com"}, "https://x.test/u")
+    assert assunto == "Ana, seu bafômetro está em dia?"
+
+
+def test_amostra_do_envio_de_teste_tem_primeiro_nome():
+    from app.routers.envio import AMOSTRA_MERGE_TAGS
+    assert AMOSTRA_MERGE_TAGS["{{primeiro_nome}}"] == "João"
+
+
 def test_unsubscribe_url_substituida_quando_o_template_a_declara():
     saida = aplicar_merge_tags('<a href="{{unsubscribe_url}}">sair</a>', {},
                                "https://x.test/u")

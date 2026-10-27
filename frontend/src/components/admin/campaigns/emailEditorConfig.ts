@@ -11,6 +11,7 @@ import { socialIconsFor, type SocialLinksConfig } from '@/lib/socialLinks';
 
 export const EMAIL_MERGE_TAGS = {
   nome: { name: 'Nome do contato', value: '{{nome}}', sample: 'João Silva' },
+  primeiro_nome: { name: 'Primeiro nome', value: '{{primeiro_nome}}', sample: 'João' },
   empresa: { name: 'Empresa', value: '{{empresa}}', sample: 'Empresa LTDA' },
   email: { name: 'Email', value: '{{email}}', sample: 'joao@empresa.com' },
   // Substituída pelo worker (backend/app/worker.py) no momento do envio, por

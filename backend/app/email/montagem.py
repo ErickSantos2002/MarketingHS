@@ -23,6 +23,16 @@ from urllib.parse import urlencode
 CAMPOS = ("nome", "empresa", "email")
 
 
+def primeiro_nome(nome) -> str:
+    """A primeira palavra do nome, com a caixa como veio; vazio se não houver.
+
+    É o `*|PRIMEIRO_NOME|*` do RD Station, que a importação dos 25 e-mails
+    trouxe como `{{primeiro_nome}}`.
+    """
+    partes = str(nome or "").split()
+    return partes[0] if partes else ""
+
+
 def _b64url(dados: bytes) -> str:
     """Base64 url-safe SEM padding — a forma que o verificador espera."""
     return base64.urlsafe_b64encode(dados).decode().rstrip("=")
@@ -80,7 +90,8 @@ def url_de_descadastro_um_clique(base: str, lead_id: str, email: str,
 
 
 def aplicar_merge_tags(html: str, contato: dict, url_descadastro: str) -> str:
-    """Troca `{{nome}}`, `{{empresa}}`, `{{email}}` e `{{unsubscribe_url}}`.
+    """Troca `{{nome}}`, `{{primeiro_nome}}`, `{{empresa}}`, `{{email}}` e
+    `{{unsubscribe_url}}`.
 
     ⚠️ Campo ausente ou nulo vira string VAZIA, nunca a tag crua. Deixar
     "{{nome}}" no corpo é pior que deixar em branco: o contato vê o esqueleto
@@ -90,6 +101,7 @@ def aplicar_merge_tags(html: str, contato: dict, url_descadastro: str) -> str:
     for campo in CAMPOS:
         valor = contato.get(campo)
         saida = saida.replace("{{%s}}" % campo, "" if valor is None else str(valor))
+    saida = saida.replace("{{primeiro_nome}}", primeiro_nome(contato.get("nome")))
     return saida.replace("{{unsubscribe_url}}", url_descadastro)
 
 
