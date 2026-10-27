@@ -4,11 +4,61 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AlertTriangle } from 'lucide-react';
+import { useLeadStatuses } from '@/hooks/useLeadStatuses';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
 import { EVENT_OPTIONS, EVENTO_COM_PAGINA, buildEntryConfig, lerListaDeEmails, type Journey } from '@/lib/journeys';
 import { EntryPageSelect } from './EntryPageSelect';
 import { ModoTesteCampo, EntryFormIdsCampo, lerFormIds } from './ModoTesteCampo';
+
+/** `entry_config.saida_status` gravado, aceitando só lista de texto. */
+export function lerSaidaStatus(cfg: Record<string, unknown> | null | undefined): string[] {
+  const lista = cfg?.saida_status;
+  return Array.isArray(lista) ? lista.filter((s): s is string => typeof s === 'string') : [];
+}
+
+/** O `entry_config` com a saída por status — sem a chave quando a lista é
+ *  vazia (o `entry_config` é regravado inteiro: omitir é desligar). */
+export function comSaidaStatus<T extends Record<string, unknown>>(cfg: T, saida: string[]): T | (T & { saida_status: string[] }) {
+  return saida.length ? { ...cfg, saida_status: saida } : cfg;
+}
+
+/**
+ * "Sair da jornada quando o status for…" (molde da saída "Venda" do RD).
+ * Antes de cada passo o executor confere o status do contato; se está aqui,
+ * a execução termina e ele não recebe mais nada deste fluxo.
+ */
+export function SaidaStatusCampo({ id = 'saida-status', value, onChange }: {
+  id?: string; value: string[]; onChange: (v: string[]) => void;
+}) {
+  const { options } = useLeadStatuses();
+  // Status gravado que não existe mais continua visível (e desmarcável).
+  const todos = [...options, ...value.filter((v) => !options.includes(v))];
+  const alternar = (nome: string, marcado: boolean) =>
+    onChange(marcado ? [...value, nome] : value.filter((v) => v !== nome));
+  return (
+    <div className="space-y-1.5">
+      <Label>Sair da jornada quando o status for… (opcional)</Label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border border-borda p-2.5">
+        {todos.map((nome, i) => (
+          <div key={nome} className="flex items-center gap-2">
+            <Checkbox
+              id={`${id}-${i}`}
+              checked={value.includes(nome)}
+              onCheckedChange={(c) => alternar(nome, c === true)}
+            />
+            <Label htmlFor={`${id}-${i}`} className="font-normal">{nome}</Label>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Antes de cada passo o status do contato é conferido: se for um dos marcados, a execução termina e ele
+        não recebe mais nada deste fluxo. Sem nenhum marcado, todos seguem até o fim.
+      </p>
+    </div>
+  );
+}
 
 interface Props {
   open: boolean;
@@ -26,6 +76,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
   const [pageSlug, setPageSlug] = useState('');
   const [formIds, setFormIds] = useState('');
   const [modoTeste, setModoTeste] = useState('');
+  const [saidaStatus, setSaidaStatus] = useState<string[]>([]);
   const [reentry, setReentry] = useState<'once' | 'allowed'>('once');
   // C1: cooldown em DIAS na UI (mais legível que horas); convertido para
   // reentry_cooldown_hours no envio. 7 dias casa com o DEFAULT do banco.
@@ -42,9 +93,9 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
     const j = await onCreate({
       name: name.trim(),
       entry_type: entryType,
-      entry_config: entryType === 'segment'
+      entry_config: comSaidaStatus(entryType === 'segment'
         ? { segment_ids: segmentIds, excluded_segment_ids: excludedSegmentIds }
-        : buildEntryConfig(eventType, pageSlug, lerFormIds(formIds)),
+        : buildEntryConfig(eventType, pageSlug, lerFormIds(formIds)), saidaStatus),
       // Vazia na criação = sem modo teste (o campo nunca foi preenchido).
       allowed_emails: listaTeste.validos.length ? listaTeste.validos : null,
       reentry,
@@ -153,6 +204,8 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
               </p>
             </div>
           )}
+
+          <SaidaStatusCampo id="novo-saida-status" value={saidaStatus} onChange={setSaidaStatus} />
 
           <ModoTesteCampo id="novo-modo-teste" value={modoTeste} onChange={setModoTeste} />
 

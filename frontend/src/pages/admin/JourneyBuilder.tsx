@@ -37,6 +37,9 @@ import { EntryPageSelect } from '@/components/admin/automations/EntryPageSelect'
 import {
   ModoTesteCampo, SeloModoTeste, EntryFormIdsCampo, lerFormIds,
 } from '@/components/admin/automations/ModoTesteCampo';
+import {
+  SaidaStatusCampo, lerSaidaStatus, comSaidaStatus,
+} from '@/components/admin/automations/JourneyCreateDialog';
 import { EmailTemplatePreviewDialog } from '@/components/admin/campaigns/EmailTemplatePreviewDialog';
 
 type BranchKey = 'next' | 'next_false' | 'next_timeout';
@@ -84,6 +87,7 @@ export default function JourneyBuilder() {
   const [entryEventType, setEntryEventType] = useState('');
   const [entryPageSlug, setEntryPageSlug] = useState('');
   const [entryFormIds, setEntryFormIds] = useState('');
+  const [saidaStatus, setSaidaStatus] = useState<string[]>([]);
   // Modo teste: o texto digitado; a lista sai de lerListaDeEmails na hora de
   // salvar. `modoTesteSalvo` (abaixo) é a lista como está no banco — é com
   // ela que se decide se o admin está DESLIGANDO o modo teste.
@@ -121,6 +125,7 @@ export default function JourneyBuilder() {
     setEntryEventType(journey.entry_type === 'event' ? (journey.entry_config?.event_type || '') : '');
     setEntryPageSlug(journey.entry_type === 'event' ? (journey.entry_config?.page_slug || '') : '');
     setEntryFormIds(journey.entry_type === 'event' ? readEntryFormIds(journey.entry_config).join(', ') : '');
+    setSaidaStatus(lerSaidaStatus(journey.entry_config));
     setModoTeste((journey.allowed_emails ?? []).join('\n'));
     setReentry(journey.reentry);
     setReentryCooldownDays(Math.max(1, Math.round((journey.reentry_cooldown_hours ?? 168) / 24)));
@@ -162,6 +167,12 @@ export default function JourneyBuilder() {
         return `${t?.name || 'template'} — "${node.config.subject || ''}"`;
       }
       case 'delay':
+        // `days` manda quando existe (o executor faz igual); `minutes` vem junto
+        // só por causa do trigger do banco.
+        if (Number.isInteger(node.config.days) && node.config.days > 0) {
+          const n = node.config.days as number;
+          return `Esperar ${n} ${node.config.dias_uteis ? (n === 1 ? 'dia útil' : 'dias úteis') : (n === 1 ? 'dia' : 'dias')}`;
+        }
         return `Esperar ${minutesToLabel(node.config.minutes || 0)}`;
       case 'wait_for_event': {
         const label = EVENT_OPTIONS.find((e) => e.value === node.config.event_type)?.label || node.config.event_type;
@@ -318,9 +329,9 @@ export default function JourneyBuilder() {
       nodes,
       entry_node_id: entryNodeId,
       entry_type: entryType,
-      entry_config: entryType === 'segment'
+      entry_config: comSaidaStatus(entryType === 'segment'
         ? { segment_ids: entrySegmentIds, excluded_segment_ids: entryExcludedSegmentIds }
-        : buildEntryConfig(entryEventType, entryPageSlug, lerFormIds(entryFormIds)),
+        : buildEntryConfig(entryEventType, entryPageSlug, lerFormIds(entryFormIds)), saidaStatus),
       reentry,
       reentry_cooldown_hours: Math.max(1, Math.round(reentryCooldownDays * 24)),
     });
@@ -571,6 +582,9 @@ export default function JourneyBuilder() {
             <p className="text-xs text-muted-foreground">
               Reentrada: {reentry === 'once' ? 'uma vez por contato' : `pode entrar de novo (mín. ${reentryCooldownDays}d)`}
             </p>
+            {saidaStatus.length > 0 && (
+              <p className="text-xs text-muted-foreground truncate">Sai quando o status for: {saidaStatus.join(', ')}</p>
+            )}
           </div>
           <Button variant="ghost" size="sm" onClick={() => setShowEntryDialog(true)}>Editar</Button>
         </CardContent>
@@ -682,6 +696,7 @@ export default function JourneyBuilder() {
                 )}
               </div>
             )}
+            <SaidaStatusCampo value={saidaStatus} onChange={(v) => { setSaidaStatus(v); setDirty(true); }} />
             <Select value={reentry} onValueChange={(v) => { setReentry(v as 'once' | 'allowed'); setDirty(true); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
