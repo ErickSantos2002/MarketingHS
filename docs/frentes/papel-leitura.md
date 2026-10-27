@@ -35,6 +35,52 @@ só leitura):
 A visão do leitor está provada pelos testes, não pelo navegador. A conta do
 `conferir-telas` é admin.
 
+### Rodada 2 (27/10): contato excluído
+
+A revisão de segurança da coordenadora achou que o 403 de `visao != ativos`
+só valia na lista `/contatos`. O leitor ainda via contato excluído pela
+ficha, pelos eventos, consentimentos e conversões, e pelos joins de envios,
+execuções, duplicatas, UTM, segmento, busca, enriquecimento e
+tags-por-contato.
+
+**Correção central na migration `035_leitor_sem_excluidos.sql`.** Ela cria
+uma política `AS RESTRICTIVE FOR SELECT TO authenticated` chamada
+`leitor_sem_excluidos`:
+
+- **Em `leads`:** `deleted_at IS NULL` OU não é o leitor.
+- **Em 18 tabelas ligadas a lead:** a linha só aparece se `leitor_ve(lead_id,
+  dnia_id)`.
+  - As tabelas são `contact_events`, `campaign_sends`, `journey_runs`,
+    `lead_*`, `segment_contacts`, `ecosystem_identities` (por
+    `dndash_lead_id`), `ab_*`, `email_*`, `crm_handoffs` e `journey_*`.
+  - O `dnia_id` só esconde quando é de um lead excluído **sem** nenhum lead
+    ativo.
+  - Um `dnia_id` que não é uuid (A/B guarda texto) não derruba a query.
+- **Custo para o admin:** `eh_leitor_somente_leitura()` entra como
+  `(SELECT …)`, o que vira InitPlan e roda uma vez por query, não por linha.
+
+Resultado para o leitor:
+
+- a ficha do excluído dá 404;
+- as listas por id vêm vazias;
+- os joins não trazem o excluído.
+
+O admin continua vendo tudo.
+
+Funções SECURITY DEFINER ignoram RLS. As que devolvem ids passam depois pelo
+JOIN com `leads` na rota. `journey_node_metrics` devolve só contagem.
+
+Verificação:
+
+- `test_leitor_nao_ve_contato_excluido_em_rota_nenhuma` passa em todas as
+  rotas abertas. Sem as políticas da 035, ele falha.
+- `test_admin_continua_vendo_o_excluido` passa.
+- A 035 foi aplicada 2× no local.
+- Suíte inteira: **1229 passed, 9 skipped**.
+
+**035 NÃO aplicada em produção.** Ela depende da 034 (precisa de `role::text`,
+mas não do enum). O 403 de `visao` na rota continua lá como primeira linha.
+
 ## Como ficou
 
 ### Três camadas
