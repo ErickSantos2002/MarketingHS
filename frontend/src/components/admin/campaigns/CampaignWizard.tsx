@@ -589,7 +589,7 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
                   />
                   {!isReadOnly && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Use {'{{nome}}'}, {'{{email}}'}, {'{{empresa}}'} como variáveis dinâmicas
+                      Use {'{{nome}}'}, {'{{primeiro_nome}}'}, {'{{email}}'}, {'{{empresa}}'} como variáveis dinâmicas
                     </p>
                   )}
                 </div>
