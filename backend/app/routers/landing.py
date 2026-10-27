@@ -174,6 +174,7 @@ def montar_casca(slug: str, config: dict, *, previa: bool = False) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{titulo}</title>
+<link rel="icon" type="image/x-icon" href="/hs.ico">
 <meta name="description" content="{descricao}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{titulo}">
