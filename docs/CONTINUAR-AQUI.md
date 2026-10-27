@@ -10,6 +10,10 @@
 >    Erick na prévia, deploy de api e sistema, criar a página em produção.
 >    Frente `landing-visual` ✅ mergeada (`7508b11`): visual novo (topo marinho com foto,
 >    Plus Jakarta Sans, comparativo em painel, logos em cor); a casca carrega a fonte.
+>    Frente `landing-confianca` ✅ mergeada (`2365fc3`, 27/10): cabeçalho com logo, rodapé,
+>    seções `certificacoes`/`depoimentos`/`video`; portão local 1114 passed, node 94, `tsc` 0.
+>    Config conferida: `scratchpad/config-phoebus-v3.json` da sessão (imagens locais — subir
+>    pelo editor em produção). WhatsApp e consentimento da página: decisão do Erick.
 >    Texto original do item: (um aparelho só). Com
 >    calma: o Erick traz muito material e criamos juntos texto, imagem,
 >    formulário e jornada. O editor de hoje é de uma seção (título,
