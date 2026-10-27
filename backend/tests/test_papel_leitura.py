@@ -455,3 +455,135 @@ async def test_leitura_nao_conta_como_admin_no_ultimo_admin(token_leitura):
     async with db.sessao(role="service_role") as conn:
         assert await conn.fetchval(
             "SELECT count(*) FROM user_roles WHERE role = 'admin'") == antes
+
+
+# ── Contato EXCLUÍDO não sai para o leitor (035) ─────────────────────────────
+
+@pytest.fixture
+async def excluido(base_semeada):
+    """Um contato EXCLUÍDO pendurado em tudo da `base_semeada`: etiqueta, nota,
+    evento, conversão, consentimento, identidade, envio da campanha, execução
+    da jornada, segmento estático. COMITA — apaga tudo no fim."""
+    s = base_semeada
+    e = {"email": f"{MARCA}-excluido-{uuid.uuid4().hex[:8]}@exemplo.invalid",
+         "dnia": str(uuid.uuid4())}
+    async with db.sessao(role="service_role") as conn:
+        e["lead"] = await conn.fetchval(
+            "INSERT INTO leads (nome, email, tipo, dnia_id, deleted_at) "
+            "VALUES ('Excluido Leitura', $1, 'teste', $2::uuid, now()) RETURNING id::text",
+            e["email"], e["dnia"])
+        await conn.execute(
+            "INSERT INTO ecosystem_identities (dnia_id, email, dndash_lead_id) "
+            "VALUES ($1::uuid, $2, $3::uuid)", e["dnia"], e["email"], e["lead"])
+        await conn.execute("INSERT INTO lead_tags (lead_id, tag_id) VALUES ($1::uuid, $2::uuid)",
+                           e["lead"], s["tag"])
+        await conn.execute(
+            "INSERT INTO lead_notes (lead_id, content) VALUES ($1::uuid, 'nota')", e["lead"])
+        await conn.execute(
+            """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type, title,
+                                           occurred_at)
+               VALUES ($1::uuid, $2::uuid, 'marketinghs', 'meeting_scheduled', $3, now())""",
+            e["lead"], e["dnia"], MARCA)
+        await conn.execute(
+            "INSERT INTO lead_conversions (lead_id, utm_content) VALUES ($1::uuid, $2)",
+            e["lead"], MARCA)
+        await conn.execute(
+            """INSERT INTO lead_consents (lead_id, base_legal, texto, versao)
+               VALUES ($1::uuid, 'legitimo_interesse_pedido_contato', 'x', 'v1')""",
+            e["lead"])
+        await conn.execute(
+            "INSERT INTO campaign_sends (campaign_id, lead_id, dnia_id, channel, status) "
+            "VALUES ($1::uuid, $2::uuid, $3::uuid, 'email', 'sent')",
+            s["camp"], e["lead"], e["dnia"])
+        await conn.execute(
+            "INSERT INTO journey_runs (journey_id, lead_id) VALUES ($1::uuid, $2::uuid)",
+            s["jorn"], e["lead"])
+        await conn.execute(
+            "INSERT INTO segment_contacts (segment_id, lead_id) VALUES ($1::uuid, $2::uuid)",
+            s["seg"], e["lead"])
+    try:
+        yield e
+    finally:
+        from limpeza import apagar_leads
+        async with db.sessao(role="service_role") as conn:
+            for tabela in ("lead_consents", "lead_conversions", "lead_notes", "lead_tags",
+                           "campaign_sends", "journey_runs", "segment_contacts"):
+                await conn.execute(f"DELETE FROM {tabela} WHERE lead_id = $1::uuid", e["lead"])
+            await conn.execute("DELETE FROM ecosystem_identities WHERE dnia_id = $1::uuid",
+                               e["dnia"])
+            await apagar_leads(conn, [e["lead"]])
+
+
+def _rastros(e: dict) -> tuple[str, ...]:
+    return (e["lead"], e["dnia"], e["email"])
+
+
+@pytest.mark.asyncio
+async def test_leitor_nao_ve_contato_excluido_em_rota_nenhuma(
+        cliente, token_leitura, base_semeada, excluido):
+    s, e = base_semeada, excluido
+    _, token = token_leitura
+    caminhos = _caminhos_de_leitura(s) + [
+        f"/contatos/busca?q={e['email'][:30]}",
+        f"/contatos/{e['lead']}", f"/contatos/{e['lead']}/eventos",
+        f"/contatos/{e['lead']}/consentimentos", f"/contatos/{e['lead']}/conversoes",
+        f"/contatos/{e['lead']}/conversoes-lista",
+    ]
+    vazou = []
+    for caminho in caminhos:
+        r = await cliente.get(caminho, headers=_h(token))
+        if any(x in r.text for x in _rastros(e)):
+            vazou.append((caminho, r.status_code))
+    for caminho, corpo in (("/contatos/enriquecimento", {"dnia_ids": [e["dnia"]]}),
+                           ("/contatos/tags-por-contato", {"lead_ids": [e["lead"]]})):
+        r = await cliente.post(caminho, headers=_h(token), json=corpo)
+        if r.status_code != 200 or any(x in r.text for x in _rastros(e)):
+            vazou.append((caminho, r.status_code))
+    assert vazou == []
+
+    # A ficha do excluído some para o leitor (404, não 500)…
+    r = await cliente.get(f"/contatos/{e['lead']}", headers=_h(token))
+    assert r.status_code == 404
+    # …a contagem por id dá zero e as listas por id vêm vazias (a resposta
+    # delas não carrega o id do lead, então a busca de rastro acima não basta).
+    r = await cliente.get(f"/contatos/{e['lead']}/conversoes", headers=_h(token))
+    assert r.json() == {"total": 0}
+    for sufixo in _LISTAS_POR_CONTATO:
+        r = await cliente.get(f"/contatos/{e['lead']}/{sufixo}", headers=_h(token))
+        assert r.status_code == 200 and r.json() == [], (sufixo, r.text[:200])
+
+
+_LISTAS_POR_CONTATO = ("eventos", "consentimentos", "conversoes-lista")
+
+
+@pytest.mark.asyncio
+async def test_admin_continua_vendo_o_excluido(cliente, token_admin, base_semeada, excluido):
+    s, e = base_semeada, excluido
+    r = await cliente.get(f"/contatos/{e['lead']}", headers=_h(token_admin))
+    assert r.status_code == 200 and r.json()["lead"]["id"] == e["lead"]
+    for caminho in (f"/campanhas/{s['camp']}/envios", f"/jornadas/{s['jorn']}/execucoes",
+                    "/contatos?visao=apagados&pagina=0&tamanho=200"):
+        r = await cliente.get(caminho, headers=_h(token_admin))
+        assert r.status_code == 200 and e["lead"] in r.text, caminho
+    for sufixo in _LISTAS_POR_CONTATO:
+        r = await cliente.get(f"/contatos/{e['lead']}/{sufixo}", headers=_h(token_admin))
+        assert r.status_code == 200 and r.json(), sufixo
+    r = await cliente.post("/contatos/tags-por-contato", headers=_h(token_admin),
+                           json={"lead_ids": [e["lead"]]})
+    assert e["lead"] in r.text
+    r = await cliente.post("/contatos/enriquecimento", headers=_h(token_admin),
+                           json={"dnia_ids": [e["dnia"]]})
+    assert e["dnia"] in r.text
+
+
+@pytest.mark.asyncio
+async def test_regra_por_dnia_nao_esconde_quem_nao_e_excluido(token_leitura, base_semeada):
+    """`leitor_ve` só corta dnia_id de lead excluído SEM lead ativo; dnia_id
+    desconhecido (visitante anônimo) ou que não é uuid continua visível."""
+    uid, _ = token_leitura
+    async with db.sessao(role="authenticated", user_id=uid) as conn:
+        assert await conn.fetchval("SELECT public.leitor_ve(NULL, $1)",
+                                   str(uuid.uuid4())) is True
+        assert await conn.fetchval("SELECT public.leitor_ve(NULL, 'nao-e-uuid')") is True
+        assert await conn.fetchval(
+            "SELECT public.leitor_ve($1::uuid, NULL)", base_semeada["lead"]) is True
