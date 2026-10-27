@@ -25,6 +25,7 @@ motivo e o fluxo segue. O worker confere de novo antes do Resend.
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,11 @@ TIMEOUT_PADRAO_MINUTOS = 1440
 # webhook). São os únicos que o modo teste barra.
 NOS_COM_EFEITO = frozenset({"send_email", "handoff_growthhs", "notify_email", "webhook"})
 MOTIVO_MODO_TESTE = "modo teste: contato fora da lista"
+
+# A espera em dias (úteis ou corridos) conta no fuso da casa: "3 dias úteis
+# depois de sexta, 9h" é quarta, 9h em São Paulo — não em UTC, onde a sexta
+# 23h já é sábado.
+FUSO_DA_CASA = ZoneInfo("America/Sao_Paulo")
 
 
 class ErroDefinitivo(ValueError):
@@ -53,6 +59,48 @@ class ErroDefinitivo(ValueError):
 
 def _agora() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def somar_dias_uteis(inicio: datetime, dias: int) -> datetime:
+    """`dias` dias úteis (seg–sex) depois de `inicio`, no fuso da casa,
+    mantendo o horário do dia. Molde do RD (`available_days: [1..5]`).
+
+    Conta dia a dia a partir do dia SEGUINTE e só soma os de semana — então
+    o resultado nunca cai no sábado nem no domingo, e partir de um fim de
+    semana conta a segunda como o 1º dia útil (sexta, sábado ou domingo + 1 =
+    segunda). ⚠️ Feriados NÃO contam como folga (pergunta aberta da frente
+    jornada-rd): sem cadastro de feriados, o e-mail sai no feriado.
+    """
+    local = inicio.astimezone(FUSO_DA_CASA)
+    dia, faltam = local.date(), max(1, int(dias))
+    while faltam:
+        dia += timedelta(days=1)
+        if dia.weekday() < 5:
+            faltam -= 1
+    # Recompõe no fuso (e não `local + timedelta`): mantém o horário de
+    # parede mesmo se um dia o Brasil voltar a ter horário de verão.
+    return datetime.combine(dia, local.timetz().replace(tzinfo=None),
+                            tzinfo=FUSO_DA_CASA)
+
+
+def instante_de_despertar(cfg: dict, agora: datetime) -> datetime:
+    """Quando o nó `delay` acorda. `days` (quando há) manda: com
+    `dias_uteis` são dias úteis; sem, dias corridos no fuso da casa. Sem
+    `days`, é a config antiga — `minutes` corridos, mínimo 1.
+
+    ⚠️ A rota grava `minutes = days × 1440` junto com `days` só porque o
+    trigger `validate_journey_graph` exige `minutes > 0`; aqui ele é ignorado
+    quando há `days`.
+    """
+    dias = cfg.get("days")
+    if isinstance(dias, int) and not isinstance(dias, bool) and dias >= 1:
+        if cfg.get("dias_uteis") is True:
+            return somar_dias_uteis(agora, dias)
+        local = agora.astimezone(FUSO_DA_CASA)
+        return datetime.combine(local.date() + timedelta(days=dias),
+                                local.timetz().replace(tzinfo=None),
+                                tzinfo=FUSO_DA_CASA)
+    return agora + timedelta(minutes=max(1, int(cfg.get("minutes") or 0)))
 
 
 async def registrar_passo(conn, run: dict, no: dict, resultado: str,
@@ -234,6 +282,34 @@ async def contato_permitido(conn, run: dict) -> bool:
     return permitido
 
 
+async def status_de_saida(conn, run: dict) -> str | None:
+    """O status do contato, se ele está na `entry_config.saida_status` da
+    jornada (sem caixa); senão `None`. Molde do RD: a Nutrição tem a saída
+    "Venda" — quem compra para de receber.
+
+    A lista é lida UMA vez por run (`run["_saida_status"]`) — o worker não
+    passa o `entry_config` ao executor. O status do contato é lido a CADA nó:
+    ele muda no meio da cadeia (o próprio fluxo pode ter um "mudar status").
+    Lista ausente, vazia ou de forma inesperada = sem saída (o de antes).
+    """
+    if "_saida_status" not in run:
+        bruta = await conn.fetchval(
+            "SELECT entry_config->'saida_status' FROM journeys WHERE id = $1::uuid",
+            run["journey_id"])
+        if isinstance(bruta, str):
+            bruta = json.loads(bruta)
+        run["_saida_status"] = ([str(s).strip().lower() for s in bruta
+                                 if isinstance(s, str) and s.strip()]
+                                if isinstance(bruta, list) else [])
+    if not run["_saida_status"]:
+        return None
+    atual = await conn.fetchval(
+        "SELECT status FROM leads WHERE id = $1::uuid", run["lead_id"])
+    if atual and atual.strip().lower() in run["_saida_status"]:
+        return atual
+    return None
+
+
 def _contexto(run: dict) -> dict:
     ctx = run.get("context")
     if isinstance(ctx, str):
@@ -268,19 +344,21 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
         return {"tipo": "avancar", "proximo": no.get("next")}
 
     if tipo == "delay":
-        minutos = max(1, int(cfg.get("minutes") or 0))
         proximo = no.get("next")
+        despertar = instante_de_despertar(cfg, _agora())
         ok = await gravar_run(conn, run, {
             "current_node_id": proximo,
             "state": "done" if proximo is None else "waiting",
             "waiting_event": None,
-            "wakeup_at": _agora() + timedelta(minutes=minutos),
+            "wakeup_at": despertar,
             "lock_token": None,
             "locked_until": None,
             "context": {**_contexto(run), "attempts": 0},
         })
-        await registrar_passo(conn, run, no, "entered" if ok else "failed",
-                              {"minutes": minutos})
+        detalhe = ({"days": cfg.get("days"), "dias_uteis": cfg.get("dias_uteis") is True,
+                    "wakeup_at": despertar.isoformat()} if cfg.get("days")
+                   else {"minutes": max(1, int(cfg.get("minutes") or 0))})
+        await registrar_passo(conn, run, no, "entered" if ok else "failed", detalhe)
         return {"tipo": "parar"}
 
     if tipo == "wait_for_event":
@@ -467,6 +545,21 @@ async def rodar_cadeia(conn, run: dict) -> dict:
                 "context": {**_contexto(run),
                             "error": f"nó {no_id} não existe mais no fluxo"}})
             return {"passos": passos, "falhou": True}
+
+        # Saída por status (entry_config.saida_status): ANTES de qualquer
+        # efeito do nó. O run termina em `exited` — o mesmo estado da fusão de
+        # contatos —, com o motivo no contexto e o passo no journey_step_log.
+        status = await status_de_saida(conn, run)
+        if status is not None:
+            await gravar_run(conn, run, {
+                "current_node_id": run.get("current_node_id"),
+                "state": "exited", "waiting_event": None,
+                "lock_token": None, "locked_until": None,
+                "context": {**_contexto(run), "encerrado_por": "saida_status",
+                            "status": status}})
+            await registrar_passo(conn, run, no, "exited",
+                                  {"motivo": "saida_status", "status": status})
+            return {"passos": passos, "falhou": False, "saiu": True}
 
         # Emissor genérico de "entered", para TODO nó. Sem ele o nó de entrada
         # do fluxo e todo nó logo depois de um delay ficariam sem nenhum

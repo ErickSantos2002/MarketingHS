@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { listarTags } from '@/lib/contatos';
 import { useTemplates } from '@/hooks/useTemplates';
@@ -74,6 +75,8 @@ const DAYS_OPTIONS = ['7', '15', '30', '60', '90'];
 
 type DurationUnit = 'minutos' | 'horas' | 'dias';
 const UNIT_MINUTES: Record<DurationUnit, number> = { minutos: 1, horas: 60, dias: 1440 };
+// Mesmo teto da rota (`DIAS_MAXIMOS` em routers/jornadas.py).
+const DIAS_MAXIMOS = 365;
 
 function minutesToQtyUnit(minutes: number | undefined): { qty: number; unit: DurationUnit } {
   const m = minutes || 0;
@@ -115,6 +118,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   // delay
   const [delayQty, setDelayQty] = useState(1);
   const [delayUnit, setDelayUnit] = useState<DurationUnit>('dias');
+  // Só com a unidade "dias": conta seg–sex no fuso de São Paulo (molde do RD).
+  const [delayDiasUteis, setDelayDiasUteis] = useState(false);
 
   // wait_for_event
   const [eventType, setEventType] = useState('');
@@ -158,9 +163,14 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
     const cfg = initialConfig || {};
     setTemplateId(cfg.template_id || '');
     setSubject(cfg.subject || '');
-    const d = minutesToQtyUnit(cfg.minutes);
+    // `days` (quando há) manda — é o que o executor usa; `minutes` só existe
+    // junto porque o trigger do banco exige.
+    const d = Number.isInteger(cfg.days) && cfg.days > 0
+      ? { qty: cfg.days as number, unit: 'dias' as DurationUnit }
+      : minutesToQtyUnit(cfg.minutes);
     setDelayQty(d.qty);
     setDelayUnit(d.unit);
+    setDelayDiasUteis(cfg.dias_uteis === true);
     setEventType(cfg.event_type || '');
     const t = minutesToQtyUnit(cfg.timeout_minutes);
     setTimeoutQty(t.qty);
@@ -208,7 +218,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   const isValid = (): boolean => {
     switch (effType) {
       case 'send_email': return !!templateId && !!subject.trim();
-      case 'delay': return delayQty > 0;
+      case 'delay': return delayQty > 0 && (delayUnit !== 'dias' || delayQty <= DIAS_MAXIMOS);
       case 'wait_for_event': return !!eventType && timeoutQty > 0;
       case 'branch_attribute': return rules.some(regraCompleta);
       case 'branch_segment': return !!segmentId;
@@ -235,7 +245,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
         config = { template_id: templateId, subject: subject.trim() };
         break;
       case 'delay':
-        config = { minutes: delayQty * UNIT_MINUTES[delayUnit] };
+        config = delayUnit === 'dias'
+          ? { minutes: delayQty * UNIT_MINUTES.dias, days: delayQty, dias_uteis: delayDiasUteis }
+          : { minutes: delayQty * UNIT_MINUTES[delayUnit] };
         break;
       case 'wait_for_event':
         config = {
@@ -377,6 +389,22 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                   </SelectContent>
                 </Select>
               </div>
+              {delayUnit === 'dias' && (
+                <>
+                  {delayQty > DIAS_MAXIMOS && (
+                    <p className="text-xs text-destructive">No máximo {DIAS_MAXIMOS} dias.</p>
+                  )}
+                  <div className="flex items-start gap-3 pt-2">
+                    <Switch id="delay-dias-uteis" checked={delayDiasUteis} onCheckedChange={setDelayDiasUteis} />
+                    <div className="space-y-0.5">
+                      <Label htmlFor="delay-dias-uteis">Só dias úteis</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Conta de segunda a sexta (horário de Brasília), mantendo o horário do dia. Feriados ainda contam como dia útil.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

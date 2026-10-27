@@ -153,6 +153,93 @@ def _conferir_avisos_no_modo_teste(lista, nos) -> None:
                 f"e-mails da lista — fora dela: {', '.join(fora)}")
 
 
+DIAS_MAXIMOS = 365
+
+
+def _inteiro(v) -> bool:
+    # `True` é `int` em Python — e "esperar True dias" não é config.
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _normalizar_delays(nos: list[dict] | None) -> list[dict] | None:
+    """Confere a config de cada nó `delay` e devolve os nós normalizados.
+
+    - `days` (inteiro 1–365) com `dias_uteis` (bool): espera em dias, úteis ou
+      corridos (frente jornada-rd, molde da Nutrição do RD);
+    - sem `days`: `minutes` > 0, como sempre foi.
+
+    ⚠️ Com `days`, grava `minutes = days × 1440`: o trigger
+    `validate_journey_graph` (028) exige `config.minutes > 0` em todo delay, e
+    trocar o trigger pedia migration. O executor ignora `minutes` quando há
+    `days` (`executor.instante_de_despertar`).
+    """
+    if nos is None:
+        return None
+    saida = []
+    for no in nos:
+        if not (isinstance(no, dict) and no.get("type") == "delay"):
+            saida.append(no)
+            continue
+        cfg = dict(no.get("config") or {})
+        nome = f"nó {no.get('id')} (esperar)"
+        dias, uteis = cfg.get("days"), cfg.get("dias_uteis")
+        if uteis is not None and not isinstance(uteis, bool):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                f"{nome}: \"só dias úteis\" precisa ser verdadeiro ou falso.")
+        if dias is not None:
+            if not _inteiro(dias) or not 1 <= dias <= DIAS_MAXIMOS:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{nome}: a espera em dias precisa ser um número inteiro de 1 a "
+                    f"{DIAS_MAXIMOS}.")
+            cfg["minutes"] = dias * 1440
+        else:
+            if uteis is True:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{nome}: \"só dias úteis\" só vale com a espera em dias.")
+            minutos = cfg.get("minutes")
+            if not _inteiro(minutos) or minutos <= 0:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{nome}: informe a espera em minutos (maior que zero) ou em dias.")
+        saida.append({**no, "config": cfg})
+    return saida
+
+
+async def _normalizar_saida(conn, entry_config: dict | None) -> dict | None:
+    """`entry_config.saida_status`: lista de status do contato que encerram a
+    jornada (molde da saída "Venda" do RD). Cada item precisa existir em
+    `lead_statuses` e volta com o nome canônico; desconhecido é 400 com a
+    lista do que vale. Ausente ou `[]` = sem saída (o de antes)."""
+    if entry_config is None or "saida_status" not in entry_config:
+        return entry_config
+    lista = entry_config["saida_status"]
+    if not isinstance(lista, list) or not all(
+            isinstance(s, str) and s.strip() for s in lista):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "\"Sair da jornada quando o status for…\" precisa ser uma lista de status.")
+    if not lista:
+        return entry_config
+    linhas = await conn.fetch("SELECT name FROM lead_statuses ORDER BY sort_order")
+    por_nome = {l["name"].lower(): l["name"] for l in linhas}
+    canonica, desconhecidos = [], []
+    for bruto in lista:
+        nome = por_nome.get(bruto.strip().lower())
+        if nome is None:
+            desconhecidos.append(bruto.strip())
+        elif nome not in canonica:
+            canonica.append(nome)
+    if desconhecidos:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Status desconhecido em \"sair da jornada\": "
+            + ", ".join(repr(d) for d in desconhecidos)
+            + ". Os que existem são: " + ", ".join(l["name"] for l in linhas) + ".")
+    return {**entry_config, "saida_status": canonica}
+
+
 def _sem_execucoes() -> dict:
     return {"active": 0, "waiting": 0, "done": 0, "failed": 0, "exited": 0}
 
@@ -202,6 +289,7 @@ async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     _conferir_webhooks(dados.nodes)
     _conferir_avisos_no_modo_teste(dados.allowed_emails, dados.nodes)
     campos = dados.model_dump()
+    campos["nodes"] = _normalizar_delays(campos["nodes"])
     if campos["allowed_emails"] is None:
         # Sem lista, a coluna fica fora do INSERT (o NULL do DEFAULT vale): a
         # criação de jornada sem modo teste não depende da 027 estar aplicada.
@@ -217,6 +305,7 @@ async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     marcas = ", ".join(f"${i}{CASTS.get(c, '')}" for i, c in enumerate(colunas, 1))
     try:
         async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            campos["entry_config"] = await _normalizar_saida(conn, campos["entry_config"])
             novo = await conn.fetchval(
                 f"INSERT INTO journeys ({nomes}, status) "
                 f"VALUES ({marcas}, 'draft') RETURNING id",
@@ -234,14 +323,17 @@ async def editar(jornada_id: str, dados: JornadaPatch,
     if not campos:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada a atualizar.")
     _conferir_webhooks(campos.get("nodes"))
-
-    partes, valores = [], []
-    for i, (coluna, valor) in enumerate(campos.items(), start=2):
-        partes.append(f"{coluna} = ${i}{CASTS.get(coluna, '')}")
-        valores.append(valor)
+    if "nodes" in campos:
+        campos["nodes"] = _normalizar_delays(campos["nodes"])
 
     try:
         async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            if "entry_config" in campos:
+                campos["entry_config"] = await _normalizar_saida(conn, campos["entry_config"])
+            partes, valores = [], []
+            for i, (coluna, valor) in enumerate(campos.items(), start=2):
+                partes.append(f"{coluna} = ${i}{CASTS.get(coluna, '')}")
+                valores.append(valor)
             if "nodes" in campos or "allowed_emails" in campos:
                 # A lista e os nós EM VIGOR depois do PATCH: o que veio no
                 # corpo, e o resto do que está gravado.
