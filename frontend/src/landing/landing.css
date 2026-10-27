@@ -1362,7 +1362,7 @@ img {
 
 @media (min-width: 600px) {
   .logos {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--colunas-meio, 3), minmax(0, 1fr));
     gap: 44px 40px;
   }
 
@@ -1371,9 +1371,16 @@ img {
   }
 }
 
-@media (min-width: 1000px) {
+/* Do tablet deitado para cima, as 4 colunas do desktop (`--colunas`, que o
+ * Secoes.tsx limita a 4); no celular, 2; entre 600 e 899, 3. */
+@media (min-width: 900px) {
   .logos {
     grid-template-columns: repeat(var(--colunas, 4), minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .logos {
     gap: 56px 48px;
   }
 }
@@ -1618,19 +1625,266 @@ img {
   padding-left: 22px;
 }
 
-.video-quadro {
+/* O palco é o quadro do vídeo mais os controles (que só existem depois do
+ * clique): o canto arredondado e o fundo são dele, e os dois leem como uma
+ * peça só. */
+.video-palco {
   position: relative;
-  aspect-ratio: 16 / 9;
   border-radius: var(--raio-cartao);
   overflow: hidden;
   background: var(--marinho-fundo);
 }
 
-.video-quadro iframe {
+.video-quadro {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--marinho-fundo);
+}
+
+/* ---- o player fechado (landing-nicholson, 27/10) ----
+ * O iframe do YouTube fica embaixo de tudo, sem receber ponteiro; o escudo
+ * por cima recebe todo clique; a miniatura cobre o iframe sempre que o vídeo
+ * não está tocando (é ali que o YouTube põe "mais vídeos" e título). */
+.video-iframe,
+.video-iframe iframe {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+.video-iframe {
+  pointer-events: none;
+}
+
+.video-escudo {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* O furo (só quando o navegador recusou o autoplay e o vídeo nunca tocou,
+ * ver Secoes.tsx): o escudo perde o quadrado do meio — `clip-path` também
+ * corta o clique — e o iframe passa a receber ponteiro ali. */
+.video-iframe-furo {
+  pointer-events: auto;
+}
+
+.video-escudo-furo {
+  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+                     32% 30%, 32% 70%, 68% 70%, 68% 30%, 32% 30%);
+}
+
+.video-escudo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-escudo-coberto::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 30, 51, 0.12) 0%, rgba(8, 30, 51, 0.46) 100%);
+  pointer-events: none;
+}
+
+.video-carregando {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  animation: video-girar 0.9s linear infinite;
+}
+
+@keyframes video-girar {
+  to { transform: rotate(360deg); }
+}
+
+.video-de-novo,
+.video-erro button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--marinho);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 28px -8px rgba(8, 30, 51, 0.6);
+}
+
+.video-de-novo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.video-de-novo:hover,
+.video-erro button:hover {
+  background: #e3eef7;
+}
+
+.video-de-novo:focus-visible,
+.video-erro button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.video-erro {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px;
+  text-align: center;
+  color: #ffffff;
+  background: rgba(8, 30, 51, 0.82);
+}
+
+.video-erro p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.video-controles {
+  padding: 6px 10px 8px;
+  color: #ffffff;
+  background: var(--marinho-fundo);
+}
+
+/* A barra de tempo: o trilho claro, a parte vista em branco (pelo
+ * `--progresso` que o Secoes.tsx põe), o botão redondo. 24 px de altura
+ * para o dedo, trilho de 4. */
+.video-barra {
+  display: block;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.video-barra:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.video-barra::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffffff var(--progresso, 0%), rgba(255, 255, 255, 0.28) var(--progresso, 0%));
+}
+
+.video-barra::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffffff var(--progresso, 0%), rgba(255, 255, 255, 0.28) var(--progresso, 0%));
+}
+
+.video-barra::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.video-barra::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.video-barra:focus {
+  outline: none;
+}
+
+.video-barra:focus-visible {
+  outline: 2px solid var(--celeste);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.video-botoes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.video-botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.video-botao:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.video-botao:focus-visible {
+  outline: 2px solid var(--celeste);
+  outline-offset: -2px;
+}
+
+.video-botao:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.video-botao-play svg {
+  width: 28px;
+  height: 28px;
+}
+
+.video-tempo {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.video-tempo-total {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .video-fachada {
@@ -1696,6 +1950,9 @@ img {
  * vem com tarjas borradas dos lados; o `cover` corta e fica só o vídeo. */
 .video-vertical .video-quadro {
   aspect-ratio: 9 / 16;
+}
+
+.video-vertical .video-palco {
   width: min(100%, 300px);
 }
 
@@ -1718,7 +1975,7 @@ img {
     gap: clamp(56px, 9vw, 144px);
   }
 
-  .video-vertical.video-com-texto .video-quadro {
+  .video-vertical.video-com-texto .video-palco {
     width: 100%;
   }
 
@@ -1968,6 +2225,26 @@ img {
   border-radius: 2px;
 }
 
+/* O "4007-1507*" do site oficial: o asterisco remete à nota miúda, que
+ * fica entre o contato e o pé, na largura toda. */
+.rodape-asterisco {
+  margin-left: 1px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.rodape-detalhe {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.rodape-nota {
+  margin: -12px 0 0;
+  max-width: 44rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.58);
+}
+
 .rodape-pe {
   padding-top: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -1998,6 +2275,13 @@ img {
 
   .rodape-pe {
     grid-column: 1 / -1;
+  }
+
+  /* Debaixo das colunas de contato, alinhada à direita como elas. */
+  .rodape-nota {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-top: -8px;
   }
 
   .rodape-com-whatsapp .rodape-miolo {
@@ -2052,5 +2336,10 @@ img {
   .perguntas summary::after,
   .landing-whatsapp {
     transition: none;
+  }
+
+  /* Carregando o vídeo: o anel fica parado (ainda diz "espere"). */
+  .video-carregando {
+    animation: none;
   }
 }

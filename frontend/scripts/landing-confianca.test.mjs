@@ -12,7 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  secoesDaConfig, idDoYoutube, miniaturaDoYoutube, playerDoYoutube, LIMITE_ITENS,
+  secoesDaConfig, idDoYoutube, miniaturaDoYoutube, LIMITE_ITENS,
 } from "../src/landing/secoes.ts";
 import { CASA } from "../src/landing/casa.ts";
 
@@ -72,10 +72,10 @@ test("idDoYoutube: qualquer outra coisa é null", () => {
   ]) assert.equal(idDoYoutube(url), null, String(url));
 });
 
-test("miniatura e player saem do id, em host fixo", () => {
+// O player saiu daqui: é o fechado de `player.ts` (landing-player.test.mjs).
+test("miniatura sai do id, em host fixo", () => {
   assert.equal(miniaturaDoYoutube(ID), `https://i.ytimg.com/vi/${ID}/maxresdefault.jpg`);
   assert.equal(miniaturaDoYoutube(ID, false), `https://i.ytimg.com/vi/${ID}/hqdefault.jpg`);
-  assert.match(playerDoYoutube(ID), new RegExp(`^https://www\\.youtube-nocookie\\.com/embed/${ID}\\?autoplay=1`));
 });
 
 test("vídeo: url ruim descarta a seção; texto vira blocos; formato só 'vertical' vale", () => {
@@ -164,10 +164,17 @@ test("o Phoebus: os três depoimentos reais (Antônio sem sobrenome nem cargo), 
 test("a casa: os dados do rodapé, com tel: e links https", () => {
   assert.equal(CASA.nome, "Health & Safety");
   assert.match(CASA.endereco.rua, /Viscondessa do Livramento, 54/);
-  assert.deepEqual(CASA.telefones.map((t) => t.rotulo), ["(81) 3052-3350", "(11) 3042-6479"]);
+  // Os do site oficial (27/10): o 4007 é de capitais, sem DDD nem +55.
+  assert.deepEqual(CASA.telefones.map((t) => t.rotulo), ["4007-1507", "(81) 98177-1177"]);
+  assert.deepEqual(CASA.telefones.map((t) => t.numero), ["40071507", "+5581981771177"]);
   for (const t of CASA.telefones) {
-    assert.equal(t.numero, "+55" + t.rotulo.replace(/\D/g, ""));
+    assert.match(t.numero, /^(\+55\d{10,11}|[34]00\d{5})$/);
+    assert.ok(t.numero.endsWith(t.rotulo.replace(/\D/g, "")));
   }
+  // Só o 4007 leva o asterisco, e a nota diz o que ele quer dizer.
+  assert.deepEqual(CASA.telefones.map((t) => t.asterisco), [true, false]);
+  assert.match(CASA.notaDoTelefone, /4000 ou 4007/);
+  assert.match(CASA.notaDoTelefone, /\(0 xx 11 4007 1507\)/);
   assert.equal(CASA.instagram.url, "https://www.instagram.com/healthsafety.oficial/");
   assert.equal(CASA.site.url, "https://www.healthsafety.com.br");
 });

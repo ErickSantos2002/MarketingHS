@@ -100,7 +100,11 @@ function Rodape({ politica, comWhatsapp }: { politica: string | null; comWhatsap
             {CASA.telefones.map((t, i) => (
               <span key={t.numero}>
                 {i > 0 && <br />}
+                {/* O asterisco fica fora do link e o leitor de tela não o
+                    lê: a nota está escrita logo abaixo, no pé. */}
                 <a href={`tel:${t.numero}`}>{t.rotulo}</a>
+                {t.asterisco && <span className="rodape-asterisco" aria-hidden="true">*</span>}
+                {t.detalhe && <span className="rodape-detalhe"> · {t.detalhe}</span>}
               </span>
             ))}
           </p>
@@ -112,6 +116,7 @@ function Rodape({ politica, comWhatsapp }: { politica: string | null; comWhatsap
             <a href={CASA.site.url} target="_blank" rel="noopener noreferrer">{CASA.site.rotulo}</a>
           </p>
         </address>
+        <p className="rodape-nota"><span aria-hidden="true">* </span>{CASA.notaDoTelefone}</p>
         <div className="rodape-pe">
           <span>© {new Date().getFullYear()} {CASA.nome}</span>
           {politica && (
