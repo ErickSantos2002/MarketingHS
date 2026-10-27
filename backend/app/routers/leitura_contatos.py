@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.crm import growthhs
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 router = APIRouter(prefix="/contatos", tags=["contatos-leitura"])
 
@@ -63,7 +63,7 @@ async def listar(
     pagina: int = Query(0, ge=0),
     tamanho: int = Query(1000, ge=1, le=TAMANHO_PAGINA_MAX),
     visao: str = Query("ativos", pattern="^(ativos|apagados|todos)$"),
-    usuario: Usuario = Depends(admin_atual),
+    usuario: Usuario = Depends(admin_ou_leitura),
 ):
     """Uma página da tabela de leads.
 
@@ -80,6 +80,11 @@ async def listar(
         "apagados": "WHERE deleted_at IS NOT NULL",
         "todos": "",
     }[visao]
+    # Papel `leitura` (034): contato EXCLUÍDO não sai para a agência — quem
+    # foi apagado (inclusive a pedido, LGPD) não deveria seguir visível.
+    if usuario.papel == "leitura" and visao != "ativos":
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Acesso somente leitura: contatos excluídos não ficam visíveis.")
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"""SELECT {COLUNAS_LEAD} FROM leads {filtro}
@@ -92,7 +97,7 @@ async def listar(
 
 
 @router.get("/conversoes-utm")
-async def conversoes_utm(usuario: Usuario = Depends(admin_atual)):
+async def conversoes_utm(usuario: Usuario = Depends(admin_ou_leitura)):
     """Mapa lead_id -> utm_contents das conversões.
 
     O hook paginava lead_conversions de 1000 em 1000 e agrupava no navegador.
@@ -108,7 +113,7 @@ async def conversoes_utm(usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/duplicatas")
-async def duplicatas(usuario: Usuario = Depends(admin_atual)):
+async def duplicatas(usuario: Usuario = Depends(admin_ou_leitura)):
     """Identidades que compartilham e-mail ou telefone.
 
     Só mostra. A fusão é do lote 1D — merge_identities mexe em várias tabelas e
@@ -174,7 +179,7 @@ async def fundir_identidades(dados: FusaoIn, usuario: Usuario = Depends(admin_at
 
 
 @router.post("/enriquecimento")
-async def enriquecimento(dados: EnriquecimentoIn, usuario: Usuario = Depends(admin_atual)):
+async def enriquecimento(dados: EnriquecimentoIn, usuario: Usuario = Depends(admin_ou_leitura)):
     """Marca, por identidade, presença nos outros sistemas e agendamento aberto.
 
     A regra do agendamento vem de useContactsEnriched e tem três partes:
@@ -249,7 +254,8 @@ async def enriquecimento(dados: EnriquecimentoIn, usuario: Usuario = Depends(adm
 
 
 @router.post("/tags-por-contato")
-async def tags_por_contato(dados: TagsDeContatosIn, usuario: Usuario = Depends(admin_atual)):
+async def tags_por_contato(dados: TagsDeContatosIn,
+                           usuario: Usuario = Depends(admin_ou_leitura)):
     """Mapa lead_id -> tags, para a coluna de tags da tabela.
 
     POST pelo mesmo motivo do enriquecimento: a lista de ids não cabe em query
@@ -273,7 +279,7 @@ async def tags_por_contato(dados: TagsDeContatosIn, usuario: Usuario = Depends(a
 async def busca(
     q: str = Query(min_length=2, max_length=100),
     limite: int = Query(20, ge=1, le=100),
-    usuario: Usuario = Depends(admin_atual),
+    usuario: Usuario = Depends(admin_ou_leitura),
 ):
     """Busca por nome, e-mail ou WhatsApp — o campo de procurar contato do
     construtor de segmento estático.
@@ -299,7 +305,7 @@ async def busca(
 
 
 @router.get("/{lead_id}")
-async def ficha(lead_id: str, usuario: Usuario = Depends(admin_atual)):
+async def ficha(lead_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """Lead, tags e notas numa volta só.
 
     A tela recarrega o lead depois de cada mudança para pegar `etiqueta` e
@@ -327,7 +333,7 @@ async def ficha(lead_id: str, usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/{lead_id}/conversoes-lista")
-async def listar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual)):
+async def listar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """As conversões do contato, para a linha do tempo da ficha."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -340,7 +346,7 @@ async def listar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual
 
 
 @router.get("/{lead_id}/consentimentos")
-async def consentimentos(lead_id: UUID, usuario: Usuario = Depends(admin_atual)):
+async def consentimentos(lead_id: UUID, usuario: Usuario = Depends(admin_ou_leitura)):
     """O histórico de consentimento do contato (prova do RD), mais recente
     primeiro — um registro por aceite, com o texto e a versão que valiam.
 
@@ -360,7 +366,7 @@ async def consentimentos(lead_id: UUID, usuario: Usuario = Depends(admin_atual))
 
 @router.get("/{lead_id}/eventos")
 async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
-                  usuario: Usuario = Depends(admin_atual)):
+                  usuario: Usuario = Depends(admin_ou_leitura)):
     """Histórico do contato, incluindo o que veio de outros sistemas.
 
     ⚠️ Filtra por `lead_id` OU pelo `dnia_id` do contato. Evento vindo de outro
@@ -383,7 +389,7 @@ async def eventos(lead_id: str, limite: int = Query(50, ge=1, le=500),
 
 
 @router.get("/{lead_id}/conversoes")
-async def contar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_atual)):
+async def contar_conversoes(lead_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """Quantas vezes o contato converteu.
 
     Serve ao critério de reconversão no detalhamento de score da ficha. É

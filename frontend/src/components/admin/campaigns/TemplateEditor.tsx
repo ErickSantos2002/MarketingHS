@@ -12,11 +12,16 @@ import { useTemplates } from '@/hooks/useTemplates';
 import { useSocialLinks } from '@/hooks/useSocialLinks';
 import { BASE_EMAIL_DESIGN, buildEmailEditorOptions, registerEmailImageUpload } from './emailEditorConfig';
 import { designDoTemplate } from './designDoHtml';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 export default function TemplateEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = !id;
+  // Leitor abre o template para ver (o AdminLayout já o tira de /templates/new);
+  // sem "Salvar" e com os campos travados. O editor visual continua aberto,
+  // mas nada do que se mexer nele é gravado.
+  const podeEditar = usePodeEditar();
   const { getTemplate, createTemplate, updateTemplate, refetch } = useTemplates();
   // Ver buildEmailEditorOptions: o pre-preenchimento do bloco social so vale se
   // as options ja estiverem prontas quando o editor inicializa.
@@ -130,24 +135,28 @@ export default function TemplateEditor() {
         <Button variant="ghost" onClick={() => navigate('/templates')} className="gap-1.5 shrink-0">
           <ArrowLeft className="h-4 w-4" /> Voltar
         </Button>
-        <Button onClick={handleSave} disabled={saving || !editorReady} className="gap-1.5 shrink-0">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Salvar template
-        </Button>
+        {podeEditar ? (
+          <Button onClick={handleSave} disabled={saving || !editorReady} className="gap-1.5 shrink-0">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Salvar template
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">Somente leitura: alterações aqui não são salvas.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
           <Label>Nome *</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Newsletter mensal" />
+          <Input value={name} readOnly={!podeEditar} onChange={e => setName(e.target.value)} placeholder="Ex: Newsletter mensal" />
         </div>
         <div>
           <Label>Categoria</Label>
-          <Input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Newsletter, Promoção" />
+          <Input value={category} readOnly={!podeEditar} onChange={e => setCategory(e.target.value)} placeholder="Ex: Newsletter, Promoção" />
         </div>
         <div>
           <Label>Descrição</Label>
-          <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Quando usar este template" />
+          <Input value={description} readOnly={!podeEditar} onChange={e => setDescription(e.target.value)} placeholder="Quando usar este template" />
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, LogOut } from 'lucide-react';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, LogOut, Eye } from 'lucide-react';
 import { AdminSidebar } from './AdminSidebar';
 import { AIDataChat } from './AIDataChat';
 import { ChaveDeTema } from './ChaveDeTema';
@@ -36,6 +36,10 @@ const TITULOS_ROTA: { padrao: RegExp; titulo: string }[] = [
 // Rota sem entrada acima não pode nascer com <h1> vazio: cai no nome do
 // sistema e, em dev, avisa uma vez por caminho para alguém mapear a rota.
 const TITULO_PADRAO = 'MarketingHS';
+
+// Rotas que só existem para alterar dado — o leitor (`leitura`) volta para a
+// Visão Geral em vez de abrir uma tela cheia de 403.
+const ROTAS_SO_EDICAO = [/^\/settings(\/.*)?$/, /^\/import(\/.*)?$/, /^\/templates\/new$/, /^\/experiments\/setup$/];
 const rotasSemTituloAvisadas = new Set<string>();
 
 function tituloDaRota(pathname: string): string {
@@ -52,7 +56,7 @@ function tituloDaRota(pathname: string): string {
 
 function AdminLayoutInner() {
   const { allLeads, filteredLeads, dashboardFilters } = useAdminData();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isLeitura } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -74,6 +78,10 @@ function AdminLayoutInner() {
 
   const titulo = tituloDaRota(location.pathname);
 
+  if (isLeitura && ROTAS_SO_EDICAO.some((r) => r.test(location.pathname))) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <div className="flex min-h-screen bg-background">
       <AdminSidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
@@ -93,6 +101,15 @@ function AdminLayoutInner() {
               <Menu className="h-5 w-5" />
             </Button>
             <h1 className="truncate text-base font-semibold text-conteudo-heading">{titulo}</h1>
+            {isLeitura && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-info/30 bg-[--tint-info] px-2.5 py-0.5 text-xs font-medium text-[--on-tint-info]"
+                title="Seu acesso permite ver as telas, mas não alterar dados."
+              >
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                Acesso somente leitura
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <ChaveDeTema />
@@ -130,9 +147,12 @@ function AdminLayoutInner() {
           </LimiteDeErro>
         </main>
       </div>
-      <LimiteDeErro area="AIDataChat">
-        <AIDataChat />
-      </LimiteDeErro>
+      {/* O chat de IA usa /ia/conversas*, que é admin-only: some para o leitor. */}
+      {!isLeitura && (
+        <LimiteDeErro area="AIDataChat">
+          <AIDataChat />
+        </LimiteDeErro>
+      )}
     </div>
   );
 }

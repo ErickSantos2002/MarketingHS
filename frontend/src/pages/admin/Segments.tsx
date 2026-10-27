@@ -11,10 +11,14 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { SegmentFormModal } from '@/components/admin/segments/SegmentFormModal';
 import { SegmentContactsDrawer } from '@/components/admin/segments/SegmentContactsDrawer';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 export default function Segments() {
   const { segments, counts, loading, duplicateSegment, deleteSegment, refetch } = useSegments();
   const navigate = useNavigate();
+  // Leitor: vê segmentos e contatos; sem criar, editar, duplicar, excluir
+  // nem o atalho "Enviar campanha".
+  const podeEditar = usePodeEditar();
   const [formOpen, setFormOpen] = useState(false);
   const [editSegment, setEditSegment] = useState<Segment | null>(null);
   const [drawerSegment, setDrawerSegment] = useState<Segment | null>(null);
@@ -40,11 +44,13 @@ export default function Segments() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <Button onClick={handleNew} className="gap-2">
-          <Plus className="h-4 w-4" /> Novo segmento
-        </Button>
-      </div>
+      {podeEditar && (
+        <div className="flex items-center justify-end">
+          <Button onClick={handleNew} className="gap-2">
+            <Plus className="h-4 w-4" /> Novo segmento
+          </Button>
+        </div>
+      )}
 
       {segments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
@@ -53,11 +59,15 @@ export default function Segments() {
           </div>
           <div>
             <p className="font-medium">Nenhum segmento criado</p>
-            <p className="text-sm text-muted-foreground mt-1">Crie segmentos para agrupar seus contatos</p>
+            {podeEditar && (
+              <p className="text-sm text-muted-foreground mt-1">Crie segmentos para agrupar seus contatos</p>
+            )}
           </div>
-          <Button onClick={handleNew} variant="outline" className="gap-2">
-            <Plus className="h-4 w-4" /> Criar primeiro segmento
-          </Button>
+          {podeEditar && (
+            <Button onClick={handleNew} variant="outline" className="gap-2">
+              <Plus className="h-4 w-4" /> Criar primeiro segmento
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -89,15 +99,15 @@ export default function Segments() {
                   <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={() => setDrawerSegment(seg)}>
                     <Users className="h-3 w-3" /> Ver contatos
                   </Button>
-                  <Button
+                  {podeEditar && <Button
                     variant="outline"
                     size="sm"
                     className="gap-1.5 flex-1"
                     onClick={() => navigate('/campaigns')}
                   >
                     <Send className="h-3 w-3" /> Enviar campanha
-                  </Button>
-                  <Popover>
+                  </Button>}
+                  {podeEditar && <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                         <MoreHorizontal className="h-4 w-4" />
@@ -114,7 +124,7 @@ export default function Segments() {
                         <Trash2 className="h-3.5 w-3.5" /> Excluir
                       </button>
                     </PopoverContent>
-                  </Popover>
+                  </Popover>}
                 </div>
               </CardContent>
             </Card>
@@ -123,7 +133,7 @@ export default function Segments() {
       )}
 
       <SegmentFormModal
-        open={formOpen}
+        open={podeEditar && formOpen}
         onOpenChange={setFormOpen}
         segment={editSegment}
         onSaved={refetch}

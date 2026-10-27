@@ -30,6 +30,7 @@ import { ErroApi } from '@/lib/api';
 import { CamposEditor } from './CamposEditor';
 import { CampoDeImagem } from './CampoDeImagem';
 import { SecoesEditor } from './SecoesEditor';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 // ⚠️ O chip "Obrigado padrão" (/obrigado) saiu em 21/10: essa rota não
 // existe, e a página caía no 404 depois de captar. Sem redirect, a landing
@@ -106,6 +107,9 @@ export default function PageConfigEditor() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { pages, updatePage, toggleStatus } = usePages();
+  // Leitor abre a configuração só para ver: o formulário fica num <fieldset
+  // disabled>, o salvamento automático não roda e Salvar/Publicar somem.
+  const podeEditar = usePodeEditar();
 
   const page = pages.find((p) => p.slug === slug);
 
@@ -131,7 +135,7 @@ export default function PageConfigEditor() {
   }, [page?.id]);
 
   const saveConfig = useCallback(async (newConfig: Record<string, any>) => {
-    if (!page) return;
+    if (!page || !podeEditar) return;
     setSaveState('saving');
     try {
       await updatePage.mutateAsync({ id: page.id, data: { config: newConfig } as any });
@@ -148,9 +152,10 @@ export default function PageConfigEditor() {
       // sem ele, "erro ao salvar" não diz qual imagem corrigir.
       toast.error(e instanceof ErroApi && e.message ? e.message : 'Erro ao salvar configurações');
     }
-  }, [page, updatePage]);
+  }, [page, updatePage, podeEditar]);
 
   const updateField = useCallback((key: string, value: any) => {
+    if (!podeEditar) return;
     setConfig((prev) => {
       const next = { ...prev, [key]: value };
       setSaveState('unsaved');
@@ -158,7 +163,7 @@ export default function PageConfigEditor() {
       debounceRef.current = setTimeout(() => saveConfig(next), 1200);
       return next;
     });
-  }, [saveConfig]);
+  }, [saveConfig, podeEditar]);
 
   const handleManualSave = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -241,7 +246,7 @@ export default function PageConfigEditor() {
             <code className="text-xs text-muted-foreground font-mono">/{page.slug}</code>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {podeEditar ? <div className="flex items-center gap-2">
           {saveState === 'saved' && (
             <Badge variant="success" className="gap-1">
               <CheckCircle className="h-3 w-3" /> Salvo
@@ -258,13 +263,15 @@ export default function PageConfigEditor() {
           <Button variant="outline" size="sm" onClick={handleManualSave}>
             <Save className="h-4 w-4 mr-1" /> Salvar
           </Button>
-        </div>
+        </div> : (
+          <p className="text-xs text-muted-foreground">Somente leitura</p>
+        )}
       </div>
 
       {/* Two Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-[55%_45%] gap-6">
         {/* Left - Form */}
-        <div className="space-y-6">
+        <fieldset disabled={!podeEditar} className="min-w-0 space-y-6">
           {/* Conteúdo principal */}
           <section className="border rounded-lg p-4 space-y-4">
             <h3 className="font-medium text-sm">Conteúdo principal</h3>
@@ -576,7 +583,7 @@ export default function PageConfigEditor() {
               </p>
             </div>
           </section>
-        </div>
+        </fieldset>
 
         {/* Right - Preview */}
         <div className="space-y-3 lg:sticky lg:top-4">
@@ -605,13 +612,15 @@ export default function PageConfigEditor() {
             <Button variant="outline" size="sm" onClick={() => window.open(caminhoDaLanding(page.slug), '_blank')}>
               <ExternalLink className="h-4 w-4 mr-1" /> Abrir em nova aba
             </Button>
-            <Button
-              variant={page.status === 'active' ? 'destructive' : 'default'}
-              size="sm"
-              onClick={handlePublishToggle}
-            >
-              {page.status === 'active' ? 'Despublicar' : 'Publicar'}
-            </Button>
+            {podeEditar && (
+              <Button
+                variant={page.status === 'active' ? 'destructive' : 'default'}
+                size="sm"
+                onClick={handlePublishToggle}
+              >
+                {page.status === 'active' ? 'Despublicar' : 'Publicar'}
+              </Button>
+            )}
           </div>
         </div>
       </div>

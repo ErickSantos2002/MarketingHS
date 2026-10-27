@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jornadas", tags=["jornadas"])
@@ -249,7 +249,7 @@ def _sem_execucoes() -> dict:
 
 
 @router.get("")
-async def listar(usuario: Usuario = Depends(admin_atual)):
+async def listar(usuario: Usuario = Depends(admin_ou_leitura)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"""SELECT {COLUNAS}, e.numeros AS runs
@@ -260,7 +260,7 @@ async def listar(usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/{jornada_id}")
-async def detalhe(jornada_id: str, usuario: Usuario = Depends(admin_atual)):
+async def detalhe(jornada_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """O fluxo, as métricas por nó e a contagem de execuções.
 
     ⚠️ As métricas saem de `journey_node_metrics`, que já existe no banco. Não
@@ -381,7 +381,7 @@ async def excluir(jornada_id: str, usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/{jornada_id}/execucoes")
-async def execucoes(jornada_id: str, usuario: Usuario = Depends(admin_atual)):
+async def execucoes(jornada_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """As execuções do fluxo, com o contato junto."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         existe = await conn.fetchval(

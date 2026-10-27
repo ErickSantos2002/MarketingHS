@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Target, Pencil, Check, X, Loader2, CalendarDays } from 'lucide-react';
+import { usePodeEditar } from '@/hooks/useAuth';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -28,6 +29,8 @@ export function LeadGoalGauge({
   onUpdateDates, 
   isSaving 
 }: LeadGoalGaugeProps) {
+  // Meta e período gravam em PUT /painel/config (403 para o leitor).
+  const podeEditar = usePodeEditar();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(goal.toString());
   const [isEditingDates, setIsEditingDates] = useState(false);
@@ -95,7 +98,7 @@ export function LeadGoalGauge({
             Meta de Leads
           </CardTitle>
           <div className="flex items-center gap-1">
-            {!isEditing && (
+            {podeEditar && !isEditing && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -109,7 +112,7 @@ export function LeadGoalGauge({
         </div>
         {/* Period indicator */}
         <div className="flex items-center gap-1 mt-1">
-          <Popover open={isEditingDates} onOpenChange={setIsEditingDates}>
+          <Popover open={podeEditar && isEditingDates} onOpenChange={(o) => setIsEditingDates(podeEditar && o)}>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"

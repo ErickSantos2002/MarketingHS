@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 router = APIRouter(prefix="/painel", tags=["painel"])
 
@@ -47,7 +47,7 @@ TETO_AGENDAMENTOS = 20000
 
 
 @router.get("/config/{chave}")
-async def ler_config(chave: str, usuario: Usuario = Depends(admin_atual)):
+async def ler_config(chave: str, usuario: Usuario = Depends(admin_ou_leitura)):
     if chave not in CHAVES:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"Configuração '{chave}' não existe.")
@@ -85,7 +85,7 @@ async def gravar_config(chave: str, valor: Any = Body(...),
 
 
 @router.get("/agendamentos")
-async def listar_agendamentos(usuario: Usuario = Depends(admin_atual)):
+async def listar_agendamentos(usuario: Usuario = Depends(admin_ou_leitura)):
     """Os eventos de agendamento, que o painel usa para contar reuniões.
 
     ⚠️ Os dois tipos legados (`scheduling_widget_booked`, `meeting_scheduled`)
@@ -121,7 +121,7 @@ async def listar_agendamentos(usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/agendamentos/mql-hoje")
-async def listar_mql_reuniao_agendada_hoje(usuario: Usuario = Depends(admin_atual)):
+async def listar_mql_reuniao_agendada_hoje(usuario: Usuario = Depends(admin_ou_leitura)):
     """Leads que ENTRARAM em 'MQL - Reunião agendada' hoje (fuso Brasília).
 
     Porta fiel de `public.mql_reuniao_agendada_today()` (ver

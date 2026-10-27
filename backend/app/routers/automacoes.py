@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/automacoes", tags=["automacoes"])
@@ -87,7 +87,7 @@ def _linha(l) -> dict:
 
 
 @router.get("")
-async def listar(usuario: Usuario = Depends(admin_atual)):
+async def listar(usuario: Usuario = Depends(admin_ou_leitura)):
     """Prioridade decrescente: a primeira que bate é a que vale.
 
     ⚠️ `admin_atual` desde 01/10/2026: a política de `automation_rules` é

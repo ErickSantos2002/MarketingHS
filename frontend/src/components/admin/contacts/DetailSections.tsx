@@ -11,6 +11,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { lerFicha, criarNota, removerNota, removerTagDoContato } from '@/lib/leitura';
 import { criarTag } from '@/lib/leitura';
+import { usePodeEditar } from '@/hooks/useAuth';
 import { aplicarTag } from '@/lib/contatos';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
@@ -108,6 +109,8 @@ export function StatusTagsSection({
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState<string>('blue');
   const [leadTags, setLeadTags] = useState<TagInfo[]>(lead.tags || []);
+  // Leitor vê as tags, mas sem remover, aplicar nem criar.
+  const podeEditar = usePodeEditar();
 
   useEffect(() => {
     setLeadTags(lead.tags || []);
@@ -187,17 +190,23 @@ export function StatusTagsSection({
               style={estiloDeCorDeDado(tag.color)}
             >
               {tag.name}
-              <button
-                onClick={() => handleRemoveTag(tag.id)}
-                className="ml-0.5 hover:opacity-70"
-              >
-                <X className="h-3 w-3" />
-              </button>
+              {podeEditar && (
+                <button
+                  onClick={() => handleRemoveTag(tag.id)}
+                  className="ml-0.5 hover:opacity-70"
+                  aria-label={`Remover tag ${tag.name}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </Badge>
           ))}
+          {!podeEditar && leadTags.length === 0 && (
+            <span className="text-xs text-muted-foreground">Sem tags</span>
+          )}
         </div>
 
-        <div className="relative">
+        {podeEditar && <div className="relative">
           <Input
             placeholder="Buscar ou criar tag..."
             value={tagSearch}
@@ -235,10 +244,10 @@ export function StatusTagsSection({
               )}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Create tag mini-modal */}
-        {showCreateTag && (
+        {podeEditar && showCreateTag && (
           <div className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-3">
             <Input
               placeholder="Nome da tag"
@@ -284,6 +293,8 @@ export function NotesSection({ leadId }: { leadId: string }) {
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Leitor lê as notas; não cria nem apaga.
+  const podeEditar = usePodeEditar();
 
   const fetchNotes = useCallback(async () => {
     setLoading(true);
@@ -323,22 +334,26 @@ export function NotesSection({ leadId }: { leadId: string }) {
 
   return (
     <div className="space-y-3">
-      <Textarea
-        placeholder="Adicionar uma nota..."
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        rows={3}
-        className="text-sm resize-none"
-      />
-      <Button
-        size="sm"
-        onClick={handleSave}
-        disabled={saving || !content.trim()}
-        className="h-7 text-xs"
-      >
-        <StickyNote className="h-3 w-3 mr-1.5" />
-        Salvar nota
-      </Button>
+      {podeEditar && (
+        <>
+          <Textarea
+            placeholder="Adicionar uma nota..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={3}
+            className="text-sm resize-none"
+          />
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving || !content.trim()}
+            className="h-7 text-xs"
+          >
+            <StickyNote className="h-3 w-3 mr-1.5" />
+            Salvar nota
+          </Button>
+        </>
+      )}
 
       {loading ? (
         <div className="space-y-2">
@@ -356,7 +371,7 @@ export function NotesSection({ leadId }: { leadId: string }) {
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {formatDistanceToNow(new Date(note.created_at), { addSuffix: true, locale: ptBR })}
                   </span>
-                  {confirmDeleteId === note.id ? (
+                  {!podeEditar ? null : confirmDeleteId === note.id ? (
                     <div className="flex items-center gap-1 text-xs">
                       <span className="text-muted-foreground">Tem certeza?</span>
                       <button onClick={() => handleDelete(note.id)} className="text-[--on-tint-danger] font-medium">Sim</button>

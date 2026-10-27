@@ -24,8 +24,9 @@ interface Props {
   metrics?: JourneyNodeMetrics;
   /** Só é passado nos nós que têm o que visualizar (email com template escolhido). */
   onPreview?: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  /** Sem `onEdit` (leitor), o lápis some; idem `onDelete`. */
+  onEdit?: () => void;
+  onDelete?: () => void;
   canDelete?: boolean;
 }
 
@@ -49,10 +50,12 @@ export function JourneyNodeCard({ node, summary, metrics, onPreview, onEdit, onD
                 <Eye className="h-3.5 w-3.5" />
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit}>
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            {canDelete && (
+            {onEdit && (
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onEdit}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {canDelete && onDelete && (
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[--on-tint-danger]" onClick={onDelete}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

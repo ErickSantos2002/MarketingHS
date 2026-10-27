@@ -12,6 +12,7 @@ import { CampaignWizard } from '@/components/admin/campaigns/CampaignWizard';
 import { CampaignDetail } from '@/components/admin/campaigns/CampaignDetail';
 import { formatInTimeZone } from 'date-fns-tz';
 import { STATUS_DE_CAMPANHA } from '@/components/admin/campaigns/statusDeCampanha';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 // Exibe sempre em Brasília: o wizard agenda em horário de Brasília, então a lista
 // precisa falar a mesma língua — com toLocaleDateString o admin veria o horário
@@ -24,6 +25,9 @@ function formatDate(d: string | null) {
 export default function Campaigns() {
   const { campaigns, loading, stats, refetch, duplicateCampaign, deleteCampaign, cancelSchedule, getCampaignStats } = useCampaigns();
   const [wizardOpen, setWizardOpen] = useState(false);
+  // Leitor: lista, detalhe e "Ver campanha" (wizard em modo consulta); sem
+  // criar, editar, duplicar, cancelar agendamento nem excluir.
+  const podeEditar = usePodeEditar();
   const [detailCampaign, setDetailCampaign] = useState<Campaign | null>(null);
   const [editCampaign, setEditCampaign] = useState<Campaign | null>(null);
   // Mesmo wizard do editCampaign, porém em modo consulta — para campanhas que já
@@ -60,12 +64,14 @@ export default function Campaigns() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <Button onClick={() => setWizardOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova campanha
-        </Button>
-      </div>
+      {podeEditar && (
+        <div className="flex items-center justify-end">
+          <Button onClick={() => setWizardOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova campanha
+          </Button>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -116,9 +122,11 @@ export default function Campaigns() {
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
           <Send className="h-10 w-10 opacity-40" />
           <p>Nenhuma campanha criada</p>
-          <Button variant="outline" onClick={() => setWizardOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Criar primeira campanha
-          </Button>
+          {podeEditar && (
+            <Button variant="outline" onClick={() => setWizardOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Criar primeira campanha
+            </Button>
+          )}
         </div>
       ) : (
         <div className="rounded-md border overflow-x-auto">
@@ -178,7 +186,7 @@ export default function Campaigns() {
                           </DropdownMenuItem>
                           {/* Editar e Ver campanha são complementares: um dos dois
                               sempre aparece, nunca os dois. */}
-                          {(c.status === 'draft' || c.status === 'scheduled') ? (
+                          {podeEditar && (c.status === 'draft' || c.status === 'scheduled') ? (
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditCampaign(c); }}>
                               <Pencil className="h-4 w-4 mr-2" /> Editar
                             </DropdownMenuItem>
@@ -187,17 +195,19 @@ export default function Campaigns() {
                               <FileText className="h-4 w-4 mr-2" /> Ver campanha
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateCampaign(c); }}>
-                            <Copy className="h-4 w-4 mr-2" /> Duplicar
-                          </DropdownMenuItem>
-                          {c.status === 'scheduled' && (
+                          {podeEditar && (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateCampaign(c); }}>
+                              <Copy className="h-4 w-4 mr-2" /> Duplicar
+                            </DropdownMenuItem>
+                          )}
+                          {podeEditar && c.status === 'scheduled' && (
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); cancelSchedule(c.id); }}>
                               <CalendarX className="h-4 w-4 mr-2" /> Cancelar agendamento
                             </DropdownMenuItem>
                           )}
                           {/* Pausada ainda tem envio pendente: o banco recusa
                               apagar (guard_campaign_delete). Parar antes. */}
-                          {c.status !== 'sending' && c.status !== 'paused' && (
+                          {podeEditar && c.status !== 'sending' && c.status !== 'paused' && (
                             <DropdownMenuItem className="text-[--on-tint-danger]" onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}>
                               <Trash2 className="h-4 w-4 mr-2" /> Excluir
                             </DropdownMenuItem>
@@ -213,14 +223,14 @@ export default function Campaigns() {
         </div>
       )}
 
-      {wizardOpen && (
+      {podeEditar && wizardOpen && (
         <CampaignWizard
           open={wizardOpen}
           onClose={() => { setWizardOpen(false); refetch(); }}
         />
       )}
 
-      {editCampaign && (
+      {podeEditar && editCampaign && (
         <CampaignWizard
           open={!!editCampaign}
           campaign={editCampaign}

@@ -16,6 +16,7 @@ import type { TagInfo, ContactsFilters } from '@/hooks/useContactsEnriched';
 import type { DashboardFilters, DatePreset, Recorrencia } from '@/hooks/useDashboardFilters';
 import type { QualificationSegment } from '@/hooks/useLeadQualification';
 import type { DeletedView } from '@/hooks/useLeads';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: 'all', label: 'Todo período' },
@@ -79,6 +80,7 @@ export function ContactsFilterPanel({
   deletedView, onDeletedViewChange,
   open, onClose,
 }: UnifiedFilterPanelProps) {
+  const podeEditar = usePodeEditar();
   const [localContacts, setLocalContacts] = useState(contactsFilters);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [createdDatePopoverOpen, setCreatedDatePopoverOpen] = useState(false);
@@ -302,16 +304,19 @@ export function ContactsFilterPanel({
         />
 
 
-        <FilterSelect
-          label="VISUALIZAÇÃO"
-          value={deletedView}
-          onValueChange={(v) => onDeletedViewChange(v as DeletedView)}
-          options={[
-            { value: 'active', label: 'Ativos' },
-            { value: 'deleted', label: 'Apenas apagados' },
-            { value: 'all', label: 'Todos (inclui apagados)' },
-          ]}
-        />
+        {/* Leitor só vê ativos: o servidor recusa apagados/todos (LGPD). */}
+        {podeEditar && (
+          <FilterSelect
+            label="VISUALIZAÇÃO"
+            value={deletedView}
+            onValueChange={(v) => onDeletedViewChange(v as DeletedView)}
+            options={[
+              { value: 'active', label: 'Ativos' },
+              { value: 'deleted', label: 'Apenas apagados' },
+              { value: 'all', label: 'Todos (inclui apagados)' },
+            ]}
+          />
+        )}
 
         <div className="space-y-1.5">
           <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Opções</Label>

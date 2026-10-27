@@ -29,10 +29,14 @@ import { usePages, type Page, type PageFormData, type PageStat } from '@/hooks/u
 import { NewPageDialog } from './NewPageDialog';
 import { UTMPresetsModal } from './UTMPresetsModal';
 import { NumerosDasPaginas } from './NumerosDasPaginas';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 export function PagesManagement() {
   const { pages, pageStats, isLoading, refetch, createPage, updatePage, deletePage, toggleStatus, updatePageConfig } = usePages();
   const navigate = useNavigate();
+  // Leitor: vê páginas e números, abre o editor só para ver, gera link e
+  // abre a página; sem criar, duplicar, ativar/desativar nem excluir.
+  const podeEditar = usePodeEditar();
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; pageId: string; pageName: string; action: 'deactivate' | 'delete' } | null>(null);
@@ -98,10 +102,12 @@ export function PagesManagement() {
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
-          <Button onClick={() => setNewDialogOpen(true)} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Página
-          </Button>
+          {podeEditar && (
+            <Button onClick={() => setNewDialogOpen(true)} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Nova Página
+            </Button>
+          )}
         </div>
       </div>
 
@@ -160,7 +166,9 @@ export function PagesManagement() {
                 </Badge>
                 <Switch
                   checked={page.status === 'active'}
-                  onCheckedChange={() => handleToggle(page)}
+                  disabled={!podeEditar}
+                  aria-label={page.status === 'active' ? 'Página ativa' : 'Página em rascunho'}
+                  onCheckedChange={() => { if (podeEditar) handleToggle(page); }}
                 />
               </div>
 
@@ -208,7 +216,7 @@ export function PagesManagement() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => navigate(`/pages/${page.slug.replace(/^\/+/, '')}/edit`)}>
-                      <Edit className="h-4 w-4 mr-2" /> Editar
+                      <Edit className="h-4 w-4 mr-2" /> {podeEditar ? 'Editar' : 'Ver configuração'}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setUtmModal({ open: true, page })}>
                       <Link2 className="h-4 w-4 mr-2" /> Gerar link
@@ -216,13 +224,15 @@ export function PagesManagement() {
                     <DropdownMenuItem onClick={() => handleViewLeads(page.slug.replace(/^\/+/, ''))}>
                       <Users className="h-4 w-4 mr-2" /> Ver leads
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDuplicate(page)}>
-                      <Copy className="h-4 w-4 mr-2" /> Duplicar
-                    </DropdownMenuItem>
+                    {podeEditar && (
+                      <DropdownMenuItem onClick={() => handleDuplicate(page)}>
+                        <Copy className="h-4 w-4 mr-2" /> Duplicar
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => window.open(caminhoDaLanding(page.slug), '_blank')}>
                       <ExternalLink className="h-4 w-4 mr-2" /> Abrir página
                     </DropdownMenuItem>
-                    {(page.total_leads || 0) === 0 && (
+                    {podeEditar && (page.total_leads || 0) === 0 && (
                       <DropdownMenuItem className="text-[--on-tint-danger]" onClick={() => handleDelete(page)}>
                         <Trash2 className="h-4 w-4 mr-2" /> Excluir
                       </DropdownMenuItem>
@@ -240,7 +250,7 @@ export function PagesManagement() {
 
       {/* New Page Dialog */}
       <NewPageDialog
-        open={newDialogOpen}
+        open={podeEditar && newDialogOpen}
         onOpenChange={setNewDialogOpen}
         pages={pages}
         onCreated={(slug) => {

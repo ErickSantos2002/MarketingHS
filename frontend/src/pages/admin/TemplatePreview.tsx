@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useTemplates, type EmailTemplate } from '@/hooks/useTemplates';
 import { EmailTemplateFrame, type Viewport } from '@/components/admin/campaigns/EmailTemplateFrame';
 import { SendTestEmailPopover } from '@/components/admin/campaigns/SendTestEmailPopover';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 // Pagina de visualizacao de template, aberta em NOVA ABA pelo menu de contexto
 // em /templates. Fica FORA do AdminLayout de proposito (ver a rota irma em
@@ -21,6 +22,7 @@ export default function TemplatePreview() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getTemplate } = useTemplates();
+  const podeEditar = usePodeEditar();
 
   const [template, setTemplate] = useState<EmailTemplate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,7 +88,7 @@ export default function TemplatePreview() {
         {id && <SendTestEmailPopover templateId={id} templateName={template?.name} />}
 
         <Button variant="outline" size="sm" onClick={() => navigate(`/templates/${id}/edit`)} className="gap-1.5">
-          <Pencil className="h-4 w-4" /> Editar template
+          <Pencil className="h-4 w-4" /> {podeEditar ? 'Editar template' : 'Abrir no editor'}
         </Button>
 
         <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Fechar visualização">

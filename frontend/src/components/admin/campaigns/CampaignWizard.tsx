@@ -27,6 +27,7 @@ import { designDoTemplate } from './designDoHtml';
 import { useSocialLinks } from '@/hooks/useSocialLinks';
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog';
 import { EmailTemplateFrame } from './EmailTemplateFrame';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface CampaignWizardProps {
   open: boolean;
@@ -69,7 +70,10 @@ export function CampaignWizard({ open, onClose, campaign, readOnly }: CampaignWi
   // Campaigns.tsx monta o wizard dentro de `{aberto && (...)}`, ou seja, ele é
   // remontado a cada abertura -- por isso inicializar o estado direto no useState
   // basta, sem useEffect de sincronização.
-  const isReadOnly = !!readOnly && !!campaign;
+  // Leitor só abre o wizard em consulta (Campaigns.tsx não oferece criar nem
+  // editar); a trava aqui é a segunda linha, caso alguém o monte com campanha.
+  const podeEditar = usePodeEditar();
+  const isReadOnly = (!!readOnly || !podeEditar) && !!campaign;
   // Os dois modos são mutuamente exclusivos: `isEditing` liga os textos e o botão
   // de salvar, que não podem aparecer em consulta.
   const isEditing = !!campaign && !isReadOnly;

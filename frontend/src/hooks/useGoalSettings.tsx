@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, ErroApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 export interface GoalSettings {
   goal: number;
@@ -27,6 +28,8 @@ export function useGoalSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  // Segunda linha: a tela já esconde a edição da meta para o leitor.
+  const podeEditar = usePodeEditar();
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -58,6 +61,7 @@ export function useGoalSettings() {
   }, [fetchSettings]);
 
   const updateSettings = useCallback(async (newSettings: Partial<GoalSettings>) => {
+    if (!podeEditar) return;
     setIsSaving(true);
     const updatedSettings = { ...settings, ...newSettings };
 
@@ -79,7 +83,7 @@ export function useGoalSettings() {
     } finally {
       setIsSaving(false);
     }
-  }, [settings, toast]);
+  }, [settings, toast, podeEditar]);
 
   const updateGoal = useCallback((goal: number) => {
     return updateSettings({ goal });

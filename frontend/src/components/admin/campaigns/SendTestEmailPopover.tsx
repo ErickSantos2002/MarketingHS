@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, usePodeEditar } from '@/hooks/useAuth';
 import { enviarEmailDeTeste } from '@/lib/campanhas';
 import { ErroApi } from '@/lib/api';
 
@@ -24,7 +24,14 @@ interface Props {
   templateName?: string;
 }
 
-export function SendTestEmailPopover({ templateId, templateName }: Props) {
+// Enviar teste é escrita (POST /campanhas/enviar-teste): some para o leitor,
+// em qualquer tela que use o botão.
+export function SendTestEmailPopover(props: Props) {
+  const podeEditar = usePodeEditar();
+  return podeEditar ? <SendTestEmailPopoverInner {...props} /> : null;
+}
+
+function SendTestEmailPopoverInner({ templateId, templateName }: Props) {
   const { user } = useAuth();
 
   const [open, setOpen] = useState(false);

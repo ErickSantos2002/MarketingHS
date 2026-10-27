@@ -20,6 +20,7 @@ import { useAbTest, useAbEvents, AbEventRow } from "@/hooks/useAbTests";
 import { analyzeVariants, VariantVerdict } from "@/lib/abStats";
 import { abDistributionLink, abBaseHost } from "@/lib/abConfig";
 import { useAbConfig } from "@/hooks/useAbConfig";
+import { usePodeEditar } from "@/hooks/useAuth";
 
 const pct = (n: number) => (n * 100).toFixed(2) + "%";
 
@@ -59,6 +60,8 @@ export default function ExperimentDetail() {
   const { data: test, isLoading } = useAbTest(id);
   const { data: eventosDoTeste, isLoading: loadingEvents } = useAbEvents(test?.id);
   const { redirectorBase } = useAbConfig();
+  // Exportar CSV tira dado do sistema (LGPD): só admin.
+  const podeEditar = usePodeEditar();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
 
   const rows = useMemo(() => eventosDoTeste?.events || [], [eventosDoTeste]);
@@ -322,7 +325,9 @@ export default function ExperimentDetail() {
                 {filtered.length.toLocaleString("pt-BR")} de {rows.length.toLocaleString("pt-BR")} eventos
                 {filtersActive && <Button variant="link" size="sm" className="h-auto p-0 ml-2" onClick={() => setFilters(EMPTY_FILTERS)}>limpar filtros</Button>}
               </div>
-              <Button variant="outline" size="sm" onClick={exportCsv}><Download className="h-4 w-4 mr-2" /> Exportar CSV</Button>
+              {podeEditar && (
+                <Button variant="outline" size="sm" onClick={exportCsv}><Download className="h-4 w-4 mr-2" /> Exportar CSV</Button>
+              )}
             </div>
             {filtersActive && (
               <div className="rounded-lg border border-warning/30 bg-[--tint-warning] px-3 py-2 text-xs text-[--on-tint-warning] flex items-center gap-2">

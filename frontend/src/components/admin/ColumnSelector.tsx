@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Settings2, GripVertical, RotateCcw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { lerPreferencia, gravarPreferencia } from '@/lib/leitura';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 const STORAGE_KEY = 'leads-table-columns';
 const ORDER_STORAGE_KEY = 'leads-table-column-order';
@@ -93,9 +94,13 @@ export function useColumnSettings() {
   const [columnOrder, setColumnOrder] = useState<string[]>(initial.order);
   const [dbLoaded, setDbLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Leitor: `PUT /preferencias` é 403 para ele — a escolha de colunas fica só
+  // no navegador (localStorage), sem gravar no servidor.
+  const podeEditar = usePodeEditar();
 
   // Persist to DB (debounced)
   const persistToDb = useCallback((visible: string[], order: string[]) => {
+    if (!podeEditar) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
@@ -107,7 +112,7 @@ export function useColumnSettings() {
         console.error('Falha ao gravar preferência de colunas:', e);
       }
     }, 1000);
-  }, []);
+  }, [podeEditar]);
 
   // Load from DB on mount
   useEffect(() => {
