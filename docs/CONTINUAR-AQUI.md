@@ -1,5 +1,11 @@
 # Continuar aqui
 
+> ## ✅ 27/10 (noite) — ajustes do Nicholson na landing
+>
+> - Frente `landing-nicholson` ✅ mergeada (`eabc571`; portão local **1233 passed**, node 99, `tsc` 0, builds ok): rodapé com 4007-1507* (nota do site oficial) e (81) 98177-1177; player do YouTube fechado (controles nossos, camada que pega todo clique, capa na pausa e no fim, para 1,5 s antes do fim); "Quem já usa" em 4 colunas. Vídeo trocado para `sByexR1w9vw` por `~/marketinghs-landing-video.sh`.
+> - Limite: título/"Mais vídeos"/logo do YouTube aparecem ~3 s no início (não clicáveis). Saída definitiva: hospedar o MP4 (pergunta ao Erick). iPhone real não conferido.
+> - **Falta:** deploy de `marketinghs-api`. Depois: agendamento de reunião na landing (Erick manda o site de referência).
+
 > ## ✅ 27/10 (tarde) — papel `leitura` (conta do Sergio, agência do Leão)
 >
 > - Pedido do Nicholson: o Sergio olha o sistema sem alterar. Frente `papel-leitura` ✅ mergeada (`711cb6d`; portão local **1229 passed, 9 skipped**, `tsc` 0, guarda 0, builds ok).
