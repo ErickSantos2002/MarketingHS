@@ -20,20 +20,21 @@ const ORIGEM = "https://marketinghs.exemplo.com";
 const ler = (config) => secoesDaConfig(config, ORIGEM, "/api");
 const PHOEBUS = JSON.parse(readFileSync(new URL("./landing-phoebus.json", import.meta.url), "utf8"));
 
-test("a config do Phoebus monta as nove seções, dos oito tipos", () => {
+test("a config do Phoebus monta as doze seções, dos onze tipos", () => {
   const secoes = ler(PHOEBUS);
   assert.deepEqual(secoes.map((s) => s.tipo), [
-    "numeros", "comparativo", "passos", "cartoes", "cartoes",
-    "texto_imagem", "logos", "perguntas", "chamada",
+    "numeros", "comparativo", "passos", "video", "cartoes", "cartoes",
+    "texto_imagem", "logos", "depoimentos", "perguntas", "certificacoes", "chamada",
   ]);
   assert.deepEqual(new Set(secoes.map((s) => s.tipo)), new Set(TIPOS_DE_SECAO));
+  const porTipo = (t) => secoes.find((s) => s.tipo === t);
   assert.equal(secoes[0].itens[0].valor, "23 milhões+");
-  assert.equal(secoes[1].linhas.length, 6);
-  assert.equal(secoes[1].colunas.b, "Phoebus");
-  assert.equal(secoes[5].blocos.length, 2);
-  assert.equal(secoes[6].itens.length, 8);
-  assert.equal(secoes[8].botao, "Quero testar 30 dias grátis");
-  assert.deepEqual(secoes[8].itens.length, 3);
+  assert.equal(porTipo("comparativo").linhas.length, 6);
+  assert.equal(porTipo("comparativo").colunas.b, "Phoebus");
+  assert.equal(porTipo("texto_imagem").blocos.length, 2);
+  assert.equal(porTipo("logos").itens.length, 8);
+  assert.equal(porTipo("chamada").botao, "Quero testar 30 dias grátis");
+  assert.equal(porTipo("chamada").itens.length, 3);
 });
 
 test("sem secoes, ou secoes que não é lista: nenhuma seção, sem lançar", () => {
@@ -45,7 +46,7 @@ test("sem secoes, ou secoes que não é lista: nenhuma seção, sem lançar", ()
 test("seção quebrada ou de tipo desconhecido é descartada e a lista segue", () => {
   const secoes = ler({ secoes: [
     null, 42, "numeros", ["x"],
-    { tipo: "video", itens: [{ url: "https://youtube.com/x" }] },
+    { tipo: "carrossel", itens: [{ url: "https://youtube.com/x" }] },
     { tipo: "__proto__" },
     { itens: [{ valor: "1", rotulo: "sem tipo" }] },
     { tipo: "numeros", itens: [{ valor: "10", rotulo: "fica" }] },
@@ -191,6 +192,7 @@ test("secaoVazia nasce com um item vazio, do tipo pedido", () => {
     assert.equal(s.id, "x1");
     if (tipo === "comparativo") assert.equal(s.linhas.length, 1);
     else if (tipo === "texto_imagem") assert.equal(s.texto, "");
+    else if (tipo === "video") assert.equal(s.url, "");
     else assert.equal(s.itens.length, 1);
     // E vazia não aparece na página até alguém preencher.
     assert.deepEqual(ler({ secoes: [s] }), []);

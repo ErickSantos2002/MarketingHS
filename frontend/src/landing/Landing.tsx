@@ -1,9 +1,13 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
 import { Formulario } from "./Formulario";
 import { COR_CTA_PADRAO } from "./padroes";
 import {
-  enderecoDaImagem, linkDoWhatsapp, paragrafosDoCorpo, textoDaConfig, urlSegura, type ConfigDaPagina,
+  consentimentoDaConfig, enderecoDaImagem, linkDoWhatsapp, paragrafosDoCorpo, textoDaConfig, urlSegura,
+  type ConfigDaPagina,
 } from "./campos";
+import { CASA } from "./casa";
+import logoHorizontal from "./marca/logo-hs-horizontal-branco.png";
+import logoEmpilhado from "./marca/logo-hs-empilhado-branco.png";
 import { Numeros, Secoes } from "./Secoes";
 import { secoesDaConfig } from "./secoes";
 
@@ -16,28 +20,115 @@ const ACENTO = { "--landing-accent": COR_CTA_PADRAO } as CSSProperties;
 // O prefixo que a imagem do upload ganha (`enderecoDaImagem`, em campos.ts).
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
 
-function IconeWhatsapp() {
+function IconeWhatsapp({ tamanho = 28 }: { tamanho?: number }) {
   return (
-    <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">
+    <svg viewBox="0 0 24 24" width={tamanho} height={tamanho} aria-hidden="true" focusable="false">
       <path fill="currentColor" d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.08c-.24.68-1.42 1.3-1.95 1.35-.5.05-.97.23-3.27-.68-2.77-1.09-4.52-3.93-4.66-4.11-.13-.18-1.11-1.48-1.11-2.82 0-1.34.7-2 .95-2.27.25-.27.54-.34.72-.34h.52c.17 0 .4-.06.62.47.24.56.79 1.92.86 2.06.07.14.11.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.27.71 1.17 1.52 1.9 1.05.93 1.93 1.22 2.2 1.36.27.14.43.11.59-.07.16-.18.68-.79.86-1.06.18-.27.36-.23.61-.14.25.09 1.59.75 1.86.89.27.14.45.2.52.32.07.11.07.66-.17 1.35Z" />
     </svg>
   );
 }
 
-function BotaoWhatsapp({ href }: { href: string }) {
+// O flutuante some enquanto o botão do cabeçalho está na tela — os dois
+// juntos no primeiro viewport seriam o mesmo convite duas vezes. Fora da
+// tela, ele também sai do Tab (`visibility: hidden` no CSS).
+function BotaoWhatsapp({ href, escondido = false }: { href: string; escondido?: boolean }) {
   return (
-    <a className="landing-whatsapp" href={href} target="_blank" rel="noopener noreferrer"
-       aria-label="Falar no WhatsApp">
+    <a className={escondido ? "landing-whatsapp landing-whatsapp-escondido" : "landing-whatsapp"}
+       href={href} target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp">
       <IconeWhatsapp />
     </a>
+  );
+}
+
+/** `true` enquanto o elemento aparece na janela. Sem IntersectionObserver, `false`. */
+function useNaTela<T extends Element>(ativo: boolean) {
+  const ref = useRef<T>(null);
+  const [naTela, setNaTela] = useState(ativo);
+  useEffect(() => {
+    const alvo = ref.current;
+    if (!ativo || !alvo || typeof IntersectionObserver === "undefined") {
+      setNaTela(false);
+      return;
+    }
+    const observador = new IntersectionObserver(([e]) => setNaTela(e.isIntersecting));
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [ativo]);
+  return [ref, naTela] as const;
+}
+
+// O alto do topo marinho: o logo da casa e, se a página tem WhatsApp, o
+// botão para falar. O logo não é link: quem chegou pelo anúncio fica na
+// página do formulário.
+function Cabecalho({ whatsapp, botaoRef }: {
+  whatsapp: string | null;
+  botaoRef: Ref<HTMLAnchorElement>;
+}) {
+  return (
+    <header className="cabecalho">
+      <div className="cabecalho-miolo">
+        <img className="cabecalho-logo" src={logoHorizontal} alt={CASA.nome} width={250} height={72} />
+        {whatsapp && (
+          <a ref={botaoRef} className="cabecalho-whatsapp" href={whatsapp} target="_blank" rel="noopener noreferrer"
+             aria-label="Falar no WhatsApp">
+            <IconeWhatsapp tamanho={20} />
+            <span className="cabecalho-whatsapp-longo" aria-hidden="true">Falar no WhatsApp</span>
+            <span className="cabecalho-whatsapp-curto" aria-hidden="true">WhatsApp</span>
+          </a>
+        )}
+      </div>
+    </header>
+  );
+}
+
+// O rodapé da casa: os dados fixos de `casa.ts` e, quando a página tem, o
+// link da política de privacidade do consentimento.
+function Rodape({ politica, comWhatsapp }: { politica: string | null; comWhatsapp: boolean }) {
+  return (
+    // Com o WhatsApp flutuante, o pé ganha folga para o botão não cobrir
+    // a política de privacidade.
+    <footer className={comWhatsapp ? "rodape rodape-com-whatsapp" : "rodape"}>
+      <div className="rodape-miolo">
+        <img className="rodape-logo" src={logoEmpilhado} alt={CASA.nome} width={196} height={120} loading="lazy" />
+        <address className="rodape-contato">
+          <p>
+            {CASA.endereco.rua}
+            <br />
+            {CASA.endereco.cidade}
+          </p>
+          <p>
+            {CASA.telefones.map((t, i) => (
+              <span key={t.numero}>
+                {i > 0 && <br />}
+                <a href={`tel:${t.numero}`}>{t.rotulo}</a>
+              </span>
+            ))}
+          </p>
+          <p>
+            <a href={CASA.instagram.url} target="_blank" rel="noopener noreferrer">
+              Instagram {CASA.instagram.rotulo}
+            </a>
+            <br />
+            <a href={CASA.site.url} target="_blank" rel="noopener noreferrer">{CASA.site.rotulo}</a>
+          </p>
+        </address>
+        <div className="rodape-pe">
+          <span>© {new Date().getFullYear()} {CASA.nome}</span>
+          {politica && (
+            <a href={politica} target="_blank" rel="noopener noreferrer">Política de privacidade</a>
+          )}
+        </div>
+      </div>
+    </footer>
   );
 }
 
 export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina }) {
   // Os padrões existem para a página nunca nascer vazia: enquanto o Nicholson
   // não decide a oferta, a landing mostra o que a HS vende de fato.
-  const headline = config.headline || "Registre e prove cada teste de alcoolemia";
-  const subheadline = config.subheadline ||
+  // `textoDaConfig`: um número ou objeto no lugar do texto derrubaria a página.
+  const headline = textoDaConfig(config.headline) || "Registre e prove cada teste de alcoolemia";
+  const subheadline = textoDaConfig(config.subheadline) ||
     "Bafômetro conectado para indústria e logística — o teste vira registro auditável.";
   // Texto puro em blocos — nunca `dangerouslySetInnerHTML`: a config é
   // editada no admin, mas a página é pública, e HTML colado viraria script.
@@ -71,6 +162,11 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
   const numerosNoTopo = primeira?.tipo === "numeros" && !primeira.titulo && !primeira.subtitulo
     ? primeira : null;
   const depois = numerosNoTopo ? secoes.slice(1) : secoes;
+  // O botão do cabeçalho na tela esconde o flutuante (só na página rica:
+  // a antiga não tem cabeçalho).
+  const [botaoDoCabecalho, cabecalhoNaTela] = useNaTela<HTMLAnchorElement>(rica && !!whatsapp);
+  const consentimento = consentimentoDaConfig(config);
+  const politica = consentimento ? urlSegura(consentimento.link, window.location.origin) : null;
 
   // `id="formulario"` no cartão: é para onde o botão da seção "chamada" rola.
   if (!rica) {
@@ -87,41 +183,45 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
   }
 
   return (
-    <main className={["landing", "landing-rica", depois.length === 0 && "landing-sem-secoes",
-                      whatsapp && "landing-com-whatsapp"].filter(Boolean).join(" ")}
-          style={ACENTO}>
-      <header className={["topo", imagem && "topo-com-foto", numerosNoTopo && "topo-com-numeros"]
-                         .filter(Boolean).join(" ")}>
-        <div className="topo-fundo" aria-hidden="true" />
-        {/* Alt vazio: a foto ilustra o título ao lado, e repetir o h1 no
-            alt faria o leitor de tela dizer a mesma frase duas vezes. */}
-        {imagem && (
-          <div className="topo-foto">
-            <img src={imagem} alt="" />
-          </div>
-        )}
-        <div className="topo-texto">
-          <h1>{headline}</h1>
-          <p className="sub">{subheadline}</p>
-          {corpo.length > 0 && (
-            <div className="topo-corpo">
-              {corpo.map((bloco, i) => bloco.tipo === "p"
-                ? <p key={i}>{bloco.texto}</p>
-                : <ul key={i}>{bloco.itens.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+    <>
+      <Cabecalho whatsapp={whatsapp} botaoRef={botaoDoCabecalho} />
+      <main className={["landing", "landing-rica", depois.length === 0 && "landing-sem-secoes",
+                        whatsapp && "landing-com-whatsapp"].filter(Boolean).join(" ")}
+            style={ACENTO}>
+        <header className={["topo", imagem && "topo-com-foto", numerosNoTopo && "topo-com-numeros"]
+                           .filter(Boolean).join(" ")}>
+          <div className="topo-fundo" aria-hidden="true" />
+          {/* Alt vazio: a foto ilustra o título ao lado, e repetir o h1 no
+              alt faria o leitor de tela dizer a mesma frase duas vezes. */}
+          {imagem && (
+            <div className="topo-foto">
+              <img src={imagem} alt="" />
             </div>
           )}
-        </div>
-        <section id="formulario" className="topo-form" aria-label="Formulário de contato">
-          <Formulario slug={slug} config={config} />
-        </section>
-        {numerosNoTopo && (
-          <div className="topo-numeros">
-            <Numeros secao={numerosNoTopo} />
+          <div className="topo-texto">
+            <h1>{headline}</h1>
+            <p className="sub">{subheadline}</p>
+            {corpo.length > 0 && (
+              <div className="topo-corpo">
+                {corpo.map((bloco, i) => bloco.tipo === "p"
+                  ? <p key={i}>{bloco.texto}</p>
+                  : <ul key={i}>{bloco.itens.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+              </div>
+            )}
           </div>
-        )}
-      </header>
-      {depois.length > 0 && <Secoes secoes={depois} />}
-      {whatsapp && <BotaoWhatsapp href={whatsapp} />}
-    </main>
+          <section id="formulario" className="topo-form" aria-label="Formulário de contato">
+            <Formulario slug={slug} config={config} />
+          </section>
+          {numerosNoTopo && (
+            <div className="topo-numeros">
+              <Numeros secao={numerosNoTopo} />
+            </div>
+          )}
+        </header>
+        {depois.length > 0 && <Secoes secoes={depois} />}
+        {whatsapp && <BotaoWhatsapp href={whatsapp} escondido={cabecalhoNaTela} />}
+      </main>
+      <Rodape politica={politica} comWhatsapp={!!whatsapp} />
+    </>
   );
 }

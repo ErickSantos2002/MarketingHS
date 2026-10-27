@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/select';
 import {
   BOTAO_DA_CHAMADA_PADRAO, COLUNA_A_PADRAO, COLUNA_B_PADRAO,
-  LIMITE_ITENS, LIMITE_LINHAS, LIMITE_NUMEROS,
+  LIMITE_ITENS, LIMITE_LINHAS, LIMITE_NUMEROS, idDoYoutube,
   type ItemDaConfig, type LinhaDaConfig, type SecaoDaConfig,
 } from '@/landing/secoes';
 import { CampoDeImagem } from './CampoDeImagem';
@@ -283,6 +283,94 @@ export function EditorDeSecao({ secao, prefixo, onChange }: {
         </div>
       );
       break;
+    case 'certificacoes':
+      corpo = (
+        <div className="space-y-3">
+          <Campo id={id('texto')} rotulo="Texto (opcional)" valor={secao.texto} longo linhas={3}
+                 placeholder="Os bafômetros Health Safety são certificados pela ISO 9001 da TÜV NORD."
+                 onChange={(v) => mudar({ texto: v })} />
+          <ListaDeItens<ItemDaConfig> itens={itens} onChange={(x) => mudar({ itens: x })}
+            novo={() => ({ nome: '', imagem_url: '' })} teto={LIMITE_ITENS} nomeDoItem="selo"
+            desenhar={(item, trocar, i) => (
+              <>
+                <Campo id={id(`item-${i}-nome`)} rotulo="Nome (legenda e texto alternativo)" valor={item.nome}
+                       placeholder="ISO 9001 — TÜV NORD" onChange={(v) => trocar({ nome: v })} />
+                <CampoDeImagem id={id(`item-${i}-imagem`)} rotulo="Selo" valor={texto(item.imagem_url)}
+                               onChange={(v) => trocar({ imagem_url: v })} />
+              </>
+            )} />
+          <p className="text-xs text-muted-foreground">Selo sem imagem não aparece na página.</p>
+        </div>
+      );
+      break;
+    case 'depoimentos':
+      corpo = (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            O primeiro depoimento aparece em destaque. Sem texto ou sem nome, o depoimento não aparece.
+          </p>
+          <ListaDeItens<ItemDaConfig> itens={itens} onChange={(x) => mudar({ itens: x })}
+            novo={() => ({ texto: '', nome: '', cargo: '', empresa: '', logo_url: '' })} teto={LIMITE_ITENS}
+            nomeDoItem="depoimento"
+            desenhar={(item, trocar, i) => (
+              <>
+                <Campo id={id(`item-${i}-texto`)} rotulo="Depoimento (sem aspas — a página põe)" valor={item.texto}
+                       longo linhas={3} onChange={(v) => trocar({ texto: v })} />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Campo id={id(`item-${i}-nome`)} rotulo="Nome" valor={item.nome}
+                         onChange={(v) => trocar({ nome: v })} />
+                  <Campo id={id(`item-${i}-cargo`)} rotulo="Cargo (opcional)" valor={item.cargo}
+                         onChange={(v) => trocar({ cargo: v })} />
+                  <Campo id={id(`item-${i}-empresa`)} rotulo="Empresa (opcional)" valor={item.empresa}
+                         onChange={(v) => trocar({ empresa: v })} />
+                </div>
+                <CampoDeImagem id={id(`item-${i}-logo`)} rotulo="Logo da empresa (opcional)"
+                               valor={texto(item.logo_url)} onChange={(v) => trocar({ logo_url: v })} />
+              </>
+            )} />
+        </div>
+      );
+      break;
+    case 'video': {
+      const url = texto(secao.url);
+      const invalida = !!url.trim() && !idDoYoutube(url);
+      corpo = (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor={id('url')} className="text-xs">Link do YouTube</Label>
+            <Input id={id('url')} value={url} placeholder="https://www.youtube.com/watch?v=…"
+                   aria-invalid={invalida || undefined}
+                   aria-describedby={invalida ? id('url-erro') : undefined}
+                   onChange={(e) => mudar({ url: e.target.value })} />
+            {invalida ? (
+              <p id={id('url-erro')} className="text-xs text-[--on-tint-danger]">
+                Link não aceito: use o endereço do vídeo no YouTube (youtube.com/watch?v=…, youtu.be/…,
+                youtube.com/shorts/… ou youtube.com/embed/…). O servidor recusa, e nenhuma alteração da página é
+                salva até corrigir.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Na página aparece só a miniatura; o vídeo carrega quando a pessoa clica.
+              </p>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Formato do vídeo</Label>
+            <Select value={secao.formato === 'vertical' ? 'vertical' : 'horizontal'}
+                    onValueChange={(v) => mudar({ formato: v as 'horizontal' | 'vertical' })}>
+              <SelectTrigger aria-label="Formato do vídeo" className="w-64"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="horizontal">Deitado (16:9)</SelectItem>
+                <SelectItem value="vertical">Em pé (celular, Shorts)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Campo id={id('texto')} rotulo="Texto ao lado (opcional)" valor={secao.texto} longo linhas={3}
+                 onChange={(v) => mudar({ texto: v })} />
+        </div>
+      );
+      break;
+    }
   }
 
   return (
