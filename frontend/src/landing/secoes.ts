@@ -139,10 +139,7 @@ export function miniaturaDoYoutube(id: string, grande = true): string {
   return `https://i.ytimg.com/vi/${id}/${grande ? "maxresdefault" : "hqdefault"}.jpg`;
 }
 
-/** O player sem cookie de rastreio até o play, já tocando (o clique foi o play). */
-export function playerDoYoutube(id: string): string {
-  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`;
-}
+// O player (youtube-nocookie, fechado) mora em `player.ts`.
 
 // Aspas que a pessoa colou em volta do depoimento: quem desenha põe as
 // tipográficas, e duas de cada lado ficaria “"assim"”.

@@ -22,11 +22,18 @@
 export const CASA = {
   nome: "Health & Safety",
   endereco: { rua: "Rua Viscondessa do Livramento, 54", cidade: "Recife - PE" },
-  // `numero` é o que vai no `tel:` (com o +55); `rotulo`, o que se lê.
+  // Os mesmos do site oficial, na mesma ordem (healthsafety.com.br, pedido
+  // do Nicholson em 27/10). `numero` é o que vai no `tel:`; `rotulo`, o que
+  // se lê. O 4007 é número de capitais: sem DDD e sem +55 (com +55 a ligação
+  // não completa), e com o asterisco que remete à `notaDoTelefone`.
   telefones: [
-    { rotulo: "(81) 3052-3350", numero: "+558130523350" },
-    { rotulo: "(11) 3042-6479", numero: "+551130426479" },
+    { rotulo: "4007-1507", numero: "40071507", asterisco: true, detalhe: "Capitais e regiões metropolitanas" },
+    { rotulo: "(81) 98177-1177", numero: "+5581981771177", asterisco: false, detalhe: "" },
   ],
+  // O texto do site oficial, palavra por palavra.
+  notaDoTelefone:
+    "Caso a localidade não possua o serviço 4000 ou 4007 é necessário informar o número da " +
+    "operadora mais o DDD 11: (0 xx 11 4007 1507).",
   instagram: { rotulo: "@healthsafety.oficial", url: "https://www.instagram.com/healthsafety.oficial/" },
   site: { rotulo: "healthsafety.com.br", url: "https://www.healthsafety.com.br" },
 } as const;

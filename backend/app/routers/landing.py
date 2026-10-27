@@ -144,6 +144,22 @@ FONTE = (
 )
 
 
+# O player do vídeo (frente landing-nicholson, 27/10) é a IFrame API do
+# YouTube: o script vem de `www.youtube.com/iframe_api` e o player é um frame
+# de `www.youtube-nocookie.com`. Esta casca não manda CSP (nem o nginx da
+# produção, conferido em 27/10), então nada a liberar — se um dia vier uma
+# CSP, ela precisa de `script-src https://www.youtube.com` e `frame-src
+# https://www.youtube-nocookie.com` (`test_landing_player.py` cobra isso).
+#
+# ⚠️ **O que o player precisa é o Referer.** Desde 2025 o embed do YouTube
+# recusa tocar sem saber de que site vem ("Erro 153"). O padrão do navegador
+# já manda a origem; a meta deixa isso escrito, para um `no-referrer`
+# global no nginx não derrubar o vídeo em silêncio (a meta vale depois do
+# cabeçalho). `strict-origin-when-cross-origin` manda só a origem para fora
+# — nunca o caminho com os `utm_*` do anúncio.
+REFERRER = '<meta name="referrer" content="strict-origin-when-cross-origin">\n'
+
+
 def montar_casca(slug: str, config: dict, *, previa: bool = False) -> str:
     """⚠️ Todo valor que sai daqui veio de campo EDITÁVEL na tela de Páginas.
     `html.escape(..., quote=True)` em tudo — inclusive, e principalmente, no que
@@ -173,7 +189,7 @@ def montar_casca(slug: str, config: dict, *, previa: bool = False) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{titulo}</title>
+{REFERRER}<title>{titulo}</title>
 <link rel="icon" type="image/x-icon" href="/hs.ico">
 <meta name="description" content="{descricao}">
 <meta property="og:type" content="website">
