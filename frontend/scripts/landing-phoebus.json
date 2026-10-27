@@ -1,112 +1,349 @@
 {
-  "headline": "Teste de álcool na entrada, sem ninguém para aplicar.",
-  "subheadline": "O Phoebus identifica o colaborador pelo rosto ou pelo crachá, faz o teste em 5 segundos e avisa o gestor no WhatsApp a cada reprovação. Teste na sua operação por 30 dias, sem custo.",
-  "cta_text": "Quero testar 30 dias grátis",
-  "corpo": "Teste na sua operação por 30 dias, sem custo e sem compromisso.\n\n- Identificação por rosto, NFC ou RFID\n- Teste em 5 segundos, sem canudo\n- Alerta no WhatsApp a cada reprovação",
+  "corpo": "- Identificação por rosto, NFC ou RFID\n- Teste em 5 segundos, sem canudo\n- Alerta no WhatsApp a cada reprovação",
   "campos": [
-    { "chave": "nome", "rotulo": "Nome", "tipo": "texto", "obrigatorio": true },
-    { "chave": "email", "rotulo": "E-mail corporativo", "tipo": "email", "obrigatorio": true },
-    { "chave": "whatsapp", "rotulo": "WhatsApp", "tipo": "telefone", "obrigatorio": true },
-    { "chave": "empresa", "rotulo": "Empresa", "tipo": "texto", "obrigatorio": true },
-    { "chave": "cargo", "rotulo": "Cargo", "tipo": "texto", "obrigatorio": false },
-    { "chave": "testes_por_dia", "rotulo": "Quantas pessoas passariam pelo teste por dia?", "tipo": "lista", "obrigatorio": false,
-      "opcoes": ["Até 50", "51 a 200", "201 a 1.000", "Mais de 1.000"] }
+    {
+      "tipo": "texto",
+      "chave": "nome",
+      "rotulo": "Nome",
+      "obrigatorio": true
+    },
+    {
+      "tipo": "email",
+      "chave": "email",
+      "rotulo": "E-mail corporativo",
+      "obrigatorio": true
+    },
+    {
+      "tipo": "telefone",
+      "chave": "whatsapp",
+      "rotulo": "WhatsApp",
+      "obrigatorio": true
+    },
+    {
+      "tipo": "texto",
+      "chave": "empresa",
+      "rotulo": "Empresa",
+      "obrigatorio": true
+    },
+    {
+      "tipo": "texto",
+      "chave": "cargo",
+      "rotulo": "Cargo",
+      "obrigatorio": false
+    },
+    {
+      "tipo": "lista",
+      "chave": "testes_por_dia",
+      "opcoes": [
+        "Até 50",
+        "51 a 200",
+        "201 a 1.000",
+        "Mais de 1.000"
+      ],
+      "rotulo": "Quantas pessoas passariam pelo teste por dia?",
+      "obrigatorio": false
+    }
   ],
-  "mensagem_obrigado": "Recebemos seu pedido. Um especialista da Health & Safety vai entrar em contato para combinar o envio do Phoebus e o treinamento da sua equipe.",
   "secoes": [
     {
-      "id": "numeros", "tipo": "numeros",
+      "id": "numeros",
+      "tipo": "numeros",
       "itens": [
-        { "valor": "23 milhões+", "rotulo": "de testes registrados" },
-        { "valor": "165 mil+", "rotulo": "colaboradores cadastrados" },
-        { "valor": "770+", "rotulo": "aparelhos conectados" }
+        {
+          "valor": "23 milhões+",
+          "rotulo": "de testes registrados"
+        },
+        {
+          "valor": "165 mil+",
+          "rotulo": "colaboradores cadastrados"
+        },
+        {
+          "valor": "770+",
+          "rotulo": "aparelhos conectados"
+        }
       ]
     },
     {
-      "id": "comparativo", "tipo": "comparativo",
-      "titulo": "O teste manual depende de alguém lembrar, aplicar e anotar.",
-      "colunas": { "a": "Processo manual", "b": "Phoebus" },
+      "id": "comparativo",
+      "tipo": "comparativo",
       "linhas": [
-        { "criterio": "Quem aplica", "a": "Um técnico ou porteiro, em cada turno", "b": "Ninguém: o colaborador faz sozinho" },
-        { "criterio": "Quem fez o teste", "a": "Assinatura na planilha", "b": "Rosto ou crachá, com foto do sopro" },
-        { "criterio": "Horário", "a": "Quando dá", "b": "24 horas, todos os dias" },
-        { "criterio": "Reprovação", "a": "Alguém precisa avisar", "b": "Gestor recebe no WhatsApp e no e-mail na hora" },
-        { "criterio": "Acesso", "a": "Depende de quem está na portaria", "b": "A catraca só libera depois do teste" },
-        { "criterio": "Auditoria", "a": "Pilha de formulários", "b": "Relatório pronto, com histórico completo" }
-      ]
+        {
+          "a": "Um técnico ou porteiro, em cada turno",
+          "b": "Ninguém: o colaborador faz sozinho",
+          "criterio": "Quem aplica"
+        },
+        {
+          "a": "Assinatura na planilha",
+          "b": "Rosto ou crachá, com foto do sopro",
+          "criterio": "Quem fez o teste"
+        },
+        {
+          "a": "Quando dá",
+          "b": "24 horas, todos os dias",
+          "criterio": "Horário"
+        },
+        {
+          "a": "Alguém precisa avisar",
+          "b": "Gestor recebe no WhatsApp e no e-mail na hora",
+          "criterio": "Reprovação"
+        },
+        {
+          "a": "Depende de quem está na portaria",
+          "b": "A catraca só libera depois do teste",
+          "criterio": "Acesso"
+        },
+        {
+          "a": "Pilha de formulários",
+          "b": "Relatório pronto, com histórico completo",
+          "criterio": "Auditoria"
+        }
+      ],
+      "titulo": "O teste manual depende de alguém lembrar, aplicar e anotar.",
+      "colunas": {
+        "a": "Processo manual",
+        "b": "Phoebus"
+      }
     },
     {
-      "id": "passos", "tipo": "passos",
-      "titulo": "Como funciona",
+      "id": "passos",
+      "tipo": "passos",
       "itens": [
-        { "titulo": "Identifica", "texto": "Reconhecimento facial, cartão NFC ou RFID. Cadastro ilimitado." },
-        { "titulo": "Testa", "texto": "Sopro à distância, sem canudo, em 5 segundos. Até 12 testes por minuto." },
-        { "titulo": "Decide", "texto": "Aprovado, a catraca libera. Reprovado, o acesso fica bloqueado e o gestor é avisado na hora." }
-      ]
+        {
+          "texto": "Reconhecimento facial, cartão NFC ou RFID. Cadastro ilimitado.",
+          "titulo": "Identifica"
+        },
+        {
+          "texto": "Sopro à distância, sem canudo, em 5 segundos. Até 12 testes por minuto.",
+          "titulo": "Testa"
+        },
+        {
+          "texto": "Aprovado, a catraca libera. Reprovado, o acesso fica bloqueado e o gestor é avisado na hora.",
+          "titulo": "Decide"
+        }
+      ],
+      "titulo": "Como funciona"
     },
     {
-      "id": "onde-instalar", "tipo": "cartoes",
-      "titulo": "Onde instalar",
+      "id": "video-em-acao",
+      "tipo": "video",
+      "titulo": "Veja o Phoebus em ação",
+      "subtitulo": "",
+      "url": "https://www.youtube.com/watch?v=3md4Er-nXEA",
+      "formato": "vertical",
+      "texto": "Identificação, teste e registro em menos de 10 segundos, sem ninguém para aplicar."
+    },
+    {
+      "id": "onde-instalar",
+      "tipo": "cartoes",
       "itens": [
-        { "titulo": "Na parede", "texto": "Portarias, vestiários, salas de controle." },
-        { "titulo": "No pedestal", "texto": "Aço carbono, fixado no piso, para onde não há parede." },
-        { "titulo": "Na catraca", "texto": "Com o Phoebus Link, o resultado vai direto para a catraca (contato seco ou Wiegand) e libera só quem passou." },
-        { "titulo": "Na portaria de veículos (Phoebus Pro)", "texto": "Braço mecânico que leva o bocal até a janela do caminhão ou do carro. O motorista faz o teste sem descer." }
-      ]
+        {
+          "texto": "Portarias, vestiários, salas de controle.",
+          "titulo": "Na parede",
+          "imagem_url": "http://127.0.0.1:8131/instalacao-parede.jpg"
+        },
+        {
+          "texto": "Aço carbono, fixado no piso, para onde não há parede.",
+          "titulo": "No pedestal",
+          "imagem_url": "http://127.0.0.1:8131/aparelho-fundo-azul.jpg"
+        },
+        {
+          "texto": "Com o Phoebus Link, o resultado vai direto para a catraca (contato seco ou Wiegand) e libera só quem passou.",
+          "titulo": "Na catraca",
+          "imagem_url": "http://127.0.0.1:8131/instalacao-catraca-link.jpg"
+        },
+        {
+          "texto": "Braço mecânico que leva o bocal até a janela do caminhão ou do carro. O motorista faz o teste sem descer.",
+          "titulo": "Na portaria de veículos (Phoebus Pro)",
+          "imagem_url": "http://127.0.0.1:8131/instalacao-veiculos-pro.jpg"
+        }
+      ],
+      "titulo": "Onde instalar"
     },
     {
-      "id": "plataforma", "tipo": "cartoes",
+      "id": "plataforma",
+      "tipo": "cartoes",
+      "itens": [
+        {
+          "texto": "Do momento do sopro — sem \"fui eu que soprei pelo colega\".",
+          "titulo": "Registro com foto"
+        },
+        {
+          "texto": "Por WhatsApp e e-mail, para quantas pessoas precisar.",
+          "titulo": "Alertas"
+        },
+        {
+          "texto": "Cada gestor vê só a sua área.",
+          "titulo": "Unidades e departamentos"
+        },
+        {
+          "texto": "Filtrados por período, unidade, setor e resultado, prontos para auditoria.",
+          "titulo": "Relatórios"
+        },
+        {
+          "texto": "Por API e webhook com o RH, o ERP ou a portaria.",
+          "titulo": "Integração"
+        },
+        {
+          "texto": "De colaboradores, aparelhos ou histórico.",
+          "titulo": "Sem limite"
+        }
+      ],
       "titulo": "Tudo o que acontece na entrada, no seu celular.",
-      "subtitulo": "A plataforma do Phoebus",
-      "itens": [
-        { "titulo": "Registro com foto", "texto": "Do momento do sopro — sem \"fui eu que soprei pelo colega\"." },
-        { "titulo": "Alertas", "texto": "Por WhatsApp e e-mail, para quantas pessoas precisar." },
-        { "titulo": "Unidades e departamentos", "texto": "Cada gestor vê só a sua área." },
-        { "titulo": "Relatórios", "texto": "Filtrados por período, unidade, setor e resultado, prontos para auditoria." },
-        { "titulo": "Integração", "texto": "Por API e webhook com o RH, o ERP ou a portaria." },
-        { "titulo": "Sem limite", "texto": "De colaboradores, aparelhos ou histórico." }
-      ]
+      "subtitulo": "A plataforma do Phoebus"
     },
     {
-      "id": "calibracao", "tipo": "texto_imagem",
-      "titulo": "Calibração sem parar a operação",
+      "id": "calibracao",
+      "lado": "direita",
+      "tipo": "texto_imagem",
       "texto": "O sensor fica num módulo calibrado em padrão RBC, válido por 12 meses.\n\nNa hora de calibrar, é como trocar uma bateria: solta o parafuso, tira o módulo, encaixa o novo e parafusa de volta. O Phoebus não sai da portaria e a operação não para.",
-      "lado": "direita"
+      "titulo": "Calibração sem parar a operação",
+      "imagem_url": "http://127.0.0.1:8131/calibracao-modulo.jpg"
     },
     {
-      "id": "clientes", "tipo": "logos",
-      "titulo": "Quem já usa",
+      "id": "clientes",
+      "tipo": "logos",
       "itens": [
-        { "nome": "CCR" }, { "nome": "Vale" }, { "nome": "Gerdau" }, { "nome": "CSN" },
-        { "nome": "Rumo" }, { "nome": "ArcelorMittal" }, { "nome": "InterCement" },
-        { "nome": "Mineração Caraíba" }
+        {
+          "nome": "CCR",
+          "imagem_url": "http://127.0.0.1:8131/logos/ccr.png"
+        },
+        {
+          "nome": "Vale",
+          "imagem_url": "http://127.0.0.1:8131/logos/vale.png"
+        },
+        {
+          "nome": "Gerdau",
+          "imagem_url": "http://127.0.0.1:8131/logos/gerdau.png"
+        },
+        {
+          "nome": "CSN",
+          "imagem_url": "http://127.0.0.1:8131/logos/csn.png"
+        },
+        {
+          "nome": "Rumo",
+          "imagem_url": "http://127.0.0.1:8131/logos/rumo.png"
+        },
+        {
+          "nome": "ArcelorMittal",
+          "imagem_url": "http://127.0.0.1:8131/logos/arcelormittal.png"
+        },
+        {
+          "nome": "InterCement",
+          "imagem_url": "http://127.0.0.1:8131/logos/intercement.png"
+        },
+        {
+          "nome": "Mineração Caraíba",
+          "imagem_url": "http://127.0.0.1:8131/logos/mineracao-caraiba.png"
+        }
+      ],
+      "titulo": "Quem já usa"
+    },
+    {
+      "id": "depoimentos",
+      "tipo": "depoimentos",
+      "titulo": "Na palavra de quem usa",
+      "subtitulo": "",
+      "itens": [
+        {
+          "texto": "O Phoebus transformou nosso processo de segurança. A identificação facial eliminou completamente as fraudes nos testes de alcoolemia.",
+          "nome": "Silmara Dias",
+          "cargo": "",
+          "empresa": "COFCO International",
+          "logo_url": "http://127.0.0.1:8131/logos/cofco.png"
+        },
+        {
+          "texto": "O alerta em tempo real via WhatsApp nos dá controle total sobre a operação, mesmo de madrugada. Mudou o jogo.",
+          "nome": "Antônio",
+          "cargo": "",
+          "empresa": "VIX",
+          "logo_url": "http://127.0.0.1:8131/logos/vix.png"
+        },
+        {
+          "texto": "Com o registro auditável do Phoebus, ganhamos confiança total em auditorias e conformidade com as NRs.",
+          "nome": "Thaciane Cardoso",
+          "cargo": "",
+          "empresa": "Rumo Logística",
+          "logo_url": "http://127.0.0.1:8131/logos/rumo.png"
+        }
       ]
     },
     {
-      "id": "perguntas", "tipo": "perguntas",
-      "titulo": "Perguntas frequentes",
+      "id": "perguntas",
+      "tipo": "perguntas",
       "itens": [
-        { "pergunta": "Precisa de canudo?", "resposta": "Não. O teste padrão é passivo, à distância. O bocal com canudo descartável existe para quando a empresa quer o teste ativo." },
-        { "pergunta": "E se a internet cair?", "resposta": "O Phoebus continua testando. Ele guarda até 20.000 resultados na memória e envia tudo para a plataforma quando a conexão volta." },
-        { "pergunta": "Funciona com a catraca que já tenho?", "resposta": "Com o Phoebus Link, sim: contato seco, Wiegand (26 a 66 bits) e RS232." },
-        { "pergunta": "Como conecta?", "resposta": "Wi-Fi, cabo de rede ou 4G." },
-        { "pergunta": "Tem garantia?", "resposta": "12 meses." },
-        { "pergunta": "O reconhecimento facial está de acordo com a LGPD?", "resposta": "Sim. O rosto serve só para identificar quem fez o teste, e cada gestor vê apenas os dados da própria unidade." },
-        { "pergunta": "Enxaguante bucal pode dar positivo?", "resposta": "Pode. Enxaguante com álcool deixa resíduo na boca e o aparelho acusa. Basta esperar alguns minutos e refazer o teste." },
-        { "pergunta": "Quem instala?", "resposta": "A sua equipe. O Phoebus vai com parafusos, buchas e conectores para catraca, e no treinamento mostramos como deixar tudo funcionando." }
+        {
+          "pergunta": "Precisa de canudo?",
+          "resposta": "Não. O teste padrão é passivo, à distância. O bocal com canudo descartável existe para quando a empresa quer o teste ativo."
+        },
+        {
+          "pergunta": "E se a internet cair?",
+          "resposta": "O Phoebus continua testando. Ele guarda até 20.000 resultados na memória e envia tudo para a plataforma quando a conexão volta."
+        },
+        {
+          "pergunta": "Funciona com a catraca que já tenho?",
+          "resposta": "Com o Phoebus Link, sim: contato seco, Wiegand (26 a 66 bits) e RS232."
+        },
+        {
+          "pergunta": "Como conecta?",
+          "resposta": "Wi-Fi, cabo de rede ou 4G."
+        },
+        {
+          "pergunta": "Tem garantia?",
+          "resposta": "12 meses."
+        },
+        {
+          "pergunta": "O reconhecimento facial está de acordo com a LGPD?",
+          "resposta": "Sim. O rosto serve só para identificar quem fez o teste, e cada gestor vê apenas os dados da própria unidade."
+        },
+        {
+          "pergunta": "Enxaguante bucal pode dar positivo?",
+          "resposta": "Pode. Enxaguante com álcool deixa resíduo na boca e o aparelho acusa. Basta esperar alguns minutos e refazer o teste."
+        },
+        {
+          "pergunta": "Quem instala?",
+          "resposta": "A sua equipe. O Phoebus vai com parafusos, buchas e conectores para catraca, e no treinamento mostramos como deixar tudo funcionando."
+        }
+      ],
+      "titulo": "Perguntas frequentes"
+    },
+    {
+      "id": "certificacoes",
+      "tipo": "certificacoes",
+      "titulo": "Qualidade certificada",
+      "subtitulo": "",
+      "texto": "Os bafômetros Health Safety são certificados pela ISO 9001 da TÜV Nord e aprovados pelo DOT/NHTSA.\n\nA Health & Safety é certificada ISO 9001 e ISO/IEC 27001 pela TÜV NORD.",
+      "itens": [
+        {
+          "nome": "ISO 9001",
+          "imagem_url": "http://127.0.0.1:8131/selos/iso9001.png"
+        },
+        {
+          "nome": "ISO/IEC 27001",
+          "imagem_url": "http://127.0.0.1:8131/selos/iso27001.png"
+        },
+        {
+          "nome": "DOT/NHTSA",
+          "imagem_url": "http://127.0.0.1:8131/selos/dot-nhtsa.png"
+        }
       ]
     },
     {
-      "id": "oferta", "tipo": "chamada",
-      "titulo": "Teste o Phoebus por 30 dias na sua operação.",
-      "texto": "Enviamos o Phoebus completo, liberamos a plataforma por um mês e treinamos sua equipe para cadastrar os colaboradores e acompanhar os resultados. Sem custo e sem compromisso.",
+      "id": "oferta",
+      "nota": "A instalação no local fica por conta da sua empresa.",
+      "tipo": "chamada",
+      "botao": "Quero testar 30 dias grátis",
       "itens": [
         "O aparelho completo, enviado até você",
         "A plataforma liberada por 1 mês",
         "Treinamento para cadastrar a equipe e usar a plataforma"
       ],
-      "nota": "A instalação no local fica por conta da sua empresa.",
-      "botao": "Quero testar 30 dias grátis"
+      "texto": "Enviamos o Phoebus completo, liberamos a plataforma por um mês e treinamos sua equipe para cadastrar os colaboradores e acompanhar os resultados. Sem custo e sem compromisso.",
+      "titulo": "Teste o Phoebus por 30 dias na sua operação."
     }
-  ]
+  ],
+  "cta_text": "Quero testar 30 dias grátis",
+  "headline": "Teste de álcool na entrada, sem ninguém para aplicar.",
+  "imagem_url": "http://127.0.0.1:8131/topo-catraca.jpg",
+  "subheadline": "O Phoebus identifica o colaborador pelo rosto ou pelo crachá, faz o teste em 5 segundos e avisa o gestor no WhatsApp a cada reprovação. Teste na sua operação por 30 dias, sem custo.",
+  "mensagem_obrigado": "Recebemos seu pedido. Um especialista da Health & Safety vai entrar em contato para combinar o envio do Phoebus e o treinamento da sua equipe."
 }

@@ -20,10 +20,12 @@ import { enderecoDaImagem, paragrafosDoCorpo, textoDaConfig, urlSegura, type Blo
 
 export type TipoDeSecao =
   | "numeros" | "comparativo" | "passos" | "cartoes"
-  | "texto_imagem" | "logos" | "perguntas" | "chamada";
+  | "texto_imagem" | "logos" | "perguntas" | "chamada"
+  | "certificacoes" | "depoimentos" | "video";
 
 export const TIPOS_DE_SECAO: readonly TipoDeSecao[] = [
   "numeros", "comparativo", "passos", "cartoes", "texto_imagem", "logos", "perguntas", "chamada",
+  "certificacoes", "depoimentos", "video",
 ];
 
 // Os mesmos do servidor (`app/captura/urls.py`, que corta ao servir).
@@ -42,6 +44,8 @@ export type ItemDaConfig = {
   titulo?: string; texto?: string;            // passos, cartoes
   imagem_url?: string; nome?: string;         // cartoes, logos
   pergunta?: string; resposta?: string;       // perguntas
+  empresa?: string; cargo?: string;           // depoimentos (+ texto, nome)
+  logo_url?: string;                          // depoimentos
 };
 
 export type LinhaDaConfig = { criterio?: string; a?: string; b?: string };
@@ -59,6 +63,8 @@ export type SecaoDaConfig = {
   lado?: "esquerda" | "direita";
   nota?: string;
   botao?: string;
+  url?: string;                               // video (YouTube)
+  formato?: "horizontal" | "vertical";        // video: 16:9 ou em pé (9:16)
 };
 
 // ── A forma lida, a que o renderizador recebe ────────────────────────────────
@@ -74,7 +80,11 @@ export type CorpoDaSecao =
   | { tipo: "texto_imagem"; blocos: BlocoDoCorpo[]; imagem: string | null; lado: "esquerda" | "direita" }
   | { tipo: "logos"; itens: { nome: string; imagem: string | null }[] }
   | { tipo: "perguntas"; itens: { pergunta: string; resposta: string }[] }
-  | { tipo: "chamada"; texto: string; itens: string[]; nota: string; botao: string };
+  | { tipo: "chamada"; texto: string; itens: string[]; nota: string; botao: string }
+  | { tipo: "certificacoes"; blocos: BlocoDoCorpo[]; itens: { nome: string; imagem: string }[] }
+  | { tipo: "depoimentos";
+      itens: { texto: string; nome: string; empresa: string; cargo: string; logo: string | null }[] }
+  | { tipo: "video"; video: string; vertical: boolean; blocos: BlocoDoCorpo[] };
 
 export type Secao = Cabeca & CorpoDaSecao;
 
@@ -83,6 +93,53 @@ export type Secao = Cabeca & CorpoDaSecao;
 export const COLUNA_A_PADRAO = "Hoje";
 export const COLUNA_B_PADRAO = "Com a Health & Safety";
 export const BOTAO_DA_CHAMADA_PADRAO = "Quero falar com um especialista";
+
+// ── YouTube ──────────────────────────────────────────────────────────────────
+// Só as quatro formas de link que o YouTube mesmo dá (assistir, curto,
+// shorts, incorporar), num host do YouTube, com o id de 11 caracteres. O id
+// é tudo o que a página usa: a miniatura e o <iframe> são montados aqui, por
+// nós, sobre i.ytimg.com e youtube-nocookie.com — nunca a URL colada. A
+// mesma régua está no servidor (`app/captura/urls.py::id_do_youtube`).
+
+const ID_DO_YOUTUBE = /^[A-Za-z0-9_-]{11}$/;
+const HOSTS_DO_YOUTUBE = ["youtube.com", "www.youtube.com", "m.youtube.com"];
+
+/** O id do vídeo, ou `null` se a URL não for de um vídeo do YouTube. */
+export function idDoYoutube(valor: unknown): string | null {
+  const texto = textoDaConfig(valor);
+  if (!texto || /[\\\s]/.test(texto)) return null;
+  let u: URL;
+  try {
+    u = new URL(texto);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  if (u.username || u.password || u.port) return null;
+  const host = u.hostname.toLowerCase();
+  let id: string | null = null;
+  if (host === "youtu.be") {
+    id = /^\/([^/]+)\/?$/.exec(u.pathname)?.[1] ?? null;
+  } else if (HOSTS_DO_YOUTUBE.includes(host)) {
+    if (u.pathname === "/watch" || u.pathname === "/watch/") id = u.searchParams.get("v");
+    else id = /^\/(?:shorts|embed)\/([^/]+)\/?$/.exec(u.pathname)?.[1] ?? null;
+  }
+  return id && ID_DO_YOUTUBE.test(id) ? id : null;
+}
+
+/** A miniatura do vídeo. `maxresdefault` nem todo vídeo tem; `hqdefault`, sim. */
+export function miniaturaDoYoutube(id: string, grande = true): string {
+  return `https://i.ytimg.com/vi/${id}/${grande ? "maxresdefault" : "hqdefault"}.jpg`;
+}
+
+/** O player sem cookie de rastreio até o play, já tocando (o clique foi o play). */
+export function playerDoYoutube(id: string): string {
+  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`;
+}
+
+// Aspas que a pessoa colou em volta do depoimento: quem desenha põe as
+// tipográficas, e duas de cada lado ficaria “"assim"”.
+const ASPAS = /^["'“”‘’«»„\s]+|["'“”‘’«»„\s]+$/g;
 
 function objeto(valor: unknown): Record<string, unknown> | null {
   return valor && typeof valor === "object" && !Array.isArray(valor)
@@ -201,6 +258,39 @@ function lerCorpo(tipo: TipoDeSecao, s: Record<string, unknown>, ctx: Contexto):
         botao: textoDaConfig(s.botao) || ctx.ctaDaPagina || BOTAO_DA_CHAMADA_PADRAO,
       };
     }
+    case "certificacoes": {
+      // Selo sem imagem não é selo. O nome é o alt e a legenda.
+      const itens = itensLidos(s.itens, LIMITE_ITENS, (o) => {
+        const imagem = imagemDe(o.imagem_url, ctx);
+        return imagem ? { nome: textoDaConfig(o.nome), imagem } : null;
+      });
+      if (!itens.length) return null;
+      const texto = textoDaConfig(s.texto);
+      return { tipo, itens, blocos: texto ? paragrafosDoCorpo(texto) : [] };
+    }
+    case "depoimentos": {
+      // Depoimento sem nome não é depoimento — é texto de marketing.
+      const itens = itensLidos(s.itens, LIMITE_ITENS, (o) => {
+        const texto = textoDaConfig(o.texto).replace(ASPAS, "");
+        const nome = textoDaConfig(o.nome);
+        if (!texto || !nome) return null;
+        return {
+          texto, nome,
+          empresa: textoDaConfig(o.empresa),
+          cargo: textoDaConfig(o.cargo),
+          logo: imagemDe(o.logo_url, ctx),
+        };
+      });
+      return itens.length ? { tipo, itens } : null;
+    }
+    case "video": {
+      const video = idDoYoutube(s.url);
+      if (!video) return null;
+      const texto = textoDaConfig(s.texto);
+      // Vídeo em pé (gravado no celular, Shorts) num quadro 16:9 vira uma
+      // faixa no meio de duas tarjas; o formato é escolha do editor.
+      return { tipo, video, vertical: s.formato === "vertical", blocos: texto ? paragrafosDoCorpo(texto) : [] };
+    }
   }
   return null;
 }
@@ -252,5 +342,9 @@ export function secaoVazia(tipo: TipoDeSecao, id: string): SecaoDaConfig {
     case "logos": return { ...base, itens: [{ nome: "", imagem_url: "" }] };
     case "perguntas": return { ...base, itens: [{ pergunta: "", resposta: "" }] };
     case "chamada": return { ...base, texto: "", itens: [""], nota: "", botao: "" };
+    case "certificacoes": return { ...base, texto: "", itens: [{ nome: "", imagem_url: "" }] };
+    case "depoimentos":
+      return { ...base, itens: [{ texto: "", nome: "", cargo: "", empresa: "", logo_url: "" }] };
+    case "video": return { ...base, url: "", texto: "", formato: "horizontal" };
   }
 }

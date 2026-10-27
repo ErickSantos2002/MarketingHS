@@ -19,6 +19,8 @@
   /* Azul profundo da marca, no mesmo matiz do azul de ação (~205°). */
   --marinho: #0c2a44;
   --marinho-fundo: #081e33;
+  /* O rodapé: um passo abaixo do marinho-fundo, para separar da chamada. */
+  --marinho-noite: #05172a;
   --marinho-borda: rgba(255, 255, 255, 0.14);
   /* Azul claro para marcadores sobre o marinho (nunca texto corrido). */
   --celeste: #7cc4ef;
@@ -394,8 +396,100 @@ img {
   padding-bottom: 0;
 }
 
-.landing-rica.landing-com-whatsapp .landing-secoes > .secao:last-child {
-  padding-bottom: calc(clamp(56px, 8vw, 112px) + 56px);
+
+/* ---- cabeçalho ----
+ * O alto do topo marinho: o logo da casa à esquerda e, se a página tem
+ * WhatsApp, o botão à direita. O botão é contornado, não cheio: o convite
+ * principal da dobra é o formulário (azul), e um verde cheio aqui
+ * disputaria com ele. O ícone guarda o verde do WhatsApp, que é o sinal que
+ * a pessoa reconhece. Mesma margem do título e do formulário. */
+
+.cabecalho {
+  background: var(--marinho);
+  color: #ffffff;
+}
+
+.cabecalho-miolo {
+  width: min(var(--miolo), 100% - 2 * var(--gutter));
+  margin: 0 auto;
+  min-height: 64px;
+  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cabecalho-logo {
+  display: block;
+  height: 30px;
+  width: auto;
+}
+
+.cabecalho-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: var(--raio-botao);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cabecalho-whatsapp svg {
+  flex: none;
+  color: #25d366;
+}
+
+.cabecalho-whatsapp:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.cabecalho-whatsapp:focus-visible {
+  outline: 3px solid var(--celeste);
+  outline-offset: 3px;
+}
+
+.cabecalho-whatsapp-longo {
+  display: none;
+}
+
+@media (min-width: 560px) {
+  .cabecalho-whatsapp-longo {
+    display: inline;
+  }
+
+  .cabecalho-whatsapp-curto {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .cabecalho-miolo {
+    min-height: 80px;
+  }
+
+  .cabecalho-logo {
+    height: 40px;
+  }
+
+  .cabecalho-whatsapp {
+    padding: 0 18px;
+  }
+}
+
+/* No desktop o marinho do topo corre na horizontal; o cabeçalho segue. */
+@media (min-width: 1240px) {
+  .cabecalho {
+    background: linear-gradient(90deg, var(--marinho-fundo) 0%, var(--marinho) 100%);
+  }
 }
 
 /* ---- topo ----
@@ -425,7 +519,9 @@ img {
   grid-column: sangria-inicio / sangria-fim;
   grid-row: 1;
   position: relative;
-  height: clamp(210px, 58vw, 340px);
+  /* A foto é paisagem: a faixa um pouco mais alta que 16:9 corta as
+   * paredes dos lados e aproxima a pessoa. */
+  height: clamp(250px, 70vw, 360px);
   overflow: hidden;
 }
 
@@ -435,10 +531,12 @@ img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 62% 46%;
+  /* Foto de paisagem (16:9) com a pessoa no meio: o terço de cima é o
+   * rosto e o aparelho. */
+  object-position: 50% 30%;
   /* A foto se dissolve no marinho embaixo, onde começa o título. */
-  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 10%, #000 55%, transparent 100%);
 }
 
 .topo-texto {
@@ -555,8 +653,7 @@ img {
     grid-row: 1 / 3;
   }
 
-  /* A foto (648 px) não estica à largura da janela: fica à direita, perto
-   * do tamanho natural, dissolvida no marinho à esquerda e embaixo; o
+  /* A foto fica à direita, dissolvida no marinho à esquerda e embaixo; o
    * título sobe para a parte dissolvida. */
   .topo-foto {
     height: clamp(260px, 34vw, 340px);
@@ -565,14 +662,14 @@ img {
   .topo-foto img {
     left: auto;
     width: min(72%, 760px);
-    object-position: 70% 42%;
+    object-position: 50% 28%;
     -webkit-mask-image:
       linear-gradient(90deg, transparent 0%, #000 38%),
-      linear-gradient(180deg, #000 55%, transparent 100%);
+      linear-gradient(180deg, transparent 0%, #000 16%, #000 55%, transparent 100%);
     -webkit-mask-composite: source-in;
     mask-image:
       linear-gradient(90deg, transparent 0%, #000 38%),
-      linear-gradient(180deg, #000 55%, transparent 100%);
+      linear-gradient(180deg, transparent 0%, #000 16%, #000 55%, transparent 100%);
     mask-composite: intersect;
   }
 
@@ -649,17 +746,25 @@ img {
     margin: 0 -48px var(--aba) -160px;
   }
 
-  /* O lado do aparelho é parede branca: um pouco menos de brilho e a
-   * dissolução começando antes, para ela não competir com o formulário. */
+  /* A foto é paisagem e o que importa (a pessoa soprando, o aparelho na
+   * catraca) ocupa o terço do meio: aqui ela vira um recorte em pé desse
+   * meio. As paredes dos lados são brancas — menos brilho, e a dissolução
+   * come as duas pontas para elas não competirem com o texto e o
+   * formulário. O topo também dissolve, para a foto não começar numa
+   * linha dura logo abaixo do cabeçalho. */
   .topo-foto img {
     left: 0;
     width: 100%;
-    filter: brightness(0.9);
-    object-position: 84% 38%;
-    -webkit-mask-composite: source-over;
-    mask-composite: add;
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 46%, #000 60%, transparent 94%);
-    mask-image: linear-gradient(90deg, transparent 0%, #000 46%, #000 60%, transparent 94%);
+    filter: brightness(0.86) saturate(0.95);
+    object-position: 51% 50%;
+    -webkit-mask-image:
+      linear-gradient(90deg, transparent 0%, #000 24%, #000 72%, transparent 94%),
+      linear-gradient(180deg, transparent 0%, #000 14%);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(90deg, transparent 0%, #000 24%, #000 72%, transparent 94%),
+      linear-gradient(180deg, transparent 0%, #000 14%);
+    mask-composite: intersect;
   }
 
   /* Em janelas de 1240 a ~1350 px a nuca da foto passa por trás do fim
@@ -680,15 +785,17 @@ img {
     padding-right: 64px;
   }
 
+  /* O cabeçalho já dá o respiro de cima: o título e o formulário sobem
+   * um pouco para a dobra caber em 900 px de altura. */
   .topo-texto {
     grid-row: 1;
-    padding: clamp(72px, 7vw, 104px) 24px calc(var(--aba) + clamp(48px, 5vw, 72px)) 0;
+    padding: clamp(40px, 4vw, 64px) 24px calc(var(--aba) + clamp(48px, 5vw, 72px)) 0;
     align-self: start;
   }
 
   .topo-form {
     grid-row: 1 / 3;
-    margin-top: clamp(72px, 7vw, 104px);
+    margin-top: clamp(40px, 4vw, 64px);
     padding: 32px 32px 34px;
   }
 
@@ -1470,6 +1577,434 @@ img {
   }
 }
 
+/* ---- video ----
+ * Fachada: a miniatura do YouTube com um botão de play branco (o mesmo
+ * branco do botão da chamada); o player só nasce no clique. Texto à
+ * esquerda e vídeo à direita no desktop, o vídeo maior. */
+
+.video {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+}
+
+.video-texto,
+.certificacoes-texto {
+  max-width: 36rem;
+  font-size: 1.06rem;
+  color: var(--tinta-media);
+}
+
+.video-texto .secao-cabeca,
+.certificacoes-texto .secao-cabeca {
+  margin-bottom: 20px;
+}
+
+.video-texto .secao-cabeca h2,
+.certificacoes-texto .secao-cabeca h2 {
+  color: var(--tinta);
+}
+
+.video-texto p,
+.video-texto ul,
+.certificacoes-texto p,
+.certificacoes-texto ul {
+  margin: 0 0 16px;
+}
+
+.video-texto ul,
+.certificacoes-texto ul {
+  padding-left: 22px;
+}
+
+.video-quadro {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--raio-cartao);
+  overflow: hidden;
+  background: var(--marinho-fundo);
+}
+
+.video-quadro iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.video-fachada {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.video-fachada img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Um véu leve do marinho embaixo, para a miniatura assentar no quadro. */
+.video-fachada::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 30, 51, 0) 45%, rgba(8, 30, 51, 0.38) 100%);
+  pointer-events: none;
+}
+
+.video-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 4px;
+  background: #ffffff;
+  color: var(--marinho);
+  box-shadow: 0 10px 28px -8px rgba(8, 30, 51, 0.6);
+}
+
+.video-fachada:hover .video-play {
+  background: #e3eef7;
+}
+
+/* O anel de foco vai no play: o quadro corta o que passa da borda. */
+.video-fachada:focus-visible {
+  outline: none;
+}
+
+.video-fachada:focus-visible .video-play {
+  outline: 3px solid #ffffff;
+  outline-offset: 4px;
+}
+
+/* Em pé: quadro 9:16, estreito. A miniatura do YouTube de vídeo em pé
+ * vem com tarjas borradas dos lados; o `cover` corta e fica só o vídeo. */
+.video-vertical .video-quadro {
+  aspect-ratio: 9 / 16;
+  width: min(100%, 300px);
+}
+
+@media (min-width: 900px) {
+  .video-com-texto {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(48px, 6vw, 88px);
+  }
+
+  /* O quadro em pé é estreito: em vez de ir para a borda direita, ele
+   * fica perto do texto, e a dupla lê como um bloco só. */
+  .video-vertical.video-com-texto {
+    grid-template-columns: minmax(0, 36rem) minmax(0, 340px);
+    justify-content: start;
+    gap: clamp(56px, 9vw, 144px);
+  }
+
+  .video-vertical .video-quadro {
+    width: 100%;
+  }
+
+  .video-play {
+    width: 88px;
+    height: 88px;
+    margin: -44px 0 0 -44px;
+  }
+}
+
+/* ---- depoimentos ----
+ * Tipografia, não caixa: a primeira citação em corpo grande, de ponta a
+ * ponta; as outras em colunas embaixo, cada uma com um fio em cima. As aspas
+ * abrem penduradas na margem (o recuo negativo), para o texto começar
+ * alinhado com o título da seção. Quem disse vem em negrito, com cargo e
+ * empresa abaixo e o logo da empresa pequeno ao lado. */
+
+.depoimentos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+}
+
+.depoimento figure,
+.depoimento blockquote {
+  margin: 0;
+}
+
+.depoimento p {
+  margin: 0;
+  max-width: 34em;
+  text-indent: -0.42em;
+  font-size: clamp(1.12rem, 1.02rem + 0.4vw, 1.3rem);
+  line-height: 1.45;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tinta);
+  text-wrap: pretty;
+}
+
+.depoimento:not(.depoimento-destaque) {
+  padding-top: 24px;
+  border-top: 1px solid var(--fio-forte);
+}
+
+.depoimento-destaque p {
+  max-width: 24em;
+  font-size: clamp(1.45rem, 1.05rem + 1.7vw, 2.4rem);
+  line-height: 1.22;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+
+.depoimento figcaption {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+}
+
+.depoimento-destaque figcaption {
+  margin-top: 26px;
+}
+
+.depoimento-quem {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.depoimento-quem strong {
+  font-weight: 800;
+  color: var(--tinta);
+}
+
+.depoimento-quem span {
+  font-size: 0.95rem;
+  color: var(--tinta-apagada);
+}
+
+/* Logo pequeno, depois de um fio: a altura vem da proporção do arquivo
+ * (`--altura-logo`, a mesma conta da seção de logos), em 55%. */
+.depoimento-logo {
+  display: block;
+  box-sizing: content-box;
+  height: calc(var(--altura-logo, 44px) * 0.55);
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  padding-left: 18px;
+  border-left: 1px solid var(--fio-forte);
+}
+
+@media (min-width: 768px) {
+  .depoimentos {
+    grid-template-columns: repeat(var(--colunas, 2), minmax(0, 1fr));
+    gap: 56px 48px;
+  }
+
+  .depoimento-destaque {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---- certificacoes ----
+ * Texto à esquerda, selos à direita (abaixo, no celular). Os selos grandes,
+ * na cor original, alinhados pelo pé; o nome embaixo de cada um. */
+
+.certificacoes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 36px;
+  align-items: center;
+}
+
+.selos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 28px 32px;
+}
+
+.selos li {
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.selos img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.selos span {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--tinta-media);
+}
+
+@media (min-width: 600px) {
+  .selos {
+    gap: 32px 48px;
+  }
+
+  .selos li {
+    width: 136px;
+  }
+
+  .selos img {
+    height: 136px;
+  }
+}
+
+@media (min-width: 900px) {
+  .certificacoes {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(48px, 6vw, 88px);
+  }
+
+  /* Entre 900 e ~1300 px a coluna dos selos é estreita: eles encolhem
+   * um pouco em vez de deixar o terceiro sozinho numa linha. */
+  .selos {
+    justify-content: flex-end;
+    column-gap: clamp(24px, 3vw, 48px);
+  }
+
+  .selos li {
+    width: clamp(108px, 9.5vw, 136px);
+  }
+
+  .selos img {
+    height: clamp(108px, 9.5vw, 136px);
+  }
+}
+
+/* ---- rodapé ----
+ * Discreto: marinho-noite, texto apagado, o logo empilhado branco. Fecha a
+ * página logo depois da chamada (que é marinho-fundo), um passo mais escuro
+ * para os dois não virarem um bloco só. */
+
+.rodape {
+  background: var(--marinho-noite);
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.rodape-miolo {
+  width: min(var(--miolo), 100% - 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 48px 0 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+}
+
+.rodape-com-whatsapp .rodape-miolo {
+  padding-bottom: 96px;
+}
+
+.rodape-logo {
+  display: block;
+  height: 56px;
+  width: auto;
+}
+
+.rodape-contato {
+  font-style: normal;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.rodape-contato p {
+  margin: 0;
+}
+
+.rodape a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.rodape a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.rodape a:focus-visible {
+  outline: 2px solid var(--celeste);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.rodape-pe {
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+@media (min-width: 768px) {
+  .rodape-miolo {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 64px;
+    align-items: start;
+    padding-top: 56px;
+  }
+
+  .rodape-logo {
+    height: 64px;
+  }
+
+  .rodape-contato {
+    grid-template-columns: repeat(3, auto);
+    justify-content: end;
+    column-gap: clamp(32px, 5vw, 72px);
+  }
+
+  .rodape-pe {
+    grid-column: 1 / -1;
+  }
+
+  .rodape-com-whatsapp .rodape-miolo {
+    padding-bottom: 28px;
+  }
+
+  /* O flutuante fica no canto direito: o pé termina antes dele. */
+  .rodape-com-whatsapp .rodape-pe {
+    padding-right: 88px;
+  }
+}
+
 /* ---- WhatsApp ----
  * Verde da marca do WhatsApp, fora da paleta de propósito: é o sinal que a
  * pessoa reconhece. */
@@ -1490,6 +2025,18 @@ img {
   z-index: 10;
 }
 
+/* Some enquanto o botão do cabeçalho está na tela (Landing.tsx). O
+ * `visibility` tira do Tab também. */
+.landing-whatsapp {
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.landing-whatsapp-escondido {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .landing-whatsapp:focus-visible {
   outline: 3px solid var(--tinta);
   outline-offset: 3px;
@@ -1497,7 +2044,8 @@ img {
 
 @media (prefers-reduced-motion: reduce) {
   .perguntas summary::before,
-  .perguntas summary::after {
+  .perguntas summary::after,
+  .landing-whatsapp {
     transition: none;
   }
 }

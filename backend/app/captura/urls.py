@@ -18,9 +18,18 @@ cada seção (`texto_imagem`) ou item (`cartoes`, `logos`) pode trazer
 lista, com o índice no caminho (`secoes.3.itens.0.imagem_url`), que é o que
 o editor mostra no erro. A caminhada não olha o tipo: qualquer `imagem_url`
 de seção ou de item entra na régua — um tipo novo não nasce com buraco.
+
+**Confiança (frente landing-confianca, 27/10).** Três tipos novos:
+`certificacoes` (`imagem_url` nos itens, já coberta pela caminhada),
+`depoimentos` (`logo_url` nos itens — a caminhada passou a olhar as duas
+chaves) e `video`, cuja `url` não é imagem: só vale link de vídeo do YouTube
+(`id_do_youtube`). A página nunca usa a URL colada — monta a miniatura e o
+player a partir do id —, mas a régua é a mesma: recusa ao salvar
+(`secoes.2.url`) e descarta ao servir.
 """
 
-from urllib.parse import urlsplit
+import re
+from urllib.parse import parse_qs, urlsplit
 
 # Os caminhos, na config, das URLs que chegam à landing.
 URLS_DA_CONFIG = (("redirect_url",), ("imagem_url",), ("consentimento", "link"))
@@ -33,7 +42,8 @@ URLS_DA_CONFIG = (("redirect_url",), ("imagem_url",), ("consentimento", "link"))
 # só os aceitos. É teto de carga, não a régua fina: pelo editor nunca se
 # passa do limite cru, então os dois só divergem em config vinda pela API.
 TIPOS_DE_SECAO = frozenset({"numeros", "comparativo", "passos", "cartoes",
-                            "texto_imagem", "logos", "perguntas", "chamada"})
+                            "texto_imagem", "logos", "perguntas", "chamada",
+                            "certificacoes", "depoimentos", "video"})
 LIMITE_SECOES = 20
 LIMITE_ITENS = 30
 LIMITE_LINHAS = 12
@@ -57,6 +67,47 @@ def url_segura(valor) -> str | None:
     return url
 
 
+# As chaves de imagem que a caminhada das seções olha, na seção e nos itens.
+CHAVES_DE_IMAGEM = ("imagem_url", "logo_url")
+
+# YouTube: as mesmas quatro formas de `frontend/src/landing/secoes.ts::
+# idDoYoutube` — assistir, curto, shorts e incorporar —, num host do
+# YouTube, com o id de 11 caracteres.
+_ID_DO_YOUTUBE = re.compile(r"[A-Za-z0-9_-]{11}")
+_HOSTS_DO_YOUTUBE = ("youtube.com", "www.youtube.com", "m.youtube.com")
+_CAMINHO_SHORTS_EMBED = re.compile(r"/(?:shorts|embed)/([^/]+)/?")
+_CAMINHO_CURTO = re.compile(r"/([^/]+)/?")
+
+
+def id_do_youtube(valor) -> str | None:
+    """O id do vídeo, se `valor` for link de vídeo do YouTube; `None` se não."""
+    if not isinstance(valor, str):
+        return None
+    url = valor.strip()
+    if not url or any(c.isspace() or c == "\\" or c == "\x00" for c in url):
+        return None
+    try:
+        partes = urlsplit(url)
+        porta = partes.port
+    except ValueError:
+        return None
+    if (partes.scheme.lower() not in ("http", "https") or partes.username
+            or partes.password or porta is not None):
+        return None
+    host = (partes.hostname or "").lower()
+    achado = None
+    if host == "youtu.be":
+        m = _CAMINHO_CURTO.fullmatch(partes.path)
+        achado = m.group(1) if m else None
+    elif host in _HOSTS_DO_YOUTUBE:
+        if partes.path in ("/watch", "/watch/"):
+            achado = (parse_qs(partes.query).get("v") or [None])[0]
+        else:
+            m = _CAMINHO_SHORTS_EMBED.fullmatch(partes.path)
+            achado = m.group(1) if m else None
+    return achado if achado and _ID_DO_YOUTUBE.fullmatch(achado) else None
+
+
 def _ler(config: dict, caminho: tuple[str, ...]):
     atual = config
     for chave in caminho:
@@ -74,24 +125,49 @@ def _ruim(valor) -> bool:
     return url_segura(valor) is None
 
 
+def _video_ruim(valor) -> bool:
+    """Preenchida e não é vídeo do YouTube. Vazio e ausente não contam: a
+    seção nasce assim no editor, e o salvamento automático não pode
+    recusar o que ainda está sendo preenchido."""
+    if valor is None or (isinstance(valor, str) and not valor.strip()):
+        return False
+    return id_do_youtube(valor) is None
+
+
 def _imagens_das_secoes(config: dict):
-    """(caminho, valor) de cada `imagem_url` de seção e de item. Tolera
-    qualquer forma: o que não é lista ou objeto é pulado (o cliente descarta
-    do mesmo jeito)."""
+    """(caminho, valor) de cada imagem (`CHAVES_DE_IMAGEM`) de seção e de
+    item. Tolera qualquer forma: o que não é lista ou objeto é pulado (o
+    cliente descarta do mesmo jeito)."""
     secoes = config.get("secoes")
     if not isinstance(secoes, list):
         return
     for i, secao in enumerate(secoes):
         if not isinstance(secao, dict):
             continue
-        if "imagem_url" in secao:
-            yield f"secoes.{i}.imagem_url", secao["imagem_url"]
+        for chave in CHAVES_DE_IMAGEM:
+            if chave in secao:
+                yield f"secoes.{i}.{chave}", secao[chave]
         itens = secao.get("itens")
         if not isinstance(itens, list):
             continue
         for j, item in enumerate(itens):
-            if isinstance(item, dict) and "imagem_url" in item:
-                yield f"secoes.{i}.itens.{j}.imagem_url", item["imagem_url"]
+            if not isinstance(item, dict):
+                continue
+            for chave in CHAVES_DE_IMAGEM:
+                if chave in item:
+                    yield f"secoes.{i}.itens.{j}.{chave}", item[chave]
+
+
+def _videos_ruins(config: dict):
+    """Caminho (`secoes.2.url`) de cada `url` de seção `video` que não é
+    vídeo do YouTube. Só no tipo `video`: em outro tipo a chave não é lida."""
+    secoes = config.get("secoes")
+    if not isinstance(secoes, list):
+        return
+    for i, secao in enumerate(secoes):
+        if (isinstance(secao, dict) and secao.get("tipo") == "video"
+                and _video_ruim(secao.get("url"))):
+            yield f"secoes.{i}.url"
 
 
 def urls_invalidas(config) -> list[str]:
@@ -102,13 +178,15 @@ def urls_invalidas(config) -> list[str]:
     saida = [".".join(caminho) for caminho in URLS_DA_CONFIG
              if _ruim(_ler(config, caminho))]
     saida += [caminho for caminho, valor in _imagens_das_secoes(config) if _ruim(valor)]
+    saida += list(_videos_ruins(config))
     return saida
 
 
 def _sem_imagem_ruim(bloco: dict) -> dict:
     copia = dict(bloco)
-    if _ruim(copia.get("imagem_url")):
-        copia.pop("imagem_url")
+    for chave in CHAVES_DE_IMAGEM:
+        if _ruim(copia.get(chave)):
+            copia.pop(chave)
     return copia
 
 
@@ -125,6 +203,10 @@ def _secoes_seguras(secoes) -> list:
         if not isinstance(tipo, str) or tipo not in TIPOS_DE_SECAO:
             continue
         copia = _sem_imagem_ruim(secao)
+        # Vídeo que não é do YouTube sai sem a `url` — e o cliente, sem id,
+        # não desenha a seção.
+        if tipo == "video" and _video_ruim(copia.get("url")):
+            copia.pop("url")
         if isinstance(copia.get("itens"), list):
             copia["itens"] = [_sem_imagem_ruim(item) if isinstance(item, dict) else item
                               for item in copia["itens"][:LIMITE_ITENS]]

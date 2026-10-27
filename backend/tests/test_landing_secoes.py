@@ -109,7 +109,7 @@ def test_servir_descarta_a_url_ruim_e_nao_mexe_na_original():
 
 
 def test_servir_corta_nos_limites_e_tira_secao_de_tipo_desconhecido():
-    config = {"secoes": [{"tipo": "video", "url": "https://youtube.com/x"}, "lixo"]
+    config = {"secoes": [{"tipo": "carrossel", "url": "https://youtube.com/x"}, "lixo"]
               + [{"tipo": "perguntas",
                   "itens": [{"pergunta": f"P{j}", "resposta": "R"} for j in range(40)]}
                  for _ in range(25)]

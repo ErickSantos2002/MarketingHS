@@ -1,5 +1,6 @@
-import { useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from "react";
-import type { Secao } from "./secoes";
+import { useRef, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from "react";
+import type { BlocoDoCorpo } from "./campos";
+import { miniaturaDoYoutube, playerDoYoutube, type Secao } from "./secoes";
 
 // Colunas da grade no desktop: o maior divisor de `n` até `teto`, para não
 // sobrar um cartão órfão na última linha (4 cartões viram 2×2, 8 logos 4×2).
@@ -136,9 +137,7 @@ function TextoImagem({ secao, idTitulo }: { secao: DaSecao<"texto_imagem">; idTi
                      secao.lado === "esquerda" && "texto-imagem-esquerda"].filter(Boolean).join(" ")}>
       <div className="texto-imagem-texto">
         <Cabeca secao={secao} idTitulo={idTitulo} />
-        {secao.blocos.map((bloco, i) => bloco.tipo === "p"
-          ? <p key={i}>{bloco.texto}</p>
-          : <ul key={i}>{bloco.itens.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+        <Blocos blocos={secao.blocos} />
       </div>
       {secao.imagem && (
         <img className="texto-imagem-foto" src={secao.imagem} alt={secao.titulo} loading="lazy" />
@@ -157,12 +156,12 @@ function alturaDoLogo(largura: number, altura: number): number {
   return Math.round(Math.min(76, Math.max(34, 46 * Math.sqrt(2.6 / proporcao))));
 }
 
-function ImagemDeLogo({ src, nome }: { src: string; nome: string }) {
+function ImagemDeLogo({ src, nome, className }: { src: string; nome: string; className?: string }) {
   const [altura, setAltura] = useState<number | null>(null);
   const aoCarregar = (e: SyntheticEvent<HTMLImageElement>) =>
     setAltura(alturaDoLogo(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight));
   return (
-    <img src={src} alt={nome} loading="lazy" onLoad={aoCarregar}
+    <img className={className} src={src} alt={nome} loading="lazy" onLoad={aoCarregar}
          style={altura ? ({ "--altura-logo": `${altura}px` } as CSSProperties) : undefined} />
   );
 }
@@ -218,6 +217,115 @@ function Chamada({ secao, idTitulo }: { secao: DaSecao<"chamada">; idTitulo: str
   );
 }
 
+// Parágrafos e listas do texto de uma seção (a regra do `corpo`).
+function Blocos({ blocos }: { blocos: BlocoDoCorpo[] }) {
+  return (
+    <>
+      {blocos.map((bloco, i) => bloco.tipo === "p"
+        ? <p key={i}>{bloco.texto}</p>
+        : <ul key={i}>{bloco.itens.map((item, j) => <li key={j}>{item}</li>)}</ul>)}
+    </>
+  );
+}
+
+// Selos ao lado do texto (no celular, abaixo). O selo é a prova: grande,
+// na cor original, com o nome embaixo — o mesmo nome é o alt, então o
+// leitor de tela ouve "ISO 9001" uma vez só (legenda `aria-hidden`).
+function Certificacoes({ secao, idTitulo }: { secao: DaSecao<"certificacoes">; idTitulo: string }) {
+  return (
+    <div className="certificacoes">
+      <div className="certificacoes-texto">
+        <Cabeca secao={secao} idTitulo={idTitulo} />
+        <Blocos blocos={secao.blocos} />
+      </div>
+      <ul className="selos">
+        {secao.itens.map((item, i) => (
+          <li key={i}>
+            <img src={item.imagem} alt={item.nome || "Selo de certificação"} loading="lazy" />
+            {item.nome && <span aria-hidden="true">{item.nome}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// A primeira citação abre em corpo grande; as outras seguem em colunas,
+// menores. Aspas tipográficas penduradas na margem (`.depoimento p`), sem
+// caixa, sem ícone de pessoa: o que dá peso é o nome e a empresa.
+function Depoimentos({ secao }: { secao: DaSecao<"depoimentos"> }) {
+  return (
+    <ul className="depoimentos" style={colunas(Math.max(secao.itens.length - 1, 1), 3)}>
+      {secao.itens.map((item, i) => {
+        const quem = [item.cargo, item.empresa].filter(Boolean).join(", ");
+        return (
+          <li key={i} className={i === 0 ? "depoimento depoimento-destaque" : "depoimento"}>
+            <figure>
+              <blockquote>
+                <p>“{item.texto}”</p>
+              </blockquote>
+              {/* O logo vem depois do nome, pequeno, com alt vazio: a
+                  empresa já está escrita (e, sem ela, o logo é enfeite). A
+                  altura sai da proporção, como na seção de logos. */}
+              <figcaption>
+                <span className="depoimento-quem">
+                  <strong>{item.nome}</strong>
+                  {quem && <span>{quem}</span>}
+                </span>
+                {item.logo && <ImagemDeLogo className="depoimento-logo" src={item.logo} nome="" />}
+              </figcaption>
+            </figure>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// Fachada do YouTube: até o clique, a página mostra só a miniatura (de
+// i.ytimg.com) e um botão — nenhum script nem cookie do YouTube carrega
+// antes de a pessoa pedir. O clique troca a fachada pelo player
+// (youtube-nocookie, já tocando) e passa o foco para ele.
+function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string }) {
+  const [tocando, setTocando] = useState(false);
+  // `maxresdefault` não existe em todo vídeo — e quando falta, o YouTube
+  // devolve 200 com um cinza de 120×90, não um erro. Os dois casos caem no
+  // `hqdefault`, que todo vídeo tem.
+  const [grande, setGrande] = useState(true);
+  const player = useRef<HTMLIFrameElement>(null);
+  const rotulo = secao.titulo ? `Assistir ao vídeo: ${secao.titulo}` : "Assistir ao vídeo";
+  const temTexto = !!(secao.titulo || secao.subtitulo || secao.blocos.length);
+  return (
+    <div className={["video", temTexto && "video-com-texto", secao.vertical && "video-vertical"]
+                    .filter(Boolean).join(" ")}>
+      {temTexto && (
+        <div className="video-texto">
+          <Cabeca secao={secao} idTitulo={idTitulo} />
+          <Blocos blocos={secao.blocos} />
+        </div>
+      )}
+      <div className="video-quadro">
+        {tocando ? (
+          <iframe ref={player} src={playerDoYoutube(secao.video)} title={secao.titulo || "Vídeo"}
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen
+                  onLoad={() => player.current?.focus()} />
+        ) : (
+          <button type="button" className="video-fachada" aria-label={rotulo} onClick={() => setTocando(true)}>
+            <img src={miniaturaDoYoutube(secao.video, grande)} alt="" loading="lazy"
+                 onLoad={(e) => { if (grande && e.currentTarget.naturalWidth <= 120) setGrande(false); }}
+                 onError={() => grande && setGrande(false)} />
+            <span className="video-play" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" focusable="false">
+                <path fill="currentColor" d="M8 5.5v13l10.5-6.5z" />
+              </svg>
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Corpo({ secao, idTitulo }: { secao: Secao; idTitulo: string }) {
   switch (secao.tipo) {
     case "numeros": return <Numeros secao={secao} />;
@@ -228,6 +336,9 @@ function Corpo({ secao, idTitulo }: { secao: Secao; idTitulo: string }) {
     case "logos": return <Logos secao={secao} />;
     case "perguntas": return <Perguntas secao={secao} />;
     case "chamada": return <Chamada secao={secao} idTitulo={idTitulo} />;
+    case "certificacoes": return <Certificacoes secao={secao} idTitulo={idTitulo} />;
+    case "depoimentos": return <Depoimentos secao={secao} />;
+    case "video": return <Video secao={secao} idTitulo={idTitulo} />;
   }
   return null;
 }
@@ -239,8 +350,9 @@ export function Secoes({ secoes }: { secoes: Secao[] }) {
         // Id do título pela posição, não pelo `id` da config: aquele é texto
         // livre e pode ter espaço, o que quebraria o `aria-labelledby`.
         const idTitulo = `secao-${i}-titulo`;
-        // `texto_imagem` e `chamada` põem o cabeçalho dentro do próprio leiaute.
-        const cabecaPropria = secao.tipo === "texto_imagem" || secao.tipo === "chamada";
+        // Estes põem o cabeçalho dentro do próprio leiaute (texto ao lado).
+        const cabecaPropria = secao.tipo === "texto_imagem" || secao.tipo === "chamada"
+          || secao.tipo === "certificacoes" || secao.tipo === "video";
         return (
           <section key={secao.id} className={`secao secao-${secao.tipo}`}
                    aria-labelledby={secao.titulo ? idTitulo : undefined}>

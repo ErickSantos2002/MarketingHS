@@ -17,6 +17,9 @@ const NOMES_DE_SECAO: Record<TipoDeSecao, { nome: string; descricao: string }> =
   logos: { nome: 'Logos', descricao: 'Clientes ou parceiros; sem imagem, mostra o nome.' },
   perguntas: { nome: 'Perguntas frequentes', descricao: 'Pergunta que abre a resposta ao clicar.' },
   chamada: { nome: 'Chamada', descricao: 'Faixa final com lista e botão que leva ao formulário.' },
+  certificacoes: { nome: 'Certificações', descricao: 'Selos de certificação (ISO, DOT) com um texto curto ao lado.' },
+  depoimentos: { nome: 'Depoimentos', descricao: 'Citações de clientes com nome, cargo, empresa e logo.' },
+  video: { nome: 'Vídeo', descricao: 'Vídeo do YouTube, que só carrega quando a pessoa clica.' },
 };
 
 function novoId(): string {
