@@ -14,7 +14,7 @@ from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, admin_atual, usuario_atual
 from app.email import resend as cliente_resend
-from app.integracoes import gravar_segredo, ler_segredo
+from app.integracoes import apagar_segredo, gravar_segredo, ler_segredo
 
 router = APIRouter(tags=["configuracao"])
 
@@ -309,7 +309,17 @@ SEGREDOS_RESEND = {
     "email_from": "EMAIL_FROM",
     "unsubscribe_secret": "UNSUBSCRIBE_SECRET",
     "webhook_secret": "RESEND_WEBHOOK_SECRET",
+    "reply_to": "EMAIL_REPLY_TO",
 }
+
+# O reply-to é UM endereço simples: sem nome de exibição, sem vírgula (dois
+# destinatários), sem espaço nem quebra de linha (injeção de cabeçalho).
+# `fullmatch`, não `match` com `$`: o `$` aceita um `\n` no fim.
+_RESPONDER_PARA = re.compile(r"[^\s@<>,;\"']+@[^\s@<>,;\"']+\.[^\s@<>,;\"'.][^\s@<>,;\"']*")
+
+
+def responder_para_valido(valor: str) -> bool:
+    return bool(_RESPONDER_PARA.fullmatch(valor or ""))
 
 _REMETENTE = re.compile(r"^\s*(.+?)\s*<([^@\s<>]+)@([^\s<>]+)>\s*$")
 
@@ -345,6 +355,10 @@ class ResendIn(BaseModel):
     api_key: str | None = None
     unsubscribe_secret: str | None = None
     webhook_secret: str | None = None
+    # ⚠️ Diferente dos segredos acima: aqui vazio É "apague" (volta a responder
+    # ao remetente) — o reply-to é opcional e a tela sempre manda o campo.
+    # Ausente (`None`, cliente antigo) é que é "não mexi".
+    reply_to: str | None = Field(default=None, max_length=320)
 
 
 def _preenchido(valor: str | None) -> str | None:
@@ -395,6 +409,8 @@ async def ler_config_resend(_: str = Depends(admin_ou_maquina("read"))):
                            "escopo": escopo},
         "email_from": valores["email_from"],
         "remetente": partes_do_remetente(valores["email_from"]),
+        # Em claro, como o EMAIL_FROM: é um endereço, não um segredo.
+        "reply_to": valores["reply_to"] or None,
         "unsubscribe_secret": {"configurado": bool(valores["unsubscribe_secret"])},
         "webhook_secret": {"configurado": bool(valores["webhook_secret"])},
         "dominios": dominios,
@@ -468,6 +484,8 @@ async def gravar_config_resend(dados: ResendIn,
     chave_nova = _preenchido(dados.api_key)
     descadastro = _preenchido(dados.unsubscribe_secret)
     segredo_webhook = _preenchido(dados.webhook_secret)
+    # None = não mexer; "" = apagar; o resto, validado no passo 4.
+    responder_para = dados.reply_to.strip() if dados.reply_to is not None else None
 
     # 1. Chave nova é testada antes de qualquer coisa. Sem chave nova, a
     #    gravada serve só para conferir o domínio.
@@ -523,6 +541,11 @@ async def gravar_config_resend(dados: ResendIn,
             status.HTTP_400_BAD_REQUEST,
             'O segredo do webhook começa com "whsec_" — é o signing secret que '
             "o Resend mostra ao criar o webhook.")
+    if responder_para and not responder_para_valido(responder_para):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            '"Responder para" precisa ser um único e-mail simples, como '
+            "hs@healthsafety.com.br — sem nome, sem vírgula, sem quebra de linha.")
 
     # 5. Grava — só depois de tudo validado.
     gravados = []
@@ -533,8 +556,17 @@ async def gravar_config_resend(dados: ResendIn,
             gravados.append(campo)
     await gravar_segredo("EMAIL_FROM", remetente)
     gravados.append("email_from")
+    if responder_para:
+        await gravar_segredo("EMAIL_REPLY_TO", responder_para)
+        gravados.append("reply_to")
+    elif responder_para == "":
+        await apagar_segredo("EMAIL_REPLY_TO")
+        gravados.append("reply_to")
 
-    return {"gravados": gravados, "email_from": remetente, "aviso": aviso}
+    return {"gravados": gravados, "email_from": remetente,
+            "reply_to": (responder_para if responder_para is not None
+                         else await ler_segredo("EMAIL_REPLY_TO")) or None,
+            "aviso": aviso}
 
 
 class RastreamentoIn(BaseModel):

@@ -5,6 +5,8 @@ completa; 401 com `restricted_api_key` é chave VÁLIDA de envio; 403 é chave
 inválida. Testar só "deu 200?" reprovaria uma chave de envio perfeita.
 """
 
+import json
+
 import httpx
 import pytest
 
@@ -118,3 +120,39 @@ async def test_alterar_dominio_sem_rede_levanta_falha_de_rede(monkeypatch):
     _trocar_transporte(monkeypatch, handler)
     with pytest.raises(resend.FalhaDeRede):
         await resend.alterar_dominio("re_x", "d1", {})
+
+
+# ── Responder para (reply-to, frente responder-para, 27/10/2026) ─────────────
+
+def _capturar_envio(monkeypatch):
+    visto = {}
+
+    def handler(request):
+        visto["corpo"] = json.loads(request.read())
+        return httpx.Response(200, json={"id": "re_id_1"})
+    _trocar_transporte(monkeypatch, handler)
+    return visto
+
+
+async def test_enviar_com_responder_para_manda_reply_to(monkeypatch):
+    visto = _capturar_envio(monkeypatch)
+    eid = await resend.enviar(
+        chave="re_x", de="HS <contato@mkt.hs.invalid>", para="lead@exemplo.invalid",
+        assunto="Oi", html="<p>x</p>", texto="x", cabecalhos={},
+        responder_para="hs@hs.invalid")
+    assert eid == "re_id_1"
+    assert visto["corpo"]["reply_to"] == "hs@hs.invalid"
+
+
+async def test_enviar_sem_responder_para_nao_manda_o_campo(monkeypatch):
+    """Vazio = o comportamento de antes: o Resend usa o próprio remetente."""
+    visto = _capturar_envio(monkeypatch)
+    await resend.enviar(
+        chave="re_x", de="HS <contato@mkt.hs.invalid>", para="lead@exemplo.invalid",
+        assunto="Oi", html="<p>x</p>", texto="x", cabecalhos={})
+    assert "reply_to" not in visto["corpo"]
+
+    await resend.enviar(
+        chave="re_x", de="HS <contato@mkt.hs.invalid>", para="lead@exemplo.invalid",
+        assunto="Oi", html="<p>x</p>", texto="x", cabecalhos={}, responder_para="")
+    assert "reply_to" not in visto["corpo"]

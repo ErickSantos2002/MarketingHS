@@ -44,8 +44,13 @@ def interpretar_envio(resposta: httpx.Response) -> str:
 
 async def enviar(chave: str, de: str, para: str, assunto: str,
                  html: str, texto: str, cabecalhos: dict,
-                 tags: list[dict] | None = None) -> str:
+                 tags: list[dict] | None = None,
+                 responder_para: str | None = None) -> str:
     """Devolve o id do e-mail no Resend. Levanta em qualquer falha.
+
+    `responder_para` vira o `reply_to` da API (segredo EMAIL_REPLY_TO): para
+    onde vão as respostas do contato. Vazio = o campo não vai, e o cliente de
+    e-mail responde ao próprio remetente — o comportamento de antes.
 
     ⚠️ Levantar é o certo aqui: quem chama é o worker, que sabe transformar
     exceção em retentativa. Engolir o erro e devolver vazio faria a mensagem
@@ -55,6 +60,8 @@ async def enviar(chave: str, de: str, para: str, assunto: str,
              "headers": cabecalhos}
     if texto:
         corpo["text"] = texto
+    if responder_para:
+        corpo["reply_to"] = responder_para
     if tags:
         # As tags voltam nos eventos do webhook e são o que correlaciona o
         # evento ao envio de forma EXATA. Sem elas a correlação depende do

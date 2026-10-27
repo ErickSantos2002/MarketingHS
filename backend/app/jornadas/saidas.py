@@ -478,7 +478,8 @@ async def _anotar_pulados(saida_id: int, pulados: list[str]) -> None:
                       atualizado_em = now() WHERE id = $1""", saida_id, pulados)
 
 
-async def _mandar_aviso(s: dict, chave: str, de: str, compasso, por_segundo: float) -> str:
+async def _mandar_aviso(s: dict, chave: str, de: str, compasso, por_segundo: float,
+                        responder_para: str = "") -> str:
     payload = s["payload"]
     ja = set(payload.get("enviados") or [])
     destinos = [d.strip() for d in (s["destino"] or "").split(",") if d.strip()]
@@ -511,7 +512,7 @@ async def _mandar_aviso(s: dict, chave: str, de: str, compasso, por_segundo: flo
                 chave=chave, de=de, para=email,
                 assunto=payload.get("assunto") or "[MarketingHS] Aviso",
                 html=html, texto=payload.get("texto") or html_para_texto(html),
-                cabecalhos={})
+                cabecalhos={}, responder_para=responder_para)
         except resend.LimiteDoResend:
             raise
         except Exception as e:  # noqa: BLE001
@@ -563,6 +564,9 @@ async def _drenar_avisos(contagem: dict, parar, compasso, somente) -> None:
     if not chave or (compasso is not None and compasso.segurado()):
         return
     de = (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
+    # O reply-to dos e-mails (EMAIL_REPLY_TO), lido junto do remetente, uma
+    # vez por passada. Vazio = sem reply-to.
+    responder_para = (await integracoes.ler_segredo("EMAIL_REPLY_TO")) or ""
     r = await ritmo.ler()
     async with sessao(role="service_role") as conn:
         # A mesma trava do `worker._tick`: medir + reivindicar sem o outro
@@ -577,7 +581,8 @@ async def _drenar_avisos(contagem: dict, parar, compasso, somente) -> None:
             await _devolver([x["id"] for x in avisos[i:]], 0)
             break
         try:
-            contagem[await _mandar_aviso(s, chave, de, compasso, r.por_segundo)] += 1
+            contagem[await _mandar_aviso(s, chave, de, compasso, r.por_segundo,
+                                         responder_para=responder_para)] += 1
         except resend.LimiteDoResend as e:
             logger.warning("[saidas] Resend pediu %ss (429) — %s avisos de volta",
                            e.espera, len(avisos) - i)

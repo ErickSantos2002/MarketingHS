@@ -14,6 +14,8 @@ export interface ConfigResend {
                     escopo: 'full' | 'sending_only' | null };
   email_from: string | null;
   remetente: { nome: string; prefixo: string; dominio: string } | null;
+  // Reply-to (EMAIL_REPLY_TO). Em claro, como o remetente; null = sem reply-to.
+  reply_to: string | null;
   unsubscribe_secret: { configurado: boolean };
   webhook_secret: { configurado: boolean };
   dominios: DominioResend[];
@@ -66,7 +68,11 @@ export const gravarConfigResend = (dados: {
   api_key?: string;
   unsubscribe_secret?: string;
   webhook_secret?: string;
-}) => api.put<{ gravados: string[]; email_from: string; aviso: string | null }>(
+  // ⚠️ Exceção à regra acima: aqui vazio APAGA (volta a responder ao
+  // remetente). Omitir o campo é que mantém o gravado.
+  reply_to?: string;
+}) => api.put<{ gravados: string[]; email_from: string; reply_to: string | null;
+                aviso: string | null }>(
   '/config/resend', dados);
 
 export const lerDominioResend = (id: string) =>
