@@ -294,13 +294,27 @@ def test_delay_so_com_minutos_fica_como_esta():
 @pytest.mark.parametrize("cfg", [
     {"days": 0}, {"days": 366}, {"days": "5"}, {"days": True}, {"days": 2.5},
     {"days": 3, "dias_uteis": "sim"}, {"minutes": 30, "dias_uteis": True},
-    {"minutes": 0}, {"minutes": "x"}, {},
+    {"minutes": 0}, {"minutes": -1.5}, {"minutes": "x"}, {"minutes": True}, {},
 ])
 def test_delay_invalido_e_400(cfg):
     with pytest.raises(HTTPException) as e:
         rota._normalizar_delays(_delay(**cfg))
     assert e.value.status_code == 400
     assert "d1" in e.value.detail
+
+
+@pytest.mark.parametrize("minutos", [1.5, 3311.9999999999995])
+def test_delay_antigo_com_minutos_decimais_continua_salvando(minutos):
+    """A tela antiga gravava `qtd × 1440` sem arredondar (2,3 dias =
+    3311.9999…); o trigger aceita. Recusar travaria o salvar do fluxo."""
+    assert rota._normalizar_delays(_delay(minutes=minutos))[0]["config"] == {"minutes": minutos}
+
+
+def test_delay_com_days_invalido_no_banco_espera_em_minutos():
+    agora = datetime(2026, 10, 23, 13, 0, tzinfo=timezone.utc)
+    assert executor.dias_do_delay({"days": "3", "minutes": 60}) is None
+    assert executor.instante_de_despertar({"days": "3", "minutes": 60}, agora) == \
+        agora + timedelta(minutes=60)
 
 
 def test_outros_nos_nao_sao_tocados():

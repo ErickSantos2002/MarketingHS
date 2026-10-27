@@ -218,7 +218,8 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
   const isValid = (): boolean => {
     switch (effType) {
       case 'send_email': return !!templateId && !!subject.trim();
-      case 'delay': return delayQty > 0 && (delayUnit !== 'dias' || delayQty <= DIAS_MAXIMOS);
+      // Em dias, inteiro de 1 a 365 — a rota recusa `days` fracionado.
+      case 'delay': return delayQty > 0 && (delayUnit !== 'dias' || (Number.isInteger(delayQty) && delayQty <= DIAS_MAXIMOS));
       case 'wait_for_event': return !!eventType && timeoutQty > 0;
       case 'branch_attribute': return rules.some(regraCompleta);
       case 'branch_segment': return !!segmentId;
@@ -379,7 +380,7 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
             <div className="space-y-1.5">
               <Label>Esperar</Label>
               <div className="flex gap-2">
-                <Input type="number" min={1} className="w-24" value={delayQty} onChange={(e) => setDelayQty(Math.max(1, Number(e.target.value)))} />
+                <Input type="number" min={1} step={1} className="w-24" value={delayQty} onChange={(e) => setDelayQty(Math.max(1, Number(e.target.value)))} />
                 <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as DurationUnit)}>
                   <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -393,6 +394,9 @@ export function NodeConfigDialog({ open, onOpenChange, type, initialConfig, send
                 <>
                   {delayQty > DIAS_MAXIMOS && (
                     <p className="text-xs text-destructive">No máximo {DIAS_MAXIMOS} dias.</p>
+                  )}
+                  {!Number.isInteger(delayQty) && (
+                    <p className="text-xs text-destructive">Em dias, use um número inteiro.</p>
                   )}
                   <div className="flex items-start gap-3 pt-2">
                     <Switch id="delay-dias-uteis" checked={delayDiasUteis} onCheckedChange={setDelayDiasUteis} />

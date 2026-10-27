@@ -198,8 +198,12 @@ def _normalizar_delays(nos: list[dict] | None) -> list[dict] | None:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     f"{nome}: \"só dias úteis\" só vale com a espera em dias.")
+            # Número positivo, inteiro OU decimal: é o que o trigger aceita, e a
+            # tela antiga gravava `2.3 × 1440 = 3311.9999…` sem arredondar.
+            # Recusar aqui travaria o salvar de jornada antiga num nó intocado.
             minutos = cfg.get("minutes")
-            if not _inteiro(minutos) or minutos <= 0:
+            if not isinstance(minutos, (int, float)) or isinstance(minutos, bool) \
+                    or minutos <= 0:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     f"{nome}: informe a espera em minutos (maior que zero) ou em dias.")

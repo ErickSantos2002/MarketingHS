@@ -83,6 +83,15 @@ def somar_dias_uteis(inicio: datetime, dias: int) -> datetime:
                             tzinfo=FUSO_DA_CASA)
 
 
+def dias_do_delay(cfg: dict) -> int | None:
+    """`days` da config do delay, se for um inteiro ≥ 1 (e não bool); senão
+    `None` e a espera é a de `minutes`."""
+    dias = cfg.get("days")
+    if isinstance(dias, int) and not isinstance(dias, bool) and dias >= 1:
+        return dias
+    return None
+
+
 def instante_de_despertar(cfg: dict, agora: datetime) -> datetime:
     """Quando o nó `delay` acorda. `days` (quando há) manda: com
     `dias_uteis` são dias úteis; sem, dias corridos no fuso da casa. Sem
@@ -92,8 +101,8 @@ def instante_de_despertar(cfg: dict, agora: datetime) -> datetime:
     trigger `validate_journey_graph` exige `minutes > 0`; aqui ele é ignorado
     quando há `days`.
     """
-    dias = cfg.get("days")
-    if isinstance(dias, int) and not isinstance(dias, bool) and dias >= 1:
+    dias = dias_do_delay(cfg)
+    if dias is not None:
         if cfg.get("dias_uteis") is True:
             return somar_dias_uteis(agora, dias)
         local = agora.astimezone(FUSO_DA_CASA)
@@ -355,8 +364,8 @@ async def executar_no(conn, run: dict, no: dict) -> dict:
             "locked_until": None,
             "context": {**_contexto(run), "attempts": 0},
         })
-        detalhe = ({"days": cfg.get("days"), "dias_uteis": cfg.get("dias_uteis") is True,
-                    "wakeup_at": despertar.isoformat()} if cfg.get("days")
+        detalhe = ({"days": dias_do_delay(cfg), "dias_uteis": cfg.get("dias_uteis") is True,
+                    "wakeup_at": despertar.isoformat()} if dias_do_delay(cfg) is not None
                    else {"minutes": max(1, int(cfg.get("minutes") or 0))})
         await registrar_passo(conn, run, no, "entered" if ok else "failed", detalhe)
         return {"tipo": "parar"}
@@ -551,15 +560,16 @@ async def rodar_cadeia(conn, run: dict) -> dict:
         # contatos —, com o motivo no contexto e o passo no journey_step_log.
         status = await status_de_saida(conn, run)
         if status is not None:
-            await gravar_run(conn, run, {
+            ok = await gravar_run(conn, run, {
                 "current_node_id": run.get("current_node_id"),
                 "state": "exited", "waiting_event": None,
                 "lock_token": None, "locked_until": None,
                 "context": {**_contexto(run), "encerrado_por": "saida_status",
                             "status": status}})
-            await registrar_passo(conn, run, no, "exited",
+            # Lease perdido: outro worker tem o run — nada de "exited" falso.
+            await registrar_passo(conn, run, no, "exited" if ok else "failed",
                                   {"motivo": "saida_status", "status": status})
-            return {"passos": passos, "falhou": False, "saiu": True}
+            return {"passos": passos, "falhou": False, "saiu": ok}
 
         # Emissor genérico de "entered", para TODO nó. Sem ele o nó de entrada
         # do fluxo e todo nó logo depois de um delay ficariam sem nenhum
