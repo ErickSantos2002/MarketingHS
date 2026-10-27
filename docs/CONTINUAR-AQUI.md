@@ -1,5 +1,14 @@
 # Continuar aqui
 
+> ## ✅ 27/10 — Phoebus no ar, GrowthHS em produção, e-mails do RD
+>
+> - Landing `/p/phoebus` no ar (script `~/marketinghs-criar-landing-phoebus.sh`), WhatsApp (81) 98177-1177, política `privacidade.cfm`, `noindex`.
+> - **Virada do GrowthHS para PRODUÇÃO** (27/10 11:30): automação 18 de vendedor (integracao2), 19–23 da volta, segredo de produção; jornada `Phoebus — lead para o comercial` ativa; jornadas da prova arquivadas.
+> - RD lido (só leitura): 25 e-mails em `~/projetos/rd-emails/rd-emails.json`, fluxos em `~/projetos/rd-emails/fluxos.md`; viraram 25 templates `RD — …` (categoria `rd`) + 15 arquivos em produção (`~/marketinghs-templates-rd.sh`).
+> - Na `main` (`2f384a5`, suíte local **1195 passed**): `{{primeiro_nome}}`, ícone da landing, reply-to (`EMAIL_REPLY_TO`), delay em dias úteis e saída da jornada por status. **Falta deploy de api, worker e sistema.**
+> - Depois do deploy: remetente "Health Safety - Bafômetros Automatizados" + reply-to `hs@healthsafety.com.br` (decisão do Erick: domínio `mkt.healthsafetytech.com` agora, `healthsafety.com.br` depois); jornada Boas-Vindas → 4 dias → Nutrição 001–016 (intervalos do RD, dias úteis, sai em Venda realizada) para a página do Phoebus.
+> - Para depois (Erick): tráfego para a página (anúncio aponta para a do Leão), tags GA4/Ads, rótulo no lugar da chave na nota do card, aviso ao gestor. Achado: o GA4 da página do Leão falha (certificado inválido em `gtm.healthsafety.com.br`).
+
 > ## ▶️ PRÓXIMA SESSÃO — combinado com o Erick (26/10/2026, fim do dia)
 >
 > 1. **Primeira landing REAL, focada no Phoebus** — em andamento (26/10, tarde).
