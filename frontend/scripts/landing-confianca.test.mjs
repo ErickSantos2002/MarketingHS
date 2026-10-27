@@ -63,6 +63,12 @@ test("idDoYoutube: qualquer outra coisa é null", () => {
     `https://youtu.be/`,
     `https://www.youtube.com/watch?v=${ID} x`,
     `https://www.youtube.com\\@evil.com/watch?v=${ID}`,
+    // O que o URL do navegador "conserta" e o servidor recusa (revisão, 27/10):
+    `https://www.youtube.com:443/watch?v=${ID}`,
+    `https:/www.youtube.com/watch?v=${ID}`,
+    `https://www.youtube.com/a/../watch?v=${ID}`,
+    `https://www.youtube.com/a/%2E%2E/watch?v=${ID}`,
+    `https://www.youtube.com/watch?v=&v=${ID}`,
   ]) assert.equal(idDoYoutube(url), null, String(url));
 });
 

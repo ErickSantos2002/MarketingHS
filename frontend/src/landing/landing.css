@@ -1699,6 +1699,11 @@ img {
   width: min(100%, 300px);
 }
 
+/* Em pé e sem texto ao lado: o quadro estreito fica no meio. */
+.video-vertical:not(.video-com-texto) {
+  justify-items: center;
+}
+
 @media (min-width: 900px) {
   .video-com-texto {
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -1713,7 +1718,7 @@ img {
     gap: clamp(56px, 9vw, 144px);
   }
 
-  .video-vertical .video-quadro {
+  .video-vertical.video-com-texto .video-quadro {
     width: 100%;
   }
 

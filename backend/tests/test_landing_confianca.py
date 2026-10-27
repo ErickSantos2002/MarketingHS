@@ -78,6 +78,11 @@ def test_id_do_youtube_aceita_as_quatro_formas(url):
     f"https://www.youtube.com/watch?v={ID} x",
     f"https://www.youtube.com\\@evil.com/watch?v={ID}",
     "https://youtu.be:abc/" + ID,
+    # Os casos em que as duas réguas divergiam (revisão, 27/10):
+    f"https://www.youtube.com:443/watch?v={ID}",
+    f"https:/www.youtube.com/watch?v={ID}",
+    f"https://www.youtube.com/a/../watch?v={ID}",
+    f"https://www.youtube.com/watch?v=&v={ID}",
 ])
 def test_id_do_youtube_recusa_o_resto(url):
     assert id_do_youtube(url) is None

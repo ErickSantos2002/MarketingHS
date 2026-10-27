@@ -338,7 +338,9 @@ function Corpo({ secao, idTitulo }: { secao: Secao; idTitulo: string }) {
     case "chamada": return <Chamada secao={secao} idTitulo={idTitulo} />;
     case "certificacoes": return <Certificacoes secao={secao} idTitulo={idTitulo} />;
     case "depoimentos": return <Depoimentos secao={secao} />;
-    case "video": return <Video secao={secao} idTitulo={idTitulo} />;
+    // `key` pelo id do vídeo: trocou o link, a fachada recomeça (miniatura
+    // grande, sem tocar).
+    case "video": return <Video key={secao.video} secao={secao} idTitulo={idTitulo} />;
   }
   return null;
 }

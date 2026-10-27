@@ -361,7 +361,7 @@ export function EditorDeSecao({ secao, prefixo, onChange }: {
               <SelectTrigger aria-label="Formato do vídeo" className="w-64"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="horizontal">Deitado (16:9)</SelectItem>
-                <SelectItem value="vertical">Em pé (gravado no celular, Shorts)</SelectItem>
+                <SelectItem value="vertical">Em pé (celular, Shorts)</SelectItem>
               </SelectContent>
             </Select>
           </div>

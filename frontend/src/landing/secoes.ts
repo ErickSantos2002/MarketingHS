@@ -102,12 +102,19 @@ export const BOTAO_DA_CHAMADA_PADRAO = "Quero falar com um especialista";
 // mesma régua está no servidor (`app/captura/urls.py::id_do_youtube`).
 
 const ID_DO_YOUTUBE = /^[A-Za-z0-9_-]{11}$/;
+// O texto CRU tem de começar pelo esquema e por um host do YouTube, sem porta
+// nem usuário: o `URL` do navegador conserta `https:/host`, esconde a porta
+// padrão (`:443`) e resolve `..` — e o servidor, que não conserta nada,
+// recusaria o que aqui passou (revisão, 27/10).
+const INICIO_DO_YOUTUBE = /^https?:\/\/(?:(?:www\.|m\.)?youtube\.com|youtu\.be)(?:[/?#]|$)/i;
+const PONTO_NO_CAMINHO = /\/(?:\.|%2e){1,2}(?:[/?#]|$)/i;
 const HOSTS_DO_YOUTUBE = ["youtube.com", "www.youtube.com", "m.youtube.com"];
 
 /** O id do vídeo, ou `null` se a URL não for de um vídeo do YouTube. */
 export function idDoYoutube(valor: unknown): string | null {
   const texto = textoDaConfig(valor);
   if (!texto || /[\\\s]/.test(texto)) return null;
+  if (!INICIO_DO_YOUTUBE.test(texto) || PONTO_NO_CAMINHO.test(texto)) return null;
   let u: URL;
   try {
     u = new URL(texto);

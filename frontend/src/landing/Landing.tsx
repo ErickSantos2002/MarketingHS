@@ -34,8 +34,7 @@ function IconeWhatsapp({ tamanho = 28 }: { tamanho?: number }) {
 function BotaoWhatsapp({ href, escondido = false }: { href: string; escondido?: boolean }) {
   return (
     <a className={escondido ? "landing-whatsapp landing-whatsapp-escondido" : "landing-whatsapp"}
-       href={href} target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp"
-       aria-hidden={escondido || undefined}>
+       href={href} target="_blank" rel="noopener noreferrer" aria-label="Falar no WhatsApp">
       <IconeWhatsapp />
     </a>
   );
@@ -127,8 +126,9 @@ function Rodape({ politica, comWhatsapp }: { politica: string | null; comWhatsap
 export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina }) {
   // Os padrões existem para a página nunca nascer vazia: enquanto o Nicholson
   // não decide a oferta, a landing mostra o que a HS vende de fato.
-  const headline = config.headline || "Registre e prove cada teste de alcoolemia";
-  const subheadline = config.subheadline ||
+  // `textoDaConfig`: um número ou objeto no lugar do texto derrubaria a página.
+  const headline = textoDaConfig(config.headline) || "Registre e prove cada teste de alcoolemia";
+  const subheadline = textoDaConfig(config.subheadline) ||
     "Bafômetro conectado para indústria e logística — o teste vira registro auditável.";
   // Texto puro em blocos — nunca `dangerouslySetInnerHTML`: a config é
   // editada no admin, mas a página é pública, e HTML colado viraria script.

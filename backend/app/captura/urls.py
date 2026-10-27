@@ -101,7 +101,9 @@ def id_do_youtube(valor) -> str | None:
         achado = m.group(1) if m else None
     elif host in _HOSTS_DO_YOUTUBE:
         if partes.path in ("/watch", "/watch/"):
-            achado = (parse_qs(partes.query).get("v") or [None])[0]
+            # O primeiro `v`, mesmo vazio — o `URLSearchParams.get` do
+            # cliente faz igual, e as duas réguas não podem divergir.
+            achado = (parse_qs(partes.query, keep_blank_values=True).get("v") or [None])[0]
         else:
             m = _CAMINHO_SHORTS_EMBED.fullmatch(partes.path)
             achado = m.group(1) if m else None
