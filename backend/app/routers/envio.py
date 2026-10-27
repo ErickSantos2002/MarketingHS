@@ -208,6 +208,7 @@ async def enfileirar(campanha_id: str) -> dict:
 # clicar nele descadastraria um contato de verdade.
 AMOSTRA_MERGE_TAGS = {
     "{{nome}}": "João Silva",
+    "{{primeiro_nome}}": "João",
     "{{empresa}}": "Empresa LTDA",
     "{{email}}": "joao@empresa.com",
     "{{unsubscribe_url}}": "#",
