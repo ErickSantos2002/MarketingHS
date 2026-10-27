@@ -1,4 +1,4 @@
-import { useAuth } from '@/hooks/useAuth';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface Props {
   status: string | null;
@@ -17,7 +17,7 @@ interface Props {
  */
 export function QualifiedBanner({ status, jaNoGrowthHS = false }: Props) {
   // O botão do cabeçalho é só de admin: a dica só faz sentido para quem o vê.
-  const { isAdmin } = useAuth();
+  const isAdmin = usePodeEditar();
   if (status !== 'Lead Qualificado') return null;
 
   return (

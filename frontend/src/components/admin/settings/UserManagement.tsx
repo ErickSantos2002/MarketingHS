@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableHeader, TableHead, TableRow, TableCell, TableBody } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { UserPlus, KeyRound, Trash2, Loader2, Shield, User, Mail, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { UserPlus, KeyRound, Trash2, Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 
@@ -29,6 +28,18 @@ interface UsuarioApi {
   last_sign_in_at: string | null;
 }
 
+// Os três papéis de public.app_role. `leitura` (27/10) vê as telas do admin
+// e não altera nada — o servidor dá 403 a qualquer escrita desse papel.
+const PAPEIS: { valor: string; rotulo: string; descricao: string }[] = [
+  { valor: 'admin', rotulo: 'Administrador', descricao: 'acesso total' },
+  { valor: 'user', rotulo: 'Usuário', descricao: 'sem acesso ao painel' },
+  { valor: 'leitura', rotulo: 'Leitura', descricao: 'vê tudo, não altera nada' },
+];
+
+function rotuloDoPapel(papel: string): string {
+  return PAPEIS.find((p) => p.valor === papel)?.rotulo ?? papel;
+}
+
 export default function UserManagement() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +48,7 @@ export default function UserManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newIsAdmin, setNewIsAdmin] = useState(false);
+  const [newPapel, setNewPapel] = useState('user');
   const [creating, setCreating] = useState(false);
 
   // Reset password dialog
@@ -92,13 +103,13 @@ export default function UserManagement() {
     setCreating(true);
     try {
       await api.post('/usuarios', {
-        email: newEmail, senha: newPassword, papel: newIsAdmin ? 'admin' : 'user',
+        email: newEmail, senha: newPassword, papel: newPapel,
       });
       toast.success('Usuário criado com sucesso');
       setCreateOpen(false);
       setNewEmail('');
       setNewPassword('');
-      setNewIsAdmin(false);
+      setNewPapel('user');
       fetchUsers();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erro ao criar usuário');
@@ -158,12 +169,12 @@ export default function UserManagement() {
     }
   };
 
-  const handleToggleRole = async (userId: string, currentRole: string) => {
-    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+  const handleChangeRole = async (userId: string, currentRole: string, newRole: string) => {
+    if (newRole === currentRole) return;
     setTogglingRole(userId);
     try {
       await api.patch(`/usuarios/${userId}/papel`, { papel: newRole });
-      toast.success(`Papel alterado para ${newRole}`);
+      toast.success(`Papel alterado para ${rotuloDoPapel(newRole)}`);
       fetchUsers();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Erro ao alterar role');
@@ -196,7 +207,7 @@ export default function UserManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead>Papel</TableHead>
                   <TableHead>Criado em</TableHead>
                   <TableHead>Último login</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -207,25 +218,27 @@ export default function UserManagement() {
                   <TableRow key={u.id}>
                     <TableCell className="text-xs font-medium">{u.email}</TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 text-xs h-6 px-2"
-                        disabled={togglingRole === u.id}
-                        onClick={() => handleToggleRole(u.id, u.role)}
-                        title={u.role === 'admin' ? 'Rebaixar para user' : 'Promover a admin'}
-                      >
-                        {togglingRole === u.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : u.role === 'admin' ? (
-                          <Shield className="h-3 w-3" />
-                        ) : (
-                          <User className="h-3 w-3" />
+                      <div className="flex items-center gap-1.5">
+                        <Select
+                          value={u.role}
+                          disabled={togglingRole === u.id}
+                          onValueChange={(v) => handleChangeRole(u.id, u.role, v)}
+                        >
+                          <SelectTrigger className="h-7 w-[150px] text-xs" aria-label={`Papel de ${u.email}`}>
+                            <SelectValue>{rotuloDoPapel(u.role)}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAPEIS.map((p) => (
+                              <SelectItem key={p.valor} value={p.valor} className="text-xs">
+                                {p.rotulo}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {togglingRole === u.id && (
+                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
                         )}
-                        <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="pointer-events-none">
-                          {u.role}
-                        </Badge>
-                      </Button>
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {new Date(u.created_at).toLocaleDateString('pt-BR')}
@@ -319,15 +332,20 @@ export default function UserManagement() {
                 onChange={(e) => setNewPassword(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="admin-check"
-                checked={newIsAdmin}
-                onCheckedChange={(v) => setNewIsAdmin(v === true)}
-              />
-              <label htmlFor="admin-check" className="text-xs">
-                Administrador (acesso total)
-              </label>
+            <div>
+              <label htmlFor="papel-novo" className="text-xs font-medium mb-1 block">Papel</label>
+              <Select value={newPapel} onValueChange={setNewPapel}>
+                <SelectTrigger id="papel-novo">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAPEIS.map((p) => (
+                    <SelectItem key={p.valor} value={p.valor}>
+                      {p.rotulo} ({p.descricao})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

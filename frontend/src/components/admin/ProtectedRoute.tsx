@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = true }: ProtectedRouteProps) {
-  const { user, isAdmin, isLoading } = useAuth();
+  const { user, podeVerAdmin, isLoading } = useAuth();
   const local = useLocation();
 
   // O papel chega junto com o usuário em /auth/eu, então não há mais um
@@ -32,8 +32,9 @@ export function ProtectedRoute({ children, requireAdmin = true }: ProtectedRoute
     return <Navigate to="/login" replace state={{ de: destinoDoLogin(local) }} />;
   }
 
-  if (requireAdmin && !isAdmin) {
-
+  // `requireAdmin` = telas do admin: entram admin e leitura (o leitor vê,
+  // não altera — as ações somem via usePodeEditar e o servidor dá 403).
+  if (requireAdmin && !podeVerAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, Download, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { usePodeEditar } from '@/hooks/useAuth';
 import { useSegments, type Segment } from '@/hooks/useSegments';
 import { StatusBadge } from '@/components/admin/contacts/StatusBadge';
 
@@ -17,6 +18,7 @@ interface Props {
 
 export function SegmentContactsDrawer({ segment, onClose }: Props) {
   const { getSegmentContacts } = useSegments();
+  const podeEditar = usePodeEditar();
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -77,9 +79,12 @@ export function SegmentContactsDrawer({ segment, onClose }: Props) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="Buscar..." className="pl-9" />
           </div>
-          <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
-            <Download className="h-3 w-3" /> CSV
-          </Button>
+          {/* Exportar tira dado pessoal do sistema (LGPD): só admin. */}
+          {podeEditar && (
+            <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5">
+              <Download className="h-3 w-3" /> CSV
+            </Button>
+          )}
         </div>
 
         <div className="flex-1 overflow-auto">

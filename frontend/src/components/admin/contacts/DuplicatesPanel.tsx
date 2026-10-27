@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { GitMerge, AlertTriangle, RefreshCw, Check } from 'lucide-react';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface DuplicateCluster {
   field: 'email' | 'phone';
@@ -26,6 +27,8 @@ interface DuplicateCluster {
 export function DuplicatesPanel() {
   const queryClient = useQueryClient();
   const [merging, setMerging] = useState<string | null>(null);
+  // Ver duplicatas é leitura (GET); fundir é escrita — some para o leitor.
+  const podeEditar = usePodeEditar();
 
   const { data: duplicates, isLoading, refetch } = useQuery({
     queryKey: ['identity-duplicates'],
@@ -126,15 +129,17 @@ export function DuplicatesPanel() {
                       {cluster.field === 'email' ? 'Email' : 'Telefone'}: {cluster.value}
                     </span>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleMerge(cluster)}
-                    disabled={merging === cluster.identities[0].dnia_id + cluster.identities[1].dnia_id}
-                  >
-                    <GitMerge className="h-3 w-3 mr-1" />
-                    Mesclar
-                  </Button>
+                  {podeEditar && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleMerge(cluster)}
+                      disabled={merging === cluster.identities[0].dnia_id + cluster.identities[1].dnia_id}
+                    >
+                      <GitMerge className="h-3 w-3 mr-1" />
+                      Mesclar
+                    </Button>
+                  )}
                 </div>
                 <div className="grid gap-1">
                   {cluster.identities.map((identity, i) => (

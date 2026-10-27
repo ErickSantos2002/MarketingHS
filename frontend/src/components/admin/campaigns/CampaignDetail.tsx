@@ -13,6 +13,7 @@ import type { Campaign, CampaignSend, CampaignLiveStats } from '@/hooks/useCampa
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { lerCampanha, pausarCampanha, retomarCampanha, pararCampanha } from '@/lib/campanhas';
 import { STATUS_DE_CAMPANHA } from './statusDeCampanha';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 // Controle do envio em curso (R1). Cada ação passa por confirmação: pausar e
 // retomar não perdem nada, mas parar não tem volta.
@@ -87,6 +88,8 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
   const runningRef = useRef(false);
   const [acao, setAcao] = useState<AcaoDeEnvio | null>(null);
   const [executando, setExecutando] = useState(false);
+  // Pausar/retomar/parar são escrita: somem para o leitor.
+  const podeEditar = usePodeEditar();
 
   // Carga única: sends + stats + o status REAL no banco. O status não pode vir da
   // prop `campaign` (é um snapshot da lista, congelado enquanto o Sheet está aberto):
@@ -229,7 +232,7 @@ export function CampaignDetail({ campaign, open, onClose }: CampaignDetailProps)
           </p>
         </SheetHeader>
 
-        {isEmail && (liveStatus === 'sending' || liveStatus === 'paused') && (
+        {podeEditar && isEmail && (liveStatus === 'sending' || liveStatus === 'paused') && (
           <div className="flex items-center gap-2 flex-wrap mt-4">
             {liveStatus === 'sending' ? (
               <Button variant="outline" size="sm" disabled={executando} onClick={() => setAcao('pausar')}>

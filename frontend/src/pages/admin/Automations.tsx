@@ -14,6 +14,7 @@ import { AUTOMACAO_COMO_FUNCIONA, previaDaRegra, type AutomationRule } from '@/l
 import { GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { JourneysTab } from '@/components/admin/automations/JourneysTab';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 const CONDITION_LABELS: Record<string, string> = {
   status: 'Status',
@@ -47,6 +48,8 @@ export default function Automations() {
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // Leitor: vê as regras; sem criar, editar, ligar/desligar nem excluir.
+  const podeEditar = usePodeEditar();
 
   // A prévia depois de salvar: quantos contatos a regra pegaria.
   //
@@ -117,11 +120,13 @@ export default function Automations() {
         </TabsList>
 
         <TabsContent value="regras" className="space-y-4 pt-4">
-          <div className="flex items-center justify-end">
-            <Button onClick={handleCreate} className="gap-2">
-              <Plus className="h-4 w-4" /> Nova regra
-            </Button>
-          </div>
+          {podeEditar && (
+            <div className="flex items-center justify-end">
+              <Button onClick={handleCreate} className="gap-2">
+                <Plus className="h-4 w-4" /> Nova regra
+              </Button>
+            </div>
+          )}
 
           {/* Desde o lote 8D as regras disparam de verdade, via gatilho no
               banco. Este aviso deixou de ser "nada dispara" e passou a
@@ -153,7 +158,7 @@ export default function Automations() {
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Zap className="h-12 w-12 mb-3 opacity-30" />
           <p className="text-sm font-medium">Nenhuma regra criada</p>
-          <p className="text-xs mt-1">Clique em "+ Nova regra" para começar</p>
+          {podeEditar && <p className="text-xs mt-1">Clique em "+ Nova regra" para começar</p>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -162,7 +167,9 @@ export default function Automations() {
               <CardContent className="py-4 flex items-center gap-4">
                 <Switch
                   checked={rule.is_active}
-                  onCheckedChange={(v) => toggleRule(rule.id, v)}
+                  disabled={!podeEditar}
+                  aria-label={rule.is_active ? 'Regra ativa' : 'Regra inativa'}
+                  onCheckedChange={(v) => { if (podeEditar) toggleRule(rule.id, v); }}
                 />
 
                 <div className="flex-1 min-w-0">
@@ -200,14 +207,14 @@ export default function Automations() {
                   </p>
                 </div>
 
-                <div className="flex gap-1 flex-shrink-0">
+                {podeEditar && <div className="flex gap-1 flex-shrink-0">
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rule)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[--on-tint-danger]" onClick={() => setDeleteId(rule.id)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
-                </div>
+                </div>}
               </CardContent>
             </Card>
           ))}
@@ -215,7 +222,7 @@ export default function Automations() {
       )}
 
       {/* Create/Edit Modal */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      <Dialog open={podeEditar && showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingRule ? 'Editar regra' : 'Nova regra'}</DialogTitle>

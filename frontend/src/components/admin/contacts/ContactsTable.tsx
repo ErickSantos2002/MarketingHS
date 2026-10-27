@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { excluirContato } from '@/lib/contatos';
 import { ErroApi } from '@/lib/api';
 import { corDoStatus } from './StatusBadge';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface ContactsTableProps {
   leads: (Lead | EnrichedLead)[];
@@ -110,6 +111,9 @@ export function ContactsTable({
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EnrichedLead | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Leitor: sem coluna de seleção (o lote não tem ação para ele), sem
+  // "Editar" nem "Apagar" no menu da linha — a ficha abre só para ver.
+  const podeEditar = usePodeEditar();
 
   const enrichedLeads = useMemo(() => rawLeads.map(asEnriched), [rawLeads]);
 
@@ -264,14 +268,16 @@ export function ContactsTable({
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[36px] min-w-[36px] px-3">
-                    <Checkbox
-                      checked={allPageSelected}
-                      onCheckedChange={toggleSelectAll}
-                      aria-label="Selecionar todos"
-                      className={`h-4 w-4 bg-muted border-foreground/50 ${somePageSelected && !allPageSelected ? 'opacity-50' : ''}`}
-                    />
-                  </TableHead>
+                  {podeEditar && (
+                    <TableHead className="w-[36px] min-w-[36px] px-3">
+                      <Checkbox
+                        checked={allPageSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Selecionar todos"
+                        className={`h-4 w-4 bg-muted border-foreground/50 ${somePageSelected && !allPageSelected ? 'opacity-50' : ''}`}
+                      />
+                    </TableHead>
+                  )}
                   {orderedVisibleCols.map(colKey => (
                     NON_SORTABLE.has(colKey) ? (
                       <TableHead key={colKey} className="whitespace-nowrap">
@@ -305,16 +311,18 @@ export function ContactsTable({
                       onMouseLeave={() => setHoveredRow(null)}
                       onClick={() => { setSelectedLead(lead); setModalOpen(true); }}
                     >
-                      <TableCell
-                        className="px-3"
-                        onClick={(e) => { e.stopPropagation(); toggleSelect(lead.id); }}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          tabIndex={-1}
-                          className="h-4 w-4 bg-muted border-foreground/50"
-                        />
-                      </TableCell>
+                      {podeEditar && (
+                        <TableCell
+                          className="px-3"
+                          onClick={(e) => { e.stopPropagation(); toggleSelect(lead.id); }}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            tabIndex={-1}
+                            className="h-4 w-4 bg-muted border-foreground/50"
+                          />
+                        </TableCell>
+                      )}
 
                       {orderedVisibleCols.map(colKey => (
                         <TableCell key={colKey}>
@@ -350,7 +358,7 @@ export function ContactsTable({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => { setSelectedLead(lead); setModalOpen(true); }}>
-                                Editar
+                                {podeEditar ? 'Editar' : 'Ver'}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleCopyEmail(lead.email)}>
                                 Copiar email
@@ -360,14 +368,18 @@ export function ContactsTable({
                                   Ver no GrowthHS
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-[--on-tint-danger] focus:text-[--on-tint-danger]"
-                                onClick={(e) => { e.stopPropagation(); setDeleteTarget(lead); }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 mr-2" />
-                                Apagar contato
-                              </DropdownMenuItem>
+                              {podeEditar && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-[--on-tint-danger] focus:text-[--on-tint-danger]"
+                                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(lead); }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                    Apagar contato
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

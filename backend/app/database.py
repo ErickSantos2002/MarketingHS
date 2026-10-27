@@ -86,4 +86,17 @@ async def sessao(role: str = "anon", user_id: str | None = None):
                 "SELECT set_config('app.current_user_id', $1, true)", str(user_id or "")
             )
             await conn.execute(f"SET LOCAL ROLE {role}")
+            if role == "authenticated" and user_id:
+                # Papel `leitura` (034): a transação dele é READ ONLY — o
+                # Postgres recusa qualquer escrita — e só assim o `has_role`
+                # o deixa ver o que o admin vê. Ligar READ ONLY é permitido a
+                # qualquer momento da transação; o contrário, não.
+                # `role::text` de propósito: com a 034 ainda não aplicada, um
+                # literal 'leitura' do enum derrubaria TODA sessão.
+                await conn.execute(
+                    """SELECT set_config('transaction_read_only', 'on', true)
+                        WHERE EXISTS (SELECT 1 FROM public.user_roles
+                                       WHERE user_id = $1::uuid
+                                         AND role::text = 'leitura')""",
+                    str(user_id))
             yield conn

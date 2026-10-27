@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { GitBranch, Plus, Pencil, Trash2, Play, Pause, Archive, ArchiveRestore, Copy, Users } from 'lucide-react';
+import { GitBranch, Plus, Pencil, Trash2, Play, Pause, Archive, ArchiveRestore, Copy, Users, Eye } from 'lucide-react';
+import { usePodeEditar } from '@/hooks/useAuth';
 import { useJourneys } from '@/hooks/useJourneys';
 import { JourneyCreateDialog } from './JourneyCreateDialog';
 import { JourneyContactsDrawer } from './JourneyContactsDrawer';
@@ -28,6 +29,9 @@ export function JourneysTab() {
   const [confirmActivate, setConfirmActivate] = useState<Journey | null>(null);
   const [activating, setActivating] = useState(false);
   const navigate = useNavigate();
+  // Leitor: "Ver contatos" e abrir o fluxo para ver; sem criar, ativar,
+  // pausar, clonar, arquivar nem excluir.
+  const podeEditar = usePodeEditar();
 
   const setStatus = (j: Journey, status: Journey['status']) => updateJourney(j.id, { status });
 
@@ -84,9 +88,11 @@ export function JourneysTab() {
           Sequências automáticas de email, espera e ramificação — os emails saem pela mesma fila das campanhas
           (supressão e descadastro valem igual).
         </p>
-        <Button onClick={() => setShowCreate(true)} className="gap-2">
-          <Plus className="h-4 w-4" /> Novo fluxo
-        </Button>
+        {podeEditar && (
+          <Button onClick={() => setShowCreate(true)} className="gap-2">
+            <Plus className="h-4 w-4" /> Novo fluxo
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -95,7 +101,7 @@ export function JourneysTab() {
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <GitBranch className="h-12 w-12 mb-3 opacity-30" />
           <p className="text-sm font-medium">Nenhum fluxo criado</p>
-          <p className="text-xs mt-1">Clique em "Novo fluxo" para começar</p>
+          {podeEditar && <p className="text-xs mt-1">Clique em "Novo fluxo" para começar</p>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -122,6 +128,7 @@ export function JourneysTab() {
                   <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => setContactsFor(j)}>
                     <Users className="h-3.5 w-3.5" /> Ver contatos
                   </Button>
+                  {podeEditar && <>
                   {j.status !== 'active' && j.status !== 'archived' && (
                     <Button variant="ghost" size="sm" className="h-7 gap-1 text-[--on-tint-success]" onClick={() => handleActivateClick(j)}>
                       <Play className="h-3.5 w-3.5" /> Ativar
@@ -145,10 +152,15 @@ export function JourneysTab() {
                       <Archive className="h-3.5 w-3.5" />
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => navigate(`/automations/fluxos/${j.id}`)}>
-                    <Pencil className="h-3.5 w-3.5" />
+                  </>}
+                  <Button
+                    variant="ghost" size="sm" className="h-7 w-7 p-0"
+                    onClick={() => navigate(`/automations/fluxos/${j.id}`)}
+                    aria-label={podeEditar ? 'Editar fluxo' : 'Ver fluxo'}
+                  >
+                    {podeEditar ? <Pencil className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </Button>
-                  {j.status === 'draft' && (
+                  {podeEditar && j.status === 'draft' && (
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[--on-tint-danger]" onClick={() => setDeleteId(j.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -161,7 +173,7 @@ export function JourneysTab() {
       )}
 
       <JourneyCreateDialog
-        open={showCreate}
+        open={podeEditar && showCreate}
         onOpenChange={setShowCreate}
         onCreate={createJourney}
         onCreated={(j) => navigate(`/automations/fluxos/${j.id}`)}

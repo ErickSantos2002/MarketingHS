@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 const SIDEBAR_COLLAPSED_KEY = 'marketinghs-sidebar-collapsed';
 // Chave do dn.marketing, lida uma única vez na inicialização abaixo para não
@@ -60,6 +61,10 @@ interface AdminSidebarProps {
 export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  // Importar e Configurações só alteram dado: somem para o leitor (e o
+  // grupo "Sistema" some junto, para não sobrar rótulo sem item).
+  const podeEditar = usePodeEditar();
+  const itensSistema = podeEditar ? SYSTEM_ITEMS : [];
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const atual = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
@@ -222,14 +227,18 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
           </div>
         ))}
 
-        <div className="my-3 border-t border-border" />
+        {itensSistema.length > 0 && (
+          <>
+            <div className="my-3 border-t border-border" />
 
-        {!collapsed && (
-          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-conteudo-faint">
-            Sistema
-          </p>
+            {!collapsed && (
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-conteudo-faint">
+                Sistema
+              </p>
+            )}
+            {itensSistema.map(item => renderItem(item))}
+          </>
         )}
-        {SYSTEM_ITEMS.map(item => renderItem(item))}
       </nav>
 
       {/* Rodapé — e-mail do usuário e Sair mudaram para a topbar. Recolhido,

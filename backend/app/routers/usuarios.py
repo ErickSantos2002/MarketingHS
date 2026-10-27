@@ -27,7 +27,7 @@ class UsuarioLinha(BaseModel):
 class CriarUsuarioIn(BaseModel):
     email: EmailStr
     senha: str = Field(min_length=8, max_length=72)
-    papel: str = Field(pattern="^(admin|user)$")
+    papel: str = Field(pattern="^(admin|user|leitura)$")
 
 
 class TrocarEmailIn(BaseModel):
@@ -35,7 +35,7 @@ class TrocarEmailIn(BaseModel):
 
 
 class TrocarPapelIn(BaseModel):
-    papel: str = Field(pattern="^(admin|user)$")
+    papel: str = Field(pattern="^(admin|user|leitura)$")
 
 
 class TrocarSenhaIn(BaseModel):

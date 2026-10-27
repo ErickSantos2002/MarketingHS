@@ -6,6 +6,7 @@ import { Search, SlidersHorizontal, Settings2, RefreshCw, Download } from 'lucid
 import { ColumnSelector } from '@/components/admin/ColumnSelector';
 import { ContactsExport } from '@/components/admin/contacts/ContactsExport';
 import type { Lead } from '@/hooks/useLeads';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface ContactsToolbarProps {
   search: string;
@@ -38,6 +39,8 @@ export function ContactsToolbar({
   onRefresh,
   leads,
 }: ContactsToolbarProps) {
+  // Exportar CSV tira dado pessoal do sistema (LGPD): só admin.
+  const podeEditar = usePodeEditar();
   return (
     // No celular a busca ocupa a linha inteira e os botões descem para a de
     // baixo; sem o `flex-wrap` a barra empurrava a página para 542 px em
@@ -90,7 +93,9 @@ export function ContactsToolbar({
       </Button>
 
       {/* Export */}
-      <ContactsExport leads={leads} visibleColumns={visibleColumns} columnOrder={columnOrder} />
+      {podeEditar && (
+        <ContactsExport leads={leads} visibleColumns={visibleColumns} columnOrder={columnOrder} />
+      )}
     </div>
   );
 }

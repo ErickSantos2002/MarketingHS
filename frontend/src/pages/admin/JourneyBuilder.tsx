@@ -41,6 +41,7 @@ import {
   SaidaStatusCampo, lerSaidaStatus, comSaidaStatus,
 } from '@/components/admin/automations/JourneyCreateDialog';
 import { EmailTemplatePreviewDialog } from '@/components/admin/campaigns/EmailTemplatePreviewDialog';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 type BranchKey = 'next' | 'next_false' | 'next_timeout';
 
@@ -69,6 +70,9 @@ function minutesToLabel(m: number): string {
 export default function JourneyBuilder() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Leitor abre o fluxo para ver: sem Salvar/Ativar/Pausar/Arquivar, sem "+"
+  // para adicionar passo, sem editar entrada, modo teste ou nó.
+  const podeEditar = usePodeEditar();
   const { journey, metrics, loading, refetch } = useJourney(id);
   const { templates } = useTemplates();
   // Usado só pelo rótulo do nó `branch_segment` (ramificação por um único
@@ -402,11 +406,12 @@ export default function JourneyBuilder() {
   const { count: activateSegmentCount } = useSegmentAudience(
     entrySegmentIds,
     entryExcludedSegmentIds,
-    entryType === 'segment',
+    // POST /segmentos/audiencia é 403 para o leitor, e ele não ativa nada.
+    podeEditar && entryType === 'segment',
   );
 
   // ---- Render recursivo em coluna vertical, com ramos em duas colunas ----
-  const AddButton = ({ parentId, branchKey }: { parentId: string | null; branchKey: BranchKey }) => (
+  const AddButton = ({ parentId, branchKey }: { parentId: string | null; branchKey: BranchKey }) => !podeEditar ? null : (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="w-7 h-7 rounded-full border border-dashed border-border/60 hover:border-primary hover:text-primary flex items-center justify-center text-muted-foreground transition-colors my-1">
@@ -469,8 +474,8 @@ export default function JourneyBuilder() {
           summary={summaryFor(node)}
           metrics={metrics[node.id]}
           onPreview={node.type === 'send_email' && node.config?.template_id ? () => setPreviewNode(node) : undefined}
-          onEdit={() => setEditingNode(node)}
-          onDelete={() => requestDeleteNode(node.id)}
+          onEdit={podeEditar ? () => setEditingNode(node) : undefined}
+          onDelete={podeEditar ? () => requestDeleteNode(node.id) : undefined}
         />,
       );
 
@@ -547,7 +552,7 @@ export default function JourneyBuilder() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        {podeEditar && <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleSaveClick()} disabled={saving}>
             <Save className="h-3.5 w-3.5" /> Salvar
           </Button>
@@ -566,7 +571,7 @@ export default function JourneyBuilder() {
               <Archive className="h-3.5 w-3.5" /> Arquivar
             </Button>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Card de entrada -- somente leitura, editável pelo diálogo próprio */}
@@ -586,7 +591,7 @@ export default function JourneyBuilder() {
               <p className="text-xs text-muted-foreground truncate">Sai quando o status for: {saidaStatus.join(', ')}</p>
             )}
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setShowEntryDialog(true)}>Editar</Button>
+          {podeEditar && <Button variant="ghost" size="sm" onClick={() => setShowEntryDialog(true)}>Editar</Button>}
         </CardContent>
       </Card>
 
@@ -609,7 +614,7 @@ export default function JourneyBuilder() {
               <p className="text-xs text-[--on-tint-danger] truncate">Inválido: {listaTeste.invalidos.join(', ')}</p>
             )}
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setShowModoTesteDialog(true)}>Editar</Button>
+          {podeEditar && <Button variant="ghost" size="sm" onClick={() => setShowModoTesteDialog(true)}>Editar</Button>}
         </CardContent>
       </Card>
 
@@ -622,7 +627,7 @@ export default function JourneyBuilder() {
       {nodes.length === 0 && (
         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
           <GitBranch className="h-10 w-10 mb-2 opacity-30" />
-          <p className="text-sm">Clique no "+" acima para adicionar o primeiro passo</p>
+          <p className="text-sm">{podeEditar ? 'Clique no "+" acima para adicionar o primeiro passo' : 'Este fluxo ainda não tem passos'}</p>
         </div>
       )}
 

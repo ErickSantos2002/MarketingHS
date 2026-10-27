@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from app.captura.urls import urls_invalidas
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 router = APIRouter(prefix="/paginas", tags=["paginas"])
 
@@ -104,7 +104,7 @@ class PaginaPatch(BaseModel):
 
 
 @router.get("")
-async def listar(usuario: Usuario = Depends(admin_atual)):
+async def listar(usuario: Usuario = Depends(admin_ou_leitura)):
     """As linhas cheias, na ordem que a tela espera (`created_at ASC`)."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -113,7 +113,7 @@ async def listar(usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/estatisticas")
-async def estatisticas(usuario: Usuario = Depends(admin_atual)):
+async def estatisticas(usuario: Usuario = Depends(admin_ou_leitura)):
     """A view `page_stats`, que é o que a TABELA da tela mostra.
 
     ⚠️ Esta rota precisa ser declarada ANTES de qualquer `GET /{algo}` neste
@@ -223,7 +223,7 @@ def _linha(linha) -> dict:
 
 @router.get("/numeros")
 async def numeros(de: date | None = Query(None), ate: date | None = Query(None),
-                  usuario: Usuario = Depends(admin_atual)):
+                  usuario: Usuario = Depends(admin_ou_leitura)):
     """⚠️ Declarada ANTES de qualquer `GET /{algo}` deste router (ver
     `estatisticas`). Padrão: os últimos 30 dias, hoje incluído."""
     hoje = datetime.now(FUSO).date()

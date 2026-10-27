@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 from app.routers.leitura_contatos import COLUNAS_LEAD
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class SegmentoIn(BaseModel):
 
 
 @router.get("")
-async def listar(usuario: Usuario = Depends(admin_atual)):
+async def listar(usuario: Usuario = Depends(admin_ou_leitura)):
     """Lista os segmentos com a contagem de contatos já resolvida.
 
     ⚠️ Uma consulta, não N+1. A tela buscava os segmentos e depois, para CADA
@@ -273,7 +273,7 @@ async def audiencia(dados: AudienciaIn, usuario: Usuario = Depends(admin_atual))
 
 
 @router.get("/{segmento_id}/contatos")
-async def contatos(segmento_id: str, usuario: Usuario = Depends(admin_atual)):
+async def contatos(segmento_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """Os contatos do segmento, resolvendo os dois tipos no banco.
 
     ⚠️ Para segmento dinâmico a tela chamava a RPC, recebia os ids e buscava os

@@ -14,7 +14,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { enviarAoComercial, GROWTHHS_NAO_CONFIGURADO, useCrmEstado } from '@/lib/crm';
-import { useAuth } from '@/hooks/useAuth';
+import { usePodeEditar } from '@/hooks/useAuth';
 import type { Lead } from '@/hooks/useLeads';
 import type { EnrichedLead, TagInfo } from '@/hooks/useContactsEnriched';
 import {
@@ -65,7 +65,7 @@ interface TimelineEventData {
 }
 
 export function LeadDetailSheet({ lead, open, onOpenChange, allTags = [], onDataChanged }: LeadDetailSheetProps) {
-  const { isAdmin } = useAuth();
+  const isAdmin = usePodeEditar();
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loadingConversions, setLoadingConversions] = useState(false);

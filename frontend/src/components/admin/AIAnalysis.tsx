@@ -4,12 +4,19 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Brain, Loader2, AlertCircle, Users, TrendingUp, Lightbulb, Target } from 'lucide-react';
 import { useAIAnalysis } from '@/hooks/useAIAnalysis';
 import type { Lead } from '@/hooks/useLeads';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface AIAnalysisProps {
   leads: Lead[];
 }
 
-export function AIAnalysis({ leads }: AIAnalysisProps) {
+// A análise faz POST /ia/analisar-leads (403 para o leitor): o cartão some.
+export function AIAnalysis(props: AIAnalysisProps) {
+  const podeEditar = usePodeEditar();
+  return podeEditar ? <AnaliseDeIA {...props} /> : null;
+}
+
+function AnaliseDeIA({ leads }: AIAnalysisProps) {
   const { analysis, isAnalyzing, error, analyzeLeads, clearAnalysis } = useAIAnalysis();
 
   const handleAnalyze = () => {

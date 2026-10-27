@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { GitMerge, Trash2 } from 'lucide-react';
 import { getUniqueValues } from '@/hooks/useDashboardFilters';
 import type { DeletedView } from '@/hooks/useLeads';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 // Link direto para a ficha: `/contacts?contato=<id>` — é o link que vai no
 // aviso por e-mail ao comercial (nó "Avisar por e-mail").
@@ -29,6 +30,7 @@ export default function Contacts() {
   const [selectAll, setSelectAll] = useState(false);
   const [sortKey, setSortKey] = useState<string | null>('last_conversion_date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const podeEditar = usePodeEditar();
 
   const {
     filteredLeads, allEnrichedLeads, isLoading, refetch,
@@ -214,7 +216,8 @@ export default function Contacts() {
       {/* Isolada aqui para que a explosão da barra de ações em massa não leve
           a TABELA junto — sem isto, a tela inteira de Contatos vira um
           cartão de erro. */}
-      <LimiteDeErro area="ações em massa">
+      {/* Leitor: sem ações em massa (a tabela nem mostra a seleção). */}
+      {podeEditar && <LimiteDeErro area="ações em massa">
         <ContactsBulkBar
           selectedLeads={selectedLeads}
           selectAll={selectAll}
@@ -224,7 +227,7 @@ export default function Contacts() {
           visibleColumns={visibleColumns}
           columnOrder={columnOrder}
         />
-      </LimiteDeErro>
+      </LimiteDeErro>}
 
       {/* Duplicates */}
       {showDuplicates && <DuplicatesPanel />}

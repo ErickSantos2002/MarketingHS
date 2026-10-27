@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.ab.dominio import normalizar_dominio
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 router = APIRouter(prefix="/ab", tags=["ab"])
 
@@ -124,7 +124,7 @@ class ConfigAbIn(BaseModel):
 
 
 @router.get("/config")
-async def ler_config(usuario: Usuario = Depends(admin_atual)):
+async def ler_config(usuario: Usuario = Depends(admin_ou_leitura)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             "SELECT production_domain, redirector_base FROM ab_config LIMIT 1")
@@ -163,7 +163,7 @@ async def gravar_config(dados: ConfigAbIn, usuario: Usuario = Depends(admin_atua
 
 
 @router.get("/testes")
-async def listar_testes(usuario: Usuario = Depends(admin_atual)):
+async def listar_testes(usuario: Usuario = Depends(admin_ou_leitura)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             f"SELECT {_COLUNAS_TESTE} FROM ab_tests ORDER BY created_at DESC")
@@ -171,7 +171,7 @@ async def listar_testes(usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/testes/{teste_id}")
-async def obter_teste(teste_id: UUID, usuario: Usuario = Depends(admin_atual)):
+async def obter_teste(teste_id: UUID, usuario: Usuario = Depends(admin_ou_leitura)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"SELECT {_COLUNAS_TESTE} FROM ab_tests WHERE id = $1::uuid", str(teste_id))
@@ -258,7 +258,7 @@ async def ativar_teste(teste_id: UUID, dados: AtivacaoIn,
 
 
 @router.get("/testes/{teste_id}/eventos")
-async def eventos_do_teste(teste_id: UUID, usuario: Usuario = Depends(admin_atual)):
+async def eventos_do_teste(teste_id: UUID, usuario: Usuario = Depends(admin_ou_leitura)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         slug = await conn.fetchval(
             "SELECT slug FROM ab_tests WHERE id = $1::uuid", str(teste_id))

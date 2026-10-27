@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/templates", tags=["templates"])
@@ -47,7 +47,7 @@ async def listar(
     categoria: str | None = Query(None, alias="category"),
     pagina: int = Query(1, alias="page", ge=1),
     limite: int = Query(20, alias="limit", ge=1, le=100),
-    usuario: Usuario = Depends(admin_atual),
+    usuario: Usuario = Depends(admin_ou_leitura),
 ):
     """Lista paginada. O filtro vai por parâmetro, não concatenado na string."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
@@ -68,7 +68,7 @@ async def listar(
 
 
 @router.get("/{template_id}")
-async def ler(template_id: str, usuario: Usuario = Depends(admin_atual)):
+async def ler(template_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             f"SELECT {COLUNAS} FROM email_templates WHERE id = $1::uuid",

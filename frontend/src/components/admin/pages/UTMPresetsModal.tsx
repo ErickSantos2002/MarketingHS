@@ -8,6 +8,7 @@ import { Copy, Trash2, Plus } from 'lucide-react';
 import { urlDaLanding } from '@/lib/landing';
 import { toast } from 'sonner';
 import type { PageStat } from '@/hooks/usePages';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 const QUICK_PRESETS: Record<string, { source: string; medium: string }> = {
   'Instagram Feed': { source: 'instagram', medium: 'feed' },
@@ -34,6 +35,9 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
   const [medium, setMedium] = useState('');
   const [campaign, setCampaign] = useState('');
   const [content, setContent] = useState('');
+  // Leitor monta e copia o link, mas não salva nem apaga preset (gravaria a
+  // config da página).
+  const podeEditar = usePodeEditar();
 
   // O host de produção do MarketingHS ainda não foi decidido (pendência do
   // Erick; frontend/public/openapi/marketinghs-api.yaml tem
@@ -105,9 +109,11 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
                 <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => copyUrl(buildUrl(preset.source, preset.medium, preset.campaign, preset.content))}>
                   <Copy className="h-3 w-3" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-[--on-tint-danger] hover:text-[--on-tint-danger]" onClick={() => deletePreset(i)}>
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                {podeEditar && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-[--on-tint-danger] hover:text-[--on-tint-danger]" onClick={() => deletePreset(i)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -125,8 +131,8 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
         </div>
 
         <div className="space-y-3 border-t pt-3">
-          <Label className="text-xs text-muted-foreground">Criar novo preset</Label>
-          <Input placeholder="Nome do preset" value={name} onChange={(e) => setName(e.target.value)} />
+          <Label className="text-xs text-muted-foreground">{podeEditar ? 'Criar novo preset' : 'Montar link'}</Label>
+          {podeEditar && <Input placeholder="Nome do preset" value={name} onChange={(e) => setName(e.target.value)} />}
           <div className="grid grid-cols-2 gap-2">
             <Input placeholder="utm_source" value={source} onChange={(e) => setSource(e.target.value)} />
             <Input placeholder="utm_medium" value={medium} onChange={(e) => setMedium(e.target.value)} />
@@ -145,9 +151,11 @@ export function UTMPresetsModal({ open, onOpenChange, page, onUpdateConfig }: UT
             </div>
           )}
 
-          <Button onClick={savePreset} disabled={!name || !source || !medium} className="w-full" size="sm">
-            <Plus className="h-4 w-4 mr-2" /> Salvar preset
-          </Button>
+          {podeEditar && (
+            <Button onClick={savePreset} disabled={!name || !source || !medium} className="w-full" size="sm">
+              <Plus className="h-4 w-4 mr-2" /> Salvar preset
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

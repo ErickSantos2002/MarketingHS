@@ -8,16 +8,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, MoreHorizontal, Eye, Pencil, Copy, Trash2, Loader2, LayoutTemplate, FileText } from 'lucide-react';
 import { useTemplates, type EmailTemplate } from '@/hooks/useTemplates';
 import { ArquivosDialog } from '@/components/admin/templates/ArquivosDialog';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 export default function Templates() {
   const navigate = useNavigate();
   const { templates, loading, duplicateTemplate, deleteTemplate } = useTemplates();
   const [deleteTarget, setDeleteTarget] = useState<EmailTemplate | null>(null);
   const [arquivosAberto, setArquivosAberto] = useState(false);
+  // Leitor: vê e abre os templates; sem Arquivos (GET /arquivos é admin-only),
+  // sem criar, duplicar nem excluir.
+  const podeEditar = usePodeEditar();
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end gap-2">
+      {podeEditar && <div className="flex items-center justify-end gap-2">
         {/* PDF com link público para pôr no e-mail (ficha técnica) */}
         <Button variant="outline" onClick={() => setArquivosAberto(true)}>
           <FileText className="h-4 w-4 mr-2" />
@@ -27,8 +31,8 @@ export default function Templates() {
           <Plus className="h-4 w-4 mr-2" />
           Novo template
         </Button>
-      </div>
-      <ArquivosDialog open={arquivosAberto} onOpenChange={setArquivosAberto} />
+      </div>}
+      {podeEditar && <ArquivosDialog open={arquivosAberto} onOpenChange={setArquivosAberto} />}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -38,9 +42,11 @@ export default function Templates() {
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
           <LayoutTemplate className="h-10 w-10 opacity-40" />
           <p>Nenhum template criado</p>
-          <Button variant="outline" onClick={() => navigate('/templates/new')}>
-            <Plus className="h-4 w-4 mr-2" /> Criar primeiro template
-          </Button>
+          {podeEditar && (
+            <Button variant="outline" onClick={() => navigate('/templates/new')}>
+              <Plus className="h-4 w-4 mr-2" /> Criar primeiro template
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -81,14 +87,18 @@ export default function Templates() {
                         <Eye className="h-4 w-4 mr-2" /> Visualizar
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/templates/${t.id}/edit`); }}>
-                        <Pencil className="h-4 w-4 mr-2" /> Editar
+                        <Pencil className="h-4 w-4 mr-2" /> {podeEditar ? 'Editar' : 'Abrir no editor'}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateTemplate(t); }}>
-                        <Copy className="h-4 w-4 mr-2" /> Duplicar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-[--on-tint-danger]" onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); }}>
-                        <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                      </DropdownMenuItem>
+                      {podeEditar && (
+                        <>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicateTemplate(t); }}>
+                            <Copy className="h-4 w-4 mr-2" /> Duplicar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-[--on-tint-danger]" onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); }}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

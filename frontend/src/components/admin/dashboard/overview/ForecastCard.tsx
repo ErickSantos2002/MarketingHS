@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { TrendingUp, CalendarIcon, Loader2, Settings2 } from 'lucide-react';
+import { usePodeEditar } from '@/hooks/useAuth';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,8 @@ export function ForecastCard({
   onUpdateDates,
   isSaving,
 }: ForecastCardProps) {
+  // O período grava em PUT /painel/config (403 para o leitor).
+  const podeEditar = usePodeEditar();
   const [showSettings, setShowSettings] = useState(false);
   const [localStartDate, setLocalStartDate] = useState<Date>(parseISO(startDate));
   const [localEndDate, setLocalEndDate] = useState<Date>(parseISO(endDate));
@@ -76,19 +79,21 @@ export function ForecastCard({
             <TrendingUp className={cn('h-4 w-4', getStatusColor())} />
             Forecast
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-50 hover:opacity-100"
-            onClick={() => setShowSettings(!showSettings)}
-          >
-            <Settings2 className="h-3 w-3" />
-          </Button>
+          {podeEditar && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-50 hover:opacity-100"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Settings2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="pt-0">
         {/* Date Settings */}
-        {showSettings && (
+        {podeEditar && showSettings && (
           <div className="mb-4 p-3 bg-muted/50 rounded-lg space-y-3 animate-fade-in">
             <div className="grid grid-cols-2 gap-2">
               <div>

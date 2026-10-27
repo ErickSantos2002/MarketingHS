@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { LayoutGrid, RotateCcw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { CardConfig } from '@/hooks/useDashboardCardSettings';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 interface DashboardCardSelectorProps {
   cards: CardConfig[];
@@ -12,7 +13,14 @@ interface DashboardCardSelectorProps {
   onReset: () => void;
 }
 
-export function DashboardCardSelector({ cards, visibleCards, onToggle, onReset }: DashboardCardSelectorProps) {
+export function DashboardCardSelector(props: DashboardCardSelectorProps) {
+  // A escolha de cartões é do painel da empresa (PUT /painel/config, global):
+  // o leitor não a altera — o seletor some nas seis abas.
+  const podeEditar = usePodeEditar();
+  return podeEditar ? <SeletorDeCartoes {...props} /> : null;
+}
+
+function SeletorDeCartoes({ cards, visibleCards, onToggle, onReset }: DashboardCardSelectorProps) {
   const hiddenCount = cards.length - visibleCards.length;
 
   return (

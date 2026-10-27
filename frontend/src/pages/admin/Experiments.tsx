@@ -32,6 +32,7 @@ import {
 import { requiredSamplePerVariant, estimateDurationDays } from "@/lib/abStats";
 import { abDistributionLink, abBaseHost, normalizeProductionDomain, domainOf, isHostInDomain } from "@/lib/abConfig";
 import { useAbConfig } from "@/hooks/useAbConfig";
+import { usePodeEditar } from "@/hooks/useAuth";
 
 const VARIANT_KEYS = ["A", "B", "C", "D", "E", "F"];
 
@@ -130,6 +131,9 @@ export default function Experiments() {
   const createTest = useCreateAbTest();
   const updateTest = useUpdateAbTest();
   const activateTest = useActivateAbTest();
+  // Leitor: lista, link e relatório; sem criar, ativar, pausar, concluir,
+  // arquivar nem a tela de configuração (que o AdminLayout já redireciona).
+  const podeEditar = usePodeEditar();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   // Enquanto o admin não editar a slug à mão, ela acompanha o nome.
@@ -314,14 +318,14 @@ export default function Experiments() {
             Split-URL por redirecionamento — mede qual página gera leads e agendamentos de maior valor.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {podeEditar && <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => navigate("/experiments/setup")}>
             <Settings2 className="h-4 w-4 mr-2" /> Configuração & Instruções
           </Button>
           <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4 mr-2" /> Novo teste
           </Button>
-        </div>
+        </div>}
       </div>
 
       <Card className="overflow-hidden">
@@ -331,7 +335,7 @@ export default function Experiments() {
           </div>
         ) : !tests || tests.length === 0 ? (
           <div className="p-10 text-center text-muted-foreground">
-            Nenhum teste ainda. Crie o primeiro para gerar um Link de Distribuição.
+            {podeEditar ? 'Nenhum teste ainda. Crie o primeiro para gerar um Link de Distribuição.' : 'Nenhum teste ainda.'}
           </div>
         ) : (
           <Table>
@@ -369,7 +373,7 @@ export default function Experiments() {
                       <Button variant="ghost" size="icon" title="Copiar link" onClick={() => copyLink(t.public_slug)}>
                         <Copy className="h-4 w-4" />
                       </Button>
-                      {t.status === "running" ? (
+                      {!podeEditar ? null : t.status === "running" ? (
                         <Button variant="ghost" size="icon" title="Pausar (kill switch)" onClick={() => pause(t)}>
                           <Pause className="h-4 w-4" />
                         </Button>
@@ -378,7 +382,7 @@ export default function Experiments() {
                           <Play className="h-4 w-4" />
                         </Button>
                       )}
-                      {(t.status === "running" || t.status === "paused") && (
+                      {podeEditar && (t.status === "running" || t.status === "paused") && (
                         <Button variant="ghost" size="icon" title="Concluir teste"
                           onClick={() => { setFinishing(t); setWinner(""); }}>
                           <Flag className="h-4 w-4" />
@@ -387,7 +391,7 @@ export default function Experiments() {
                       <Button variant="ghost" size="icon" title="Relatório" onClick={() => navigate(`/experiments/${t.id}`)}>
                         <BarChart3 className="h-4 w-4" />
                       </Button>
-                      {t.status !== "archived" && (
+                      {podeEditar && t.status !== "archived" && (
                         <Button variant="ghost" size="icon" title="Arquivar" onClick={() => archive(t)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -402,7 +406,7 @@ export default function Experiments() {
         )}
       </Card>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={podeEditar && open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Novo teste A/B</DialogTitle>

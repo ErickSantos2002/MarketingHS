@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, admin_atual
+from app.dependencies import Usuario, admin_atual, admin_ou_leitura
 from app.dominio import controle_campanha
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ async def listar(
     canal: str | None = Query(None, alias="channel"),
     pagina: int = Query(1, alias="page", ge=1),
     limite: int = Query(20, alias="limit", ge=1, le=100),
-    usuario: Usuario = Depends(admin_atual),
+    usuario: Usuario = Depends(admin_ou_leitura),
 ):
     """Lista paginada, com os NOMES dos segmentos já resolvidos.
 
@@ -146,7 +146,7 @@ async def listar(
 
 
 @router.get("/{campanha_id}")
-async def detalhe(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
+async def detalhe(campanha_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """A campanha, os nomes dos segmentos e uma amostra dos envios.
 
     ⚠️ `stats` é lido da coluna, NÃO recalculado aqui. Quem calcula é
@@ -322,7 +322,7 @@ async def excluir(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/{campanha_id}/audiencia")
-async def audiencia(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
+async def audiencia(campanha_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """Quantos contatos esta campanha atingiria hoje.
 
     ⚠️ Chama `count_segment_audience` e `resolve_segment_audience` — as MESMAS
@@ -358,7 +358,7 @@ async def audiencia(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
 
 
 @router.get("/{campanha_id}/envios")
-async def envios(campanha_id: str, usuario: Usuario = Depends(admin_atual)):
+async def envios(campanha_id: str, usuario: Usuario = Depends(admin_ou_leitura)):
     """Todos os envios da campanha, com o contato já junto.
 
     ⚠️ `NULLS LAST` não é enfeite. A partir da fila os envios nascem `pending`

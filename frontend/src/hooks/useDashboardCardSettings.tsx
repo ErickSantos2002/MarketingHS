@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { api, ErroApi } from '@/lib/api';
+import { usePodeEditar } from '@/hooks/useAuth';
 
 export interface CardConfig {
   key: string;
@@ -49,6 +50,9 @@ export function useDashboardCardSettings(tabName: string, allCards: CardConfig[]
   const [visibleCards, setVisibleCards] = useState<string[]>(() =>
     loadFromLocalStorage(tabName, allCards)
   );
+  // Segunda linha: o seletor já some para o leitor, mas a gravação no
+  // servidor também não sai dele (PUT /painel/config é 403).
+  const podeEditar = usePodeEditar();
 
   // Sync from DB on mount
   useEffect(() => {
@@ -77,6 +81,7 @@ export function useDashboardCardSettings(tabName: string, allCards: CardConfig[]
 
     // Persist to DB (fire-and-forget). Lê o objeto inteiro, atualiza só a
     // própria aba e regrava — outras abas continuam com o que já tinham.
+    if (!podeEditar) return;
     (async () => {
       try {
         const atual = await lerValorGuardado();
@@ -86,7 +91,7 @@ export function useDashboardCardSettings(tabName: string, allCards: CardConfig[]
         console.error('useDashboardCardSettings: falha ao salvar', error);
       }
     })();
-  }, [tabName]);
+  }, [tabName, podeEditar]);
 
   const toggleCard = useCallback((key: string) => {
     setVisibleCards(prev => {
