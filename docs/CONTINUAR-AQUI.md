@@ -1,5 +1,13 @@
 # Continuar aqui
 
+> ## ✅ 27/10 (tarde) — papel `leitura` (conta do Sergio, agência do Leão)
+>
+> - Pedido do Nicholson: o Sergio olha o sistema sem alterar. Frente `papel-leitura` ✅ mergeada (`711cb6d`; portão local **1229 passed, 9 skipped**, `tsc` 0, guarda 0, builds ok).
+> - Três travas: rota (`usuario_atual` dá 403 a toda escrita do leitor, exceto `enriquecimento` e `tags-por-contato`, que são leitura em POST), transação READ ONLY na `sessao()`, e `has_role(uid,'admin')` verdadeiro para o leitor só em transação READ ONLY (034). A 035 esconde contato excluído do leitor (política restritiva em `leads` + 18 tabelas).
+> - Fora do leitor: Configurações, usuários, chaves, IA, Importar e toda exportação de contatos.
+> - **Falta:** Erick roda `bash ~/marketinghs-migrations-034-035.sh`, deploy de api e sistema, cria a conta em Configurações → Usuários com papel Leitura.
+> - Pergunta aberta (LGPD): o leitor vê a base ativa inteira com e-mail/telefone pela API; mascarar ou limitar é decisão do Erick/Nicholson. Detalhes em `docs/frentes/papel-leitura.md`.
+
 > ## ✅ 27/10 — Phoebus no ar, GrowthHS em produção, e-mails do RD
 >
 > - Landing `/p/phoebus` no ar (script `~/marketinghs-criar-landing-phoebus.sh`), WhatsApp (81) 98177-1177, política `privacidade.cfm`, `noindex`.
