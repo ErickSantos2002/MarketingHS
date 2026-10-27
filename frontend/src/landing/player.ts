@@ -89,6 +89,10 @@ export function opcoesDoPlayer(id: string, origem: string) {
 }
 
 export const URL_DA_API = "https://www.youtube.com/iframe_api";
+/** O `iframe_api` puxa outro script (`www-widgetapi.js`); se ESSE for
+ * bloqueado, o `onYouTubeIframeAPIReady` nunca vem. Sem prazo, a promessa
+ * ficaria pendurada para sempre e a próxima tentativa a reaproveitaria. */
+export const PRAZO_DA_API_MS = 12000;
 
 // ── O carregador da API ──────────────────────────────────────────────────────
 // Uma vez por página: o script define `window.YT` e chama
@@ -132,7 +136,9 @@ export function carregarApiDoYoutube(): Promise<ConstrutorDoPlayer> {
   if (carregando) return carregando;
   carregando = new Promise<ConstrutorDoPlayer>((resolver, rejeitar) => {
     const anterior = janela.onYouTubeIframeAPIReady;
+    const prazo = window.setTimeout(() => rejeitar(new Error("API do YouTube não respondeu")), PRAZO_DA_API_MS);
     janela.onYouTubeIframeAPIReady = () => {
+      window.clearTimeout(prazo);
       anterior?.();
       if (janela.YT?.Player) resolver(janela.YT.Player);
       else rejeitar(new Error("API do YouTube sem Player"));
@@ -141,6 +147,7 @@ export function carregarApiDoYoutube(): Promise<ConstrutorDoPlayer> {
     script.src = URL_DA_API;
     script.async = true;
     script.onerror = () => {
+      window.clearTimeout(prazo);
       script.remove();
       rejeitar(new Error("API do YouTube não carregou"));
     };

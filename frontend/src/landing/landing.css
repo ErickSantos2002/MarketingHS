@@ -1362,7 +1362,7 @@ img {
 
 @media (min-width: 600px) {
   .logos {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--colunas-meio, 3), minmax(0, 1fr));
     gap: 44px 40px;
   }
 
@@ -1665,6 +1665,18 @@ img {
   z-index: 1;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* O furo (só quando o navegador recusou o autoplay e o vídeo nunca tocou,
+ * ver Secoes.tsx): o escudo perde o quadrado do meio — `clip-path` também
+ * corta o clique — e o iframe passa a receber ponteiro ali. */
+.video-iframe-furo {
+  pointer-events: auto;
+}
+
+.video-escudo-furo {
+  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+                     32% 30%, 32% 70%, 68% 70%, 68% 30%, 32% 30%);
 }
 
 .video-escudo img {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from "react";
 import type { BlocoDoCorpo } from "./campos";
 import { miniaturaDoYoutube, type Secao } from "./secoes";
 import {
@@ -178,7 +178,8 @@ function ImagemDeLogo({ src, nome, className }: { src: string; nome: string; cla
 // logo gigante. A última linha pode ficar incompleta — é uma lista, não um
 // mosaico. Menos de 4 logos, uma coluna por logo.
 function Logos({ secao }: { secao: DaSecao<"logos"> }) {
-  const estilo = { "--colunas": Math.min(secao.itens.length, 4) } as CSSProperties;
+  const n = secao.itens.length;
+  const estilo = { "--colunas": Math.min(n, 4), "--colunas-meio": Math.min(n, 3) } as CSSProperties;
   return (
     <ul className="logos" style={estilo}>
       {secao.itens.map((item, i) => (
@@ -318,6 +319,8 @@ type FaseDoVideo = "fachada" | "carregando" | "tocando" | "pausado" | "fim" | "e
 // iframe), o player fica parado; depois disto, a fase vira "pausado" e o
 // nosso botão de play aparece.
 const ESPERA_DO_AUTOPLAY_MS = 2500;
+// Sem o player pronto neste prazo, a fase vira "erro" (com "tentar de novo").
+const PRAZO_DO_PLAYER_MS = 15000;
 
 const ICONES = {
   play: "M8 5.5v13l10.5-6.5z",
@@ -345,13 +348,30 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
   const [pronto, setPronto] = useState(false);
   const [atual, setAtual] = useState(0);
   const [duracao, setDuracao] = useState(0);
+  // O furo: o autoplay foi recusado e o vídeo nunca tocou (Safari/iPhone,
+  // que não repassa ao iframe o gesto feito na nossa página). Só então um
+  // quadrado no MEIO do escudo deixa o toque chegar ao iframe — ali, com
+  // `controls=0`, só há o play do próprio YouTube, longe do título e do
+  // logo. Fecha no primeiro PLAYING e não volta.
+  const [furo, setFuro] = useState(false);
   // `maxresdefault` não existe em todo vídeo — e quando falta, o YouTube
   // devolve 200 com um cinza de 120×90, não um erro. Os dois casos caem no
   // `hqdefault`, que todo vídeo tem.
   const [grande, setGrande] = useState(true);
-  const caixa = useRef<HTMLDivElement | null>(null);
+  const caixa = useRef<HTMLDivElement>(null);
   const player = useRef<PlayerDoYoutube | null>(null);
   const botaoPlay = useRef<HTMLButtonElement>(null);
+  const botaoTentar = useRef<HTMLButtonElement>(null);
+  // O que a pessoa pediu por último (tocar ou não). Os eventos do YouTube
+  // chegam atrasados: um PLAYING que chega depois de um "pausar" não pode
+  // tirar a capa — ele vira `pauseVideo()`.
+  const querTocar = useRef(false);
+  const jaTocou = useRef(false);
+  // Arrastando a barra, o relógio não mexe no `atual` (o botão pularia).
+  const arrastando = useRef(false);
+  // O furo também é lido dentro dos eventos do YouTube.
+  const furoAberto = useRef(false);
+  furoAberto.current = furo;
   const iniciado = fase !== "fachada";
 
   const rotulo = secao.titulo ? `Assistir ao vídeo: ${secao.titulo}` : "Assistir ao vídeo";
@@ -365,6 +385,15 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
     let vivo = true;
     let criado: PlayerDoYoutube | null = null;
     let espera: number | undefined;
+    querTocar.current = true;  // o clique na fachada foi o play
+    jaTocou.current = false;
+    // Sem `onReady` neste prazo (script do YouTube bloqueado, rede ruim),
+    // erro com "tentar de novo" — e não um anel girando para sempre.
+    let expirou = false;
+    const prazo = window.setTimeout(() => {
+      expirou = true;
+      if (vivo) setFase("erro");
+    }, PRAZO_DO_PLAYER_MS);
     // A API TROCA o elemento que recebe pelo iframe: ele nasce aqui, fora do
     // React, para o React nunca perder um nó que acha que é dele.
     const ponto = document.createElement("div");
@@ -375,27 +404,40 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
         ...opcoesDoPlayer(secao.video, window.location.origin),
         events: {
           onReady: (e) => {
-            if (!vivo) return;
+            // Atrasado demais: a tela já diz "erro"; tocar por baixo dela
+            // seria som sem imagem. O "tentar de novo" remonta tudo.
+            if (!vivo || expirou) return;
+            window.clearTimeout(prazo);
             player.current = e.target;
-            const iframe = e.target.getIframe();
-            iframe.setAttribute("tabindex", "-1");
-            iframe.title = secao.titulo || "Vídeo";
+            e.target.getIframe().setAttribute("tabindex", "-1");
             setDuracao(e.target.getDuration() || 0);
             setPronto(true);
-            e.target.playVideo();
+            if (querTocar.current) e.target.playVideo();
             espera = window.setTimeout(() => {
+              if (!vivo || jaTocou.current) return;
+              // Recusado: o próximo play é pedido novo, não pausa.
+              querTocar.current = false;
               setFase((f) => (f === "carregando" ? "pausado" : f));
+              setFuro(true);
             }, ESPERA_DO_AUTOPLAY_MS);
           },
           onStateChange: (e) => {
             if (!vivo) return;
             const d = e.target.getDuration();
             if (d > 0) setDuracao(d);
-            if (e.data === ESTADO.tocando) setFase("tocando");
-            else if (e.data === ESTADO.pausado) setFase((f) => (f === "fim" ? f : "pausado"));
-            else if (e.data === ESTADO.terminado) {
+            if (e.data === ESTADO.tocando) {
+              jaTocou.current = true;
+              setFuro(false);
+              // Tocou pelo furo (toque direto no iframe): conta como pedido.
+              if (!querTocar.current && furoAberto.current) querTocar.current = true;
+              if (querTocar.current) setFase("tocando");
+              else e.target.pauseVideo();
+            } else if (e.data === ESTADO.pausado) {
+              setFase((f) => (f === "fim" ? f : "pausado"));
+            } else if (e.data === ESTADO.terminado) {
               // Chegou ao fim entre duas leituras (aba em segundo plano, por
               // exemplo): a fachada cobre na hora.
+              querTocar.current = false;
               setAtual(d > 0 ? d : 0);
               setFase("fim");
             }
@@ -407,14 +449,30 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
     return () => {
       vivo = false;
       window.clearTimeout(espera);
+      window.clearTimeout(prazo);
       try { criado?.destroy(); } catch { /* o player já não existe */ }
       player.current = null;
       setPronto(false);
+      setFuro(false);
       alvo.replaceChildren();
     };
     // `fase` fica de fora de propósito: o player nasce uma vez por tentativa.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [iniciado, tentativa, secao.video, secao.titulo]);
+  }, [iniciado, tentativa, secao.video]);
+
+  // O `title` do iframe acompanha o da seção sem remontar o player (na
+  // prévia do editor, o título muda a cada tecla).
+  useEffect(() => {
+    if (pronto) player.current?.getIframe().setAttribute("title", secao.titulo || "Vídeo");
+  }, [pronto, secao.titulo]);
+
+  // `inert` (o React 18 não conhece o atributo): nem Tab, nem clique, nem
+  // leitor de tela entram no iframe — a não ser pelo furo.
+  useLayoutEffect(() => {
+    const el = caixa.current;
+    if (!el) return;
+    if (furo) el.removeAttribute("inert");
+    else el.setAttribute("inert", "");
+  }, [furo, iniciado]);
 
   // Tocando, lê o tempo quatro vezes por segundo — e pausa na folga do fim.
   useEffect(() => {
@@ -424,9 +482,10 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
       if (!p) return;
       const t = p.getCurrentTime();
       const d = p.getDuration();
-      setAtual(t);
+      if (!arrastando.current) setAtual(t);
       if (d > 0) setDuracao(d);
       if (chegouAoFim(t, d)) {
+        querTocar.current = false;
         p.pauseVideo();
         setAtual(d);  // a barra fecha cheia: acabou
         setFase("fim");
@@ -436,41 +495,49 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
   }, [fase]);
 
   // O foco vai para o play/pausa quando o player fica pronto: a pessoa
-  // pediu o vídeo, e é dali que ela o controla.
+  // pediu o vídeo, e é dali que ela o controla. No erro, para o "tentar".
   useEffect(() => {
     if (pronto) botaoPlay.current?.focus({ preventScroll: true });
   }, [pronto]);
+  useEffect(() => {
+    if (fase === "erro") botaoTentar.current?.focus({ preventScroll: true });
+  }, [fase]);
 
-  // `inert` pela ref: o React 18 não conhece o atributo.
-  const marcarInerte = (el: HTMLDivElement | null) => {
-    caixa.current = el;
-    el?.setAttribute("inert", "");
-  };
-
-  const irPara = (segundos: number) => {
+  // `final`: arrastando, o seek é só visual (`allowSeekAhead=false`, como a
+  // API recomenda); ao soltar (ou pelo teclado), busca de verdade.
+  const irPara = (segundos: number, final = true) => {
     const p = player.current;
     if (!p) return;
     const alvo = alvoDoSeek(segundos, duracao);
-    p.seekTo(alvo, true);
+    p.seekTo(alvo, final);
     setAtual(alvo);
     // Voltou do fim: fica pausado onde a pessoa pôs, coberto, até o play.
     if (fase === "fim") setFase("pausado");
   };
 
+  const soltarBarra = (valor: number) => {
+    if (!arrastando.current) return;
+    arrastando.current = false;
+    irPara(valor, true);
+  };
+
   const alternar = () => {
     const p = player.current;
     if (!p) return;
-    if (fase === "tocando") {
+    if (querTocar.current && fase !== "fim") {
       // A capa entra já, sem esperar o evento do YouTube: o "mais vídeos"
       // da pausa aparece no primeiro quadro pausado.
+      querTocar.current = false;
       setFase("pausado");
       p.pauseVideo();
     } else if (fase === "fim") {
+      querTocar.current = true;
       p.seekTo(0, true);
       setAtual(0);
       setFase("carregando");
       p.playVideo();
     } else {
+      querTocar.current = true;
       p.playVideo();
     }
   };
@@ -489,7 +556,8 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
   const ativo = pronto && fase !== "erro";
   const posicao = Math.min(atual, duracao || 0);
   const progresso = duracao ? `${(posicao / duracao) * 100}%` : "0%";
-  const rotuloDoPlay = fase === "tocando" ? "Pausar" : fase === "fim" ? "Assistir de novo" : "Reproduzir";
+  const pausaria = fase === "tocando" || (fase === "carregando" && querTocar.current);
+  const rotuloDoPlay = pausaria ? "Pausar" : fase === "fim" ? "Assistir de novo" : "Reproduzir";
 
   return (
     <div className={["video", temTexto && "video-com-texto", secao.vertical && "video-vertical"]
@@ -513,11 +581,13 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
             </button>
           ) : (
             <>
-              <div ref={marcarInerte} className="video-iframe" aria-hidden="true" />
+              <div ref={caixa} className={furo ? "video-iframe video-iframe-furo" : "video-iframe"}
+                   aria-hidden="true" />
               {/* O escudo: todo clique no quadro para aqui e vira play/pausa.
                   Nada chega ao iframe. Teclado e leitor de tela usam os
                   controles de baixo. */}
-              <div className={coberto ? "video-escudo video-escudo-coberto" : "video-escudo"}
+              <div className={["video-escudo", coberto && "video-escudo-coberto", furo && "video-escudo-furo"]
+                                .filter(Boolean).join(" ")}
                    aria-hidden="true"
                    onClick={fase === "fim" || fase === "erro" ? undefined : alternar}
                    onContextMenu={(e) => e.preventDefault()}>
@@ -536,7 +606,7 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
               {fase === "erro" && (
                 <div className="video-erro" role="alert">
                   <p>Não foi possível carregar o vídeo agora.</p>
-                  <button type="button" onClick={tentarDeNovo}>Tentar de novo</button>
+                  <button type="button" ref={botaoTentar} onClick={tentarDeNovo}>Tentar de novo</button>
                 </div>
               )}
             </>
@@ -549,7 +619,10 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
                    aria-label="Posição no vídeo"
                    aria-valuetext={`${tempoPorExtenso(posicao)} de ${tempoPorExtenso(duracao)}`}
                    style={{ "--progresso": progresso } as CSSProperties}
-                   onChange={(e) => irPara(Number(e.currentTarget.value))} />
+                   onPointerDown={() => { arrastando.current = true; }}
+                   onPointerUp={(e) => soltarBarra(Number(e.currentTarget.value))}
+                   onPointerCancel={(e) => soltarBarra(Number(e.currentTarget.value))}
+                   onChange={(e) => irPara(Number(e.currentTarget.value), !arrastando.current)} />
             <div className="video-botoes">
               <button type="button" className="video-botao" onClick={() => irPara(atual - SALTO)}
                       disabled={!ativo} aria-label={`Voltar ${SALTO} segundos`}>
@@ -557,7 +630,7 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
               </button>
               <button type="button" ref={botaoPlay} className="video-botao video-botao-play"
                       onClick={alternar} disabled={!ativo} aria-label={rotuloDoPlay}>
-                <IconeDoVideo tipo={fase === "tocando" ? "pausa" : "play"} />
+                <IconeDoVideo tipo={pausaria ? "pausa" : "play"} />
               </button>
               <button type="button" className="video-botao" onClick={() => irPara(atual + SALTO)}
                       disabled={!ativo} aria-label={`Avançar ${SALTO} segundos`}>
