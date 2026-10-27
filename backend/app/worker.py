@@ -102,13 +102,20 @@ async def _remetente() -> str:
     return (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
 
+async def _responder_para() -> str:
+    """O reply-to (segredo EMAIL_REPLY_TO), lido uma vez por passada como o
+    remetente. Vazio = sem reply-to: a resposta vai ao próprio remetente."""
+    return (await integracoes.ler_segredo("EMAIL_REPLY_TO")) or ""
+
+
 # A regra do modo teste mora em `app/jornadas/modo_teste.py` — a mesma do
 # executor e da caixa de saída.
 _na_lista_do_modo_teste = modo_teste.na_lista
 
 
 async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
-                     segredo_descadastro: str, por_segundo: float) -> None:
+                     segredo_descadastro: str, por_segundo: float,
+                     responder_para: str = "") -> None:
     """Processa uma mensagem. Levanta se o envio falhar — quem chama devolve.
     `resend.LimiteDoResend` (429) também sobe: quem chama adia sem contar
     tentativa."""
@@ -226,6 +233,7 @@ async def _processar(conn, m: fila.Mensagem, chave: str, de: str,
         html=html, texto=html_para_texto(html),
         cabecalhos=cabecalhos_rfc8058(settings.FRONTEND_URL, m.lead_id, email,
                                       segredo_descadastro),
+        responder_para=responder_para,
         # Estes três nomes exatos são os que o webhook procura. Qualquer outro
         # deixa a correlação no fallback do resend_email_id.
         #
@@ -268,6 +276,7 @@ async def _tick() -> int:
         return 0
 
     de = await _remetente()
+    responder_para = await _responder_para()
     r = await ritmo.ler()
 
     async with sessao(role="service_role") as conn:
@@ -298,7 +307,8 @@ async def _tick() -> int:
         campanhas.add(m.campaign_id)
         try:
             async with sessao(role="service_role") as conn:
-                await _processar(conn, m, chave, de, segredo, r.por_segundo)
+                await _processar(conn, m, chave, de, segredo, r.por_segundo,
+                                 responder_para=responder_para)
         except resend.LimiteDoResend as e:
             # 429: não é falha do envio. Esta mensagem e as que vinham atrás
             # voltam para a fila SEM gastar tentativa, e ninguém envia até o

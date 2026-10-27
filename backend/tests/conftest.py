@@ -411,7 +411,7 @@ async def token_admin():
 
 
 SEGREDOS_DO_RESEND = ("RESEND_API_KEY", "EMAIL_FROM", "UNSUBSCRIBE_SECRET",
-                      "RESEND_WEBHOOK_SECRET")
+                      "RESEND_WEBHOOK_SECRET", "EMAIL_REPLY_TO")
 
 
 @pytest_asyncio.fixture

@@ -29,6 +29,12 @@ REMETENTE_PADRAO = "MarketingHS <onboarding@resend.dev>"
 async def _remetente() -> str:
     return (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
+
+async def _responder_para() -> str:
+    """O mesmo reply-to (EMAIL_REPLY_TO) que o worker usa: o teste precisa
+    responder para onde a campanha real responde. Vazio = sem reply-to."""
+    return (await integracoes.ler_segredo("EMAIL_REPLY_TO")) or ""
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campanhas", tags=["campanhas-envio"])
 
@@ -278,7 +284,8 @@ async def enviar_teste(dados: TesteIn, _: Usuario = Depends(admin_atual)):
         eid = await resend.enviar(
             chave=chave, de=de, para=dados.to,
             assunto=f"[Teste] {modelo['name']}",
-            html=html, texto=html_para_texto(html), cabecalhos={}, tags=None)
+            html=html, texto=html_para_texto(html), cabecalhos={}, tags=None,
+            responder_para=await _responder_para())
     except Exception as exc:  # noqa: BLE001
         logger.warning("envio de teste falhou: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,

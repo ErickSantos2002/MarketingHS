@@ -46,7 +46,8 @@ def mundo(monkeypatch):
 
     async def segredo(nome):
         return {"RESEND_API_KEY": "re_falsa", "UNSUBSCRIBE_SECRET": "x",
-                "EMAIL_FROM": "a@exemplo.invalid"}.get(nome)
+                "EMAIL_FROM": "a@exemplo.invalid",
+                "EMAIL_REPLY_TO": estado.get("responder_para")}.get(nome)
 
     @contextlib.asynccontextmanager
     async def sessao(**_):
@@ -69,10 +70,11 @@ def mundo(monkeypatch):
         estado["devolvidos"].append(fila_id)
         return "reagendada"
 
-    async def processar(conn, m, chave, de, segredo, por_segundo):
+    async def processar(conn, m, chave, de, segredo, por_segundo, responder_para=""):
         if estado["falha_em"] == m.fila_id:
             raise resend.LimiteDoResend(12)
         estado["processados"].append(m.fila_id)
+        estado.setdefault("responderes", []).append(responder_para)
 
     async def ler_ritmo():
         return ritmo.Ritmo()
@@ -158,3 +160,41 @@ async def test_campanha_pausada_no_meio_do_lote_volta_para_a_fila(monkeypatch):
     await worker._processar(conn, m, "re_falsa", "a@b", "x", 2.0)
     assert adiados == [9]
     assert conn.execs == []  # nada de 'failed'
+
+
+# ── Responder para (EMAIL_REPLY_TO, frente responder-para, 27/10/2026) ───────
+
+async def test_tick_passa_o_responder_para_configurado(mundo):
+    mundo["responder_para"] = "hs@healthsafety.com.br"
+    assert await worker._tick() == 3
+    assert mundo["responderes"] == ["hs@healthsafety.com.br"] * 3
+
+
+async def test_tick_sem_responder_para_passa_vazio(mundo):
+    assert await worker._tick() == 3
+    assert mundo["responderes"] == [""] * 3
+
+
+async def test_processar_entrega_o_responder_para_ao_enviar(monkeypatch):
+    vistos = []
+
+    async def enviar(**kw):
+        vistos.append(kw)
+        return "re_1"
+
+    async def concluir(conn, fila_id):
+        return None
+
+    monkeypatch.setattr(worker.resend, "enviar", enviar)
+    monkeypatch.setattr(worker.fila, "concluir", concluir)
+    monkeypatch.setattr(worker, "_compasso", ritmo.Compasso())
+    conn = Conn(envio={"status": "pending", "journey_node_id": None,
+                       "journey_run_id": None, "campanha": "sending",
+                       "subject": "Oi", "body": "<p>x</p>",
+                       "email": "lead@exemplo.invalid", "nome": "Ana", "empresa": ""})
+    m = fila.Mensagem(fila_id=7, send_id="s7", campaign_id="c7", lead_id="l7",
+                      tentativas=1)
+    await worker._processar(conn, m, "re_falsa", "a@b", "x", 1000.0,
+                            responder_para="hs@healthsafety.com.br")
+    assert len(vistos) == 1
+    assert vistos[0]["responder_para"] == "hs@healthsafety.com.br"

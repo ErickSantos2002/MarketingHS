@@ -27,6 +27,11 @@ import RitmoEnvio from './RitmoEnvio';
 
 const MINIMO_DESCADASTRO = 32;
 
+// O mesmo critério do servidor (`responder_para_valido`): um e-mail simples,
+// sem nome, vírgula, espaço ou quebra de linha. Só para avisar antes; quem
+// decide é o servidor.
+const RESPONDER_PARA = /^[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"'.][^\s@<>,;"']*$/;
+
 // crypto.getRandomValues, NUNCA Math.random: Math.random não é criptográfico, e
 // este segredo assina todo link de descadastro.
 function gerarSegredo(tamanho = 48): string {
@@ -57,6 +62,7 @@ export default function ResendConfigCard() {
   const [nome, setNome] = useState('');
   const [prefixo, setPrefixo] = useState('');
   const [dominio, setDominio] = useState('');
+  const [responderPara, setResponderPara] = useState('');
 
   const [descadastro, setDescadastro] = useState('');
   const [segredoWebhook, setSegredoWebhook] = useState('');
@@ -79,6 +85,7 @@ export default function ResendConfigCard() {
         setPrefixo(c.remetente.prefixo);
         setDominio(c.remetente.dominio);
       }
+      setResponderPara(c.reply_to ?? '');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao carregar a configuração');
     } finally {
@@ -137,6 +144,7 @@ export default function ResendConfigCard() {
   const descadastroOk = descadastroConfigurado
     ? descadastro.length === 0 || descadastro.length >= MINIMO_DESCADASTRO
     : descadastro.length >= MINIMO_DESCADASTRO;
+  const responderParaOk = responderPara.trim() === '' || RESPONDER_PARA.test(responderPara.trim());
 
   const salvar = async () => {
     setSalvando(true);
@@ -148,6 +156,7 @@ export default function ResendConfigCard() {
         api_key: apiKey,
         unsubscribe_secret: descadastro,
         webhook_secret: segredoWebhook,
+        reply_to: responderPara.trim(),
       });
       toast.success(`Configuração salva — remetente: ${r.email_from}`);
       if (r.aviso) toast.warning(r.aviso);
@@ -323,6 +332,26 @@ export default function ResendConfigCard() {
           </p>
         </div>
 
+        {/* Responder para (reply-to) */}
+        <div className="space-y-2">
+          <Label htmlFor="resend-responder-para">Responder para</Label>
+          <Input
+            id="resend-responder-para" type="email" autoComplete="off"
+            placeholder="ex: hs@healthsafety.com.br"
+            value={responderPara}
+            onChange={(e) => setResponderPara(e.target.value)}
+            aria-invalid={!responderParaOk}
+          />
+          <p className="text-xs text-muted-foreground">
+            Para onde vão as respostas dos contatos. Vazio = o próprio remetente.
+          </p>
+          {!responderParaOk && (
+            <p className="text-xs text-[--on-tint-danger]">
+              Use um único e-mail simples, sem nome e sem vírgula.
+            </p>
+          )}
+        </div>
+
         {/* Segredo de descadastro */}
         <div className="space-y-2">
           <Label htmlFor="resend-descadastro">Segredo de descadastro</Label>
@@ -374,7 +403,8 @@ export default function ResendConfigCard() {
         </div>
 
         <Button onClick={salvar}
-                disabled={salvando || !nome.trim() || !prefixo.trim() || !dominio.trim() || !descadastroOk}
+                disabled={salvando || !nome.trim() || !prefixo.trim() || !dominio.trim() || !descadastroOk
+                          || !responderParaOk}
                 className="gap-2">
           {salvando && <Loader2 className="h-4 w-4 animate-spin" />}
           Salvar

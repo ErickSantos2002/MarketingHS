@@ -385,6 +385,20 @@ async def test_aviso_sai_pelo_resend_sem_descadastro(saida, resend_falso):
     linha = await _linha(sid)
     assert linha["status"] == "enviado"
     assert linha["resend_email_id"] == "re_teste_1,re_teste_2"
+    # Sem EMAIL_REPLY_TO gravado, nada de reply-to: o comportamento de antes.
+    assert all(not e.get("responder_para") for e in resend_falso["enviados"])
+
+
+async def test_aviso_leva_o_responder_para_configurado(saida, resend_falso, monkeypatch):
+    async def segredo(nome):
+        return {"RESEND_API_KEY": "re_falsa", "EMAIL_FROM": "MHS <a@exemplo.invalid>",
+                "EMAIL_REPLY_TO": "hs@healthsafety.com.br"}.get(nome)
+    monkeypatch.setattr(saidas.integracoes, "ler_segredo", segredo)
+    sid = await saida("aviso_email", "comercial@exemplo.invalid,outro@exemplo.invalid")
+    r = await saidas.rodar_saidas(somente=[sid])
+    assert r["enviados"] == 1
+    assert [e["responder_para"] for e in resend_falso["enviados"]] == [
+        "hs@healthsafety.com.br"] * 2
 
 
 async def test_aviso_nao_sai_com_cota_zero(saida, resend_falso, monkeypatch):

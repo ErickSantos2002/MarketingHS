@@ -13,7 +13,8 @@ import pytest
 from app import integracoes
 from app.config import settings
 from app.email import resend as cliente_resend
-from app.routers.configuracao import partes_do_remetente, url_do_webhook_resend
+from app.routers.configuracao import (partes_do_remetente, responder_para_valido,
+                                      url_do_webhook_resend)
 
 ROTA = "/config/resend"
 
@@ -366,3 +367,75 @@ async def test_ligar_rastreamento_com_chave_rejeitada_nao_desloga_o_admin(
     assert r.status_code != 401
     assert r.status_code == 400
     assert "rejeitada pelo Resend" in r.json()["detail"]
+
+
+# ── Responder para (EMAIL_REPLY_TO, frente responder-para, 27/10/2026) ───────
+
+@pytest.mark.parametrize("valor", [
+    "hs@healthsafety.com.br", "comercial.hs@sub.dominio.com", "a+b@x.io"])
+def test_responder_para_aceita_endereco_simples(valor):
+    assert responder_para_valido(valor)
+
+
+@pytest.mark.parametrize("valor", [
+    "HS <hs@healthsafety.com.br>",          # nome de exibição
+    "a@x.com, b@x.com",                     # vírgula: dois destinatários
+    "a@x.com,b@x.com",
+    "a@x.com\nBcc: c@x.com",                # quebra de linha: injeção de cabeçalho
+    "a@x.com\n",
+    "a@x.com\r",
+    "sem-arroba.com", "a@semponto", "a@@x.com", "a;b@x.com", "", " ",
+])
+def test_responder_para_recusa_o_resto(valor):
+    assert not responder_para_valido(valor)
+
+
+async def test_gravar_grava_o_responder_para(cliente, token_admin, segredos_resend,
+                                             monkeypatch):
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "unsubscribe_secret": "u" * 32,
+        "reply_to": "  hs@healthsafety.com.br "})
+    assert r.status_code == 200, r.text
+    assert "reply_to" in r.json()["gravados"]
+    assert r.json()["reply_to"] == "hs@healthsafety.com.br"
+    assert await integracoes.ler_segredo("EMAIL_REPLY_TO") == "hs@healthsafety.com.br"
+
+    # E a leitura devolve em claro (não é segredo, como o EMAIL_FROM).
+    lido = await cliente.get(ROTA, headers=_auth(token_admin))
+    assert lido.json()["reply_to"] == "hs@healthsafety.com.br"
+
+
+async def test_gravar_recusa_responder_para_invalido_e_nao_grava_nada(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json={
+        **REMETENTE, "unsubscribe_secret": "u" * 32,
+        "reply_to": "HS <hs@healthsafety.com.br>"})
+    assert r.status_code == 400
+    assert "Responder para" in r.json()["detail"]
+    assert await integracoes.ler_segredo("EMAIL_REPLY_TO") is None
+    assert await integracoes.ler_segredo("EMAIL_FROM") is None
+    assert await integracoes.ler_segredo("UNSUBSCRIBE_SECRET") is None
+
+
+async def test_responder_para_vazio_apaga_e_ausente_nao_mexe(
+        cliente, token_admin, segredos_resend, monkeypatch):
+    await integracoes.gravar_segredo("UNSUBSCRIBE_SECRET", "u" * 40)
+    await integracoes.gravar_segredo("EMAIL_REPLY_TO", "hs@healthsafety.com.br")
+    _resend_falso(monkeypatch, teste=VERIFICADO)
+
+    # Cliente antigo, sem o campo: o reply-to gravado fica.
+    r = await cliente.put(ROTA, headers=_auth(token_admin), json=REMETENTE)
+    assert r.status_code == 200, r.text
+    assert "reply_to" not in r.json()["gravados"]
+    assert await integracoes.ler_segredo("EMAIL_REPLY_TO") == "hs@healthsafety.com.br"
+
+    # Campo vazio: o admin apagou — volta a responder para o remetente.
+    r = await cliente.put(ROTA, headers=_auth(token_admin),
+                          json={**REMETENTE, "reply_to": "  "})
+    assert r.status_code == 200, r.text
+    assert r.json()["reply_to"] is None
+    assert await integracoes.ler_segredo("EMAIL_REPLY_TO") is None
+    lido = await cliente.get(ROTA, headers=_auth(token_admin))
+    assert lido.json()["reply_to"] is None
