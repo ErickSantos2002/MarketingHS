@@ -4,7 +4,8 @@
 >
 > - Frente `landing-nicholson` ✅ mergeada (`eabc571`; portão local **1233 passed**, node 99, `tsc` 0, builds ok): rodapé com 4007-1507* (nota do site oficial) e (81) 98177-1177; player do YouTube fechado (controles nossos, camada que pega todo clique, capa na pausa e no fim, para 1,5 s antes do fim); "Quem já usa" em 4 colunas. Vídeo trocado para `sByexR1w9vw` por `~/marketinghs-landing-video.sh`.
 > - Limite: título/"Mais vídeos"/logo do YouTube aparecem ~3 s no início (não clicáveis). Saída definitiva: hospedar o MP4 (pergunta ao Erick). iPhone real não conferido.
-> - **Falta:** deploy de `marketinghs-api`. Depois: agendamento de reunião na landing (Erick manda o site de referência).
+> - ✅ Deploy da api feito (27/10, fim do dia).
+> - **▶️ Amanhã (28/10), combinado com o Erick:** agendamento de reunião na landing (ele manda o site de referência) e possivelmente ajustes no formulário. Em aberto: hospedar o MP4 do vídeo; conferir o player num iPhone.
 
 > ## ✅ 27/10 (tarde) — papel `leitura` (conta do Sergio, agência do Leão)
 >
