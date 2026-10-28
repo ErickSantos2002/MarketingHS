@@ -15,6 +15,7 @@ campanha fecharia como enviada, e ninguém receberia nada.
 import asyncio
 import logging
 import signal
+from datetime import datetime, timezone
 
 from app import fila, integracoes, ritmo
 from app.config import settings
@@ -43,6 +44,8 @@ AGENDADOR_INTERVALO = 60
 # As jornadas têm ritmo próprio: um `delay` de um minuto é a menor unidade que
 # o construtor oferece, então varrer com mais frequência que isso não adianta.
 JORNADAS_INTERVALO = 20
+# A fila do agendamento de reunião (frente agendamento, 28/10).
+AGENDAMENTOS_INTERVALO = 15
 JORNADAS_LOTE = 25
 JORNADAS_LEASE = 300
 EVENTOS_LOTE = 50
@@ -537,6 +540,26 @@ async def _laco_entregas() -> None:
             pass
 
 
+async def _laco_agendamentos() -> None:
+    """A fila do agendamento de reunião (frente agendamento, 28/10), num laço
+    PRÓPRIO pelo mesmo motivo do `_laco_entregas`: o GrowthHS lento não pode
+    atrasar o resto. A cada `AGENDAMENTOS_INTERVALO` segundos — o lead já leu
+    "confirmado" e espera o convite."""
+    from app.agendamento import execucao
+
+    while not _parar.is_set():
+        try:
+            resultado = await execucao.rodar_agendamentos(parar=_parar)
+            if not resultado.get("desligado") and any(resultado.values()):
+                logger.info("[agendamento] fila: %s", resultado)
+        except Exception:  # noqa: BLE001 — este laço não pode morrer
+            logger.exception("falha na passada da fila do agendamento")
+        try:
+            await asyncio.wait_for(_parar.wait(), timeout=AGENDAMENTOS_INTERVALO)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def _laco_saidas() -> None:
     """A caixa de saída das jornadas (aviso por e-mail e webhook, prova do
     RD), num laço PRÓPRIO pelo mesmo motivo do `_laco_entregas`: um webhook
@@ -568,6 +591,7 @@ async def principal() -> None:
                 settings.FILA_LOTE, settings.WORKER_INTERVALO_SEGUNDOS)
     tarefa_entregas = asyncio.create_task(_laco_entregas())
     tarefa_saidas = asyncio.create_task(_laco_saidas())
+    tarefa_agendamentos = asyncio.create_task(_laco_agendamentos())
     proximo_agendador = 0.0
     proximo_jornadas = 0.0
     try:
@@ -587,6 +611,15 @@ async def principal() -> None:
                         await fila.fechar_campanhas_drenadas(conn)
                 except Exception:  # noqa: BLE001
                     logger.exception("falha na varredura de campanhas drenadas")
+                # Agendamento: rascunho abandonado vira lead comum; reunião
+                # que passou sai dos índices únicos (`realizada`).
+                try:
+                    from app.agendamento import execucao
+                    r = await execucao.varrer(datetime.now(timezone.utc))
+                    if any(r.values()):
+                        logger.info("[agendamento] varredura: %s", r)
+                except Exception:  # noqa: BLE001
+                    logger.exception("falha na varredura do agendamento")
             if agora >= proximo_jornadas:
                 proximo_jornadas = agora + JORNADAS_INTERVALO
                 try:
@@ -611,7 +644,7 @@ async def principal() -> None:
         # inofensivo (idempotente) e cobre o caso raro do laço principal
         # sair por outro motivo que não o sinal de parada.
         _parar.set()
-        for tarefa in (tarefa_entregas, tarefa_saidas):
+        for tarefa in (tarefa_entregas, tarefa_saidas, tarefa_agendamentos):
             try:
                 await asyncio.wait_for(tarefa, timeout=30)
             except asyncio.TimeoutError:

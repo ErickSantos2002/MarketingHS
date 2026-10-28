@@ -1249,6 +1249,85 @@ async def testar_config_growthhs(ambiente: str, _: Usuario = Depends(admin_atual
     return {"valido": True}
 
 
+# ── Roleta de reunião (frente agendamento, 28/10) ────────────────────────────
+# Fila de vendedores do agendamento pela landing, uma por ambiente do GrowthHS
+# (os ids são outros em cada um). Nome e e-mail vêm SEMPRE do GrowthHS
+# (`/integration/vendedores`) — ninguém cadastra vendedor à mão aqui.
+# `admin_atual` nas duas: é configuração de integração, como o resto daqui.
+
+# Para os testes: o transporte do `growthhs.Cliente` (MockTransport).
+TRANSPORTE_ROLETA = None
+AVISO_SEM_VENDEDORES = ("Não foi possível listar os vendedores do GrowthHS deste "
+                        "ambiente agora. A fila salva continua valendo.")
+
+
+class RoletaIn(BaseModel):
+    user_ids: list[int] = Field(max_length=30)
+
+
+async def _vendedores_do_ambiente(ambiente: str) -> list[dict] | None:
+    """Os vendedores ativos daquele GrowthHS, ou `None` se não deu para
+    perguntar (ambiente incompleto, fora do ar, credencial recusada)."""
+    from app.crm import growthhs
+
+    cfg = await growthhs.ler_config_do_ambiente(ambiente)
+    if not cfg.completo:
+        return None
+    try:
+        async with growthhs.Cliente(cfg, transporte=TRANSPORTE_ROLETA) as cliente:
+            return await cliente.vendedores()
+    except (growthhs.ErroTransitorio, growthhs.ErroDefinitivo):
+        return None
+
+
+async def _fila_da_roleta(ambiente: str) -> list[dict]:
+    async with sessao(role="service_role") as conn:
+        return [dict(r) for r in await conn.fetch(
+            """SELECT user_id, nome, email, posicao FROM reuniao_roleta
+                WHERE ambiente = $1 ORDER BY posicao, user_id""", ambiente)]
+
+
+@router.get("/config/growthhs/{ambiente}/roleta")
+async def ler_roleta_reuniao(ambiente: str, _: Usuario = Depends(admin_atual)):
+    _ambiente_growthhs(ambiente)
+    vendedores = await _vendedores_do_ambiente(ambiente)
+    resposta = {"fila": await _fila_da_roleta(ambiente), "vendedores": vendedores or []}
+    if vendedores is None:
+        resposta["aviso"] = AVISO_SEM_VENDEDORES
+    return resposta
+
+
+@router.put("/config/growthhs/{ambiente}/roleta")
+async def gravar_roleta_reuniao(ambiente: str, dados: RoletaIn,
+                                _: Usuario = Depends(admin_atual)):
+    """Substitui a fila: a ordem de `user_ids` é a vez. Todo id tem que ser
+    vendedor ativo daquele GrowthHS (422 senão); o nome e o e-mail são
+    gravados do GrowthHS. Sem como perguntar ao GrowthHS → 502, nada muda."""
+    _ambiente_growthhs(ambiente)
+    ids = list(dict.fromkeys(dados.user_ids))
+    vendedores = await _vendedores_do_ambiente(ambiente)
+    if vendedores is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, AVISO_SEM_VENDEDORES)
+    por_id = {v["id"]: v for v in vendedores}
+    desconhecidos = [i for i in ids if i not in por_id]
+    if desconhecidos:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Não são vendedores ativos deste GrowthHS: "
+                            + ", ".join(str(i) for i in desconhecidos))
+    async with sessao(role="service_role") as conn:
+        # A mesma linha que a confirmação trava (`FOR UPDATE`): a troca da
+        # fila espera a confirmação em curso terminar.
+        await conn.execute(
+            "SELECT 1 FROM reuniao_roleta WHERE ambiente = $1 FOR UPDATE", ambiente)
+        await conn.execute("DELETE FROM reuniao_roleta WHERE ambiente = $1", ambiente)
+        for posicao, uid in enumerate(ids):
+            await conn.execute(
+                """INSERT INTO reuniao_roleta (ambiente, user_id, posicao, nome, email)
+                   VALUES ($1, $2, $3, $4, $5)""",
+                ambiente, uid, posicao, por_id[uid]["nome"], por_id[uid]["email"])
+    return {"fila": await _fila_da_roleta(ambiente), "vendedores": vendedores}
+
+
 @router.post("/config/growthhs/reenfileirar")
 async def reenfileirar_falhas_growthhs(_: Usuario = Depends(admin_atual)):
     """Devolve à fila as falhas em aberto (revisão final do 8D, I3) — até

@@ -8,6 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +28,7 @@ import { toast } from 'sonner';
 import { COR_CTA_PADRAO } from '@/landing/padroes';
 import {
   camposDaConfig, camposParaGravar, textoDoConsentimentoParaGravar,
-  type CampoDaPagina, type ConsentimentoDaPagina,
+  type AgendamentoDaPagina, type CampoDaPagina, type ConsentimentoDaPagina,
 } from '@/landing/campos';
 import { ErroApi } from '@/lib/api';
 import { CamposEditor } from './CamposEditor';
@@ -78,6 +82,147 @@ function TextoDoConsentimento({ texto, onChange }: { texto: string; onChange: (t
         </p>
       )}
     </>
+  );
+}
+
+// Agendamento de reunião (frente agendamento, 28/10). O que nasce ao ligar:
+// os padrões da spec. Expediente fica no padrão do servidor (seg–sex, 8h–18h
+// Brasília) — sem campo na tela no v1.
+const AGENDAMENTO_PADRAO: AgendamentoDaPagina = {
+  ativo: true,
+  duracao_min: 60,
+  meeting_kind: 'apresentacao_phoebus',
+  campo_porte: 'funcionarios',
+  faixas_que_agendam: [],
+  antecedencia_min: 120,
+  janela_dias: 14,
+};
+const TIPOS_DE_REUNIAO: { valor: string; rotulo: string }[] = [
+  { valor: 'apresentacao_phoebus', rotulo: 'Apresentação Phoebus' },
+  { valor: 'duvidas_phoebus', rotulo: 'Dúvidas Phoebus' },
+  { valor: 'apresentacao', rotulo: 'Apresentação' },
+  { valor: 'duvidas', rotulo: 'Dúvidas' },
+  { valor: 'outra', rotulo: 'Outra' },
+];
+
+function AgendamentoDaPaginaEditor({
+  agendamento, campos, onChange,
+}: {
+  agendamento: AgendamentoDaPagina | undefined;
+  campos: CampoDaPagina[];
+  onChange: (a: AgendamentoDaPagina | undefined) => void;
+}) {
+  const ligado = !!agendamento?.ativo;
+  const atual = { ...AGENDAMENTO_PADRAO, ...(agendamento ?? {}) };
+  const listas = campos.filter((c) => c.tipo === 'lista' && (c.opcoes?.length ?? 0) > 0);
+  const porte = listas.find((c) => c.chave === atual.campo_porte);
+  const faixas = atual.faixas_que_agendam ?? [];
+  const mudar = (parcial: Partial<AgendamentoDaPagina>) => onChange({ ...atual, ...parcial });
+
+  return (
+    <section className="border rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-medium text-sm">Agendamento de reunião</h3>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="agendamento-ligado" className="text-xs text-muted-foreground">
+            Permitir agendar reunião
+          </Label>
+          <Switch
+            id="agendamento-ligado"
+            checked={ligado}
+            onCheckedChange={(v) => onChange(v ? { ...atual, ativo: true } : agendamento ? { ...atual, ativo: false } : undefined)}
+          />
+        </div>
+      </div>
+      {ligado ? (
+        <>
+          <p className="text-xs text-muted-foreground">
+            A landing ganha o botão "Agendar reunião". Quem marca uma das faixas abaixo escolhe dia e
+            horário com um vendedor livre da roleta (Configurações → Roleta de reunião); os demais
+            viram lead comum.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="agendamento-porte">Campo do porte</Label>
+              <Select value={porte ? porte.chave : ''}
+                      onValueChange={(v) => mudar({ campo_porte: v, faixas_que_agendam: [] })}>
+                <SelectTrigger id="agendamento-porte">
+                  <SelectValue placeholder="Escolha um campo de lista" />
+                </SelectTrigger>
+                <SelectContent>
+                  {listas.map((c) => (
+                    <SelectItem key={c.chave} value={c.chave}>{c.rotulo || c.chave}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="agendamento-tipo">Tipo da reunião</Label>
+              <Select value={atual.meeting_kind} onValueChange={(v) => mudar({ meeting_kind: v })}>
+                <SelectTrigger id="agendamento-tipo">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_DE_REUNIAO.map((t) => (
+                    <SelectItem key={t.valor} value={t.valor}>{t.rotulo}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {porte ? (
+            <div className="space-y-2">
+              <Label>Faixas que podem agendar</Label>
+              <div className="flex flex-wrap gap-4">
+                {(porte.opcoes ?? []).map((o) => (
+                  <div key={o} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`agendamento-faixa-${o}`}
+                      checked={faixas.includes(o)}
+                      onCheckedChange={(v) => mudar({
+                        faixas_que_agendam: v === true
+                          ? [...faixas.filter((f) => f !== o), o]
+                          : faixas.filter((f) => f !== o),
+                      })}
+                    />
+                    <Label htmlFor={`agendamento-faixa-${o}`} className="text-xs">{o}</Label>
+                  </div>
+                ))}
+              </div>
+              {faixas.length === 0 && (
+                <p className="text-xs text-[--on-tint-danger]">
+                  Sem nenhuma faixa marcada o agendamento fica desligado na landing.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-[--on-tint-danger]">
+              Crie em "Campos do formulário" um campo de lista com as faixas de porte (ex.:
+              funcionários) e escolha-o acima.
+            </p>
+          )}
+          <div className="space-y-2 max-w-40">
+            <Label htmlFor="agendamento-duracao">Duração (min)</Label>
+            <Input
+              id="agendamento-duracao"
+              type="number"
+              min={15}
+              max={240}
+              step={15}
+              value={atual.duracao_min ?? 60}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (Number.isFinite(n) && n > 0) mudar({ duracao_min: Math.round(n) });
+              }}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Desligado: a landing só tem o formulário normal.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -420,6 +565,13 @@ export default function PageConfigEditor() {
               </p>
             )}
           </section>
+
+          {/* Agendamento de reunião */}
+          <AgendamentoDaPaginaEditor
+            agendamento={config.agendamento}
+            campos={campos}
+            onChange={(a) => updateField('agendamento', a)}
+          />
 
           {/* Depois do envio */}
           <section className="border rounded-lg p-4 space-y-4">

@@ -15,6 +15,7 @@ from app.middleware.cors_sites import CorsDosSitesMiddleware
 from app.middleware.limite_taxa import LimiteTaxaMiddleware
 from app.routers.ab import router as ab_router
 from app.routers.ab_publico import router as ab_publico_router
+from app.routers.agendamento import router as agendamento_router
 from app.routers.api_contato import router as api_contato_router
 from app.routers.automacoes import router as automacoes_router
 from app.routers.campanhas import router as campanhas_router
@@ -106,7 +107,8 @@ app.add_middleware(
     # isenção é por PREFIXO (`startswith`), cobre os dois.
     isentos=("/publico/webhook/", "/publico/growthhs/webhook/", "/publico/validar-email",
              "/publico/ab/go", "/publico/ab/eventos",
-             "/publico/descadastro/um-clique", "/publico/site/visita"),
+             "/publico/descadastro/um-clique", "/publico/site/visita",
+             "/publico/agendamento/horarios/"),
 )
 
 # I1: balde próprio do coletor de eventos do A/B — bem mais generoso que o
@@ -137,6 +139,14 @@ app.add_middleware(
     LimiteTaxaMiddleware,
     por_minuto=settings.LIMITE_VISITA_POR_MINUTO,
     prefixos=("/publico/site/visita",),
+)
+
+# Balde próprio dos horários do agendamento (frente agendamento, 28/10): o
+# lead navega entre os dias da etapa 3; o resto do modal fica no comum.
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=settings.LIMITE_HORARIOS_POR_MINUTO,
+    prefixos=("/publico/agendamento/horarios/",),
 )
 
 # ⚠️ Por último de propósito: é o mais de fora, e responde o preflight do
@@ -184,6 +194,7 @@ app.include_router(imagens_router)
 app.include_router(painel_router)
 app.include_router(paginas_router)
 app.include_router(captura_router)
+app.include_router(agendamento_router)
 app.include_router(api_contato_router)
 app.include_router(ab_router)
 app.include_router(ab_publico_router)
