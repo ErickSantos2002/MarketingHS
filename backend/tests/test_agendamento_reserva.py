@@ -172,7 +172,7 @@ async def test_card_aberto_mostra_so_o_vendedor_dele_e_nao_anda_a_fila(cenario, 
     assert (linha["card_existente_id"], linha["vendedor_id"]) == (card, C)
 
     r = await _confirmar(falso, token, _brt(29, 14))
-    assert r["status"] == "reservada" and r["vendedor_nome"] == f"Vendedor {C}"
+    assert r["status"] == "reservada" and "vendedor_nome" not in r
     assert await cenario.fila() == [A, B]
     linha = await cenario.linha(token)
     assert (linha["vendedor_id"], linha["vendedor_email"]) == (C, f"v{C}@hs.invalid")
@@ -199,7 +199,8 @@ async def test_confirmar_escolhe_primeiro_livre_e_pulado_guarda_vez(cenario, fal
         falso.ocupar(v, _z(_brt(29, 11)), _z(_brt(29, 13)))
     r = await _confirmar(falso, await cenario.rascunho(), _brt(29, 12))
     assert r == {"status": "reservada", "inicio": _z(_brt(29, 12)),
-                 "fim": _z(_brt(29, 13)), "vendedor_nome": f"Vendedor {D}"}
+                 "fim": _z(_brt(29, 13))}
+    assert "vendedor_nome" not in r
     assert await cenario.fila() == [A, B, C, E, D]
 
 
@@ -209,8 +210,7 @@ async def test_confirmar_duas_vezes_mesma_reserva(cenario, falso):
     primeira = await _confirmar(falso, token, _brt(29, 12))
     segunda = await _confirmar(falso, token, _brt(29, 15))
     assert primeira["status"] == "reservada"
-    assert segunda == {"status": "ja_tem", "inicio": primeira["inicio"],
-                       "fim": primeira["fim"]}
+    assert segunda == {"status": "ja_tem"}
     async with db.sessao(role="service_role") as conn:
         assert await conn.fetchval(
             "SELECT count(*) FROM reuniao_agendamentos WHERE page_slug = $1 "
@@ -221,10 +221,10 @@ async def test_confirmar_duas_vezes_mesma_reserva(cenario, falso):
 async def test_email_com_maiuscula_e_espaco_e_o_mesmo(cenario, falso):
     await cenario.roleta(A, B)
     email = cenario.email("caixa")
-    primeira = await _confirmar(falso, await cenario.rascunho(email), _brt(29, 12))
+    await _confirmar(falso, await cenario.rascunho(email), _brt(29, 12))
     outra_aba = await cenario.rascunho(f"  {email.upper()} ")
     r = await _confirmar(falso, outra_aba, _brt(30, 9))
-    assert r == {"status": "ja_tem", "inicio": primeira["inicio"], "fim": primeira["fim"]}
+    assert r == {"status": "ja_tem"}
 
 
 async def test_duas_confirmacoes_simultaneas_vendedores_diferentes(cenario, falso):
@@ -295,3 +295,17 @@ async def test_confirmado_grava_lead_com_marca_e_sem_handoff(cenario, falso):
         assert meta["agendamento"] == "true" and meta["page_slug"] == cenario.slug
         assert await conn.fetchval(
             "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1", lead["id"]) == 0
+
+
+async def test_ja_tem_nao_devolve_horario(cenario, falso):
+    """Revisão de segurança (28/10): o e-mail não é verificado — quem digita o
+    e-mail de outra pessoa não pode descobrir quando é a reunião dela, nem
+    com qual vendedor."""
+    await cenario.roleta(A)
+    email = cenario.email("alvo")
+    dono = await _confirmar(falso, await cenario.rascunho(email), _brt(29, 12))
+    assert set(dono) == {"status", "inicio", "fim"}
+    intruso = await cenario.rascunho(email)
+    r = await _confirmar(falso, intruso, _brt(30, 9))
+    assert r == {"status": "ja_tem"}
+    assert "2026-10-29" not in json.dumps(r) and "Vendedor" not in json.dumps(r)

@@ -100,6 +100,13 @@ async def _ler(conn, token: str, *, travar: bool = False):
     return linha
 
 
+def _outro_ambiente(cliente, ag) -> bool:
+    """O GrowthHS ativo não é o do rascunho (trocaram de ambiente no meio):
+    os ids da roleta seriam de outro CRM."""
+    ambiente = getattr(getattr(cliente, "cfg", None), "ambiente", None)
+    return ambiente is not None and ambiente != ag["ambiente"]
+
+
 # ── Rascunho ─────────────────────────────────────────────────────────────────
 
 async def criar_rascunho(conn, *, page_slug: str, email: str, dados: dict,
@@ -189,7 +196,7 @@ async def horarios(token: str, *, agora: datetime, cliente) -> dict:
             raise TokenDesconhecido(token)
         cfg = await _config_da_pagina(conn, ag["page_slug"])
         roleta = await _candidatos(conn, ag)
-    if not pode_agendar(cfg, respostas(_dados(ag["dados"]))):
+    if not pode_agendar(cfg, respostas(_dados(ag["dados"]))) or _outro_ambiente(cliente, ag):
         return dict(INDISPONIVEL)
     janela = periodo(cfg, agora)
     if janela is None:
@@ -233,8 +240,12 @@ async def horarios(token: str, *, agora: datetime, cliente) -> dict:
 
 # ── Confirmação ──────────────────────────────────────────────────────────────
 
-def _ja_tem(linha) -> dict:
-    return {"status": "ja_tem", "inicio": iso_z(linha["inicio"]), "fim": iso_z(linha["fim"])}
+def _ja_tem(_linha=None) -> dict:
+    """⚠️ Sem dia nem hora (revisão de segurança, 28/10): o e-mail digitado
+    não é verificado — devolver o horário da reserva de OUTRO token deixaria
+    qualquer um descobrir quando é a reunião de quem tem aquele e-mail. O
+    convite, com dia, hora e link, chega no e-mail do dono."""
+    return {"status": "ja_tem"}
 
 
 async def _outra_viva(conn, ag):
@@ -271,7 +282,7 @@ async def confirmar(token: str, inicio: datetime, *, agora: datetime, cliente) -
 
     fixo = ag["vendedor_id"] if ag["card_existente_id"] is not None else None
     ids = [int(fixo)] if fixo is not None else [int(r["user_id"]) for r in roleta]
-    if not ids:
+    if not ids or _outro_ambiente(cliente, ag):
         return {"status": "indisponivel"}
 
     # (2) Rede: a agenda DAQUELE horário, agora.
@@ -337,7 +348,10 @@ async def confirmar(token: str, inicio: datetime, *, agora: datetime, cliente) -
                 "UPDATE reuniao_agendamentos SET lead_id = $2::uuid WHERE token = $1",
                 token, lead_id)
     except Exception:  # noqa: BLE001 — a reserva vale; a execução registra de novo
-        logger.exception("[agendamento] reserva %s gravada, lead não registrado", token)
+        # ⚠️ O id da linha, nunca o token (o token é a credencial do rascunho).
+        logger.exception("[agendamento] reserva %s gravada, lead não registrado", ag["id"])
 
-    return {"status": "reservada", "inicio": iso_z(inicio), "fim": iso_z(fim),
-            "vendedor_nome": nome}
+    # ⚠️ Sem `vendedor_nome` na resposta pública (revisão de segurança, 28/10):
+    # diria qual vendedor atende aquele cliente a quem não provou ser o dono do
+    # e-mail. O nome fica no banco e no e-mail ao vendedor.
+    return {"status": "reservada", "inicio": iso_z(inicio), "fim": iso_z(fim)}
