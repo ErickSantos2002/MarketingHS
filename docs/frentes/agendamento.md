@@ -21,10 +21,67 @@ produção (a 036 foi aplicada só no Postgres local, duas vezes).
 | 9 Bloco no editor da página | feito | `582e484` |
 | 10 Modal na landing | feito | `d11b841` |
 
-Portão (Postgres local): pytest **1327 passed, 0 failed, 9 skipped** (7
-`base_real` + 2 da 032 já aplicada); `tsc` 0 erros; `node --test
-scripts/landing-*.test.mjs` 62/62; `npm run build:landing` ok; `guarda:visual`
-0 em `settings` e `pages`.
+| Revisão final (C1, I1, I2, M1–M3, M7, títulos) | feito | `ba83482`, `4e9d7a3`, `315e027`, `3c07e4e` |
+
+Portão depois da revisão (Postgres local): pytest **1341 passed, 0 failed, 9
+skipped** (7 `base_real` + 2 da 032 já aplicada); `tsc` 0 erros; `node --test
+scripts/landing-*.test.mjs` 63/63; `npm run build:landing` ok;
+`guarda:visual` 0 em `settings` e `pages`.
+
+## Revisão final da branch (coordenadora, 28/10)
+
+- **C1 — card duplicado com handoff em paralelo** (`ba83482`): no caminho do
+  card novo, `_card` lê os cards abertos da pessoa ANTES de criar. Assinatura
+  da reserva → é o nosso (201 perdido). Outro card aberto (a jornada de
+  handoff da captura normal, regra `send_to_growthhs`) → é usado, o mais
+  novo. Sem vendedor → ganha o da reserva. De outro vendedor → o dono NÃO
+  muda; a tarefa fica com o vendedor da reserva (livre e bloqueado no
+  Outlook); a nota diz "Reunião agendada pelo lead com <reserva>; o card é de
+  <card>" (guardado em `dados.aviso_dono`, sobrevive a retry) e os admins
+  recebem um aviso (`alertar_admins(..., aviso=True)`: assunto "com aviso",
+  não grava `alerta_em` — o alerta de falha, se vier, ainda sai; uma vez só
+  por `dados.aviso_dono_enviado`).
+- **M7** (`ba83482`): `card_existente_id` ganho, perdido ou 404 cai no caminho
+  do card novo (com a checagem do C1).
+- **I2** (`ba83482`): `_executar` com `inicio <= now()` → `falhou` + alerta
+  "reunião não pôde ser criada antes do horário", nenhuma chamada ao
+  GrowthHS, nenhum e-mail. `_tratar`: transitório re-tenta enquanto `inicio`
+  não chegou (o teto de `MAX_TENTATIVAS` saiu daqui); na 2ª falha seguida
+  (`tentativas >= 2`) ou a menos de 3 h do início, `alertar_admins` (uma vez,
+  `alerta_em`).
+- **I1** (`4e9d7a3`): `pg_advisory_xact_lock(hashtext('reuniao:' || ambiente))`
+  no início da transação da confirmação, nos dois caminhos (roleta e
+  vendedor fixo), antes de ler as reservas. A conferência já era por
+  sobreposição (`inicio < fim AND fim > inicio`); o que faltava era a trava.
+  O teste força a corrida (a leitura das reservas espera 0,3 s): sem a trava
+  as duas passavam.
+- **M1** (`ba83482`, `4e9d7a3`, `315e027`): varredura de abandono por
+  `atualizado_em` e pelo `abandono_min` da página (padrão 30; a busca poda
+  em 5 min, o menor aceito); `confirmar` também toca `atualizado_em`. No
+  modal, 404 ao confirmar → "Nossa equipe vai entrar em contato"
+  (`mensagemDoErroAoConfirmar`).
+- **M2** (`4e9d7a3`, ajuste `3c07e4e`): o rascunho que recebe `ja_tem` de
+  OUTRO token registra a captura COM a marca de agendamento (respostas e
+  consentimento no contato/conversão, sem jornada de handoff nem pedido de
+  card) e só então vira `abandonada`.
+- **M3** (`4e9d7a3`): a reserva nasce com `visivel_em = now() + 30 s` — a fila
+  não a pega antes do `registrar_captura`.
+- **Títulos** (`ba83482`): tarefa cortada em 255, com o nome do lead em
+  `MAX_NOME_PESSOA`; o do card já saía em `MAX_TITULO` (`montar_card`).
+- **Testes de execução com relógio de verdade:** a execução agora compara
+  `inicio` com `now()`, então `test_agendamento_execucao.py` usa o próximo
+  dia útil (≥ 2 dias) às 12:00 em vez de 29/10 fixo — senão a suíte
+  quebraria a partir de 29/10.
+
+### Backlog (anotado, não feito)
+
+- **M4** — idempotência da tarefa e da sala: 2xx perdido no `criar_tarefa`
+  (hoje: sem id → falha + alerta) ou no `daily-room` (hoje: o retry pede
+  outra sala).
+- **M5** — alerta sem Resend configurado só vai para o log; ninguém fica
+  sabendo.
+- **M6** — o token do rascunho vai no CAMINHO da URL (logs de proxy, nginx);
+  mover para corpo/cabeçalho.
 
 ## Decisões
 
@@ -94,12 +151,13 @@ scripts/landing-*.test.mjs` 62/62; `npm run build:landing` ok; `guarda:visual`
     falha + alerta.
   - O e-mail ao vendedor NÃO passa pelo `ritmo`/`compasso` do worker (volume
     de poucas reuniões por dia).
+  - (Revisto: ver "Revisão final" — re-tenta até o início, alerta cedo.)
   - Agendamento de teste (`@exemplo.invalid`) nunca sai por passada sem
     `somente` (worker de produção), nem pela varredura sem
     `somente_paginas` — a mesma lição de `entrega.LEAD_DE_TESTE`.
   - Varredura: todo rascunho tem a etapa 1 (é ela que o cria), então o
-    rascunho de > 30 min vira lead comum; `abandonada` só se isso falhar. O
-    corte de 30 min é constante (não lê o `abandono_min` da página).
+    rascunho parado vira lead comum; `abandonada` só se isso falhar.
+    (Revisto no M1: pela última mexida e pelo `abandono_min` da página.)
   - Laço próprio no worker, a cada 15 s; varredura no bloco do agendador.
 - **Task 8:** as duas rotas são `admin_atual` (como todo `/config/growthhs`;
   o leitor não vê Configurações). PUT com o GrowthHS fora → 502, nada muda.
@@ -122,9 +180,8 @@ scripts/landing-*.test.mjs` 62/62; `npm run build:landing` ok; `guarda:visual`
   que tem card aberto vê só os horários do vendedor daquele card — a grade
   diferente revela que existe card (não revela quem). Aceito pela
   coordenadora (28/10).
-- A sala de vídeo (`daily-room`) não é idempotente do nosso lado: se a
-  resposta 2xx se perder, o retry pede outra sala ao GrowthHS. Depende de
-  como o GrowthHS trata a segunda chamada na mesma tarefa.
+- A sala de vídeo (`daily-room`) não é idempotente do nosso lado (M4, no
+  backlog).
 
 ## Fora deste trabalho / para a coordenadora
 
@@ -132,7 +189,8 @@ scripts/landing-*.test.mjs` 62/62; `npm run build:landing` ok; `guarda:visual`
   painéis da lista `ABRIDORES` — não abre o modal. Conferi a landing de
   teste (botão "Agendar reunião" a 390 e 1440 px, sem estouro, sem erro de
   console) e o editor da página (bloco desligado, contra o banco de
-  produção, só leitura). As etapas do modal e o bloco do editor LIGADO ficam
+  produção, só leitura — na revisão a coordenadora vetou isso: daqui em
+  diante backend só contra o Postgres local). As etapas do modal e o bloco do editor LIGADO ficam
   para a Task 11 (Playwright da sessão).
 - A Task 11 inteira (homologação, script de produção, CONTINUAR-AQUI).
 - Na Task 11: a página `phoebus` precisa dos campos `funcionarios`
