@@ -1,5 +1,12 @@
 # Continuar aqui
 
+> ## ✅ 28/10 — agendamento de reunião na landing (pedido do Nicholson)
+>
+> - Spec `docs/superpowers/specs/2026-10-28-agendamento-reuniao-design.md`, plano `docs/superpowers/plans/2026-10-28-agendamento-reuniao.md`. Lead com **mais de 400 funcionários** marca sozinho reunião na **sala de vídeo do GrowthHS**; roleta de reunião no MarketingHS (primeiro livre da fila; pulado guarda a vez); card nasce na **lista 28** com vendedor, nota, reunião e convite; e-mail ao vendedor. Sem código de confirmação por e-mail (decisão do Erick).
+> - **GrowthHS** (sessão `hsgrowth-sistema`, v1.10.22 `54407ed`, homologação): `/integration/vendedores`, `/integration/agenda`, `daily-room` por integração. **Azure:** RBAC para aplicativos no Exchange — `Application Calendars.ReadWrite` do app "HSGrowth CRM" restrita ao grupo `agenda-vendedores@healthsafetytech.com` (`~/exchange-agenda-vendedores.ps1`). **Provado na homologação:** agenda lida (compromisso de teste ocupado), cards 11244–11246 na 28 com vendedor 19, evento no Outlook do vendedor como organizador, convite no Gmail (`DAILY_DEV_MODE=false` em homo).
+> - Frente `agendamento` ✅ mergeada (`6e6c64f`; portão local **1341 passed, 9 skipped**, `tsc` 0, node 63, build ok, guarda 0). Migration **036** (NÃO aplicada em produção).
+> - **Falta:** Task 11 — ponta a ponta pela landing contra a homologação (modal nunca aberto no navegador); script do Erick: 036 + config da `phoebus` (campos `funcionarios`/`filiais`, bloco `agendamento`) + roleta de produção; deploy de api, worker e sistema; GrowthHS v1.10.22 em produção. Backlog em `docs/frentes/agendamento.md` (M4 idempotência de tarefa/sala, M5 alerta sem Resend, M6 token na URL). Grupo do Exchange tem `sdr50@` (Miguel) e não tem a Karolaine (`sdr30@`) — conferir quem entra na roleta.
+
 > ## ✅ 27/10 (noite) — ajustes do Nicholson na landing
 >
 > - Frente `landing-nicholson` ✅ mergeada (`eabc571`; portão local **1233 passed**, node 99, `tsc` 0, builds ok): rodapé com 4007-1507* (nota do site oficial) e (81) 98177-1177; player do YouTube fechado (controles nossos, camada que pega todo clique, capa na pausa e no fim, para 1,5 s antes do fim); "Quem já usa" em 4 colunas. Vídeo trocado para `sByexR1w9vw` por `~/marketinghs-landing-video.sh`.
