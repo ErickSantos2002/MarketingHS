@@ -20,7 +20,6 @@ import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -30,13 +29,14 @@ import app.database as db
 from app.config import settings
 from app.crm import entrega, growthhs
 from app.crm.growthhs import Config, bloco_ja_aplicado, marca_de_criacao, marca_do_pedido
+from growthhs_falso import (ANTIGO, BOARD_DE_ENTRADA, CARDS, LISTA_DE_ENTRADA, NOTAS,
+                            PESSOAS, GrowthHSFalso)
 from rodada import EmailDeRodada
 
 # Único por processo (decisão 27: duas suítes ao mesmo tempo) — ver tests/rodada.py.
 _EMAIL = EmailDeRodada("entrega-8d", antigo="entrega-8d@exemplo.invalid")
 _EMAIL_GEMEO = EmailDeRodada("entrega-8d-gemeo", antigo="entrega-8d-gemeo@exemplo.invalid")
 EMAIL, EMAIL_GEMEO = _EMAIL.atual, _EMAIL_GEMEO.atual
-LISTA_DE_ENTRADA, BOARD_DE_ENTRADA = 22, 6
 CFG = Config(base_url="https://growthhs.exemplo.invalid", client_id="hsg_8d",
              client_secret="segredo-8d", list_id=LISTA_DE_ENTRADA,
              boards_conferidos=(6, 7), app_url="https://app.exemplo.invalid",
@@ -53,8 +53,6 @@ NOTA = re.compile(r"^Lead converteu de novo pelo MarketingHS \(MarketingHS\) em 
                   r"/contacts\?contato=[0-9a-f-]+$")
 ABERTURA = re.compile(r"^Lead enviado pelo MarketingHS \(MarketingHS\) em "
                       r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}\.\n")
-CARDS, NOTAS, PESSOAS = "/api/v1/cards", "/api/v1/card-notes", "/api/v1/persons"
-ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -121,132 +119,6 @@ def _sem_token_guardado():
     growthhs.limpar_tokens()
     yield
     growthhs.limpar_tokens()
-
-
-class GrowthHSFalso:
-    """O GrowthHS em memória, com o comportamento de §8 de lá que importa:
-    busca de pessoa PARCIAL e sem `email_alternative`; `POST /persons` 400
-    para e-mail repetido em qualquer dos quatro campos; listagem de cards por
-    board + pessoa SEM a descrição (por isso a entrega lê o card).
-
-    Defeitos sob encomenda:
-    - `forcar[(método, prefixo do caminho)]`: respostas devolvidas ANTES do
-      comportamento normal, consumidas em ordem (a rota volta ao normal
-      quando a lista acaba);
-    - `perder[(método, prefixo)] = n`: faz a operação e PERDE a resposta
-      (timeout) n vezes — o 201/200 que nunca chegou;
-    - `corpo_do_post_card`: bytes no lugar do JSON do 201 (o card é criado);
-    - `ao_criar_card`: chamado depois de criar um card.
-    `agora` é o `created_at` dos cards criados por `POST` — fixo no passado
-    por padrão, para o teste não depender do relógio desta máquina contra o
-    do banco (que dá o `criado_em` do pedido)."""
-
-    def __init__(self):
-        self.pessoas: dict[int, dict] = {}
-        self.cards: dict[int, dict] = {}
-        self.notas: list[dict] = []
-        self.pedidos: list[httpx.Request] = []
-        self.forcar: dict[tuple[str, str], list] = {}
-        self.perder: dict[tuple[str, str], int] = {}
-        self.corpo_do_post_card: bytes | None = None
-        self.ao_criar_card = None
-        self.agora = "2026-10-01T12:00:00"
-        self._ids = itertools.count(7001)
-
-    # ── semear ──
-    def pessoa(self, **campos) -> int:
-        pid = next(self._ids)
-        self.pessoas[pid] = {"id": pid, "name": "Pessoa", **campos}
-        return pid
-
-    def card(self, person_id, *, descricao="", board=BOARD_DE_ENTRADA, is_won=False,
-             is_lost=False, created_at=ANTIGO) -> int:
-        cid = next(self._ids)
-        self.cards[cid] = {"id": cid, "person_id": person_id, "list_id": LISTA_DE_ENTRADA,
-                           "board_id": board, "title": "Card do vendedor",
-                           "description": descricao, "is_won": is_won, "is_lost": is_lost,
-                           "created_at": created_at}
-        return cid
-
-    # ── olhar ──
-    def de(self, metodo, caminho):
-        return [p for p in self.pedidos if p.method == metodo and p.url.path == caminho]
-
-    def puts(self):
-        return [p for p in self.pedidos if p.method == "PUT"]
-
-    def transporte(self):
-        return httpx.MockTransport(self)
-
-    # ── servir ──
-    def __call__(self, request: httpx.Request) -> httpx.Response:
-        self.pedidos.append(request)
-        caminho = request.url.path
-        for (metodo, prefixo), fila in self.forcar.items():
-            if metodo == request.method and caminho.startswith(prefixo) and fila:
-                resposta = fila.pop(0)
-                if isinstance(resposta, Exception):
-                    raise resposta
-                return resposta
-        resposta = self._servir(request, caminho)
-        for (metodo, prefixo), n in self.perder.items():
-            if metodo == request.method and caminho.startswith(prefixo) and n > 0:
-                self.perder[(metodo, prefixo)] = n - 1
-                raise httpx.ReadTimeout("resposta perdida", request=request)
-        return resposta
-
-    def _servir(self, request, caminho) -> httpx.Response:
-        metodo = request.method
-        corpo = json.loads(request.content) if request.content else {}
-        params = {k: v[0] for k, v in parse_qs(urlsplit(str(request.url)).query).items()}
-        if (metodo, caminho) == ("POST", "/api/v1/auth/client-credentials"):
-            return httpx.Response(200, json={"access_token": "tok", "expires_in": 28800})
-        if (metodo, caminho) == ("GET", PESSOAS):
-            termo = params.get("search", "").lower()
-            campos = ("name", "email", "email_commercial", "email_personal",
-                      "phone", "phone_commercial", "phone_whatsapp")
-            achadas = [p for p in self.pessoas.values()
-                       if any(termo in str(p.get(c) or "").lower() for c in campos)]
-            return httpx.Response(200, json={"persons": achadas, "total": len(achadas),
-                                             "page": 1, "page_size": 100, "total_pages": 1})
-        if (metodo, caminho) == ("POST", PESSOAS):
-            email = (corpo.get("email") or "").lower()
-            for p in self.pessoas.values():
-                if email and email in [str(p.get(c) or "").lower() for c in
-                                       ("email", "email_commercial", "email_personal",
-                                        "email_alternative")]:
-                    return httpx.Response(400, json={"detail": "E-mail já cadastrado"})
-            pid = self.pessoa(**corpo)
-            return httpx.Response(201, json=self.pessoas[pid])
-        if (metodo, caminho) == ("GET", CARDS):
-            board, pessoa = int(params["board_id"]), int(params["person_id"])
-            achados = [{k: v for k, v in c.items() if k != "description"}
-                       for c in self.cards.values()
-                       if c["board_id"] == board and c["person_id"] == pessoa]
-            return httpx.Response(200, json={"cards": achados, "total": len(achados),
-                                             "page": 1, "page_size": 100, "total_pages": 1})
-        if (metodo, caminho) == ("POST", CARDS):
-            cid = self.card(corpo["person_id"], descricao=corpo.get("description") or "",
-                            created_at=self.agora)
-            self.cards[cid].update({k: v for k, v in corpo.items() if k != "description"})
-            if self.ao_criar_card:
-                self.ao_criar_card()
-            if self.corpo_do_post_card is not None:
-                return httpx.Response(201, content=self.corpo_do_post_card)
-            return httpx.Response(201, json=self.cards[cid])
-        if caminho.startswith(CARDS + "/"):
-            cid = int(caminho.rsplit("/", 1)[1])
-            if cid not in self.cards:
-                return httpx.Response(404, json={"detail": "Card não encontrado"})
-            if metodo == "GET":
-                return httpx.Response(200, json=self.cards[cid])
-            if metodo == "PUT":
-                self.cards[cid]["description"] = corpo["description"]
-                return httpx.Response(200, json=self.cards[cid])
-        if (metodo, caminho) == ("POST", NOTAS):
-            self.notas.append(corpo)
-            return httpx.Response(201, json={"id": len(self.notas), **corpo})
-        return httpx.Response(599, json={"detail": f"rota não prevista {metodo} {caminho}"})
 
 
 def _resposta(status):

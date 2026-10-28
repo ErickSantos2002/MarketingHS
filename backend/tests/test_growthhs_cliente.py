@@ -672,3 +672,199 @@ async def test_2xx_que_nao_e_objeto_nao_ecoa_o_corpo():
         with pytest.raises(ErroTransitorio) as erro:
             await cli.ler_card(1)
     assert "segredo-interno" not in str(erro.value)
+
+
+# ── Agendamento de reunião (frente agendamento, 28/10/2026) ──────────────────
+# Contrato final do GrowthHS: spec 2026-10-28-agendamento-reuniao-design.md,
+# "Contrato final, como o GrowthHS implementou".
+
+VENDEDORES = ("GET", "/api/v1/integration/vendedores")
+AGENDA = ("GET", "/api/v1/integration/agenda")
+UTC = timezone.utc
+
+
+async def test_vendedores_filtra_inativos():
+    api = Api({VENDEDORES: [httpx.Response(200, json=[
+        {"id": 3, "nome": "Ana", "email": "ana@hs.invalid", "ativo": True},
+        {"id": 7, "nome": "Bia", "email": "bia@hs.invalid", "ativo": False},
+        {"id": 19, "nome": "Erick", "email": "erick@hs.invalid", "ativo": True}])]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        vendedores = await cli.vendedores()
+    assert [v["id"] for v in vendedores] == [3, 19]
+    assert vendedores[0] == {"id": 3, "nome": "Ana", "email": "ana@hs.invalid", "ativo": True}
+
+
+async def test_vendedores_corpo_que_nao_e_lista_e_transitorio():
+    api = Api({VENDEDORES: [httpx.Response(200, json={"x": 1})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroTransitorio):
+            await cli.vendedores()
+
+
+INI = datetime(2026, 10, 29, 11, tzinfo=UTC)
+FIM = datetime(2026, 10, 29, 21, tzinfo=UTC)
+
+
+async def test_agenda_converte_utc_e_erros_viram_none():
+    api = Api({AGENDA: [httpx.Response(200, json={
+        "vendedores": [{"user_id": 19, "email": "erick@hs.invalid", "ocupado": [
+            {"inicio": "2026-10-29T10:00:00-03:00", "fim": "2026-10-29T14:00:00Z",
+             "status": "busy"}]}],
+        "erros": [{"user_id": 3, "motivo": "Access is denied."}]})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        r = await cli.agenda([19, 3], INI, FIM)
+    assert r[19] == [(datetime(2026, 10, 29, 13, tzinfo=UTC),
+                      datetime(2026, 10, 29, 14, tzinfo=UTC))]
+    assert r[3] is None
+
+
+async def test_agenda_vendedor_que_nao_veio_e_ocupado():
+    """Nem em `vendedores` nem em `erros`: na dúvida, nunca livre."""
+    api = Api({AGENDA: [httpx.Response(200, json={"vendedores": [], "erros": []})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.agenda([5], INI, FIM) == {5: None}
+
+
+async def test_agenda_manda_datas_com_Z():
+    from datetime import timedelta
+    api = Api({AGENDA: [httpx.Response(200, json={"vendedores": [
+        {"user_id": 19, "email": "e", "ocupado": []}], "erros": []})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        r = await cli.agenda([19, 3], INI.astimezone(timezone(timedelta(hours=-3))), FIM)
+    params = _params(api.de(*AGENDA)[0])
+    assert params == {"user_ids": "19,3", "inicio": "2026-10-29T11:00:00Z",
+                      "fim": "2026-10-29T21:00:00Z"}
+    assert r[19] == []
+
+
+async def test_agenda_503_e_transitorio():
+    api = Api({AGENDA: [httpx.Response(503, json={"detail": "token da Microsoft"})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroTransitorio):
+            await cli.agenda([19], INI, FIM)
+
+
+async def test_agenda_sem_vendedor_nao_chama():
+    api = Api({})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.agenda([], INI, FIM) == {}
+    assert api.pedidos == []
+
+
+async def test_buscar_pessoa_nao_cria():
+    api = Api({("GET", "/api/v1/persons"): [httpx.Response(200, json={"persons": [
+        {"id": 1, "email": "joana@x.com"}]})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.buscar_pessoa(" Ana@X.com ") is None
+    assert api.de("POST", "/api/v1/persons") == []
+    assert _params(api.de("GET", "/api/v1/persons")[0])["search"] == "ana@x.com"
+
+
+async def test_card_aberto_ignora_ganho_e_perdido():
+    def listar(request):
+        if _params(request)["board_id"] != "7":
+            return httpx.Response(200, json={"cards": [], "total_pages": 1})
+        return httpx.Response(200, json={"cards": [
+            {"id": 10, "is_won": True, "is_lost": False, "assigned_to_id": 3,
+             "created_at": "2026-10-20T10:00:00"},
+            {"id": 11, "is_won": False, "is_lost": False, "assigned_to_id": 19,
+             "created_at": "2026-10-01T10:00:00"},
+            {"id": 12, "is_won": False, "is_lost": True, "assigned_to_id": 5,
+             "created_at": "2026-10-25T10:00:00"}], "total_pages": 1})
+    api = Api({("GET", "/api/v1/cards"): listar})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.card_aberto(1180) == {"id": 11, "assigned_to_id": 19}
+
+
+async def test_card_aberto_mais_recente_e_le_o_card_sem_vendedor_na_listagem():
+    def listar(request):
+        if _params(request)["board_id"] != "6":
+            return httpx.Response(200, json={"cards": [], "total_pages": 1})
+        return httpx.Response(200, json={"cards": [
+            {"id": 20, "is_won": False, "is_lost": False, "created_at": "2026-10-01T10:00:00"},
+            {"id": 21, "is_won": False, "is_lost": False, "created_at": "2026-10-02T10:00:00"}],
+            "total_pages": 1})
+    api = Api({("GET", "/api/v1/cards"): listar,
+               ("GET", "/api/v1/cards/21"): [httpx.Response(200, json={
+                   "id": 21, "assigned_to_id": None})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.card_aberto(1180) == {"id": 21, "assigned_to_id": None}
+    assert len(api.de("GET", "/api/v1/cards/21")) == 1
+
+
+async def test_card_aberto_nenhum():
+    api = Api({("GET", "/api/v1/cards"): [httpx.Response(200, json={"cards": [],
+                                                                    "total_pages": 1})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.card_aberto(1180) is None
+
+
+@pytest.mark.parametrize("resposta", [httpx.Response(204), httpx.Response(201, content=b"<x"),
+                                      httpx.Response(201, json=[1])])
+async def test_criar_tarefa_2xx_sem_corpo_nao_levanta(resposta):
+    api = Api({("POST", "/api/v1/card-tasks"): [resposta]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.criar_tarefa({"card_id": 1, "task_type": "meeting"}) == {}
+    assert _corpo(api.de("POST", "/api/v1/card-tasks")[0]) == {"card_id": 1,
+                                                               "task_type": "meeting"}
+
+
+async def test_criar_tarefa_devolve_o_corpo():
+    api = Api({("POST", "/api/v1/card-tasks"): [httpx.Response(201, json={"id": 55})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.criar_tarefa({"card_id": 1}) == {"id": 55}
+
+
+async def test_atribuir_vendedor_so_manda_o_vendedor():
+    api = Api({("PUT", "/api/v1/cards/4821"): [httpx.Response(200, json={"id": 4821})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        assert await cli.atribuir_vendedor(4821, 19) is None
+    assert _corpo(api.de("PUT", "/api/v1/cards/4821")[0]) == {"assigned_to_id": 19}
+
+
+async def test_criar_sala():
+    api = Api({("POST", "/api/v1/card-tasks/55/daily-room"): [httpx.Response(200, json={
+        "room_url": "https://x.daily.co/sala", "public_link": "https://g/s/abc",
+        "public_access_token": "abc", "convidados_removidos": 0})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        sala = await cli.criar_sala(55)
+    assert sala == {"room_url": "https://x.daily.co/sala", "public_link": "https://g/s/abc",
+                    "public_access_token": "abc", "convidados_removidos": 0}
+
+
+async def test_criar_sala_503_e_transitorio():
+    api = Api({("POST", "/api/v1/card-tasks/55/daily-room"): [
+        httpx.Response(503, json={"detail": "Graph"})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroTransitorio):
+            await cli.criar_sala(55)
+
+
+async def test_criar_sala_422_e_definitivo():
+    api = Api({("POST", "/api/v1/card-tasks/55/daily-room"): [
+        httpx.Response(422, json={"detail": "tarefa sem vendedor com e-mail"})]})
+    async with Cliente(CFG, transporte=api.transporte()) as cli:
+        with pytest.raises(ErroDefinitivo) as erro:
+            await cli.criar_sala(55)
+    assert erro.value.status == 422
+
+
+async def test_o_falso_compartilhado_serve_as_rotas_novas():
+    """O `GrowthHSFalso` (tests/growthhs_falso.py) é o que a Task 5 e a 7 usam."""
+    from growthhs_falso import GrowthHSFalso
+    falso = GrowthHSFalso()
+    falso.vendedores = [{"id": 19, "nome": "Erick", "email": "e@hs.invalid", "ativo": True}]
+    falso.ocupar(19, "2026-10-29T13:00:00Z", "2026-10-29T14:00:00Z")
+    falso.erros_agenda.add(3)
+    pid = falso.pessoa(email="lead@exemplo.invalid")
+    cid = falso.card(pid)
+    async with Cliente(CFG, transporte=falso.transporte()) as cli:
+        assert [v["id"] for v in await cli.vendedores()] == [19]
+        agenda = await cli.agenda([19, 3], INI, FIM)
+        assert agenda[3] is None and len(agenda[19]) == 1
+        assert await cli.buscar_pessoa("lead@exemplo.invalid") == pid
+        await cli.atribuir_vendedor(cid, 19)
+        assert (await cli.card_aberto(pid))["assigned_to_id"] == 19
+        tarefa = await cli.criar_tarefa({"card_id": cid, "task_type": "meeting"})
+        sala = await cli.criar_sala(tarefa["id"])
+    assert sala["convidados_removidos"] == 0 and sala["public_link"]

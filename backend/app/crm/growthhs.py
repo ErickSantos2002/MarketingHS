@@ -882,6 +882,155 @@ class Cliente:
         await self._chamar("POST", CAMINHO_NOTAS,
                            json={"card_id": card_id, "content": conteudo_da_nota(texto)})
 
+    # ── Agendamento de reunião (frente agendamento, 28/10/2026) ──
+    # Contrato final do GrowthHS: spec 2026-10-28-agendamento-reuniao-design.md,
+    # "Contrato final, como o GrowthHS implementou". As três rotas de
+    # integração exigem o mesmo JWT do `client-credentials`.
+
+    async def vendedores(self) -> list[dict]:
+        """Os vendedores ATIVOS (`GET /integration/vendedores` devolve ativos e
+        inativos, por nome). Corpo que não é lista é transitório: leitura, não
+        criou nada lá."""
+        resposta = await self._chamar("GET", CAMINHO_VENDEDORES)
+        try:
+            corpo = resposta.json()
+        except ValueError:
+            corpo = None
+        if not isinstance(corpo, list):
+            raise ErroTransitorio(f"{resposta.status_code}: resposta inesperada do GrowthHS "
+                                  f"(não é lista JSON)")
+        saida = []
+        for v in corpo:
+            if not isinstance(v, dict) or not v.get("ativo") or v.get("id") is None:
+                continue
+            saida.append({"id": int(v["id"]), "nome": uma_linha(v.get("nome")),
+                          "email": uma_linha(v.get("email")).lower(), "ativo": True})
+        return saida
+
+    async def agenda(self, user_ids: list[int], inicio: datetime,
+                     fim: datetime) -> dict[int, list[tuple[datetime, datetime]] | None]:
+        """Os blocos OCUPADOS de cada vendedor no período, em UTC.
+
+        `None` = o vendedor veio em `erros` (fora do grupo do Exchange, sem
+        caixa) ou nem veio: quem chama trata como ocupado o período inteiro —
+        nunca "livre" por falta de informação. Todo status que a rota devolve
+        conta como ocupado (`busy`, `tentative`, `oof`, `workingElsewhere`; o
+        `free` ela não manda). Mais de `MAX_IDS_AGENDA` ids vira mais de uma
+        chamada."""
+        ids = [int(i) for i in dict.fromkeys(user_ids)]
+        saida: dict[int, list[tuple[datetime, datetime]] | None] = {i: None for i in ids}
+        for k in range(0, len(ids), MAX_IDS_AGENDA):
+            lote = ids[k:k + MAX_IDS_AGENDA]
+            resposta = await self._chamar(
+                "GET", CAMINHO_AGENDA,
+                params={"user_ids": ",".join(str(i) for i in lote),
+                        "inicio": _utc_z(inicio), "fim": _utc_z(fim)})
+            corpo = _objeto(resposta)
+            for v in corpo.get("vendedores") or []:
+                if not isinstance(v, dict):
+                    continue
+                try:
+                    uid = int(v.get("user_id"))
+                except (TypeError, ValueError):
+                    continue
+                if uid not in saida:
+                    continue
+                blocos = []
+                for b in v.get("ocupado") or []:
+                    ini, fim_b = (_ler_iso((b or {}).get("inicio")),
+                                  _ler_iso((b or {}).get("fim")))
+                    if ini is None or fim_b is None:
+                        # Bloco ilegível: o vendedor inteiro fica ocupado.
+                        blocos = None
+                        break
+                    blocos.append((ini, fim_b))
+                saida[uid] = blocos
+            for e in corpo.get("erros") or []:
+                try:
+                    saida[int((e or {}).get("user_id"))] = None
+                except (TypeError, ValueError):
+                    continue
+        return {i: saida[i] for i in ids}
+
+    async def buscar_pessoa(self, email: str) -> int | None:
+        """Só BUSCA a pessoa pelo e-mail exato — nunca cria (a etapa 3 do
+        agendamento procura o card aberto do lead antes de ele confirmar)."""
+        alvo = (email or "").strip().lower()
+        if not alvo:
+            return None
+        return await self._buscar_pessoa(alvo, CAMPOS_EMAIL)
+
+    async def card_aberto(self, person_id: int) -> dict | None:
+        """O card aberto (nem ganho nem perdido) mais recente da pessoa, como
+        `{"id", "assigned_to_id"}`. A listagem que não traz o vendedor faz
+        ler o card."""
+        abertos = [c for c in await self.cards_da_pessoa(person_id)
+                   if not c.get("is_won") and not c.get("is_lost") and c.get("id") is not None]
+        if not abertos:
+            return None
+        minimo = datetime.min.replace(tzinfo=timezone.utc)
+        card = max(abertos, key=lambda c: (criado_em_utc(c) or minimo, int(c["id"])))
+        if "assigned_to_id" not in card:
+            card = await self.ler_card(int(card["id"]))
+        vendedor = card.get("assigned_to_id")
+        return {"id": int(card["id"]),
+                "assigned_to_id": int(vendedor) if vendedor is not None else None}
+
+    async def criar_tarefa(self, corpo: dict) -> dict:
+        """`POST /card-tasks`. Mesma regra do `criar_card`: chegou 2xx, a
+        tarefa JÁ existe lá — daqui para frente nunca levanta (corpo torto
+        vira `{}`), senão quem chama re-tentaria e criaria a segunda."""
+        resposta = await self._chamar("POST", CAMINHO_TAREFAS, json=corpo)
+        return _corpo_depois_do_2xx(resposta)
+
+    async def atribuir_vendedor(self, card_id: int, user_id: int) -> None:
+        """PUT SÓ com `assigned_to_id` — o card aberto sem vendedor ganha o
+        da roleta de reunião. Nada mais do card muda."""
+        await self._chamar("PUT", f"{CAMINHO_CARDS}/{card_id}",
+                           json={"assigned_to_id": int(user_id)})
+
+    async def criar_sala(self, task_id: int) -> dict:
+        """`POST /card-tasks/{id}/daily-room`: sala, link público e o evento no
+        Outlook DO VENDEDOR com o lead convidado. 503 (Graph) é transitório;
+        422 (tarefa sem vendedor com e-mail) definitivo.
+
+        ⚠️ `convidados_removidos > 0` vem num 2xx — é o `DAILY_DEV_MODE` de
+        lá cortando o lead. Quem chama trata como falha (Task 7)."""
+        corpo = _objeto(await self._chamar("POST", f"{CAMINHO_TAREFAS}/{task_id}/daily-room"))
+        try:
+            removidos = int(corpo.get("convidados_removidos") or 0)
+        except (TypeError, ValueError):
+            removidos = 0
+        return {"room_url": corpo.get("room_url"), "public_link": corpo.get("public_link"),
+                "public_access_token": corpo.get("public_access_token"),
+                "convidados_removidos": removidos}
+
+
+CAMINHO_VENDEDORES = "/api/v1/integration/vendedores"
+CAMINHO_AGENDA = "/api/v1/integration/agenda"
+CAMINHO_TAREFAS = "/api/v1/card-tasks"
+# Limite da `/integration/agenda` (422 acima disso).
+MAX_IDS_AGENDA = 30
+
+
+def _utc_z(data: datetime) -> str:
+    """`2026-10-29T15:00:00Z` — a rota recusa data sem fuso (422)."""
+    if data.tzinfo is None:
+        raise ValueError("data sem fuso")
+    return data.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _corpo_depois_do_2xx(resposta: httpx.Response) -> dict:
+    """O corpo de um POST que JÁ criou algo lá: nunca levanta."""
+    if not resposta.content:
+        return {}
+    try:
+        corpo = resposta.json()
+    except ValueError:
+        logger.warning("[growthhs] 2xx com corpo que não é JSON válido")
+        return {}
+    return corpo if isinstance(corpo, dict) else {}
+
 
 async def testar(cfg: Config, *,
                  transporte: httpx.AsyncBaseTransport | None = None) -> None:
