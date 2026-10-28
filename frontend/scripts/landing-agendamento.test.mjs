@@ -21,6 +21,8 @@ import {
   semanasDoMes,
   duracaoDaReuniao,
   MENSAGEM_JA_TEM,
+  MENSAGEM_CONTATO,
+  mensagemDoErroAoConfirmar,
 } from "../src/landing/agendamento.ts";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,4 +112,11 @@ test("o modal chama /api/publico/agendamento", () => {
   const modal = readFileSync(path.join(raiz, "src", "landing", "Agendamento.tsx"), "utf8");
   assert.doesNotMatch(modal, /["'`]\/publico\//);
   assert.doesNotMatch(modal, /dangerouslySetInnerHTML/);
+});
+
+test("404 ao confirmar (rascunho que a varredura já virou lead comum) termina em contato", () => {
+  assert.equal(mensagemDoErroAoConfirmar(404, "Não encontrado."), MENSAGEM_CONTATO);
+  assert.equal(mensagemDoErroAoConfirmar(422, "Esse horário não está disponível."),
+               "Esse horário não está disponível.");
+  assert.equal(mensagemDoErroAoConfirmar(0, ""), null);
 });

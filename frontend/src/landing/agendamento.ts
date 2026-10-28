@@ -23,6 +23,17 @@ export const MENSAGEM_CONTATO = "Recebemos seus dados. Nossa equipe vai entrar e
 export const MENSAGEM_SEM_HORARIO =
   "Não há horário livre nos próximos dias. Deixe que a gente liga: nossa equipe vai entrar em contato.";
 
+/**
+ * O que mostrar quando o `/confirmar` falha. 404 é o rascunho que não existe
+ * mais como rascunho (a varredura o virou lead comum depois de um tempo
+ * parado): o lead já está com a equipe — "Nossa equipe vai entrar em
+ * contato", nunca "Não encontrado.".
+ */
+export function mensagemDoErroAoConfirmar(status: number, mensagem: string): string | null {
+  if (status === 404) return MENSAGEM_CONTATO;
+  return mensagem || null;
+}
+
 function faixas(config: ConfigDaPagina): string[] {
   const lista = config?.agendamento?.faixas_que_agendam;
   return Array.isArray(lista) ? lista.filter((f): f is string => typeof f === "string" && !!f.trim()) : [];

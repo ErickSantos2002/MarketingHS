@@ -6,7 +6,7 @@ import {
 import {
   MENSAGEM_CONTATO, MENSAGEM_JA_TEM, MENSAGEM_OCUPADO, MENSAGEM_SEM_HORARIO, NOMES_DOS_MESES,
   ErroDoAgendamento, agendamentoAtivo, buscarHorarios, camposDaEtapa1, camposDaEtapa2,
-  confirmarHorario, diaDeBrasilia, duracaoDaReuniao, enviarDados, enviarEmpresa, pedirLigacao,
+  confirmarHorario, diaDeBrasilia, duracaoDaReuniao, enviarDados, enviarEmpresa, mensagemDoErroAoConfirmar, pedirLigacao,
   rotuloDoDia, rotuloDoHorario, semanasDoMes, type DiaComVaga,
 } from "./agendamento";
 import { Controle, utmDaUrl } from "./Formulario";
@@ -210,7 +210,13 @@ export function Agendamento({ slug, config, onFechar, inicial }: {
       else if (r.status === "ocupado") { await carregarHorarios(token); setErro(MENSAGEM_OCUPADO); }
       else { await pedirLigacao(token).catch(() => undefined); terminar(MENSAGEM_SEM_HORARIO); }
     } catch (err) {
-      setErro(err instanceof ErroDoAgendamento ? err.message : "Não conseguimos agendar agora.");
+      if (err instanceof ErroDoAgendamento && err.status === 404) {
+        terminar(MENSAGEM_CONTATO);
+      } else {
+        setErro((err instanceof ErroDoAgendamento
+          ? mensagemDoErroAoConfirmar(err.status, err.message) : null)
+          ?? "Não conseguimos agendar agora.");
+      }
     } finally {
       setOcupado(false);
     }
