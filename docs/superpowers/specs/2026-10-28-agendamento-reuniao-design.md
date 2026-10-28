@@ -146,6 +146,19 @@ já garante o vendedor e o horário.*
    roleta do GrowthHS). Quem confirma **não** passa pela jornada "lead para o
    comercial" (senão nasceriam dois cards).
 5. **Filiais:** o Nicholson quer saber quantas, opcional.
+6. **Sem código de confirmação por e-mail no lançamento.** O e-mail do lead
+   não é verificado (igual ao formulário normal); a revisão de segurança
+   apontou que alguém pode agendar no nome de outro. Aceito pelo Erick:
+   seguram o corte de 400, uma reunião por e-mail, MX, isca e limite por IP.
+   Se aparecer agendamento falso, liga-se um código de 6 dígitos antes da
+   etapa 3. A resposta pública não revela horário de reserva existente nem
+   nome de vendedor.
+
+**Provado na homologação (28/10):** agenda do vendedor lida pela integração
+(compromisso de teste apareceu como ocupado); card 11245/11246 na lista 28
+com vendedor 19, nota, reunião `apresentacao_phoebus`, sala Daily; evento no
+Outlook do vendedor como organizador e "Ocupado"; convite com link chegou no
+Gmail (`DAILY_DEV_MODE=false` na homologação).
 
 ## O que muda no GrowthHS (outra sessão — spec entregue, não editado daqui)
 
