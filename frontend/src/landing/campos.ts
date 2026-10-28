@@ -33,6 +33,19 @@ export type ConsentimentoDaPagina = {
   obrigatorio: boolean;
 };
 
+// Agendamento de reunião pela landing (frente agendamento, 28/10). O servidor
+// lê com padrões em `app/agendamento/config.py::ler_config`; sem
+// `faixas_que_agendam` o agendamento fica desligado.
+export type AgendamentoDaPagina = {
+  ativo: boolean;
+  duracao_min?: number;
+  meeting_kind?: string;
+  campo_porte?: string;
+  faixas_que_agendam?: string[];
+  antecedencia_min?: number;
+  janela_dias?: number;
+};
+
 export type ConfigDaPagina = {
   nome_da_pagina?: string;
   headline?: string;
@@ -52,6 +65,7 @@ export type ConfigDaPagina = {
   whatsapp?: { numero: string; mensagem: string };
   noindex?: boolean;
   tags?: string[];
+  agendamento?: AgendamentoDaPagina;
 };
 
 export const TIPOS_DE_CAMPO: readonly TipoDeCampo[] = [
