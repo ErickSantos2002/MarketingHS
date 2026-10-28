@@ -4,6 +4,8 @@ import {
   urlSegura, validarNoCliente,
   type CampoDaPagina, type ConfigDaPagina,
 } from "./campos";
+import { Agendamento } from "./Agendamento";
+import { podeAgendar } from "./agendamento";
 
 // Os cinco campos que o gatilho `trg_score_lead_on_change` observa são o que
 // qualifica um lead neste sistema: cargo, faturamento, funcionarios, desafios e
@@ -21,7 +23,7 @@ const ERRO_GERAL = "Não conseguimos registrar agora. Tente de novo.";
 const OBRIGADO_PADRAO =
   "Recebemos seus dados. Em breve alguém da Health & Safety entra em contato.";
 
-function utmDaUrl(): Record<string, string> {
+export function utmDaUrl(): Record<string, string> {
   const p = new URLSearchParams(window.location.search);
   const saida: Record<string, string> = {};
   for (const chave of ["utm_source", "utm_medium", "utm_campaign", "utm_term",
@@ -54,7 +56,7 @@ function lerErroDoServidor(corpo: unknown): { mensagem: string; campos: Record<s
   return { mensagem: ERRO_GERAL, campos: {} };
 }
 
-function Controle({ campo, valor, erro, aoMudar }: {
+export function Controle({ campo, valor, erro, aoMudar }: {
   campo: CampoDaPagina; valor: string; erro?: string; aoMudar: (v: string) => void;
 }) {
   const id = `campo-${campo.chave}`;
@@ -150,6 +152,10 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
   // formulário preenche. O servidor (`_caiu_no_honeypot`, R1) responde
   // sucesso sem gravar quando `fields.website` vem preenchido.
   const [isca, setIsca] = useState("");
+  // Agendamento (frente agendamento, 28/10): quem passou do corte de porte
+  // ganha, no obrigado, o atalho para marcar a reunião — com as etapas 1 e 2
+  // já preenchidas pelo que digitou aqui.
+  const [agendando, setAgendando] = useState(false);
 
   function focarPrimeiroErro(chaves: string[]) {
     const primeira = campos.find((c) => chaves.includes(c.chave))?.chave
@@ -219,11 +225,24 @@ export function Formulario({ slug, config }: { slug: string; config: ConfigDaPag
     // O formulário sai da tela de propósito — deixar os campos preenchidos
     // depois de um envio que já funcionou é o que convida a reenviar.
     // Texto puro: `mensagem_obrigado` nunca vira HTML.
+    const oferta = podeAgendar(config, valores);
     return (
       <div className="captura-sucesso" role="status">
         {(textoDaConfig(config.mensagem_obrigado) || OBRIGADO_PADRAO).split(/\n\s*\n/).map((p, i) => (
           <p key={i}>{p}</p>
         ))}
+        {oferta && (
+          <div className="agenda-oferta">
+            <p>Quer adiantar? Agende sua reunião agora.</p>
+            <button type="button" className="agenda-abrir" onClick={() => setAgendando(true)}>
+              Agendar reunião
+            </button>
+          </div>
+        )}
+        {agendando && (
+          <Agendamento slug={slug} config={config} onFechar={() => setAgendando(false)}
+                       inicial={{ valores, aceitou }} />
+        )}
       </div>
     );
   }

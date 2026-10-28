@@ -2343,3 +2343,359 @@ img {
     animation: none;
   }
 }
+
+/* ===================================================================
+ * Agendamento de reunião (Agendamento.tsx, frente agendamento, 28/10)
+ * O modal em etapas; reaproveita os campos do `.captura`.
+ * =================================================================== */
+
+.agenda-abrir {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 12px 20px;
+  border: 2px solid var(--landing-accent, #1a71a8);
+  border-radius: var(--raio-botao);
+  background: #ffffff;
+  color: var(--landing-accent, #1a71a8);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agenda-abrir:hover {
+  background: var(--fundo-frio);
+}
+
+.agenda-abrir:focus-visible,
+.agenda-modal button:focus-visible {
+  outline: 3px solid var(--tinta);
+  outline-offset: 2px;
+}
+
+.agenda-oferta {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--fio);
+}
+
+.agenda-oferta p {
+  margin: 0;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.agenda-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 12px;
+  overflow-y: auto;
+  background: rgba(8, 30, 51, 0.62);
+}
+
+.agenda-modal {
+  width: 100%;
+  max-width: 720px;
+  margin: auto 0;
+  padding: 22px clamp(16px, 4vw, 28px) 26px;
+  border-radius: var(--raio-cartao);
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--fonte);
+  box-shadow: 0 24px 60px rgba(5, 23, 42, 0.35);
+}
+
+.agenda-cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agenda-cabeca h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.agenda-meta {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: var(--tinta-apagada);
+}
+
+.agenda-fechar {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--raio-botao);
+  background: transparent;
+  color: var(--tinta-media);
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.agenda-fechar:hover {
+  background: var(--fundo-frio);
+}
+
+.agenda-passos {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.agenda-passos li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 3px solid var(--fio);
+  font-size: 0.78rem;
+  color: var(--tinta-apagada);
+}
+
+.agenda-passos li.feito,
+.agenda-passos li.atual {
+  border-top-color: var(--landing-accent, #1a71a8);
+}
+
+.agenda-passos li.atual {
+  color: var(--tinta);
+  font-weight: 700;
+}
+
+.agenda-numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--fundo-frio);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.agenda-passos li.atual .agenda-numero,
+.agenda-passos li.feito .agenda-numero {
+  background: var(--landing-accent, #1a71a8);
+  color: #ffffff;
+}
+
+@media (max-width: 479px) {
+  .agenda-rotulo-passo {
+    display: none;
+  }
+  .agenda-passos li.atual .agenda-rotulo-passo {
+    display: inline;
+  }
+}
+
+.agenda-horarios {
+  display: grid;
+  gap: 20px;
+}
+
+@media (min-width: 640px) {
+  .agenda-horarios {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.agenda-carregando,
+.agenda-dica {
+  margin: 0;
+  color: var(--tinta-apagada);
+}
+
+.agenda-mes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.agenda-mes button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--fio);
+  border-radius: var(--raio-botao);
+  background: #ffffff;
+  color: var(--tinta);
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+
+.agenda-mes button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.agenda-calendario table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.agenda-calendario th {
+  padding: 4px 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--tinta-apagada);
+}
+
+.agenda-calendario td {
+  padding: 2px;
+  text-align: center;
+}
+
+.agenda-dia {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 44px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  font-size: 0.9rem;
+}
+
+button.agenda-dia {
+  border: none;
+  background: var(--fundo-frio);
+  color: var(--landing-accent, #1a71a8);
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.agenda-dia:hover {
+  background: var(--fio);
+}
+
+button.agenda-dia.escolhido {
+  background: var(--landing-accent, #1a71a8);
+  color: #ffffff;
+}
+
+.agenda-dia.sem-vaga {
+  color: var(--fio-forte);
+}
+
+.agenda-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agenda-fuso {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--tinta-apagada);
+}
+
+.agenda-dia-escolhido {
+  margin: 0;
+  font-weight: 700;
+}
+
+.agenda-dia-escolhido::first-letter {
+  text-transform: uppercase;
+}
+
+.agenda-botoes-horario {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.agenda-horario {
+  min-height: 44px;
+  border: 1px solid var(--fio-forte);
+  border-radius: var(--raio-campo);
+  background: #ffffff;
+  color: var(--tinta);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agenda-horario:hover {
+  border-color: var(--landing-accent, #1a71a8);
+}
+
+.agenda-horario.escolhido {
+  border-color: var(--landing-accent, #1a71a8);
+  background: var(--landing-accent, #1a71a8);
+  color: #ffffff;
+}
+
+.agenda-botao {
+  min-height: 52px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: var(--raio-botao);
+  background: var(--landing-accent, #1a71a8);
+  color: var(--landing-accent-fg);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agenda-botao:hover:not(:disabled) {
+  background: var(--acao-escuro);
+}
+
+.agenda-botao:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.agenda-horarios .erro,
+.agenda-final .erro {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--raio-campo);
+  background: var(--erro-fundo);
+  color: var(--erro);
+  font-weight: 600;
+}
+
+.agenda-final {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agenda-final p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.agenda-final-titulo {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--led-verde-escuro);
+}
+
+.agenda-final p:first-letter {
+  text-transform: uppercase;
+}

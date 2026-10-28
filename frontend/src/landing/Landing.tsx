@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
 import { Formulario } from "./Formulario";
+import { BotaoAgendar } from "./Agendamento";
 import { COR_CTA_PADRAO } from "./padroes";
 import {
   consentimentoDaConfig, enderecoDaImagem, linkDoWhatsapp, paragrafosDoCorpo, textoDaConfig, urlSegura,
@@ -181,6 +182,7 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
           <h1>{headline}</h1>
           <p className="sub">{subheadline}</p>
           <Formulario slug={slug} config={config} />
+          <BotaoAgendar slug={slug} config={config} />
         </section>
         {whatsapp && <BotaoWhatsapp href={whatsapp} />}
       </main>
@@ -216,6 +218,7 @@ export function Landing({ slug, config }: { slug: string; config: ConfigDaPagina
           </div>
           <section id="formulario" className="topo-form" aria-label="Formulário de contato">
             <Formulario slug={slug} config={config} />
+            <BotaoAgendar slug={slug} config={config} />
           </section>
           {numerosNoTopo && (
             <div className="topo-numeros">
