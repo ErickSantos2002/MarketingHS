@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 
 from app import integracoes
 from app.agendamento import reserva
+from app.agendamento.config import ler_config
 from app.config import settings
 from app.crm import entrega, growthhs
 from app.database import sessao
@@ -47,7 +48,8 @@ FUSO = ZoneInfo("America/Sao_Paulo")
 UTC = timezone.utc
 REMETENTE_PADRAO = "MarketingHS <noreply@localhost>"
 LISTA_REUNIAO_PADRAO = 28
-ABANDONO = timedelta(minutes=30)
+# O menor `abandono_min` que a config aceita (app/agendamento/config.py).
+ABANDONO_MINIMO = timedelta(minutes=5)
 PRAZO_DA_REIVINDICACAO = timedelta(minutes=10)
 AGENDAMENTO_DE_TESTE = "lower(email) LIKE '%@exemplo.invalid'"
 DIAS_DA_SEMANA = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
@@ -128,13 +130,17 @@ async def _remetente() -> tuple[str | None, str, str]:
     return chave, de, responder
 
 
-async def alertar_admins(ag: dict, motivo: str) -> None:
+async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
     """E-mail a todo admin: a reunião que o lead acha confirmada não ficou
-    pronta. Uma vez só por reserva (`alerta_em`)."""
-    if ag.get("alerta_em") is not None:
+    pronta. Uma vez só por reserva (`alerta_em`).
+
+    `aviso=True` (card de outro vendedor, C1): a reunião FICOU pronta, mas
+    alguém precisa olhar — não grava `alerta_em` (o alerta de falha, se vier
+    depois, ainda sai); quem chama garante o "uma vez"."""
+    if not aviso and ag.get("alerta_em") is not None:
         return
     async with sessao(role="service_role") as conn:
-        if await conn.fetchval(
+        if not aviso and await conn.fetchval(
                 "SELECT alerta_em FROM reuniao_agendamentos WHERE id = $1", ag["id"]):
             return
         admins = [r["email"] for r in await conn.fetch(
@@ -154,18 +160,26 @@ async def alertar_admins(ag: dict, motivo: str) -> None:
              ("Vendedor", linha(ag.get("vendedor_nome") or ag.get("vendedor_id"))),
              ("Página", linha(ag.get("page_slug"))),
              ("Card no GrowthHS", linha(ag.get("card_id") or "não criado"))]
-    corpo = ("<p>Uma reunião agendada pela landing <strong>não ficou pronta</strong>. "
-             "O lead viu \"confirmado\" e o horário segue reservado para o vendedor — "
-             "confira no GrowthHS e fale com o lead.</p><ul>"
+    abertura = ("<p>Uma reunião agendada pela landing caiu num card de "
+                "<strong>outro vendedor</strong>. A reunião foi criada; confira no "
+                "GrowthHS quem atende o lead.</p><ul>" if aviso else
+                "<p>Uma reunião agendada pela landing <strong>não ficou pronta</strong>. "
+                "O lead viu \"confirmado\" e o horário segue reservado para o vendedor — "
+                "confira no GrowthHS e fale com o lead.</p><ul>")
+    corpo = (abertura
              + "".join(f"<li>{e(r)}: {e(str(v))}</li>" for r, v in itens) + "</ul>")
     for email in admins:
         try:
             await resend.enviar(chave=chave, de=de, para=email,
-                                assunto=f"[MarketingHS] Agendamento com falha — {dia} {hora}",
+                                assunto=(f"[MarketingHS] Agendamento com aviso — {dia} {hora}"
+                                         if aviso else
+                                         f"[MarketingHS] Agendamento com falha — {dia} {hora}"),
                                 html=corpo, texto=html_para_texto(corpo), cabecalhos={},
                                 responder_para=responder)
         except Exception:  # noqa: BLE001 — o alerta tenta os outros admins
             logger.exception("[agendamento] alerta da reserva %s não saiu", ag["id"])
+    if aviso:
+        return
     async with sessao(role="service_role") as conn:
         await conn.execute(
             "UPDATE reuniao_agendamentos SET alerta_em = now() WHERE id = $1", ag["id"])
@@ -206,6 +220,15 @@ async def _marcar_dado(ag_id, chave: str) -> None:
             "WHERE id = $1", ag_id, chave)
 
 
+async def _gravar_dado(ag: dict, chave: str, valor: str) -> None:
+    """Um texto em `dados` (o passo seguinte lê, mesmo depois de um retry)."""
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET dados = dados || jsonb_build_object($2::text, $3::text) "
+            "WHERE id = $1", ag["id"], chave, valor)
+    ag["dados"] = {**_dados(ag), chave: valor}
+
+
 async def _lead_e_origem(ag: dict) -> tuple[dict, dict | None, dict | None]:
     async with sessao(role="service_role") as conn:
         if ag.get("lead_id") is None:
@@ -228,21 +251,71 @@ async def _lead_e_origem(ag: dict) -> tuple[dict, dict | None, dict | None]:
     return dict(lead), conversao, consentimento
 
 
+async def _ler_aberto(cliente, card_id: int) -> dict | None:
+    """O card, se ainda existe e está aberto (M7: o card visto na etapa 3 pode
+    ter sido ganho, perdido ou apagado até a execução)."""
+    try:
+        card = await cliente.ler_card(card_id)
+    except growthhs.ErroDefinitivo as erro:
+        if erro.status == 404:
+            return None
+        raise
+    if card.get("is_won") or card.get("is_lost"):
+        return None
+    return {**card, "id": card.get("id", card_id)}
+
+
+async def _nome_do_vendedor(cliente, user_id: int) -> str:
+    try:
+        for v in await cliente.vendedores():
+            if v["id"] == int(user_id):
+                return v["nome"] or f"vendedor #{user_id}"
+    except (growthhs.ErroTransitorio, growthhs.ErroDefinitivo):
+        pass
+    return f"vendedor #{user_id}"
+
+
+async def _usar_card(ag: dict, card: dict, cliente) -> int:
+    """Usa um card aberto que já existe. Sem vendedor, ganha o da reserva.
+    De OUTRO vendedor (C1): o dono não muda — a reunião fica com o vendedor
+    da reserva, que é quem está livre e bloqueado no Outlook —, a nota diz
+    isso e os admins são avisados (em `_executar`)."""
+    card_id = int(card["id"])
+    dono = card.get("assigned_to_id")
+    if dono is None:
+        await cliente.atribuir_vendedor(card_id, int(ag["vendedor_id"]))
+    elif int(dono) != int(ag["vendedor_id"]):
+        da_reserva = ag.get("vendedor_nome") or await _nome_do_vendedor(cliente, ag["vendedor_id"])
+        do_card = await _nome_do_vendedor(cliente, int(dono))
+        aviso = (f"Reunião agendada pelo lead com {growthhs.uma_linha(da_reserva)}; "
+                 f"o card é de {growthhs.uma_linha(do_card)}.")
+        await _gravar_dado(ag, "aviso_dono", aviso)
+    return card_id
+
+
 async def _card(ag: dict, lead, conversao, consentimento, cfg, cliente) -> int:
     if ag.get("card_existente_id") is not None:
-        card_id = int(ag["card_existente_id"])
-        if (await cliente.ler_card(card_id)).get("assigned_to_id") is None:
-            await cliente.atribuir_vendedor(card_id, int(ag["vendedor_id"]))
-        return card_id
-    if ag["tentativas"] > 1:
-        # Retry: o card que uma tentativa anterior criou (201 perdido) é
-        # reconhecido pela assinatura — nunca o segundo card.
-        for c in await cliente.cards_da_pessoa(int(ag["person_id"])):
-            if not entrega._aberto(c):
-                continue
-            descricao = (await cliente.ler_card(int(c["id"]))).get("description")
-            if growthhs.card_do_pedido(descricao, ag["id"]):
-                return int(c["id"])
+        card = await _ler_aberto(cliente, int(ag["card_existente_id"]))
+        if card is not None:
+            return await _usar_card(ag, card, cliente)
+    # Os cards abertos da pessoa AGORA. O retry de um 201 perdido acha o
+    # nosso pela assinatura; e (C1) um card aberto que outro handoff criou
+    # depois da reserva — a jornada da captura normal, uma regra — é usado
+    # em vez de nascer o segundo card.
+    abertos = []
+    for c in await cliente.cards_da_pessoa(int(ag["person_id"])):
+        if not entrega._aberto(c):
+            continue
+        lido = await _ler_aberto(cliente, int(c["id"]))
+        if lido is None:
+            continue
+        if growthhs.card_do_pedido(lido.get("description"), ag["id"]):
+            return int(lido["id"])
+        abertos.append((growthhs.criado_em_utc(c), int(c["id"]), lido))
+    if abertos:
+        minimo = datetime.min.replace(tzinfo=UTC)
+        _, _, mais_novo = max(abertos, key=lambda t: (t[0] or minimo, t[1]))
+        return await _usar_card(ag, mais_novo, cliente)
     corpo = growthhs.montar_card(lead, cfg, conversao=conversao, consentimento=consentimento,
                                  person_id=int(ag["person_id"]),
                                  frontend_url=settings.FRONTEND_URL, pedido_id=ag["id"])
@@ -260,6 +333,9 @@ def _nota(ag, lead, conversao, consentimento) -> list[str]:
     dia, hora = _quando(ag)
     duracao = int((ag["fim"] - ag["inicio"]).total_seconds() // 60)
     linhas = [f"Reunião agendada pelo lead: {dia} às {hora} (Brasília), {duracao} min."]
+    aviso = _dados(ag).get("aviso_dono")
+    if aviso:
+        linhas.append(aviso)
     linhas += growthhs.nota_de_abertura(lead, conversao=conversao, consentimento=consentimento,
                                         frontend_url=settings.FRONTEND_URL,
                                         quando=datetime.now(UTC))
@@ -269,7 +345,21 @@ def _nota(ag, lead, conversao, consentimento) -> list[str]:
     return linhas
 
 
+class _Passou(_Falha):
+    """A reunião chegou (ou passou) sem ficar pronta: nada mais é criado."""
+
+
+MOTIVO_PASSOU = "reunião não pôde ser criada antes do horário"
+# A partir daqui (ou na 2ª falha seguida) os admins são avisados (I2).
+AVISAR_ANTES = timedelta(hours=3)
+MAX_TITULO_TAREFA = 255
+
+
 async def _executar(ag: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
+    if ag["inicio"] <= datetime.now(UTC):
+        # I2: nem card, nem convite, nem e-mail para uma reunião que já
+        # começou — o lead não estaria lá.
+        raise _Passou(MOTIVO_PASSOU)
     lead, conversao, consentimento = await _lead_e_origem(ag)
     if ag.get("person_id") is None:
         ag["person_id"] = await cliente.achar_ou_criar_pessoa(lead)
@@ -277,15 +367,20 @@ async def _executar(ag: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -
     if ag.get("card_id") is None:
         ag["card_id"] = await _card(ag, lead, conversao, consentimento, cfg, cliente)
         await asyncio.shield(_gravar(ag["id"], card_id=ag["card_id"]))
+    aviso = _dados(ag).get("aviso_dono")
+    if aviso and not _dados(ag).get("aviso_dono_enviado"):
+        await alertar_admins(ag, aviso, aviso=True)
+        await _marcar_dado(ag["id"], "aviso_dono_enviado")
     if not _dados(ag).get("nota_enviada"):
         await cliente.anotar(int(ag["card_id"]), _nota(ag, lead, conversao, consentimento))
         await asyncio.shield(_marcar_dado(ag["id"], "nota_enviada"))
     if ag.get("task_id") is None:
-        nome = growthhs.uma_linha(lead.get("nome")) or ag["email"]
+        nome = growthhs._cortar(lead.get("nome"), growthhs.MAX_NOME_PESSOA) or ag["email"]
         empresa = growthhs.uma_linha(lead.get("empresa"))
+        titulo = (f"Reunião: {nome}" + (f" — {empresa}" if empresa else ""))[:MAX_TITULO_TAREFA]
         tarefa = await cliente.criar_tarefa({
             "card_id": int(ag["card_id"]),
-            "title": f"Reunião: {nome}" + (f" — {empresa}" if empresa else ""),
+            "title": titulo,
             "task_type": "meeting", "meeting_kind": ag["_meeting_kind"],
             "assigned_to_id": int(ag["vendedor_id"]),
             "due_date": reserva.iso_z(ag["inicio"]),
@@ -331,19 +426,28 @@ async def _email_ao_vendedor(ag, lead, cfg, cliente) -> None:
 
 
 async def _tratar(ag: dict, erro: Exception) -> str:
+    """Transitório: re-tenta com espera crescente ENQUANTO a reunião não
+    chegou (I2). Os admins são avisados (uma vez, `alerta_em`) na 2ª falha
+    seguida ou quando faltam menos de 3 h. Definitivo, ou a reunião chegou:
+    `falhou` (o horário segue bloqueado) e alerta."""
     transitorio = isinstance(erro, growthhs.ErroTransitorio) or (
         isinstance(erro, growthhs.ErroDefinitivo)
         and (erro.de_configuracao or erro.status in entrega.STATUS_DE_CONFIGURACAO))
     texto = str(erro)[:400] or type(erro).__name__
-    if transitorio and ag["tentativas"] < entrega.MAX_TENTATIVAS:
+    agora = datetime.now(UTC)
+    if transitorio and ag["inicio"] > agora:
         espera = entrega.espera_transitoria(ag["tentativas"])
         async with sessao(role="service_role") as conn:
             await conn.execute(
                 """UPDATE reuniao_agendamentos SET visivel_em = now() + $2::interval,
                           erro = $3, atualizado_em = now() WHERE id = $1""",
                 ag["id"], espera, texto)
+        if ag["tentativas"] >= 2 or ag["inicio"] - agora < AVISAR_ANTES:
+            await alertar_admins(ag, f"ainda tentando criar a reunião: {texto}")
         return "adiadas"
-    await _gravar(ag["id"], status="falhou", erro=texto)
+    if transitorio:
+        texto = f"{MOTIVO_PASSOU} (último erro: {texto})"
+    await _gravar(ag["id"], status="falhou", erro=texto[:400])
     await alertar_admins(ag, texto)
     return "falhas"
 
@@ -384,17 +488,28 @@ async def rodar_agendamentos(*, limite: int = 10, cfg: growthhs.Config | None = 
 # ── Varredura ────────────────────────────────────────────────────────────────
 
 async def varrer(agora: datetime, *, somente_paginas: list[str] | None = None) -> dict:
-    """Rascunho parado há mais de 30 min vira lead comum (o lead desistiu no
+    """Rascunho parado há mais de `abandono_min` (30) vira lead comum (o lead desistiu no
     meio); se nem isso der, `abandonada`. Reunião criada/falhada que já
     passou vira `realizada` (sai dos índices únicos)."""
     resumo = {"lead_comum": 0, "abandonadas": 0, "realizadas": 0}
     filtro = ("page_slug = ANY($2::text[])" if somente_paginas is not None
               else f"NOT ({AGENDAMENTO_DE_TESTE}) AND $2::text[] IS NULL")
     async with sessao(role="service_role") as conn:
-        tokens = [r["token"] for r in await conn.fetch(
-            f"""SELECT token FROM reuniao_agendamentos
-                 WHERE status = 'rascunho' AND criado_em < $1 AND {filtro}
-                 ORDER BY criado_em LIMIT 100""", agora - ABANDONO, somente_paginas)]
+        # M1: o relógio é a ÚLTIMA mexida do lead (`atualizado_em` — toda
+        # chamada pública do token o toca), não a criação: quem está na etapa
+        # 3 escolhendo dia não é desistente. O corte é o `abandono_min` da
+        # página (padrão 30); `ABANDONO_MINIMO` só poda a busca.
+        parados = await conn.fetch(
+            f"""SELECT token, atualizado_em,
+                       (SELECT p.config FROM pages p
+                         WHERE p.slug = reuniao_agendamentos.page_slug) AS config
+                  FROM reuniao_agendamentos
+                 WHERE status = 'rascunho' AND atualizado_em < $1 AND {filtro}
+                 ORDER BY atualizado_em LIMIT 100""",
+            agora - ABANDONO_MINIMO, somente_paginas)
+        tokens = [r["token"] for r in parados
+                  if r["atualizado_em"] < agora - timedelta(
+                      minutes=ler_config(reserva._dados(r["config"])).abandono_min)]
         resumo["realizadas"] = int((await conn.execute(
             f"""UPDATE reuniao_agendamentos SET status = 'realizada', atualizado_em = now()
                  WHERE status IN ('criada', 'falhou') AND fim < $1 AND {filtro}""",

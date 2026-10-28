@@ -24,7 +24,22 @@ from growthhs_falso import CARDS, TAREFAS, GrowthHSFalso
 
 BRT = ZoneInfo("America/Sao_Paulo")
 UTC = timezone.utc
-AGORA = datetime(2026, 10, 28, 10, tzinfo=BRT)
+# Relógio de verdade: a execução compara `inicio` com `now()` (reunião que já
+# passou não é criada) — com data fixa a suíte quebraria no dia seguinte.
+AGORA = datetime.now(BRT)
+
+
+def _proximo_dia_util(dias: int = 2):
+    dia = AGORA.date() + timedelta(days=dias)
+    while dia.weekday() > 4:
+        dia += timedelta(days=1)
+    return dia
+
+
+_DIA = _proximo_dia_util()
+SLOT = datetime(_DIA.year, _DIA.month, _DIA.day, 12, tzinfo=BRT).astimezone(timezone.utc)
+SLOT_Z = SLOT.strftime("%Y-%m-%dT%H:%M:%SZ")
+DIA_BR, DIA_CURTO = _DIA.strftime("%d/%m/%Y"), _DIA.strftime("%d/%m")
 CFG = Config(base_url="https://growthhs.exemplo.invalid", client_id="hsg_ag",
              client_secret="segredo", list_id=22, boards_conferidos=(6, 7),
              app_url="https://app.exemplo.invalid", ambiente="homologacao")
@@ -74,9 +89,12 @@ async def _reservar(cenario, falso, email=None, inicio=None) -> str:
     token = await cenario.rascunho(email)
     async with Cliente(CFG, transporte=falso.transporte()) as cli:
         await reserva.horarios(token, agora=AGORA, cliente=cli)
-        r = await reserva.confirmar(token, inicio or _brt(29, 12), agora=AGORA, cliente=cli)
+        r = await reserva.confirmar(token, inicio or SLOT, agora=AGORA, cliente=cli)
     assert r["status"] == "reservada"
-    return str((await cenario.linha(token))["id"])
+    ag_id = str((await cenario.linha(token))["id"])
+    # A confirmação deixa a reserva invisível por 30 s (M3); o teste não espera.
+    await _liberar(ag_id)
+    return ag_id
 
 
 async def _rodar(falso, ag_id):
@@ -109,15 +127,15 @@ async def test_cria_card_28_com_vendedor_nota_tarefa_sala_e_email(cenario, falso
     assert card["acquisition_channel"] == "Inbound"
     assert f"Pedido MarketingHS: {ag_id}" in card["description"]
     nota = falso.notas[0]["content"]
-    assert nota.startswith("Reunião agendada pelo lead: 29/10/2026 às 12:00 (Brasília), 60 min.")
+    assert nota.startswith(f"Reunião agendada pelo lead: {DIA_BR} às 12:00 (Brasília), 60 min.")
     tarefa = falso.tarefas[linha["task_id"]]
     assert tarefa["task_type"] == "meeting" and tarefa["meeting_kind"] == "apresentacao_phoebus"
-    assert tarefa["assigned_to_id"] == A and tarefa["due_date"] == "2026-10-29T15:00:00Z"
+    assert tarefa["assigned_to_id"] == A and tarefa["due_date"] == SLOT_Z
     assert tarefa["duration_minutes"] == 60 and tarefa["invited_emails"] == [linha["email"]]
     assert falso.salas == [linha["task_id"]] and linha["public_link"]
     (email,) = resend_falso["enviados"]
     assert email["para"] == f"v{A}@hs.invalid"
-    assert email["assunto"] == "Reunião agendada: Acme <b> — 29/10 às 12:00"
+    assert email["assunto"] == f"Reunião agendada: Acme <b> — {DIA_CURTO} às 12:00"
     assert "https://app.exemplo.invalid/cards/" in email["html"]
     # Nada a fazer na passada seguinte.
     assert await _rodar(falso, ag_id) == {"criadas": 0, "adiadas": 0, "falhas": 0}
@@ -195,8 +213,8 @@ async def test_falhou_continua_bloqueando_o_horario(cenario, falso, resend_falso
     token = await cenario.rascunho()
     async with Cliente(CFG, transporte=falso.transporte()) as cli:
         h = await reserva.horarios(token, agora=AGORA, cliente=cli)
-        assert "2026-10-29T15:00:00Z" not in [x for d in h["dias"] for x in d["horarios"]]
-        assert await reserva.confirmar(token, _brt(29, 12), agora=AGORA, cliente=cli) == {
+        assert SLOT_Z not in [x for d in h["dias"] for x in d["horarios"]]
+        assert await reserva.confirmar(token, SLOT, agora=AGORA, cliente=cli) == {
             "status": "ocupado"}
 
 
@@ -256,8 +274,12 @@ async def test_varrer_rascunho_de_31_min_vira_lead_comum(cenario):
     velho, novo = await cenario.rascunho(), await cenario.rascunho()
     async with db.sessao(role="service_role") as conn:
         await conn.execute(
-            "UPDATE reuniao_agendamentos SET criado_em = now() - interval '31 minutes' "
-            "WHERE token = $1", velho)
+            "UPDATE reuniao_agendamentos SET criado_em = now() - interval '31 minutes', "
+            "atualizado_em = now() - interval '31 minutes' WHERE token = $1", velho)
+        # Criado há muito, mas mexido agora (o lead está na etapa 3): fica.
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET criado_em = now() - interval '2 hours' "
+            "WHERE token = $1", novo)
     r = await execucao.varrer(datetime.now(UTC), somente_paginas=[cenario.slug])
     assert r["lead_comum"] == 1
     assert (await cenario.linha(velho))["status"] == "lead_comum"
@@ -270,10 +292,137 @@ async def test_varrer_reuniao_passada_vira_realizada(cenario, falso):
     async with db.sessao(role="service_role") as conn:
         await conn.execute(
             "UPDATE reuniao_agendamentos SET status = 'criada' WHERE id = $1::uuid", ag_id)
-    r = await execucao.varrer(_brt(29, 13, 1), somente_paginas=[cenario.slug])
+    r = await execucao.varrer(SLOT + timedelta(minutes=61), somente_paginas=[cenario.slug])
     assert r["realizadas"] == 1
     assert (await _linha(ag_id))["status"] == "realizada"
     # Saiu dos índices: o mesmo e-mail pode agendar de novo.
-    r2 = await execucao.varrer(_brt(29, 12, 30) - timedelta(days=1),
+    r2 = await execucao.varrer(SLOT - timedelta(days=1),
                                somente_paginas=[cenario.slug])
     assert r2["realizadas"] == 0
+
+
+
+# ── Revisão final da branch (28/10) ──────────────────────────────────────────
+
+async def _alertas(resend_falso):
+    return [e for e in resend_falso["enviados"] if "Agendamento" in e["assunto"]]
+
+
+async def test_c1_card_aberto_criado_depois_da_reserva_e_usado(cenario, falso, resend_falso):
+    """Outro handoff (a jornada da captura normal, uma regra) criou o card A
+    entre a reserva e a execução: a execução usa A, não cria B. O dono de A é
+    outro vendedor: o card não muda de dono, a reunião fica com o da reserva,
+    a nota diz isso e os admins são avisados."""
+    await cenario.roleta(A)
+    email = cenario.email("paralelo")
+    ag_id = await _reservar(cenario, falso, email)
+    card_a = falso.card(falso.pessoa(email=email))
+    falso.cards[card_a]["assigned_to_id"] = B
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    linha = await _linha(ag_id)
+    assert linha["card_id"] == card_a
+    assert falso.de("POST", CARDS) == []
+    assert falso.cards[card_a]["assigned_to_id"] == B          # dono não trocado
+    assert falso.tarefas[linha["task_id"]]["assigned_to_id"] == A
+    nota = falso.notas[0]["content"]
+    assert f"com Vendedor {A}; o card é de Vendedor {B}" in nota
+    alertas = await _alertas(resend_falso)
+    assert len(alertas) == 1 and "o card é de" in alertas[0]["html"]
+
+
+async def test_c1_card_aberto_sem_vendedor_ganha_o_da_reserva(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    email = cenario.email("paralelo2")
+    ag_id = await _reservar(cenario, falso, email)
+    card_a = falso.card(falso.pessoa(email=email))
+    await _rodar(falso, ag_id)
+    assert (await _linha(ag_id))["card_id"] == card_a
+    assert falso.cards[card_a]["assigned_to_id"] == A
+    assert falso.de("POST", CARDS) == [] and await _alertas(resend_falso) == []
+
+
+async def test_m7_card_existente_ganho_cai_no_card_novo(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    email = cenario.email("ganho")
+    antigo = falso.card(falso.pessoa(email=email))
+    falso.cards[antigo]["assigned_to_id"] = A
+    ag_id = await _reservar(cenario, falso, email)
+    assert (await _linha(ag_id))["card_existente_id"] == antigo
+    falso.cards[antigo]["is_won"] = True
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    linha = await _linha(ag_id)
+    assert linha["card_id"] != antigo and len(falso.de("POST", CARDS)) == 1
+    assert falso.cards[linha["card_id"]]["assigned_to_id"] == A
+
+
+async def test_m7_card_existente_sumido_cai_no_card_novo(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    email = cenario.email("sumido")
+    antigo = falso.card(falso.pessoa(email=email))
+    falso.cards[antigo]["assigned_to_id"] = A
+    ag_id = await _reservar(cenario, falso, email)
+    del falso.cards[antigo]
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    assert len(falso.de("POST", CARDS)) == 1
+
+
+async def test_i2_reuniao_que_ja_passou_nao_e_criada(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET inicio = now() - interval '1 hour', "
+            "fim = now() WHERE id = $1::uuid", ag_id)
+    falso.pedidos.clear()
+    assert (await _rodar(falso, ag_id))["falhas"] == 1
+    linha = await _linha(ag_id)
+    assert linha["status"] == "falhou" and "antes do horário" in linha["erro"]
+    assert falso.pedidos == [] and falso.tarefas == {} and falso.salas == []
+    assert len(await _alertas(resend_falso)) == 1
+    assert all("Reunião agendada" not in e["assunto"] for e in resend_falso["enviados"])
+
+
+async def test_i2_segunda_falha_alerta_e_continua_tentando(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.forcar[("POST", TAREFAS + "/")] = [httpx.Response(503, json={"detail": "x"})] * 2
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    assert await _alertas(resend_falso) == []                  # 1ª falha, longe do horário
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    assert len(await _alertas(resend_falso)) == 1              # 2ª seguida: avisa
+    linha = await _linha(ag_id)
+    assert linha["status"] == "reservada" and linha["alerta_em"] is not None
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    assert len(await _alertas(resend_falso)) == 1              # uma vez só
+
+
+async def test_i2_perto_do_horario_alerta_na_primeira_falha(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET inicio = now() + interval '2 hours', "
+            "fim = now() + interval '3 hours' WHERE id = $1::uuid", ag_id)
+    falso.forcar[("POST", TAREFAS + "/")] = [httpx.Response(503, json={"detail": "x"})]
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    assert len(await _alertas(resend_falso)) == 1
+    assert (await _linha(ag_id))["status"] == "reservada"
+
+
+async def test_titulo_da_tarefa_cortado(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    token = await cenario.rascunho(dados={"colunas": {
+        "nome": "N" * 400, "empresa": "E" * 400, "funcionarios": "401 a 1.000",
+        "whatsapp": "+5581999990000", "cargo": "x"}})
+    async with Cliente(CFG, transporte=falso.transporte()) as cli:
+        await reserva.horarios(token, agora=AGORA, cliente=cli)
+        assert (await reserva.confirmar(token, SLOT, agora=AGORA, cliente=cli))["status"] \
+            == "reservada"
+    ag_id = str((await cenario.linha(token))["id"])
+    await _liberar(ag_id)
+    await _rodar(falso, ag_id)
+    tarefa = next(iter(falso.tarefas.values()))
+    assert len(tarefa["title"]) <= 255
+    assert len(falso.cards[(await _linha(ag_id))["card_id"]]["title"]) <= growthhs.MAX_TITULO
