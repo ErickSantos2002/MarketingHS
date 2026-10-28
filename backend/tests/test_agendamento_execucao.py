@@ -236,6 +236,78 @@ def test_email_do_vendedor_escapa_html():
     assert "Filiais: 2 a 5" in texto and "testes_por_dia: <img src=x>" in texto
 
 
+ROTULO_TESTES = "Quantas pessoas passariam pelo teste por dia?"
+
+
+def test_email_do_vendedor_usa_o_rotulo_do_campo_extra():
+    """Ajuste da homologação (28/10): o vendedor lia `testes_por_dia`. Com a
+    definição na config da página, vai o rótulo; sem ela, a chave."""
+    ag = {"inicio": _brt(29, 12), "fim": _brt(29, 13), "email": "x@exemplo.invalid",
+          "page_slug": "phoebus",
+          "dados": {"colunas": {"nome": "Joana"},
+                    "extras": {"testes_por_dia": "<b>40</b>", "outro": "sem definição"}}}
+    _, corpo, texto = execucao.montar_email_vendedor(
+        ag, {"email": "x@exemplo.invalid"}, None,
+        rotulos={"testes_por_dia": ROTULO_TESTES})
+    assert f"{ROTULO_TESTES}: <b>40</b>" in texto
+    assert "testes_por_dia" not in texto and "testes_por_dia" not in corpo
+    assert "outro: sem definição" in texto
+    assert "&lt;b&gt;40&lt;/b&gt;" in corpo
+
+
+def test_rotulos_da_config_da_pagina():
+    from agendamento_banco import config_da_pagina
+    config = config_da_pagina()
+    config["campos"].append({"chave": "testes_por_dia", "rotulo": ROTULO_TESTES,
+                             "tipo": "texto", "obrigatorio": False})
+    rotulos = execucao.rotulos_dos_campos(config)
+    assert rotulos["testes_por_dia"] == ROTULO_TESTES
+    assert rotulos["filiais"] == "Quantas filiais?"
+    assert execucao.rotulos_dos_campos(None).get("testes_por_dia") is None
+
+
+def test_nota_so_acrescenta_o_que_a_nota_padrao_nao_mostra():
+    ag = {"inicio": _brt(29, 12), "fim": _brt(29, 13), "email": "x@exemplo.invalid",
+          "_rotulos": {"filiais": "Quantas filiais?", "novo": "Pergunta nova?"},
+          "dados": {"colunas": {"empresa": "Acme"},
+                    "extras": {"filiais": "2 a 5", "novo": "sim", "utm_source": "g"}}}
+    lead = {"id": "x", "empresa": "Acme", "campos_extras": {"filiais": "2 a 5"}}
+    nota = execucao._nota(ag, lead, None, None)
+    assert nota[0].startswith("Reunião agendada pelo lead: 29/10/2026 às 12:00")
+    texto = "\n".join(nota)
+    assert texto.count("2 a 5") == 1 and "- Quantas filiais?: 2 a 5" in texto
+    assert nota[-1] == "- Pergunta nova?: sim"
+    assert "Filiais: 2 a 5" not in texto and "utm_source" not in texto
+
+
+async def test_nota_e_email_com_rotulo_e_sem_filiais_repetida(cenario, falso, resend_falso):
+    """A nota do card mostrava a chave do campo extra e repetia "Filiais: 2 a
+    5" no fim (já estava em "Respostas do formulário")."""
+    from agendamento_banco import DADOS_COMPLETOS, config_da_pagina
+    config = config_da_pagina()
+    config["campos"].append({"chave": "testes_por_dia", "rotulo": ROTULO_TESTES,
+                             "tipo": "texto", "obrigatorio": False})
+    await cenario.trocar_config(config)
+    await cenario.roleta(A)
+    dados = {"colunas": dict(DADOS_COMPLETOS["colunas"]),
+             "extras": {"filiais": "2 a 5", "testes_por_dia": "40"}}
+    token = await cenario.rascunho(dados=dados)
+    async with Cliente(CFG, transporte=falso.transporte()) as cli:
+        await reserva.horarios(token, agora=AGORA, cliente=cli)
+        r = await reserva.confirmar(token, SLOT, agora=AGORA, cliente=cli)
+    assert r["status"] == "reservada"
+    ag_id = str((await cenario.linha(token))["id"])
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    nota = falso.notas[0]["content"]
+    assert nota.startswith(f"Reunião agendada pelo lead: {DIA_BR} às 12:00")
+    assert f"{ROTULO_TESTES}: 40" in nota and "testes_por_dia" not in nota
+    assert nota.count("2 a 5") == 1 and "Quantas filiais?: 2 a 5" in nota
+    assert "Filiais: 2 a 5" not in nota
+    (email,) = resend_falso["enviados"]
+    assert f"{ROTULO_TESTES}: 40" in email["texto"] and "testes_por_dia" not in email["texto"]
+
+
 async def test_alerta_nao_repete(cenario, falso, resend_falso):
     await cenario.roleta(A)
     ag_id = await _reservar(cenario, falso)
