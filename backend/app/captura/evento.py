@@ -26,6 +26,18 @@ worker chama `journey_enroll_event(lead, tipo, metadata)`, que aplica o filtro
 CHAVE_DA_PAGINA = "marketinghs.page_slug"
 CHAVE_DO_FORMULARIO = "marketinghs.form_id"
 CHAVE_DO_SITE = "marketinghs.site_id"
+# 036 (agendamento, 28/10): a conversão veio de um agendamento CONFIRMADO. O
+# `fn_lead_insert_event` põe a marca no metadata, e a `journey_enroll_event`
+# não matricula o lead em jornada com nó `handoff_growthhs` — o agendamento
+# já cria o card.
+CHAVE_DO_AGENDAMENTO = "marketinghs.agendamento"
+
+
+async def marcar_agendamento(conn, ligado: bool) -> None:
+    """Marca (ou desmarca) a conversão desta transação como agendamento.
+    `SET LOCAL`, como `marcar_pagina`."""
+    await conn.execute("SELECT set_config($1, $2, true)", CHAVE_DO_AGENDAMENTO,
+                       "true" if ligado else "")
 
 
 async def marcar_pagina(conn, page_slug: str | None, *, form_id: str | None = None,
@@ -51,7 +63,8 @@ async def marcar_pagina(conn, page_slug: str | None, *, form_id: str | None = No
 async def publicar_conversao(conn, lead_id: str, page_slug: str | None, *,
                              origem: str, form_id: str | None = None,
                              site_id: str | None = None,
-                             informados: list[dict] | None = None) -> None:
+                             informados: list[dict] | None = None,
+                             agendamento: bool = False) -> None:
     """`form_submitted` com a origem, para contato que JÁ existia.
 
     `origem` vai no metadata (`captura`, `api` ou `site`) — a linha do tempo
@@ -62,6 +75,10 @@ async def publicar_conversao(conn, lead_id: str, page_slug: str | None, *,
     contato (`captura.informados.divergencias`), em
     `metadata.informados_diferentes` — a linha do tempo mostra. Sem
     diferença, a chave não entra.
+
+    `agendamento` (036): `"agendamento": true` no metadata — a reconversão
+    de quem confirmou um agendamento não entra em jornada de handoff. Sem
+    ele, a chave não entra.
     """
     await conn.execute(
         """INSERT INTO contact_events (lead_id, dnia_id, source_app, event_type,
@@ -76,5 +93,7 @@ async def publicar_conversao(conn, lead_id: str, page_slug: str | None, *,
                                      'site_id', $5::text)
                   || CASE WHEN $6::jsonb IS NULL THEN '{}'::jsonb
                           ELSE jsonb_build_object('informados_diferentes', $6::jsonb) END
+                  || CASE WHEN $7::boolean THEN jsonb_build_object('agendamento', true)
+                          ELSE '{}'::jsonb END
              FROM leads l WHERE l.id = $1::uuid""",
-        lead_id, page_slug, origem, form_id, site_id, informados or None)
+        lead_id, page_slug, origem, form_id, site_id, informados or None, agendamento)

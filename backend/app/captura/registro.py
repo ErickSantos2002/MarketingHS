@@ -19,7 +19,7 @@ import logging
 from dataclasses import dataclass
 
 from app.ab.costura import Ab, registrar_conversao_ab
-from app.captura.evento import marcar_pagina, publicar_conversao
+from app.captura.evento import marcar_agendamento, marcar_pagina, publicar_conversao
 from app.captura.informados import dados_informados, divergencias
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,8 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
                             consentimento: Consentimento | None, tags: list[str],
                             utm_da_conversao: dict | None = None,
                             canal_origem: str = "captura",
-                            sql_identidade: str | None = None) -> str:
+                            sql_identidade: str | None = None,
+                            agendamento: bool = False) -> str:
     """Grava a captura e devolve o `lead_id`. `conn` já está numa transação
     (`sessao()`), e tudo aqui acontece nela.
 
@@ -89,7 +90,31 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
     conversão (`dados_informados`, migration 031), e no evento de reconversão
     vai o que difere do contato (`informados_diferentes`) — o contato em si
     continua sem ser sobrescrito (`_atualizar`).
+
+    `agendamento` (036, 28/10): a captura de quem CONFIRMOU um agendamento
+    leva a marca no evento de conversão (novo: pelo gatilho; existente: pela
+    reconversão) e não entra em jornada com nó `handoff_growthhs` — o
+    agendamento cria o card, a jornada criaria o segundo.
     """
+    # ⚠️ Sem `finally`, como a marca da página em `_inserir`: se algo falha,
+    # a transação já está abortada (e a marca morre com ela) — desmarcar ali
+    # levantaria outro erro por cima do verdadeiro.
+    if agendamento:
+        await marcar_agendamento(conn, True)
+    lead_id = await _registrar(conn, email=email, campos=campos, extras=extras,
+                               origem=origem, session_id=session_id,
+                               consentimento=consentimento, tags=tags,
+                               utm_da_conversao=utm_da_conversao,
+                               canal_origem=canal_origem, sql_identidade=sql_identidade,
+                               agendamento=agendamento)
+    if agendamento:
+        await marcar_agendamento(conn, False)
+    return lead_id
+
+
+async def _registrar(conn, *, email, campos, extras, origem, session_id, consentimento,
+                     tags, utm_da_conversao, canal_origem, sql_identidade,
+                     agendamento) -> str:
     informados = dados_informados(campos, extras)
     # ⚠️ `lower(email)`, não `email = $1`. `leads_email_unique` é única na
     # coluna CRUA, sem `lower()` — uma linha antiga gravada como
@@ -134,7 +159,8 @@ async def registrar_captura(conn, *, email: str, campos: dict, extras: dict,
         await publicar_conversao(conn, lead_id, origem.page_slug, origem=canal_origem,
                                  form_id=origem.form_id, site_id=origem.site_id,
                                  informados=await _diferentes_do_contato(
-                                     conn, lead_id, informados))
+                                     conn, lead_id, informados),
+                                 agendamento=agendamento)
 
     await _resolver_identidade(conn, lead_id, email, campos, sql=sql_identidade)
 
