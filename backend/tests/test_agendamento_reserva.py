@@ -309,3 +309,83 @@ async def test_ja_tem_nao_devolve_horario(cenario, falso):
     r = await _confirmar(falso, intruso, _brt(30, 9))
     assert r == {"status": "ja_tem"}
     assert "2026-10-29" not in json.dumps(r) and "Vendedor" not in json.dumps(r)
+
+
+# ── Revisão final da branch (28/10) ──────────────────────────────────────────
+
+async def _lead_com_card_de(cenario, falso, vendedor):
+    email = cenario.email("fixo")
+    card = falso.card(falso.pessoa(email=email))
+    falso.cards[card]["assigned_to_id"] = vendedor
+    token = await cenario.rascunho(email)
+    await _horarios(falso, token)
+    assert (await cenario.linha(token))["vendedor_id"] == vendedor
+    return token
+
+
+async def test_i1_vendedor_fixo_sobreposicao_simultanea(cenario, falso, monkeypatch):
+    """Dois leads com card do MESMO vendedor confirmam 12:00 e 12:30 (60 min)
+    ao mesmo tempo: os horários se sobrepõem sem ter o mesmo início — o índice
+    único não pega; a trava do ambiente e a conferência por sobreposição sim.
+    A leitura das reservas espera um pouco, para as duas transações lerem
+    antes de qualquer uma gravar (sem trava, as duas passariam)."""
+    lenta = reserva._reservas_proprias
+
+    async def devagar(*a, **kw):
+        linhas = await lenta(*a, **kw)
+        await asyncio.sleep(0.3)
+        return linhas
+
+    monkeypatch.setattr(reserva, "_reservas_proprias", devagar)
+    await cenario.roleta(A)
+    t1 = await _lead_com_card_de(cenario, falso, C)
+    t2 = await _lead_com_card_de(cenario, falso, C)
+    r1, r2 = await asyncio.gather(_confirmar(falso, t1, _brt(29, 12)),
+                                  _confirmar(falso, t2, _brt(29, 12, 30)))
+    assert sorted([r1["status"], r2["status"]]) == ["ocupado", "reservada"]
+
+
+async def test_i1_sobreposicao_em_sequencia(cenario, falso):
+    await cenario.roleta(A)
+    t1 = await _lead_com_card_de(cenario, falso, C)
+    t2 = await _lead_com_card_de(cenario, falso, C)
+    assert (await _confirmar(falso, t1, _brt(29, 12)))["status"] == "reservada"
+    assert await _confirmar(falso, t2, _brt(29, 11, 30)) == {"status": "ocupado"}
+    assert (await _confirmar(falso, t2, _brt(29, 13)))["status"] == "reservada"
+
+
+async def test_m2_ja_tem_de_outro_token_abandona_o_rascunho(cenario, falso):
+    await cenario.roleta(A, B)
+    email = cenario.email("m2")
+    dono = await cenario.rascunho(email)
+    assert (await _confirmar(falso, dono, _brt(29, 12)))["status"] == "reservada"
+    outro = await cenario.rascunho(email)
+    assert await _confirmar(falso, outro, _brt(30, 9)) == {"status": "ja_tem"}
+    assert (await cenario.linha(outro))["status"] == "abandonada"
+    assert (await cenario.linha(dono))["status"] == "reservada"
+
+
+async def test_m3_reserva_so_fica_visivel_depois_de_30_s(cenario, falso):
+    await cenario.roleta(A)
+    token = await cenario.rascunho()
+    assert (await _confirmar(falso, token, _brt(29, 12)))["status"] == "reservada"
+    async with db.sessao(role="service_role") as conn:
+        segundos = await conn.fetchval(
+            "SELECT extract(epoch FROM visivel_em - now()) FROM reuniao_agendamentos "
+            "WHERE token = $1", token)
+    assert 20 < segundos <= 30
+
+
+async def test_m1_confirmar_ocupado_conta_como_mexida(cenario, falso):
+    await cenario.roleta(A)
+    falso.ocupar(A, _z(_brt(29, 12)), _z(_brt(29, 13)))
+    token = await cenario.rascunho()
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET atualizado_em = now() - interval '1 hour' "
+            "WHERE token = $1", token)
+    assert await _confirmar(falso, token, _brt(29, 12)) == {"status": "ocupado"}
+    async with db.sessao(role="service_role") as conn:
+        assert await conn.fetchval(
+            "SELECT atualizado_em > now() - interval '1 minute' FROM reuniao_agendamentos "
+            "WHERE token = $1", token)

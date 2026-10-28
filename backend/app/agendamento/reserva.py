@@ -240,6 +240,15 @@ async def horarios(token: str, *, agora: datetime, cliente) -> dict:
 
 # ── Confirmação ──────────────────────────────────────────────────────────────
 
+async def _abandonar(conn, token: str) -> None:
+    """M2: o rascunho que esbarrou na reserva de OUTRO token com o mesmo
+    e-mail sai de cena — o lead já está registrado pela outra, e a
+    varredura não deve virá-lo lead comum de novo."""
+    await conn.execute(
+        """UPDATE reuniao_agendamentos SET status = 'abandonada', atualizado_em = now()
+            WHERE token = $1 AND status = 'rascunho'""", token)
+
+
 def _ja_tem(_linha=None) -> dict:
     """⚠️ Sem dia nem hora (revisão de segurança, 28/10): o e-mail digitado
     não é verificado — devolver o horário da reserva de OUTRO token deixaria
@@ -269,8 +278,13 @@ async def confirmar(token: str, inicio: datetime, *, agora: datetime, cliente) -
             return _ja_tem(ag)  # clique duplo: a mesma reserva
         if ag["status"] != "rascunho":
             raise TokenDesconhecido(token)
+        # M1: toda chamada pública conta como mexida — a varredura só
+        # abandona quem parou de mexer, inclusive quem leva "ocupado".
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET atualizado_em = now() WHERE token = $1", token)
         outra = await _outra_viva(conn, ag)
         if outra is not None:
+            await _abandonar(conn, token)
             return _ja_tem(outra)
         cfg = await _config_da_pagina(conn, ag["page_slug"])
         roleta = await _candidatos(conn, ag)
@@ -301,6 +315,13 @@ async def confirmar(token: str, inicio: datetime, *, agora: datetime, cliente) -
     # (3) Transação: trava, desconta, escolhe, grava.
     try:
         async with sessao(role="service_role") as conn:
+            # I1: UMA confirmação por ambiente de cada vez, nos dois caminhos
+            # (roleta e vendedor fixo do card aberto). Sem isto, duas
+            # confirmações de horários que se SOBREPÕEM sem o mesmo início
+            # (12:00 e 12:30, 60 min) liam as reservas ao mesmo tempo e
+            # passavam as duas — o índice único só pega início idêntico.
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtext('reuniao:' || $1))",
+                               ag["ambiente"])
             ag = await _ler(conn, token, travar=True)
             if ag["status"] in VIVAS:
                 return _ja_tem(ag)
@@ -321,7 +342,9 @@ async def confirmar(token: str, inicio: datetime, *, agora: datetime, cliente) -
             await conn.execute(
                 """UPDATE reuniao_agendamentos
                       SET status = 'reservada', vendedor_id = $2, vendedor_nome = $3,
-                          vendedor_email = $4, inicio = $5, fim = $6, visivel_em = now(),
+                          vendedor_email = $4, inicio = $5, fim = $6,
+                          -- M3: a fila só pega depois do registro do lead.
+                          visivel_em = now() + interval '30 seconds',
                           atualizado_em = now()
                     WHERE token = $1""",
                 token, escolhido, nome, email, inicio, fim)
@@ -335,6 +358,8 @@ async def confirmar(token: str, inicio: datetime, *, agora: datetime, cliente) -
         if erro.constraint_name == "uniq_reuniao_email_futura":
             async with sessao(role="service_role") as conn:
                 outra = await _outra_viva(conn, ag)
+                if outra is not None:
+                    await _abandonar(conn, token)
             if outra is not None:
                 return _ja_tem(outra)
         return {"status": "ocupado"}
