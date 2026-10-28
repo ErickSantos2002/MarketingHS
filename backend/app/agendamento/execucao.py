@@ -36,6 +36,8 @@ from zoneinfo import ZoneInfo
 from app import integracoes
 from app.agendamento import reserva
 from app.agendamento.config import ler_config
+from app.captura.campos import ler_definicoes
+from app.captura.informados import CAMPOS_INFORMADOS
 from app.config import settings
 from app.crm import entrega, growthhs
 from app.database import sessao
@@ -64,6 +66,37 @@ def _dados(ag) -> dict:
     return reserva._dados(ag["dados"])
 
 
+# O que a nota de abertura e o e-mail ao vendedor já mostram por nome (ou que
+# não é resposta do lead): não vai de novo como resposta avulsa.
+CHAVES_DE_CONTROLE = frozenset({
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "source", "ab_test", "ab_var", "ab_vid", "tipo", "status"})
+CHAVES_JA_MOSTRADAS = CHAVES_DE_CONTROLE | {
+    "nome", "empresa", "cargo", "email", "whatsapp", "funcionarios", "filiais"}
+
+
+def rotulos_dos_campos(config) -> dict[str, str]:
+    """chave -> rótulo dos campos da página (`ler_definicoes`). Ajuste da
+    homologação (28/10): o vendedor lia `testes_por_dia` em vez da pergunta."""
+    return {d.chave: d.rotulo for d in ler_definicoes(reserva._dados(config)) if d.rotulo}
+
+
+def _rotulo(chave: str, rotulos: dict[str, str] | None) -> str:
+    return (rotulos or {}).get(chave) or chave
+
+
+def _trocar_chaves(respostas, rotulos: dict[str, str] | None):
+    """As respostas com o rótulo no lugar da chave. Rótulo que dois campos
+    dividem, ou que é a chave de outro campo, fica na chave: duas respostas
+    não podem virar uma."""
+    if not isinstance(respostas, dict):
+        return respostas
+    rotulos = rotulos or {}
+    valores = list(rotulos.values())
+    mapa = {c: r for c, r in rotulos.items() if valores.count(r) == 1 and r not in rotulos}
+    return {mapa.get(chave, chave): valor for chave, valor in respostas.items()}
+
+
 def _quando(ag) -> tuple[str, str]:
     inicio = ag["inicio"].astimezone(FUSO)
     return inicio.strftime("%d/%m/%Y"), inicio.strftime("%H:%M")
@@ -71,9 +104,12 @@ def _quando(ag) -> tuple[str, str]:
 
 # ── E-mails ──────────────────────────────────────────────────────────────────
 
-def montar_email_vendedor(ag: dict, lead: dict, url_card: str | None) -> tuple[str, str, str]:
+def montar_email_vendedor(ag: dict, lead: dict, url_card: str | None, *,
+                          rotulos: dict[str, str] | None = None) -> tuple[str, str, str]:
     """(assunto, html, texto) do aviso ao vendedor. Tudo que veio do
-    formulário público passa por `html.escape` (e por `uma_linha`)."""
+    formulário público passa por `html.escape` (e por `uma_linha`). As
+    respostas avulsas saem com o rótulo do campo na página (`rotulos`),
+    a chave só quando a página não define o campo."""
     dados = reserva._dados(ag.get("dados"))
     respostas = reserva.respostas(dados)
     inicio = ag["inicio"].astimezone(FUSO)
@@ -93,12 +129,9 @@ def montar_email_vendedor(ag: dict, lead: dict, url_card: str | None) -> tuple[s
         ("WhatsApp", campo("whatsapp")),
         ("Funcionários", campo("funcionarios")), ("Filiais", campo("filiais")),
     ]
-    vistos = {"nome", "empresa", "cargo", "email", "whatsapp", "funcionarios", "filiais",
-              "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-              "source", "ab_test", "ab_var", "ab_vid", "tipo", "status"}
     for chave, valor in respostas.items():
-        if chave not in vistos and linha(valor):
-            itens.append((linha(chave), linha(valor)))
+        if chave not in CHAVES_JA_MOSTRADAS and linha(valor):
+            itens.append((linha(_rotulo(chave, rotulos)), linha(valor)))
     itens.append(("Página de origem", linha(ag.get("page_slug"))))
     if linha(respostas.get("utm_campaign")):
         itens.append(("Campanha", linha(respostas.get("utm_campaign"))))
@@ -247,7 +280,10 @@ async def _lead_e_origem(ag: dict) -> tuple[dict, dict | None, dict | None]:
             raise _Falha("o contato foi excluído antes da criação da reunião")
         conversao, consentimento = await entrega.origem_do_card(conn, str(ag["lead_id"]))
         cfg_pagina = await reserva._config_da_pagina(conn, ag["page_slug"])
+        config_bruta = await conn.fetchval(
+            "SELECT config FROM pages WHERE slug = $1", ag["page_slug"])
     ag["_meeting_kind"] = cfg_pagina.meeting_kind
+    ag["_rotulos"] = rotulos_dos_campos(config_bruta)
     return dict(lead), conversao, consentimento
 
 
@@ -336,12 +372,29 @@ def _nota(ag, lead, conversao, consentimento) -> list[str]:
     aviso = _dados(ag).get("aviso_dono")
     if aviso:
         linhas.append(aviso)
-    linhas += growthhs.nota_de_abertura(lead, conversao=conversao, consentimento=consentimento,
+    rotulos = ag.get("_rotulos")
+    extras = dict(lead.get("campos_extras") or {})
+    # A nota padrão com o rótulo do campo, não a chave (ajuste da
+    # homologação, 28/10) — nas "Respostas do formulário" e no "Informou
+    # nesta conversão", que compara as duas pelo MESMO nome.
+    lead_rotulado = {**lead, "campos_extras": _trocar_chaves(extras, rotulos)}
+    if conversao and isinstance(conversao.get("dados_informados"), dict):
+        informados = conversao["dados_informados"]
+        conversao = {**conversao, "dados_informados": {
+            **informados, "campos_extras": _trocar_chaves(informados.get("campos_extras"),
+                                                          rotulos)}}
+    linhas += growthhs.nota_de_abertura(lead_rotulado,
+                                        conversao=conversao, consentimento=consentimento,
                                         frontend_url=settings.FRONTEND_URL,
                                         quando=datetime.now(UTC))
-    filiais = reserva.respostas(_dados(ag)).get("filiais")
-    if filiais:
-        linhas.append(f"Filiais: {filiais}")
+    # Só o que a nota padrão ainda não mostra: a resposta desta reserva que
+    # não chegou a `campos_extras` (antes, "Filiais" saía aqui DE NOVO).
+    for chave, valor in reserva.respostas(_dados(ag)).items():
+        texto = growthhs.uma_linha(valor)
+        if (chave in CHAVES_DE_CONTROLE or chave in CAMPOS_INFORMADOS or chave == "email"
+                or chave in extras or not texto):
+            continue
+        linhas.append(f"- {growthhs.uma_linha(_rotulo(chave, rotulos))}: {texto}")
     return linhas
 
 
@@ -415,7 +468,8 @@ async def _email_ao_vendedor(ag, lead, cfg, cliente) -> None:
     chave, de, responder = await _remetente()
     if not chave:
         raise growthhs.ErroTransitorio("e-mail ao vendedor: Resend não configurado")
-    assunto, corpo, texto = montar_email_vendedor(ag, lead, cfg.url_do_card(ag["card_id"]))
+    assunto, corpo, texto = montar_email_vendedor(ag, lead, cfg.url_do_card(ag["card_id"]),
+                                                  rotulos=ag.get("_rotulos"))
     try:
         await resend.enviar(chave=chave, de=de, para=destino, assunto=assunto, html=corpo,
                             texto=texto, cabecalhos={}, responder_para=responder)

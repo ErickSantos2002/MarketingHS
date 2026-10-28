@@ -4,7 +4,8 @@ import {
   type ConfigDaPagina,
 } from "./campos";
 import {
-  MENSAGEM_CONTATO, MENSAGEM_JA_TEM, MENSAGEM_OCUPADO, MENSAGEM_SEM_HORARIO, NOMES_DOS_MESES,
+  MENSAGEM_CONTATO, MENSAGEM_CONVITE, MENSAGEM_JA_TEM, MENSAGEM_OCUPADO, MENSAGEM_SEM_HORARIO,
+  NOMES_DOS_MESES, PREFIXO_DO_ID_NO_MODAL,
   ErroDoAgendamento, agendamentoAtivo, buscarHorarios, camposDaEtapa1, camposDaEtapa2,
   confirmarHorario, diaDeBrasilia, duracaoDaReuniao, enviarDados, enviarEmpresa, mensagemDoErroAoConfirmar, pedirLigacao,
   rotuloDoDia, rotuloDoHorario, semanasDoMes, type DiaComVaga,
@@ -262,6 +263,7 @@ export function Agendamento({ slug, config, onFechar, inicial }: {
           <form className="captura" onSubmit={enviarEtapa1} noValidate>
             {etapa1.map((c) => (
               <Controle key={c.chave} campo={c} valor={valores[c.chave] ?? ""} erro={erros[c.chave]}
+                        prefixoDoId={PREFIXO_DO_ID_NO_MODAL}
                         aoMudar={(v) => mudar(c.chave, v)} />
             ))}
             {consentimento && (
@@ -294,6 +296,7 @@ export function Agendamento({ slug, config, onFechar, inicial }: {
           <form className="captura" onSubmit={enviarEtapa2} noValidate>
             {etapa2.map((c) => (
               <Controle key={c.chave} campo={c} valor={valores[c.chave] ?? ""} erro={erros[c.chave]}
+                        prefixoDoId={PREFIXO_DO_ID_NO_MODAL}
                         aoMudar={(v) => mudar(c.chave, v)} />
             ))}
             {erro && <p className="erro" role="alert">{erro}</p>}
@@ -385,7 +388,7 @@ export function Agendamento({ slug, config, onFechar, inicial }: {
             <p>
               {rotuloDoDia(diaDeBrasilia(confirmado))}, às {rotuloDoHorario(confirmado)} (horário de Brasília).
             </p>
-            <p>O convite com o link da sala chegou no seu e-mail.</p>
+            <p>{MENSAGEM_CONVITE}</p>
             <button type="button" className="agenda-botao" onClick={onFechar}>Fechar</button>
           </div>
         )}

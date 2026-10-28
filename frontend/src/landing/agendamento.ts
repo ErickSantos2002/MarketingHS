@@ -22,6 +22,18 @@ export const MENSAGEM_OCUPADO = "Esse horário acabou de ser ocupado. Escolha ou
 export const MENSAGEM_CONTATO = "Recebemos seus dados. Nossa equipe vai entrar em contato.";
 export const MENSAGEM_SEM_HORARIO =
   "Não há horário livre nos próximos dias. Deixe que a gente liga: nossa equipe vai entrar em contato.";
+// O convite sai pela fila, segundos depois da confirmação: "chegou" mentia.
+export const MENSAGEM_CONVITE = "O convite com o link da sala vai chegar no seu e-mail em instantes.";
+
+// O modal abre por cima do formulário da página e reusa o `Controle`: com o
+// mesmo id, o `<label for>` do modal apontava para o campo de fora (leitor de
+// tela e clique no rótulo iam para o campo errado).
+export const PREFIXO_DO_ID = "campo-";
+export const PREFIXO_DO_ID_NO_MODAL = "agendamento-campo-";
+
+export function idDoCampo(chave: string, prefixo: string = PREFIXO_DO_ID): string {
+  return `${prefixo}${chave}`;
+}
 
 /**
  * O que mostrar quando o `/confirmar` falha. 404 é o rascunho que não existe
