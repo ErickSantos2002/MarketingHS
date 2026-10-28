@@ -23,6 +23,9 @@ import {
   MENSAGEM_JA_TEM,
   MENSAGEM_CONTATO,
   mensagemDoErroAoConfirmar,
+  MENSAGEM_CONVITE,
+  idDoCampo,
+  PREFIXO_DO_ID_NO_MODAL,
 } from "../src/landing/agendamento.ts";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -119,4 +122,24 @@ test("404 ao confirmar (rascunho que a varredura já virou lead comum) termina e
   assert.equal(mensagemDoErroAoConfirmar(422, "Esse horário não está disponível."),
                "Esse horário não está disponível.");
   assert.equal(mensagemDoErroAoConfirmar(0, ""), null);
+});
+
+// Ajustes do teste na homologação (28/10).
+test("a confirmação diz que o convite VAI chegar (a fila manda segundos depois)", () => {
+  assert.equal(MENSAGEM_CONVITE, "O convite com o link da sala vai chegar no seu e-mail em instantes.");
+  const modal = readFileSync(path.join(raiz, "src", "landing", "Agendamento.tsx"), "utf8");
+  assert.doesNotMatch(modal, /chegou no seu e-mail/);
+  assert.match(modal, /\{MENSAGEM_CONVITE\}/);
+});
+
+test("os campos do modal têm id próprio, não o do formulário da página", () => {
+  assert.equal(idDoCampo("nome"), "campo-nome");
+  assert.equal(idDoCampo("nome", PREFIXO_DO_ID_NO_MODAL), "agendamento-campo-nome");
+  assert.notEqual(idDoCampo("email", PREFIXO_DO_ID_NO_MODAL), idDoCampo("email"));
+  const modal = readFileSync(path.join(raiz, "src", "landing", "Agendamento.tsx"), "utf8");
+  const controles = modal.match(/<Controle\b[\s\S]*?\/>/g) ?? [];
+  assert.ok(controles.length >= 2);
+  for (const c of controles) assert.match(c, /prefixoDoId=\{PREFIXO_DO_ID_NO_MODAL\}/);
+  const form = readFileSync(path.join(raiz, "src", "landing", "Formulario.tsx"), "utf8");
+  assert.match(form, /const id = idDoCampo\(campo\.chave, prefixoDoId\)/);
 });

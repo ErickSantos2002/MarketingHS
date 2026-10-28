@@ -5,7 +5,7 @@ import {
   type CampoDaPagina, type ConfigDaPagina,
 } from "./campos";
 import { Agendamento } from "./Agendamento";
-import { podeAgendar } from "./agendamento";
+import { PREFIXO_DO_ID, idDoCampo, podeAgendar } from "./agendamento";
 
 // Os cinco campos que o gatilho `trg_score_lead_on_change` observa são o que
 // qualifica um lead neste sistema: cargo, faturamento, funcionarios, desafios e
@@ -56,10 +56,11 @@ function lerErroDoServidor(corpo: unknown): { mensagem: string; campos: Record<s
   return { mensagem: ERRO_GERAL, campos: {} };
 }
 
-export function Controle({ campo, valor, erro, aoMudar }: {
+export function Controle({ campo, valor, erro, aoMudar, prefixoDoId = PREFIXO_DO_ID }: {
   campo: CampoDaPagina; valor: string; erro?: string; aoMudar: (v: string) => void;
+  prefixoDoId?: string;
 }) {
-  const id = `campo-${campo.chave}`;
+  const id = idDoCampo(campo.chave, prefixoDoId);
   const idErro = `${id}-erro`;
   const comuns = {
     id,
