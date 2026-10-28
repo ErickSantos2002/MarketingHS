@@ -131,6 +131,8 @@ async def cenario():
     try:
         yield c
     finally:
+        # A fixture `cliente` pode ter fechado a pool antes desta.
+        await db.init_db()
         await _limpar(c.slug, c.emails)
         async with db.sessao(role="service_role") as conn:
             await conn.execute("DELETE FROM reuniao_roleta WHERE ambiente = $1", AMBIENTE)

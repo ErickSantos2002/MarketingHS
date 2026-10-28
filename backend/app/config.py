@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # formulário.
     LIMITE_VISITA_POR_MINUTO: int = 120
 
+    # Balde PRÓPRIO dos horários do agendamento (`/publico/agendamento/
+    # horarios/`, frente agendamento, 28/10): o lead abre a etapa 3, volta,
+    # troca de dia — não pode gastar a cota do formulário.
+    LIMITE_HORARIOS_POR_MINUTO: int = 60
+
     # Receptor de teste do contrato do GrowthHS e eco do formulário de teste;
     # desligado por padrão; liga só durante a prova (prova do RD, 21/10).
     PROVA_RECEPTOR_TESTE: bool = False
