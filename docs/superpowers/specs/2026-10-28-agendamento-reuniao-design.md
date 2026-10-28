@@ -168,6 +168,33 @@ público, `teams_event_id`) igual.
 vendedores (id, nome, e-mail corporativo, ativo), para a tela da roleta e o
 e-mail ao vendedor. O MarketingHS não cadastra vendedor à mão.
 
+**Contrato final, como o GrowthHS implementou (28/10)** — spec de lá:
+`hsgrowth-sistema/docs/superpowers/specs/2026-10-28-agendamento-integracao.md`.
+
+- Autenticação das três: o mesmo JWT do `client-credentials` do
+  `integracao2`; exige `is_integracao` (humano → 403). Sem chave nem escopo
+  novo.
+- **A.** `GET /api/v1/integration/agenda?user_ids=19,3&inicio=…Z&fim=…Z` →
+  `{"vendedores":[{"user_id","email","ocupado":[{"inicio","fim","status"}]}],
+  "erros":[{"user_id","motivo"}]}`. 422 para data sem fuso, `fim<=inicio`,
+  período > 15 dias, `user_ids` vazio/inválido/> 30. 503 se o token de
+  aplicativo da Microsoft falhar (resposta inteira). Uma chamada
+  `getSchedule` por vendedor; vendedor fora do grupo vem em `erros`
+  ("Access is denied.").
+- **B.** `POST /api/v1/card-tasks/{id}/daily-room` — mesma resposta de hoje
+  (`room_url`, `public_link`, `public_access_token`, `convidados_removidos`).
+  422 antes de criar a sala se a tarefa não tem vendedor com e-mail. Falha no
+  Graph → sala desfeita e 503 (re-tentável). `end` = `due_date +
+  duration_minutes` (60 se nulo); convite assinado pelo vendedor.
+  ⚠️ `DAILY_DEV_MODE` ligado corta convidado de fora do domínio (o lead) e
+  devolve `convidados_removidos: 1` — **a fila deve tratar
+  `convidados_removidos > 0` como falha a alertar**, senão o lead fica sem
+  convite em silêncio. Remarcar/cancelar pela integração não existe (PATCH
+  de `due_date` não atualiza o Outlook).
+- **C.** `GET /api/v1/integration/vendedores` → `[{"id","nome","email",
+  "ativo"}]`, papel `salesperson`, ativos e inativos (filtrar `ativo` aqui),
+  por nome.
+
 **Azure (Erick, uma vez):** no aplicativo que o GrowthHS já usa
 (`MS_CLIENT_ID`), adicionar permissão **de aplicativo** de calendário
 (leitura de disponibilidade e escrita de evento — a permissão exata se
