@@ -389,3 +389,51 @@ async def test_m1_confirmar_ocupado_conta_como_mexida(cenario, falso):
         assert await conn.fetchval(
             "SELECT atualizado_em > now() - interval '1 minute' FROM reuniao_agendamentos "
             "WHERE token = $1", token)
+
+
+async def test_m2_rascunho_com_ja_tem_grava_os_dados_sem_handoff(cenario, falso):
+    """O rascunho que esbarra no `ja_tem` não perde o que o lead respondeu:
+    a captura é registrada COM a marca de agendamento (dados no contato,
+    nenhuma jornada de handoff, nenhum pedido de card) e só então ele sai."""
+    await cenario.roleta(A, B)
+    email = cenario.email("m2dados")
+    dono = await cenario.rascunho(email)
+    assert (await _confirmar(falso, dono, _brt(29, 12)))["status"] == "reservada"
+    async with db.sessao(role="service_role") as conn:
+        jornada = await conn.fetchval(
+            """INSERT INTO journeys (name, status, entry_type, entry_config, entry_node_id, nodes)
+               VALUES ('m2 handoff', 'active', 'event', $1::jsonb, 'n1', $2::jsonb)
+               RETURNING id::text""",
+            {"event_type": "form_submitted", "page_slug": cenario.slug},
+            [{"id": "n1", "type": "handoff_growthhs", "config": {}, "next": None}])
+    try:
+        outro = await cenario.rascunho(email, dados={
+            "colunas": {**DADOS_COMPLETOS["colunas"], "cargo": "Gerente de SESMT"},
+            "extras": {"testes_por_dia": "51 a 200"}})
+        assert await _confirmar(falso, outro, _brt(30, 9)) == {"status": "ja_tem"}
+        linha = await cenario.linha(outro)
+        assert linha["status"] == "abandonada" and linha["lead_id"] is not None
+        async with db.sessao(role="service_role") as conn:
+            lead = await conn.fetchrow(
+                "SELECT id, campos_extras FROM leads WHERE email = $1", email)
+            extras = lead["campos_extras"]
+            extras = extras if isinstance(extras, dict) else json.loads(extras)
+            assert extras["testes_por_dia"] == "51 a 200"
+            assert await conn.fetchval(
+                "SELECT count(*) FROM lead_conversions WHERE lead_id = $1", lead["id"]) == 2
+            for e in await conn.fetch(
+                    "SELECT event_type, metadata FROM journey_events WHERE lead_id = $1",
+                    lead["id"]):
+                meta = e["metadata"] if isinstance(e["metadata"], dict) \
+                    else json.loads(e["metadata"])
+                await conn.fetchval("SELECT journey_enroll_event($1, $2, $3::jsonb)",
+                                    lead["id"], e["event_type"], meta)
+            assert await conn.fetchval(
+                "SELECT count(*) FROM journey_runs WHERE journey_id = $1::uuid", jornada) == 0
+            assert await conn.fetchval(
+                "SELECT count(*) FROM crm_handoffs WHERE lead_id = $1", lead["id"]) == 0
+    finally:
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute(
+                "UPDATE journeys SET status = 'draft' WHERE id = $1::uuid", jornada)
+            await conn.execute("DELETE FROM journeys WHERE id = $1::uuid", jornada)

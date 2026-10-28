@@ -242,11 +242,26 @@ async def horarios(token: str, *, agora: datetime, cliente) -> dict:
 
 async def _abandonar(conn, token: str) -> None:
     """M2: o rascunho que esbarrou na reserva de OUTRO token com o mesmo
-    e-mail sai de cena — o lead já está registrado pela outra, e a
-    varredura não deve virá-lo lead comum de novo."""
+    e-mail sai de cena — mas sem perder o que o lead respondeu nele: a
+    captura é registrada COM a marca de agendamento (os dados vão para o
+    contato e a conversão, e a jornada de handoff não matricula — o card é
+    o da outra reserva). A varredura não o pega depois."""
+    ag = await conn.fetchrow(
+        "SELECT * FROM reuniao_agendamentos WHERE token = $1 AND status = 'rascunho' "
+        "FOR UPDATE", token)
+    if ag is None:
+        return
+    lead_id = None
+    try:
+        async with conn.transaction():
+            lead_id = await _registrar_lead(conn, ag, agendamento=True)
+    except Exception:  # noqa: BLE001 — a resposta ao lead não depende disto
+        logger.exception("[agendamento] rascunho %s: captura do ja_tem não registrada",
+                         ag["id"])
     await conn.execute(
-        """UPDATE reuniao_agendamentos SET status = 'abandonada', atualizado_em = now()
-            WHERE token = $1 AND status = 'rascunho'""", token)
+        """UPDATE reuniao_agendamentos SET status = 'abandonada', lead_id = $2::uuid,
+                  atualizado_em = now()
+            WHERE token = $1""", token, lead_id)
 
 
 def _ja_tem(_linha=None) -> dict:
