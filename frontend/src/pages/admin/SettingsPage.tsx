@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import ApiDocumentation from '@/components/admin/settings/ApiDocumentation';
 import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings';
 import GrowthHSCard from '@/components/admin/settings/GrowthHSCard';
+import RoletaReuniaoCard from '@/components/admin/settings/RoletaReuniaoCard';
 import ResendConfigCard from '@/components/admin/settings/ResendConfigCard';
 import MetaCard from '@/components/admin/settings/MetaCard';
 import IACard from '@/components/admin/settings/IACard';
@@ -146,6 +147,9 @@ export default function SettingsPage() {
 
             {/* GrowthHS Card */}
             <GrowthHSCard />
+
+            {/* Roleta de reunião do agendamento pela landing */}
+            <RoletaReuniaoCard />
 
             {/* Resend Card */}
             <ResendConfigCard />
