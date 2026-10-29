@@ -5,7 +5,7 @@
 > - Nicholson aprovou a landing com agendamento. Pedido dele aplicado: faixa de números sem "770+ aparelhos conectados" e com "200 mil+" colaboradores (`~/marketinghs-phoebus-numeros.sh`, rodado).
 > - ✅ **Virada feita** (29/10 09:42): GrowthHS ativo = **Produção**. Conferido antes: nenhum lead real da `phoebus` desde 28/10 14:12 UTC; produção completa (lista 22).
 > - Frente `agendamento-robustez` ✅ mergeada (`5ca2843`; portão local **1366 passed, 9 skipped**, `tsc` 0, node 70, builds ok): M4 retry não cria 2ª tarefa nem 2ª sala (marca em `notes`, busca antes de criar); M5 "ALERTA NÃO ENVIADO" no log + varredura reenvia alerta sem `alerta_em`; M6 token no corpo (POST), rotas antigas `deprecated`.
-> - **Falta:** deploy de api, worker e sistema. **Depois, no deploy seguinte:** tirar os 4 `*_antiga` de `routers/agendamento.py` + `test_m6_rotas_antigas_ainda_aceitas`. Ligar `execucao.pendencias()` no `_estado_growthhs` e uma faixa no `GrowthHSCard`. Pedido ao HSGrowth (não bloqueia): `docs/pedido-hsgrowth-2026-10-29-idempotencia.md`.
+> - ✅ Deploy de api, worker e sistema (29/10 10:11); rota nova no ar, worker sem erro. **No deploy seguinte:** tirar os 4 `*_antiga` de `routers/agendamento.py` + `test_m6_rotas_antigas_ainda_aceitas`. Ligar `execucao.pendencias()` no `_estado_growthhs` e uma faixa no `GrowthHSCard`. Pedido ao HSGrowth (não bloqueia): `docs/pedido-hsgrowth-2026-10-29-idempotencia.md`.
 > - Nome "Health & Safety" no convite: em andamento numa sessão do `hsgrowth-sistema`. Karolaine **não** entra na roleta (Erick, 29/10).
 
 > ## ▶️ 29/10 (manhã) — perguntas só do agendamento
