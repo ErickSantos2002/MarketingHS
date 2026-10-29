@@ -3,8 +3,8 @@
 > ## ▶️ 29/10 (manhã) — perguntas só do agendamento
 >
 > - O Erick tirou funcionários/testes por dia/filiais do formulário da `phoebus` (11:09) e eles sumiram do modal também — sem `funcionarios`, ninguém agendava. Frente `agendamento-campos` ✅ mergeada (`0d65148`; portão local **1352 passed, 9 skipped**, `tsc` 0, node 69, builds ok): `config.agendamento.campos` = perguntas só do modal (etapa 2 = página + elas; validação, rótulos na nota e editor "Perguntas só do agendamento").
-> - **Falta:** Erick roda `bash ~/marketinghs-agendamento-campos.sh` (põe os 3 em `agendamento.campos` da `phoebus`) + Deploy de api, worker e sistema; conferir o modal depois.
-> - Pergunta aberta: a oferta "Agendar reunião" no obrigado do formulário normal some (não há porte nele). Assumido deixar assim; opções em `docs/frentes/agendamento-campos.md`.
+> - ✅ Em produção (29/10 08:40): script rodado (formulário com os 5, os 3 só no agendamento) e deploy de api, worker e sistema; bundles da landing e do editor conferidos com o código novo.
+> - ✅ Decidido (Erick): a oferta "Agendar reunião" no obrigado do formulário normal some — fica só o botão da página, que sempre aparece (opção a).
 > - GrowthHS segue em **homologação** até o Nicholson aprovar (decisão do Erick, 29/10).
 
 > ## ▶️ 29/10 — agendamento no ar, esperando o OK do Nicholson

@@ -129,3 +129,9 @@ test_empresa_valida_perguntas_so_do_agendamento` (obrigatório faltando →
 `testes_por_dia`/`filiais` em extras), `test_agendamento_execucao.py::
 test_rotulos_incluem_as_perguntas_so_do_agendamento`; 4 no
 `landing-agendamento.test.mjs`.
+
+## Desfecho (coordenadora, 29/10)
+
+Mergeada (`0d65148`), SQL rodado pelo Erick, deploy de api/worker/sistema às
+08:40. Pergunta da oferta pós-envio: o Erick ficou com a opção (a) — o botão
+"Agende sua reunião" da página sempre aparece.
