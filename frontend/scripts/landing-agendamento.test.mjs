@@ -26,6 +26,10 @@ import {
   MENSAGEM_CONVITE,
   idDoCampo,
   PREFIXO_DO_ID_NO_MODAL,
+  enviarEmpresa,
+  buscarHorarios,
+  confirmarHorario,
+  pedirLigacao,
 } from "../src/landing/agendamento.ts";
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -203,4 +207,36 @@ test("os campos do modal têm id próprio, não o do formulário da página", ()
   for (const c of controles) assert.match(c, /prefixoDoId=\{PREFIXO_DO_ID_NO_MODAL\}/);
   const form = readFileSync(path.join(raiz, "src", "landing", "Formulario.tsx"), "utf8");
   assert.match(form, /const id = idDoCampo\(campo\.chave, prefixoDoId\)/);
+});
+
+// M6 (frente agendamento-robustez, 29/10): o token do rascunho no CAMINHO
+// fica no log de acesso do proxy. Vai no corpo, em POST.
+test("o token do rascunho vai no corpo, nunca no caminho", async () => {
+  const pedidos = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    pedidos.push({ url: String(url), metodo: init?.method, corpo: JSON.parse(init?.body ?? "null") });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+  const token = "tok_SECRETO-123";
+  try {
+    await enviarEmpresa(token, { empresa: "Acme" });
+    await buscarHorarios(token);
+    await confirmarHorario(token, "2026-11-03T17:00:00Z");
+    await pedirLigacao(token);
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.deepEqual(pedidos.map((p) => [p.metodo, p.url]), [
+    ["POST", "/api/publico/agendamento/empresa"],
+    ["POST", "/api/publico/agendamento/horarios/consultar"],
+    ["POST", "/api/publico/agendamento/confirmar"],
+    ["POST", "/api/publico/agendamento/ligar"],
+  ]);
+  for (const p of pedidos) {
+    assert.ok(!p.url.includes(token), p.url);
+    assert.equal(p.corpo.token, token);
+  }
+  assert.deepEqual(pedidos[0].corpo.fields, { empresa: "Acme" });
+  assert.equal(pedidos[2].corpo.inicio, "2026-11-03T17:00:00Z");
 });

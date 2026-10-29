@@ -214,19 +214,22 @@ export function enviarDados(corpo: Record<string, unknown>): Promise<{ token: st
   return pedir("POST", "/dados", corpo);
 }
 
+// ⚠️ O token do rascunho vai no CORPO, nunca no caminho (M6, 29/10): o
+// caminho fica no log de acesso do proxy, e o token é a única chave do
+// rascunho.
 export function enviarEmpresa(token: string, fields: Record<string, string>):
     Promise<{ pode_agendar: boolean }> {
-  return pedir("POST", `/${encodeURIComponent(token)}/empresa`, { fields });
+  return pedir("POST", "/empresa", { token, fields });
 }
 
 export function buscarHorarios(token: string): Promise<Horarios> {
-  return pedir("GET", `/horarios/${encodeURIComponent(token)}`);
+  return pedir("POST", "/horarios/consultar", { token });
 }
 
 export function confirmarHorario(token: string, inicio: string): Promise<Confirmacao> {
-  return pedir("POST", `/${encodeURIComponent(token)}/confirmar`, { inicio });
+  return pedir("POST", "/confirmar", { token, inicio });
 }
 
 export function pedirLigacao(token: string): Promise<{ ok: boolean }> {
-  return pedir("POST", `/${encodeURIComponent(token)}/ligar`);
+  return pedir("POST", "/ligar", { token });
 }

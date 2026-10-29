@@ -10,8 +10,12 @@ nunca refaz o card (molde `crm/entrega.py`):
        `Pedido MarketingHS: <id da reserva>`; o retry depois de um 201
        perdido o reconhece pela assinatura                → card_id
     3. nota de abertura + "Reunião agendada pelo lead…"   → dados.nota_enviada
-    4. tarefa `meeting` com o lead convidado             → task_id
-    5. sala de vídeo (evento no Outlook do vendedor)     → public_link
+    4. tarefa `meeting` com o lead convidado, assinada em `notes`
+       `Pedido MarketingHS: <id>`; `dados.tarefa_pedida` ANTES do POST, e o
+       retry com a marca procura nas reuniões do card (M4)  → task_id
+    5. sala de vídeo (evento no Outlook do vendedor); `dados.sala_pedida`
+       ANTES do POST, e o retry lê a tarefa: sala + evento = pronta (M4)
+                                                          → public_link
        ⚠️ `convidados_removidos > 0` num 2xx é o convite CORTADO em silêncio
        (`DAILY_DEV_MODE` de lá): falha que alerta, não sucesso
     6. e-mail ao vendedor                                 → email_vendedor_em,
@@ -186,11 +190,16 @@ async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
                  JOIN auth.users u ON u.id = r.user_id
                 WHERE r.role = 'admin' AND u.email IS NOT NULL""")]
     chave, de, responder = await _remetente()
-    if not chave or not admins:
-        logger.error("[agendamento] alerta da reserva %s sem como enviar (Resend/admin): %s",
-                     ag["id"], motivo)
-        return
     dia, hora = _quando(ag)
+    if not chave or not admins:
+        # M5: sem e-mail, o log é o único rastro — nível de erro e um texto
+        # fixo para achar (`ALERTA NÃO ENVIADO`). `alerta_em` fica vazio: a
+        # fila (reservada) ou a varredura (falhou) tenta de novo.
+        logger.error("[agendamento] ALERTA NÃO ENVIADO (%s) — reserva %s, %s %s, página %s, "
+                     "vendedor %s: %s",
+                     "Resend sem RESEND_API_KEY" if not chave else "nenhum admin com e-mail",
+                     ag["id"], dia, hora, ag.get("page_slug"), ag.get("vendedor_id"), motivo)
+        return
     e = html.escape
     linha = growthhs.uma_linha
     itens = [("Motivo", linha(motivo)), ("Lead", linha(ag.get("email"))),
@@ -206,6 +215,7 @@ async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
                 "confira no GrowthHS e fale com o lead.</p><ul>")
     corpo = (abertura
              + "".join(f"<li>{e(r)}: {e(str(v))}</li>" for r, v in itens) + "</ul>")
+    enviados = 0
     for email in admins:
         try:
             await resend.enviar(chave=chave, de=de, para=email,
@@ -214,9 +224,16 @@ async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
                                          f"[MarketingHS] Agendamento com falha — {dia} {hora}"),
                                 html=corpo, texto=html_para_texto(corpo), cabecalhos={},
                                 responder_para=responder)
+            enviados += 1
         except Exception:  # noqa: BLE001 — o alerta tenta os outros admins
             logger.exception("[agendamento] alerta da reserva %s não saiu", ag["id"])
     if aviso:
+        return
+    if not enviados:
+        # M5: o Resend recusou para todos — ninguém soube. Sem `alerta_em`, a
+        # próxima passada (ou a varredura) tenta de novo.
+        logger.error("[agendamento] ALERTA NÃO ENVIADO (Resend falhou para todos os admins) "
+                     "— reserva %s, %s %s: %s", ag["id"], dia, hora, motivo)
         return
     async with sessao(role="service_role") as conn:
         await conn.execute(
@@ -413,6 +430,68 @@ AVISAR_ANTES = timedelta(hours=3)
 MAX_TITULO_TAREFA = 255
 
 
+LINHA_DA_TAREFA = "Reunião agendada pelo lead na landing (MarketingHS)."
+
+
+def _corpo_da_tarefa(ag: dict, lead: dict) -> dict:
+    nome = growthhs._cortar(lead.get("nome"), growthhs.MAX_NOME_PESSOA) or ag["email"]
+    empresa = growthhs.uma_linha(lead.get("empresa"))
+    titulo = (f"Reunião: {nome}" + (f" — {empresa}" if empresa else ""))[:MAX_TITULO_TAREFA]
+    return {
+        "card_id": int(ag["card_id"]),
+        "title": titulo,
+        "task_type": "meeting", "meeting_kind": ag["_meeting_kind"],
+        "assigned_to_id": int(ag["vendedor_id"]),
+        "due_date": reserva.iso_z(ag["inicio"]),
+        "duration_minutes": int((ag["fim"] - ag["inicio"]).total_seconds() // 60),
+        "invited_emails": [ag["email"]],
+        # M4: a marca vai em `notes`, NUNCA em `description` — lá a
+        # `description` é a "Pauta" do convite que o lead recebe; `notes` só
+        # aparece no CRM.
+        "notes": f"{LINHA_DA_TAREFA}\n{growthhs.marca_de_criacao(ag['id'])}"}
+
+
+async def _tarefa_do_pedido(ag: dict, cliente) -> int | None:
+    """A tarefa desta reserva, se já existe no card (marca exata, numa linha
+    própria de `notes` — `card_do_pedido`)."""
+    for t in await cliente.reunioes_do_card(int(ag["card_id"])):
+        if growthhs.card_do_pedido(t.get("notes"), ag["id"]):
+            achada = entrega._id_inteiro(t.get("id"))
+            if achada is not None:
+                logger.info("[agendamento] reserva %s: tarefa %s já existia (resposta perdida)",
+                            ag["id"], achada)
+                return achada
+    return None
+
+
+async def _sala_ja_criada(ag: dict, cfg: growthhs.Config, cliente) -> dict | None:
+    """M4: a sala de uma tentativa anterior, lida da tarefa. A rota de lá
+    (`POST /card-tasks/{id}/daily-room`) cria a sala, DEPOIS o evento no
+    Outlook, e desfaz a sala se o evento falhar. Então:
+
+    - nem sala → a anterior não ficou: `None`, pede de novo;
+    - sala e evento → pronta: o link público é `<app_url>/entrar/<token>`,
+      o mesmo que a rota devolve;
+    - sala sem evento → a anterior ainda está rodando (ou caiu no meio):
+      transitório, sem pedir outra — o Daily recusaria o nome repetido.
+
+    ⚠️ O `convidados_removidos` não fica gravado lá: na sala recuperada ele
+    é 0 por falta de como saber (pedido ao GrowthHS, 29/10)."""
+    tarefa = await cliente.ler_tarefa(int(ag["task_id"]))
+    url, token = tarefa.get("daily_room_url"), tarefa.get("public_access_token")
+    if not url:
+        return None
+    if not tarefa.get("teams_event_id"):
+        raise growthhs.ErroTransitorio(
+            "sala de vídeo criada sem o convite no Outlook (ainda): confira a tarefa "
+            f"{ag['task_id']} no GrowthHS")
+    link = f"{cfg.app_url.rstrip('/')}/entrar/{token}" if cfg.app_url and token else ""
+    logger.info("[agendamento] reserva %s: sala da tarefa %s já existia (resposta perdida)",
+                ag["id"], ag["task_id"])
+    return {"room_url": url, "public_link": link, "public_access_token": token,
+            "convidados_removidos": 0}
+
+
 async def _executar(ag: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
     if ag["inicio"] <= datetime.now(UTC):
         # I2: nem card, nem convite, nem e-mail para uma reunião que já
@@ -433,24 +512,28 @@ async def _executar(ag: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -
         await cliente.anotar(int(ag["card_id"]), _nota(ag, lead, conversao, consentimento))
         await asyncio.shield(_marcar_dado(ag["id"], "nota_enviada"))
     if ag.get("task_id") is None:
-        nome = growthhs._cortar(lead.get("nome"), growthhs.MAX_NOME_PESSOA) or ag["email"]
-        empresa = growthhs.uma_linha(lead.get("empresa"))
-        titulo = (f"Reunião: {nome}" + (f" — {empresa}" if empresa else ""))[:MAX_TITULO_TAREFA]
-        tarefa = await cliente.criar_tarefa({
-            "card_id": int(ag["card_id"]),
-            "title": titulo,
-            "task_type": "meeting", "meeting_kind": ag["_meeting_kind"],
-            "assigned_to_id": int(ag["vendedor_id"]),
-            "due_date": reserva.iso_z(ag["inicio"]),
-            "duration_minutes": int((ag["fim"] - ag["inicio"]).total_seconds() // 60),
-            "invited_emails": [ag["email"]]})
-        if entrega._id_inteiro(tarefa.get("id")) is None:
-            # Criou lá sem id aqui: re-tentar criaria a segunda tarefa.
-            raise _Falha("o GrowthHS criou a tarefa da reunião sem devolver o id")
-        ag["task_id"] = int(tarefa["id"])
+        task_id = None
+        if _dados(ag).get("tarefa_pedida"):
+            # M4: uma tentativa anterior pediu a tarefa — a resposta pode ter
+            # se perdido com a tarefa criada lá.
+            task_id = await _tarefa_do_pedido(ag, cliente)
+        if task_id is None:
+            await asyncio.shield(_marcar_dado(ag["id"], "tarefa_pedida"))
+            tarefa = await cliente.criar_tarefa(_corpo_da_tarefa(ag, lead))
+            task_id = entrega._id_inteiro(tarefa.get("id"))
+            if task_id is None:
+                # Criou lá sem id aqui: o retry acha pela marca em `notes`.
+                raise growthhs.ErroTransitorio(
+                    "o GrowthHS criou a tarefa da reunião sem devolver o id")
+        ag["task_id"] = int(task_id)
         await asyncio.shield(_gravar(ag["id"], task_id=ag["task_id"]))
     if ag.get("public_link") is None:
-        sala = await cliente.criar_sala(int(ag["task_id"]))
+        sala = None
+        if _dados(ag).get("sala_pedida"):
+            sala = await _sala_ja_criada(ag, cfg, cliente)
+        if sala is None:
+            await asyncio.shield(_marcar_dado(ag["id"], "sala_pedida"))
+            sala = await cliente.criar_sala(int(ag["task_id"]))
         ag["public_link"] = sala.get("public_link") or sala.get("room_url") or ""
         await asyncio.shield(_gravar(ag["id"], public_link=ag["public_link"]))
         if sala["convidados_removidos"] > 0:
@@ -544,15 +627,58 @@ async def rodar_agendamentos(*, limite: int = 10, cfg: growthhs.Config | None = 
     return contagem
 
 
+# ── Painel ───────────────────────────────────────────────────────────────────
+
+async def pendencias(*, somente_paginas: list[str] | None = None) -> dict:
+    """M5: as reuniões que o lead acha confirmadas e não ficaram prontas, para
+    o painel (o card do GrowthHS em Configurações já mostra a fila de
+    entrega; este é o par dele). `falhou` cuja reunião não passou há mais de
+    7 dias; `sem_alerta` = nem o e-mail aos admins saiu. Nunca o token."""
+    filtro = ("page_slug = ANY($1::text[])" if somente_paginas is not None
+              else f"NOT ({AGENDAMENTO_DE_TESTE}) AND $1::text[] IS NULL")
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            f"""SELECT id::text, page_slug, inicio, vendedor_id, card_id, erro,
+                       alerta_em, atualizado_em
+                  FROM reuniao_agendamentos
+                 WHERE status = 'falhou' AND fim > now() - interval '7 days' AND {filtro}
+                 ORDER BY atualizado_em DESC""",
+            somente_paginas)
+    return {"falhas": len(linhas),
+            "sem_alerta": sum(1 for l in linhas if l["alerta_em"] is None),
+            "ultimas": [{**dict(l), "inicio": l["inicio"].isoformat(),
+                         "alerta_em": l["alerta_em"] and l["alerta_em"].isoformat(),
+                         "atualizado_em": l["atualizado_em"].isoformat()}
+                        for l in linhas[:5]]}
+
+
 # ── Varredura ────────────────────────────────────────────────────────────────
 
 async def varrer(agora: datetime, *, somente_paginas: list[str] | None = None) -> dict:
     """Rascunho parado há mais de `abandono_min` (30) vira lead comum (o lead desistiu no
     meio); se nem isso der, `abandonada`. Reunião criada/falhada que já
     passou vira `realizada` (sai dos índices únicos)."""
-    resumo = {"lead_comum": 0, "abandonadas": 0, "realizadas": 0}
+    resumo = {"lead_comum": 0, "abandonadas": 0, "realizadas": 0, "alertas": 0}
     filtro = ("page_slug = ANY($2::text[])" if somente_paginas is not None
               else f"NOT ({AGENDAMENTO_DE_TESTE}) AND $2::text[] IS NULL")
+    async with sessao(role="service_role") as conn:
+        # M5: `falhou` sem `alerta_em` = o alerta não saiu (Resend sem chave
+        # ou fora). A fila não volta a ela; daqui sai assim que o Resend
+        # estiver de pé. ANTES do `realizada` abaixo: a reunião que já passou
+        # também precisa do alerta (o lead ficou esperando).
+        sem_alerta = [dict(l) for l in await conn.fetch(
+            f"""SELECT * FROM reuniao_agendamentos
+                 WHERE status = 'falhou' AND alerta_em IS NULL
+                   AND fim > $1::timestamptz - interval '7 days' AND {filtro}
+                 ORDER BY inicio LIMIT 20""",
+            agora, somente_paginas)]
+    for ag in sem_alerta:
+        await alertar_admins(ag, ag.get("erro") or "falha sem motivo registrado")
+        async with sessao(role="service_role") as conn:
+            if await conn.fetchval(
+                    "SELECT alerta_em IS NOT NULL FROM reuniao_agendamentos WHERE id = $1",
+                    ag["id"]):
+                resumo["alertas"] += 1
     async with sessao(role="service_role") as conn:
         # M1: o relógio é a ÚLTIMA mexida do lead (`atualizado_em` — toda
         # chamada pública do token o toca), não a criação: quem está na etapa

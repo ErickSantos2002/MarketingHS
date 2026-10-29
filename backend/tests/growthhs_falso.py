@@ -19,6 +19,8 @@ TAREFAS = "/api/v1/card-tasks"
 VENDEDORES = "/api/v1/integration/vendedores"
 AGENDA = "/api/v1/integration/agenda"
 ANTIGO = "2026-01-01T10:00:00"  # ingênuo, como o GrowthHS serializa
+# O `FRONTEND_URL` de lá: o link público é `<app>/entrar/<public_access_token>`.
+APP_URL = "https://app.exemplo.invalid"
 
 
 class GrowthHSFalso:
@@ -34,6 +36,7 @@ class GrowthHSFalso:
     - `perder[(método, prefixo)] = n`: faz a operação e PERDE a resposta
       (timeout) n vezes — o 201/200 que nunca chegou;
     - `corpo_do_post_card`: bytes no lugar do JSON do 201 (o card é criado);
+    - `corpo_do_post_tarefa`: idem para a tarefa (a tarefa é criada);
     - `ao_criar_card`: chamado depois de criar um card.
     `agora` é o `created_at` dos cards criados por `POST` — fixo no passado
     por padrão, para o teste não depender do relógio desta máquina contra o
@@ -59,6 +62,7 @@ class GrowthHSFalso:
         self.tarefas: dict[int, dict] = {}
         self.salas: list[int] = []
         self.convidados_removidos = 0
+        self.corpo_do_post_tarefa: bytes | None = None
 
     # ── semear ──
     def pessoa(self, **campos) -> int:
@@ -172,17 +176,44 @@ class GrowthHSFalso:
                           for i in ids if i in self.erros_agenda]})
         if (metodo, caminho) == ("POST", TAREFAS):
             tid = next(self._ids)
-            self.tarefas[tid] = {"id": tid, **corpo}
+            self.tarefas[tid] = {"id": tid, "notes": None, "daily_room_url": None,
+                                 "public_access_token": None, "teams_event_id": None,
+                                 "meeting_provider": None, **corpo}
+            if self.corpo_do_post_tarefa is not None:
+                return httpx.Response(201, content=self.corpo_do_post_tarefa)
             return httpx.Response(201, json=self.tarefas[tid])
+        if (metodo, caminho) == ("GET", TAREFAS):
+            # Como `list_tasks` de lá: filtros `card_id`/`task_type`, paginado.
+            achadas = [t for t in self.tarefas.values()
+                       if str(t.get("card_id")) == params.get("card_id", str(t.get("card_id")))
+                       and t.get("task_type") == params.get("task_type", t.get("task_type"))]
+            tamanho, pagina = int(params.get("page_size", 50)), int(params.get("page", 1))
+            fatia = achadas[(pagina - 1) * tamanho:pagina * tamanho]
+            return httpx.Response(200, json={
+                "tasks": fatia, "total": len(achadas), "page": pagina, "page_size": tamanho,
+                "total_pages": -(-len(achadas) // tamanho)})
+        if metodo == "GET" and caminho.startswith(TAREFAS + "/"):
+            tid = int(caminho.rsplit("/", 1)[1])
+            if tid not in self.tarefas:
+                return httpx.Response(404, json={"detail": "Tarefa não encontrada"})
+            return httpx.Response(200, json=self.tarefas[tid])
         if metodo == "POST" and caminho.startswith(TAREFAS + "/") and \
                 caminho.endswith("/daily-room"):
             tid = int(caminho.split("/")[-2])
             if tid not in self.tarefas:
                 return httpx.Response(404, json={"detail": "Tarefa não encontrada"})
+            tarefa = self.tarefas[tid]
+            if tarefa.get("daily_room_url"):
+                # Como lá: a sala se chama `<prefixo>-<id da tarefa>`; o Daily
+                # recusa o nome repetido e a rota devolve 503.
+                return httpx.Response(503, json={"detail": "Não foi possível criar a reunião"})
             self.salas.append(tid)
+            tarefa.update({"daily_room_url": f"https://hs.daily.co/sala-{tid}",
+                           "public_access_token": f"tok-{tid}",
+                           "teams_event_id": f"evento-{tid}", "meeting_provider": "daily"})
             return httpx.Response(200, json={
-                "room_url": f"https://hs.daily.co/sala-{tid}",
-                "public_link": f"https://growthhs.exemplo.invalid/reuniao/{tid}",
+                "room_url": tarefa["daily_room_url"],
+                "public_link": f"{APP_URL}/entrar/tok-{tid}",
                 "public_access_token": f"tok-{tid}",
                 "convidados_removidos": self.convidados_removidos})
         return httpx.Response(599, json={"detail": f"rota não prevista {metodo} {caminho}"})
