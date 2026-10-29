@@ -459,7 +459,9 @@ export function EditorDeSecao({ secao, prefixo, onChange }: {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Na página aparece só a miniatura; o vídeo carrega quando a pessoa clica.
+                {temArquivo
+                  ? 'Fica guardado: ao tirar o arquivo, a página volta a tocar este link.'
+                  : 'Na página aparece só a miniatura; o vídeo carrega quando a pessoa clica.'}
               </p>
             )}
           </div>

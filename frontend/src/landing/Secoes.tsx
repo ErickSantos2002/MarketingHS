@@ -703,7 +703,9 @@ function VideoHospedado({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo
     if (v.ended) v.currentTime = 0;
     // Recusado (economia de dados, política do navegador): fica pausado, e o
     // nosso play continua lá para a próxima tentativa.
-    v.play().catch(() => setFase((f) => (f === "erro" ? f : "pausado")));
+    // Arquivo que não carrega (404, formato que o navegador não toca) também
+    // rejeita o play: aí é erro, com "tentar de novo".
+    v.play().catch(() => setFase((f) => (v.error || f === "erro" ? "erro" : "pausado")));
   };
 
   const comecar = () => {
