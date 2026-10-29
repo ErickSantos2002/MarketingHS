@@ -3,7 +3,7 @@ import type { BlocoDoCorpo } from "./campos";
 import { miniaturaDoYoutube, type Secao } from "./secoes";
 import {
   ESTADO, SALTO, alvoDoSeek, alvoNoArquivo, carregarApiDoYoutube, chegouAoFim, formatarTempo, opcoesDoPlayer,
-  tempoPorExtenso, type PlayerDoYoutube,
+  progressoDaBarra, tempoPorExtenso, type PlayerDoYoutube,
 } from "./player";
 
 // Colunas da grade no desktop: o maior divisor de `n` até `teto`, para não
@@ -557,7 +557,7 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
   const coberto = fase !== "tocando";
   const ativo = pronto && fase !== "erro";
   const posicao = Math.min(atual, duracao || 0);
-  const progresso = duracao ? `${(posicao / duracao) * 100}%` : "0%";
+  const progresso = progressoDaBarra(posicao, duracao);
   const pausaria = fase === "tocando" || (fase === "carregando" && querTocar.current);
   const rotuloDoPlay = pausaria ? "Pausar" : fase === "fim" ? "Assistir de novo" : "Reproduzir";
 
@@ -616,7 +616,7 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
         </div>
         {iniciado && (
           <div className="video-controles" role="group" aria-label="Controles do vídeo">
-            <input type="range" className="video-barra" min={0} max={duracao > 0 ? duracao : 1} step={1}
+            <input type="range" className="video-barra" min={0} max={duracao > 0 ? duracao : 1} step="any"
                    value={posicao} disabled={!ativo || !duracao}
                    aria-label="Posição no vídeo"
                    aria-valuetext={`${tempoPorExtenso(posicao)} de ${tempoPorExtenso(duracao)}`}
@@ -766,7 +766,7 @@ function VideoHospedado({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo
 
   const ativo = iniciado && fase !== "erro";
   const posicao = Math.min(atual, duracao || 0);
-  const progresso = duracao ? `${(posicao / duracao) * 100}%` : "0%";
+  const progresso = progressoDaBarra(posicao, duracao);
   const pausaria = fase === "tocando";
   const rotuloDoPlay = pausaria ? "Pausar" : fase === "fim" ? "Assistir de novo" : "Reproduzir";
 
@@ -829,7 +829,7 @@ function VideoHospedado({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo
         </div>
         {iniciado && (
           <div className="video-controles" role="group" aria-label="Controles do vídeo">
-            <input type="range" className="video-barra" min={0} max={duracao > 0 ? duracao : 1} step={1}
+            <input type="range" className="video-barra" min={0} max={duracao > 0 ? duracao : 1} step="any"
                    value={posicao} disabled={!ativo || !duracao}
                    aria-label="Posição no vídeo"
                    aria-valuetext={`${tempoPorExtenso(posicao)} de ${tempoPorExtenso(duracao)}`}

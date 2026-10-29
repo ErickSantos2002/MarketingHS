@@ -67,6 +67,15 @@ export function alvoNoArquivo(segundos: number, duracao: number): number {
   return duracao > 0 ? Math.min(alvo, duracao) : alvo;
 }
 
+/** O `--progresso` da barra de tempo: onde a linha branca acaba. O centro
+ * da bolinha (16 px, `.video-barra` no landing.css) anda de 8 px a 100% − 8
+ * px, não de 0 a 100% — com a conta simples a linha passava na frente dela. */
+export function progressoDaBarra(posicao: number, duracao: number): string {
+  const fracao = duracao > 0 && Number.isFinite(posicao)
+    ? Math.min(1, Math.max(0, posicao / duracao)) : 0;
+  return `calc(8px + (100% - 16px) * ${fracao})`;
+}
+
 /** Se o vídeo já está na folga do fim (e deve virar fachada). */
 export function chegouAoFim(atual: number, duracao: number): boolean {
   return duracao > 0 && Number.isFinite(atual) && duracao - atual < FOLGA_DO_FIM;

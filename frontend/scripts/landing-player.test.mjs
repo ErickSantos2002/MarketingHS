@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 
 import {
   FOLGA_DO_FIM, MARGEM_DO_SEEK, SALTO, URL_DA_API, alvoDoSeek, chegouAoFim, formatarTempo,
-  opcoesDoPlayer, tempoPorExtenso,
+  opcoesDoPlayer, progressoDaBarra, tempoPorExtenso,
 } from "../src/landing/player.ts";
 
 const ID = "sByexR1w9vw";
@@ -65,4 +65,18 @@ test("fim: a menos de 1,5 s do fim (a API arredonda a duração), e só com dura
   assert.equal(chegouAoFim(98.4, 100), false);
   assert.equal(chegouAoFim(0, 0), false);
   assert.equal(chegouAoFim(NaN, 100), false);
+});
+
+// 29/10: a linha branca andava na frente da bolinha. A linha ia de 0 a 100%
+// do trilho; o centro da bolinha (16 px) anda de 8 px a 100% − 8 px.
+test("progressoDaBarra: a linha acaba no centro da bolinha", () => {
+  assert.equal(progressoDaBarra(0, 28.97), "calc(8px + (100% - 16px) * 0)");
+  assert.equal(progressoDaBarra(28.97, 28.97), "calc(8px + (100% - 16px) * 1)");
+  assert.equal(progressoDaBarra(14.485, 28.97), "calc(8px + (100% - 16px) * 0.5)");
+});
+
+test("progressoDaBarra: sem duração ou fora da faixa", () => {
+  assert.equal(progressoDaBarra(5, 0), "calc(8px + (100% - 16px) * 0)");
+  assert.equal(progressoDaBarra(40, 28.97), "calc(8px + (100% - 16px) * 1)");
+  assert.equal(progressoDaBarra(Number.NaN, 28.97), "calc(8px + (100% - 16px) * 0)");
 });
