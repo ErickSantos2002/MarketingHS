@@ -1,5 +1,13 @@
 # Continuar aqui
 
+> ## ▶️ 29/10 — agendamento no ar, esperando o OK do Nicholson
+>
+> - Em produção: 036 + campos `funcionarios`/`filiais` na `phoebus` (`~/marketinghs-agendamento-producao.sh`), GrowthHS v1.10.22, deploy de api/worker/sistema, roleta de produção (Adriana → Gislayne → Eduardo → Sandra → Miguel), agendamento LIGADO na `phoebus`. Teste do Erick funcionou (card 11248 na homologação).
+> - ⚠️ **GrowthHS ativo no MarketingHS de produção = HOMOLOGAÇÃO** desde 28/10 11:12 (sem lead real desde então). Voltar para Produção em Configurações → Integrações antes de divulgar a landing.
+> - ⚠️ O teste caiu na **agenda real da Adriana** (29/10 12h): a homologação do GrowthHS usa as mesmas caixas do Outlook. Ela cancela o evento. Roleta de **homologação** deve ficar só com o Erick (19).
+> - Pendente: `docs/pedido-hsgrowth-2026-10-29-nome-da-empresa.md` ("Health & Safety", não "… Tech", no convite/lembrete/tela da sala) numa sessão do `hsgrowth-sistema` + deploy. Rodapé do admin já corrigido (`99f267f`). Sobra: nota do formulário normal ainda mostra a chave do campo extra (`growthhs.py`/`entrega.py`).
+> - **Próximo:** Erick mostra ao Nicholson; ajustes que ele pedir.
+
 > ## ✅ 28/10 — agendamento de reunião na landing (pedido do Nicholson)
 >
 > - Spec `docs/superpowers/specs/2026-10-28-agendamento-reuniao-design.md`, plano `docs/superpowers/plans/2026-10-28-agendamento-reuniao.md`. Lead com **mais de 400 funcionários** marca sozinho reunião na **sala de vídeo do GrowthHS**; roleta de reunião no MarketingHS (primeiro livre da fila; pulado guarda a vez); card nasce na **lista 28** com vendedor, nota, reunião e convite; e-mail ao vendedor. Sem código de confirmação por e-mail (decisão do Erick).
