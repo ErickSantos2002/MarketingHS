@@ -267,29 +267,27 @@ async def test_m6_fluxo_inteiro_sem_token_no_caminho(cenario, cliente, falso):
     assert all(token not in caminho for caminho in caminhos)
 
 
-async def test_m6_rotas_antigas_ainda_aceitas(cenario, cliente, falso):
-    """Só para quem abriu a página ANTES do deploy (o JS velho fica na aba
-    aberta; o rascunho vive até `abandono_min`). Sair num deploy seguinte —
-    ver docs/frentes/agendamento-robustez.md."""
+async def test_m6_rotas_antigas_com_token_no_caminho_sairam(cenario, cliente, falso):
+    """As quatro rotas com o token no caminho saíram no deploy seguinte ao das
+    novas (29/10). Com token VÁLIDO: um 404 com token inventado não provaria
+    nada (a rota antiga também dava 404 para token desconhecido)."""
     await cenario.roleta(A)
     token = (await cliente.post("/publico/agendamento/dados",
                                 json=_dados(cenario, cenario.email("antiga")))).json()["token"]
-    r = await cliente.post(f"/publico/agendamento/{token}/empresa",
-                           json={"fields": EMPRESA_GRANDE})
-    assert r.json() == {"pode_agendar": True}
-    assert (await cliente.get(f"/publico/agendamento/horarios/{token}")).status_code == 200
-    c = await cliente.post(f"/publico/agendamento/{token}/confirmar",
-                           json={"inicio": _proximo_util_as_14h()})
-    assert c.json()["status"] == "reservada"
-    t2 = (await cliente.post("/publico/agendamento/dados",
-                             json=_dados(cenario, cenario.email("antiga2")))).json()["token"]
-    assert (await cliente.post(f"/publico/agendamento/{t2}/ligar")).json() == {"ok": True}
-    for metodo, caminho in (("post", "/publico/agendamento/xyz/empresa"),
-                            ("get", "/publico/agendamento/horarios/xyz"),
-                            ("post", "/publico/agendamento/xyz/confirmar"),
-                            ("post", "/publico/agendamento/xyz/ligar")):
-        kw = {} if metodo == "get" else {"json": {"fields": {}, "inicio": _proximo_util_as_14h()}}
-        assert (await getattr(cliente, metodo)(caminho, **kw)).status_code == 404, caminho
+    for metodo, caminho, corpo in (
+            ("POST", f"/publico/agendamento/{token}/empresa", {"fields": EMPRESA_GRANDE}),
+            ("GET", f"/publico/agendamento/horarios/{token}", None),
+            ("POST", f"/publico/agendamento/{token}/confirmar",
+             {"inicio": _proximo_util_as_14h()}),
+            ("POST", f"/publico/agendamento/{token}/ligar", None)):
+        r = await cliente.request(metodo, caminho, json=corpo)
+        assert r.status_code in (404, 405), (metodo, caminho, r.status_code)
+    caminhos = {r.path for r in rota.router.routes}
+    assert not any("{token}" in c for c in caminhos), caminhos
+    # O rascunho continua inteiro: nenhuma das chamadas acima andou com ele.
+    assert (await cliente.post("/publico/agendamento/empresa",
+                               json={"token": token, "fields": EMPRESA_GRANDE})).json() == {
+        "pode_agendar": True}
 
 
 def test_m6_horarios_novos_no_balde_proprio():
