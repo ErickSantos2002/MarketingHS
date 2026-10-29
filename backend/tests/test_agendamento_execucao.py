@@ -266,6 +266,20 @@ def test_rotulos_da_config_da_pagina():
     assert execucao.rotulos_dos_campos(None).get("testes_por_dia") is None
 
 
+def test_rotulos_incluem_as_perguntas_so_do_agendamento():
+    """Pergunta que só o modal faz (`agendamento.campos`, 29/10) também sai
+    com o rótulo na nota e no e-mail ao vendedor, não com a chave."""
+    from test_agendamento_regras import config_phoebus
+    config = config_phoebus()
+    config["campos"].append({"chave": "filiais", "rotulo": "Filiais (página)",
+                             "tipo": "texto"})
+    rotulos = execucao.rotulos_dos_campos(config)
+    assert rotulos["testes_por_dia"] == "Quantas pessoas passariam pelo teste por dia?"
+    assert rotulos["funcionarios"] == "Quantos funcionários a empresa tem?"
+    assert rotulos["filiais"] == "Filiais (página)"
+    assert rotulos["empresa"] == "Empresa"
+
+
 def test_nota_so_acrescenta_o_que_a_nota_padrao_nao_mostra():
     ag = {"inicio": _brt(29, 12), "fim": _brt(29, 13), "email": "x@exemplo.invalid",
           "_rotulos": {"filiais": "Quantas filiais?", "novo": "Pergunta nova?"},

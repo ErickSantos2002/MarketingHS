@@ -68,6 +68,67 @@ test("camposDaEtapa2 tira nome, e-mail e WhatsApp", () => {
   assert.deepEqual(camposDaEtapa2(CONFIG).map((c) => c.chave), ["empresa", "funcionarios", "filiais"]);
 });
 
+// Pedido do Erick (29/10, landing phoebus): o formulário da página fica com
+// nome/e-mail/WhatsApp/empresa/cargo; as perguntas de qualificação são só do
+// modal, em `agendamento.campos`.
+const PHOEBUS = {
+  campos: [
+    { chave: "nome", rotulo: "Nome", tipo: "texto", obrigatorio: true },
+    { chave: "email", rotulo: "E-mail corporativo", tipo: "email", obrigatorio: true },
+    { chave: "whatsapp", rotulo: "WhatsApp", tipo: "telefone", obrigatorio: true },
+    { chave: "empresa", rotulo: "Empresa", tipo: "texto", obrigatorio: true },
+    { chave: "cargo", rotulo: "Cargo", tipo: "texto", obrigatorio: false },
+  ],
+  agendamento: {
+    ativo: true, faixas_que_agendam: ["401 a 1.000", "Mais de 1.000"],
+    campos: [
+      { chave: "funcionarios", rotulo: "Quantos funcionários a empresa tem?", tipo: "lista",
+        obrigatorio: true, opcoes: FAIXAS },
+      { chave: "testes_por_dia", rotulo: "Quantas pessoas passariam pelo teste por dia?",
+        tipo: "lista", obrigatorio: false, opcoes: ["Até 50", "51 a 200", "201 a 1.000", "Mais de 1.000"] },
+      { chave: "filiais", rotulo: "Quantas filiais?", tipo: "lista", obrigatorio: false,
+        opcoes: ["Só a matriz", "2 a 5", "6 a 20", "Mais de 20"] },
+    ],
+  },
+};
+
+test("camposDaEtapa2 junta os da página com os só do agendamento", () => {
+  const etapa2 = camposDaEtapa2(PHOEBUS);
+  assert.deepEqual(etapa2.map((c) => c.chave),
+    ["empresa", "cargo", "funcionarios", "testes_por_dia", "filiais"]);
+  const porte = etapa2.find((c) => c.chave === "funcionarios");
+  assert.equal(porte.obrigatorio, true);
+  assert.deepEqual(porte.opcoes, FAIXAS);
+});
+
+test("camposDaEtapa2: chave repetida fica a da página; etapa 1 e e-mail nunca entram", () => {
+  const config = {
+    campos: [...PHOEBUS.campos, { chave: "filiais", rotulo: "Filiais (página)", tipo: "texto" }],
+    agendamento: { ...PHOEBUS.agendamento, campos: [
+      ...PHOEBUS.agendamento.campos,
+      { chave: "nome", rotulo: "Outro nome", tipo: "texto" },
+      { chave: "whatsapp", rotulo: "Outro whats", tipo: "telefone" },
+    ] },
+  };
+  const etapa2 = camposDaEtapa2(config);
+  assert.deepEqual(etapa2.map((c) => c.chave),
+    ["empresa", "cargo", "filiais", "funcionarios", "testes_por_dia"]);
+  assert.equal(etapa2.find((c) => c.chave === "filiais").rotulo, "Filiais (página)");
+});
+
+test("camposDaEtapa2: agendamento.campos vazio ou inválido não traz os campos padrão", () => {
+  for (const campos of [undefined, [], [{ chave: "x" }], "lixo"]) {
+    const config = { ...PHOEBUS, agendamento: { ...PHOEBUS.agendamento, campos } };
+    assert.deepEqual(camposDaEtapa2(config).map((c) => c.chave), ["empresa", "cargo"]);
+  }
+});
+
+test("o formulário da página não vê os campos só do agendamento", async () => {
+  const { camposDaConfig } = await import("../src/landing/campos.ts");
+  assert.deepEqual(camposDaConfig(PHOEBUS).map((c) => c.chave),
+    ["nome", "email", "whatsapp", "empresa", "cargo"]);
+});
+
 test("camposDaEtapa1 tem os três, obrigatórios, mesmo se a página não pede", () => {
   const etapa1 = camposDaEtapa1(CONFIG);
   assert.deepEqual(etapa1.map((c) => c.chave), ["nome", "email", "whatsapp"]);

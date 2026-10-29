@@ -136,3 +136,87 @@ def test_escolher_e_fila_depois():
     assert escolher([1, 2, 3], {1, 3}) == 1
     assert fila_depois([1, 2, 3], 1) == [2, 3, 1]
     assert fila_depois([1, 2, 3], 3) == [1, 2, 3]
+
+
+# ── Perguntas só do agendamento (`agendamento.campos`, 29/10) ────────────────
+# A landing phoebus: o formulário da página tem só nome/e-mail/WhatsApp/
+# empresa/cargo; o porte, os testes por dia e as filiais só o modal pergunta.
+# O modo de falhar: o modal sem o porte (ninguém passa do `pode_agendar`), a
+# captura normal exigindo uma pergunta que ela não mostra, ou a lista vazia
+# trazendo de volta os campos padrão.
+
+FAIXAS_PORTE = ["Até 100", "101 a 400", "401 a 1.000", "Mais de 1.000"]
+
+
+def config_phoebus() -> dict:
+    return {
+        "campos": [
+            {"chave": "nome", "rotulo": "Nome", "tipo": "texto", "obrigatorio": True},
+            {"chave": "email", "rotulo": "E-mail corporativo", "tipo": "email",
+             "obrigatorio": True},
+            {"chave": "whatsapp", "rotulo": "WhatsApp", "tipo": "telefone",
+             "obrigatorio": True},
+            {"chave": "empresa", "rotulo": "Empresa", "tipo": "texto", "obrigatorio": True},
+            {"chave": "cargo", "rotulo": "Cargo", "tipo": "texto", "obrigatorio": False},
+        ],
+        "agendamento": {
+            "ativo": True, "faixas_que_agendam": FAIXAS,
+            "campos": [
+                {"chave": "funcionarios", "rotulo": "Quantos funcionários a empresa tem?",
+                 "tipo": "lista", "obrigatorio": True, "opcoes": FAIXAS_PORTE},
+                {"chave": "testes_por_dia",
+                 "rotulo": "Quantas pessoas passariam pelo teste por dia?",
+                 "tipo": "lista", "obrigatorio": False,
+                 "opcoes": ["Até 50", "51 a 200", "201 a 1.000", "Mais de 1.000"]},
+                {"chave": "filiais", "rotulo": "Quantas filiais?", "tipo": "lista",
+                 "obrigatorio": False,
+                 "opcoes": ["Só a matriz", "2 a 5", "6 a 20", "Mais de 20"]},
+            ],
+        },
+    }
+
+
+def test_etapa_2_junta_pagina_e_agendamento():
+    from app.agendamento.config import definicoes_da_etapa_2
+    defs = definicoes_da_etapa_2(config_phoebus())
+    assert [d.chave for d in defs] == ["empresa", "cargo", "funcionarios",
+                                       "testes_por_dia", "filiais"]
+    porte = defs[2]
+    assert porte.obrigatorio and porte.opcoes == tuple(FAIXAS_PORTE) and not porte.legado
+
+
+def test_etapa_2_chave_repetida_fica_a_da_pagina_e_etapa_1_nunca_entra():
+    from app.agendamento.config import definicoes_da_etapa_2
+    config = config_phoebus()
+    config["campos"].append({"chave": "filiais", "rotulo": "Filiais (página)",
+                             "tipo": "texto"})
+    config["agendamento"]["campos"] += [
+        {"chave": "nome", "rotulo": "Outro", "tipo": "texto"},
+        {"chave": "whatsapp", "rotulo": "Outro", "tipo": "telefone"}]
+    defs = definicoes_da_etapa_2(config)
+    assert [d.chave for d in defs] == ["empresa", "cargo", "filiais", "funcionarios",
+                                       "testes_por_dia"]
+    assert defs[2].rotulo == "Filiais (página)"
+
+
+def test_etapa_2_sem_lista_do_agendamento_nao_traz_campos_padrao():
+    from app.agendamento.config import definicoes_da_etapa_2
+    for campos in (None, [], [{"chave": "x"}], "lixo"):
+        config = config_phoebus()
+        config["agendamento"]["campos"] = campos
+        assert [d.chave for d in definicoes_da_etapa_2(config)] == ["empresa", "cargo"]
+
+
+def test_captura_normal_nao_ve_as_perguntas_do_agendamento():
+    from app.captura.campos import ler_definicoes, validar
+    defs = ler_definicoes(config_phoebus())
+    assert [d.chave for d in defs] == ["nome", "email", "whatsapp", "empresa", "cargo"]
+    validados = validar(defs, {"email": "a@b.com", "nome": "Ana",
+                               "whatsapp": "(81) 99999-0000", "empresa": "Acme"})
+    assert validados.erros == {}
+
+
+def test_pode_agendar_com_porte_so_do_agendamento():
+    cfg = ler_config(config_phoebus())
+    assert cfg.ativo and cfg.campo_porte == "funcionarios"
+    assert pode_agendar(cfg, {"funcionarios": "Mais de 1.000"})

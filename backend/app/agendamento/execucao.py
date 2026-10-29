@@ -35,7 +35,7 @@ from zoneinfo import ZoneInfo
 
 from app import integracoes
 from app.agendamento import reserva
-from app.agendamento.config import ler_config
+from app.agendamento.config import definicoes_so_do_agendamento, ler_config
 from app.captura.campos import ler_definicoes
 from app.captura.informados import CAMPOS_INFORMADOS
 from app.config import settings
@@ -77,8 +77,13 @@ CHAVES_JA_MOSTRADAS = CHAVES_DE_CONTROLE | {
 
 def rotulos_dos_campos(config) -> dict[str, str]:
     """chave -> rótulo dos campos da página (`ler_definicoes`). Ajuste da
-    homologação (28/10): o vendedor lia `testes_por_dia` em vez da pergunta."""
-    return {d.chave: d.rotulo for d in ler_definicoes(reserva._dados(config)) if d.rotulo}
+    homologação (28/10): o vendedor lia `testes_por_dia` em vez da pergunta.
+    Inclui as perguntas só do modal (`agendamento.campos`, 29/10); chave
+    repetida fica com o rótulo da página."""
+    config = reserva._dados(config)
+    rotulos = {d.chave: d.rotulo for d in definicoes_so_do_agendamento(config) if d.rotulo}
+    rotulos.update({d.chave: d.rotulo for d in ler_definicoes(config) if d.rotulo})
+    return rotulos
 
 
 def _rotulo(chave: str, rotulos: dict[str, str] | None) -> str:

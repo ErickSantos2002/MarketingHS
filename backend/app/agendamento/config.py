@@ -11,6 +11,10 @@ import re
 from dataclasses import dataclass
 from datetime import time
 
+from app.captura.campos import DefinicaoCampo, ler_definicoes
+
+# Nome, e-mail e WhatsApp: a etapa 1 do modal, sempre os da página.
+CHAVES_DA_ETAPA_1 = frozenset({"email", "nome", "whatsapp"})
 RE_CHAVE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 RE_HORA = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 # A `/integration/agenda` aceita período de até 15 dias.
@@ -92,6 +96,33 @@ def ler_config(config_da_pagina: dict | None) -> ConfigAgendamento:
         grade_min=_inteiro(bruto.get("grade_min"), padrao.grade_min, 5, 240),
         abandono_min=_inteiro(bruto.get("abandono_min"), padrao.abandono_min, 5, 24 * 60),
     )
+
+
+def definicoes_so_do_agendamento(config_da_pagina: dict | None) -> list[DefinicaoCampo]:
+    """As perguntas que só o modal faz: `agendamento.campos` (29/10), mesmo
+    formato de `config["campos"]`, lidas por `ler_definicoes`.
+
+    ⚠️ `ler_definicoes` põe o e-mail na frente e, se nada sobra, devolve os
+    campos padrão (`legado`): os dois saem daqui, com nome e WhatsApp — a
+    etapa 1 é sempre da página. Lista vazia é nenhuma pergunta.
+    """
+    bruto = config_da_pagina.get("agendamento") if isinstance(config_da_pagina, dict) else None
+    lista = bruto.get("campos") if isinstance(bruto, dict) else None
+    if not isinstance(lista, list) or not lista:
+        return []
+    return [d for d in ler_definicoes({"campos": lista})
+            if not d.legado and d.chave not in CHAVES_DA_ETAPA_1]
+
+
+def definicoes_da_etapa_2(config_da_pagina: dict | None) -> list[DefinicaoCampo]:
+    """Etapa 2 do modal: os campos da página menos nome, e-mail e WhatsApp,
+    depois as perguntas só do agendamento (chave repetida: fica a da página).
+    O espelho de `camposDaEtapa2` (`frontend/src/landing/agendamento.ts`)."""
+    da_pagina = [d for d in ler_definicoes(config_da_pagina)
+                 if d.chave not in CHAVES_DA_ETAPA_1]
+    vistas = {d.chave for d in da_pagina}
+    return da_pagina + [d for d in definicoes_so_do_agendamento(config_da_pagina)
+                        if d.chave not in vistas]
 
 
 def pode_agendar(cfg: ConfigAgendamento, campos: dict) -> bool:

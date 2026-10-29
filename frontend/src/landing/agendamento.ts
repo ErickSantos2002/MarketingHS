@@ -88,9 +88,30 @@ export function camposDaEtapa1(config: ConfigDaPagina): CampoDaPagina[] {
   });
 }
 
-/** Etapa 2: todos os campos da página menos nome, e-mail e WhatsApp. */
+/**
+ * As perguntas que só o modal faz (`config.agendamento.campos`, 29/10): mesmo
+ * formato de `config.campos`, lidas por `camposDaConfig`. Lista vazia ou sem
+ * entrada válida é nenhuma pergunta — nunca os campos padrão (`legado`), que
+ * o `camposDaConfig` devolve quando não sobra nada.
+ */
+export function camposSoDoAgendamento(config: ConfigDaPagina): CampoDaPagina[] {
+  // `AgendamentoDaPagina` (em `campos.ts`, fora do território da frente) não
+  // declara `campos`: lido como desconhecido e conferido aqui.
+  const lista = (config?.agendamento as { campos?: unknown } | undefined)?.campos;
+  if (!Array.isArray(lista) || !lista.length) return [];
+  return camposDaConfig({ campos: lista as CampoDaPagina[] }).filter(
+    (c) => !c.legado && !CHAVES_DA_ETAPA_1.includes(c.chave));
+}
+
+/**
+ * Etapa 2: os campos da página menos nome, e-mail e WhatsApp, e depois as
+ * perguntas só do agendamento. Chave repetida: fica a da página. O espelho de
+ * `app/agendamento/config.py::definicoes_da_etapa_2`.
+ */
 export function camposDaEtapa2(config: ConfigDaPagina): CampoDaPagina[] {
-  return camposDaConfig(config).filter((c) => !CHAVES_DA_ETAPA_1.includes(c.chave));
+  const daPagina = camposDaConfig(config).filter((c) => !CHAVES_DA_ETAPA_1.includes(c.chave));
+  const vistas = new Set(daPagina.map((c) => c.chave));
+  return [...daPagina, ...camposSoDoAgendamento(config).filter((c) => !vistas.has(c.chave))];
 }
 
 /** `"2026-10-29T15:00:00Z"` → `"12:00"` (Brasília). */
