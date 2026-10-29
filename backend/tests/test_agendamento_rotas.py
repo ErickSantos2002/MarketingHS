@@ -154,6 +154,36 @@ async def test_fluxo_completo_dados_empresa_horarios_confirmar(cenario, cliente,
     assert c2.status_code == 200 and c2.json() == {"status": "ja_tem"}
 
 
+async def test_empresa_valida_perguntas_so_do_agendamento(cenario, cliente, falso):
+    """Landing phoebus (29/10): o porte, os testes por dia e as filiais saíram
+    do formulário da página e ficam em `agendamento.campos` — o modal pergunta,
+    a etapa 2 valida, e o `pode_agendar` passa com o porte vindo só dali."""
+    from test_agendamento_regras import config_phoebus
+    await cenario.trocar_config(config_phoebus())
+    url = "/publico/agendamento/{}/empresa"
+
+    token = (await cliente.post("/publico/agendamento/dados",
+                                json=_dados(cenario, cenario.email("so-ag")))).json()["token"]
+    # Obrigatório só do agendamento faltando: 400 com erro no campo.
+    r = await cliente.post(url.format(token), json={"fields": {"empresa": "Acme"}})
+    assert r.status_code == 400
+    assert set(r.json()["detail"]["campos"]) == {"funcionarios"}
+    # Opção fora da lista: recusada.
+    r = await cliente.post(url.format(token), json={"fields": {
+        "empresa": "Acme", "funcionarios": "Mais de 1.000", "filiais": "Umas dez"}})
+    assert r.status_code == 400 and set(r.json()["detail"]["campos"]) == {"filiais"}
+    # Completo: aceito, e o porte do agendamento destrava a agenda.
+    r = await cliente.post(url.format(token), json={"fields": {
+        "empresa": "Acme", "funcionarios": "Mais de 1.000",
+        "testes_por_dia": "51 a 200", "filiais": "2 a 5"}})
+    assert r.status_code == 200 and r.json() == {"pode_agendar": True}
+    linha = await cenario.linha(token)
+    dados = linha["dados"] if isinstance(linha["dados"], dict) else __import__(
+        "json").loads(linha["dados"])
+    assert dados["colunas"]["funcionarios"] == "Mais de 1.000"
+    assert dados["extras"] == {"testes_por_dia": "51 a 200", "filiais": "2 a 5"}
+
+
 async def test_confirmar_sem_fuso_422(cenario, cliente, falso):
     token = (await cliente.post("/publico/agendamento/dados",
                                 json=_dados(cenario, cenario.email()))).json()["token"]

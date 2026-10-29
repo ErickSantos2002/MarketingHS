@@ -81,10 +81,17 @@ function OpcoesDaLista({ opcoes, onChange, id }: {
   );
 }
 
-export function CamposEditor({ campos, onChange }: {
+// `prefixoDoId`: o editor aparece duas vezes na configuração da página (campos
+// do formulário e perguntas só do agendamento) — ids repetidos fariam o
+// `<label for>` de uma lista apontar para a outra. `colunasFora`: colunas que
+// a lista não oferece (o agendamento não pergunta nome nem WhatsApp de novo).
+export function CamposEditor({ campos, onChange, prefixoDoId = 'campo', colunasFora = [] }: {
   campos: CampoDaPagina[];
   onChange: (c: CampoDaPagina[]) => void;
+  prefixoDoId?: string;
+  colunasFora?: string[];
 }) {
+  const colunas = COLUNAS.filter((c) => !colunasFora.includes(c.chave));
   const trocar = (i: number, parcial: Partial<CampoDaPagina>) => {
     onChange(campos.map((c, j) => (j === i ? { ...c, ...parcial } : c)));
   };
@@ -97,7 +104,7 @@ export function CamposEditor({ campos, onChange }: {
   };
   const remover = (i: number) => onChange(campos.filter((_, j) => j !== i));
   const adicionar = () => {
-    const livre = COLUNAS.find((c) => !campos.some((x) => x.chave === c.chave));
+    const livre = colunas.find((c) => !campos.some((x) => x.chave === c.chave));
     onChange([
       ...campos,
       livre
@@ -112,7 +119,7 @@ export function CamposEditor({ campos, onChange }: {
         const ehEmail = campo.chave === 'email';
         const personalizado = !ehEmail && !CHAVES_DE_COLUNA.has(campo.chave);
         const erro = erroDaChave(campo, campos);
-        const prefixo = `campo-${i}`;
+        const prefixo = `${prefixoDoId}-${i}`;
         return (
           <div key={i} className="rounded-lg border border-borda bg-surface p-3 space-y-3">
             <div className="flex items-start gap-2">
@@ -137,7 +144,7 @@ export function CamposEditor({ campos, onChange }: {
                         if (v === PERSONALIZADO) {
                           trocar(i, { chave: '' });
                         } else {
-                          const coluna = COLUNAS.find((c) => c.chave === v);
+                          const coluna = colunas.find((c) => c.chave === v);
                           trocar(i, {
                             chave: v,
                             rotulo: campo.rotulo || coluna?.rotulo || '',
@@ -148,7 +155,7 @@ export function CamposEditor({ campos, onChange }: {
                     >
                       <SelectTrigger aria-label="Coluna do contato"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {COLUNAS.map((c) => (
+                        {colunas.map((c) => (
                           <SelectItem key={c.chave} value={c.chave}
                                       disabled={c.chave !== campo.chave && campos.some((x) => x.chave === c.chave)}>
                             {c.rotulo}

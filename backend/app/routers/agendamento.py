@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.agendamento import reserva
+from app.agendamento.config import CHAVES_DA_ETAPA_1, definicoes_da_etapa_2
 from app.agendamento.config import ler_config as ler_config_agendamento
 from app.captura.campos import ler_definicoes, validar
 from app.captura.canal import canal_do_toque
@@ -39,7 +40,6 @@ from app.routers.captura import (EMAIL_TAMANHO_MAXIMO, MENSAGEM_CAMPOS,
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/publico/agendamento", tags=["agendamento"])
 
-CHAVES_DA_ETAPA_1 = frozenset({"email", "nome", "whatsapp"})
 MENSAGEM_OCUPADO = "Esse horário acabou de ser ocupado. Escolha outro."
 # Para os testes: o transporte do `growthhs.Cliente` (MockTransport).
 TRANSPORTE = None
@@ -189,8 +189,9 @@ async def etapa_empresa(token: str, dados: EmpresaIn):
             if slug is None:
                 raise _nao_achado()
             config = await _pagina_com_agendamento(conn, slug)
-            definicoes = [d for d in ler_definicoes(config)
-                          if d.chave not in CHAVES_DA_ETAPA_1]
+            # Os campos da página e as perguntas só do modal
+            # (`agendamento.campos`, 29/10) — o que `camposDaEtapa2` mostra.
+            definicoes = definicoes_da_etapa_2(config)
             campos = {k: v for k, v in (dados.fields or {}).items()
                       if k not in CHAVES_DA_ETAPA_1}
             validados = validar(definicoes, campos)

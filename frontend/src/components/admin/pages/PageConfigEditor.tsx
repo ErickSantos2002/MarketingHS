@@ -97,6 +97,19 @@ const AGENDAMENTO_PADRAO: AgendamentoDaPagina = {
   antecedencia_min: 120,
   janela_dias: 14,
 };
+// Perguntas que só o modal faz (`agendamento.campos`, 29/10): mesmo formato de
+// `config.campos`. `AgendamentoDaPagina` (landing/campos.ts) não as declara.
+type AgendamentoComCampos = AgendamentoDaPagina & { campos?: CampoDaPagina[] };
+// Ao ligar o agendamento numa página sem campo de porte (nem no formulário
+// nem nas perguntas do agendamento), a pergunta do porte nasce aqui — sem ela
+// ninguém passa do corte.
+const PERGUNTA_DO_PORTE: CampoDaPagina = {
+  chave: 'funcionarios',
+  rotulo: 'Quantos funcionários a empresa tem?',
+  tipo: 'lista',
+  obrigatorio: true,
+  opcoes: ['Até 100', '101 a 400', '401 a 1.000', 'Mais de 1.000'],
+};
 const TIPOS_DE_REUNIAO: { valor: string; rotulo: string }[] = [
   { valor: 'apresentacao_phoebus', rotulo: 'Apresentação Phoebus' },
   { valor: 'duvidas_phoebus', rotulo: 'Dúvidas Phoebus' },
@@ -108,16 +121,30 @@ const TIPOS_DE_REUNIAO: { valor: string; rotulo: string }[] = [
 function AgendamentoDaPaginaEditor({
   agendamento, campos, onChange,
 }: {
-  agendamento: AgendamentoDaPagina | undefined;
+  agendamento: AgendamentoComCampos | undefined;
   campos: CampoDaPagina[];
-  onChange: (a: AgendamentoDaPagina | undefined) => void;
+  onChange: (a: AgendamentoComCampos | undefined) => void;
 }) {
   const ligado = !!agendamento?.ativo;
-  const atual = { ...AGENDAMENTO_PADRAO, ...(agendamento ?? {}) };
-  const listas = campos.filter((c) => c.tipo === 'lista' && (c.opcoes?.length ?? 0) > 0);
+  const atual: AgendamentoComCampos = { ...AGENDAMENTO_PADRAO, ...(agendamento ?? {}) };
+  const soDoAgendamento = Array.isArray(atual.campos) ? atual.campos : [];
+  // O porte pode vir do formulário da página ou das perguntas do agendamento
+  // (chave repetida: a da página, como no modal).
+  const listas = [...campos, ...soDoAgendamento.filter((c) => !campos.some((p) => p.chave === c.chave))]
+    .filter((c) => c.tipo === 'lista' && (c.opcoes?.length ?? 0) > 0);
   const porte = listas.find((c) => c.chave === atual.campo_porte);
   const faixas = atual.faixas_que_agendam ?? [];
-  const mudar = (parcial: Partial<AgendamentoDaPagina>) => onChange({ ...atual, ...parcial });
+  const mudar = (parcial: Partial<AgendamentoComCampos>) => onChange({ ...atual, ...parcial });
+  const ligar = () => {
+    // Com alguma lista (no formulário ou no agendamento), a pessoa escolhe
+    // o porte no seletor. Sem lista nenhuma: nasce a pergunta padrão.
+    if (porte || listas.length) return onChange({ ...atual, ativo: true });
+    const semRepetir = soDoAgendamento.filter((c) => c.chave !== PERGUNTA_DO_PORTE.chave);
+    onChange({
+      ...atual, ativo: true, campo_porte: PERGUNTA_DO_PORTE.chave, faixas_que_agendam: [],
+      campos: [...semRepetir, PERGUNTA_DO_PORTE],
+    });
+  };
 
   return (
     <section className="border rounded-lg p-4 space-y-4">
@@ -130,7 +157,7 @@ function AgendamentoDaPaginaEditor({
           <Switch
             id="agendamento-ligado"
             checked={ligado}
-            onCheckedChange={(v) => onChange(v ? { ...atual, ativo: true } : agendamento ? { ...atual, ativo: false } : undefined)}
+            onCheckedChange={(v) => (v ? ligar() : onChange(agendamento ? { ...atual, ativo: false } : undefined))}
           />
         </div>
       </div>
@@ -197,10 +224,24 @@ function AgendamentoDaPaginaEditor({
             </div>
           ) : (
             <p className="text-xs text-[--on-tint-danger]">
-              Crie em "Campos do formulário" um campo de lista com as faixas de porte (ex.:
-              funcionários) e escolha-o acima.
+              Crie em "Campos do formulário" ou em "Perguntas só do agendamento" um campo de
+              lista com as faixas de porte (ex.: funcionários) e escolha-o acima.
             </p>
           )}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Perguntas só do agendamento</h4>
+            <p className="text-xs text-muted-foreground">
+              Aparecem só para quem clica em agendar, depois de nome, e-mail e WhatsApp, junto com os
+              demais campos do formulário. O formulário normal da página não as mostra. Pergunta com a
+              mesma chave de um campo do formulário fica com a do formulário.
+            </p>
+            <CamposEditor
+              campos={soDoAgendamento}
+              prefixoDoId="agendamento-pergunta"
+              colunasFora={['nome', 'whatsapp']}
+              onChange={(c) => mudar({ campos: camposParaGravar(c) })}
+            />
+          </div>
           <div className="space-y-2 max-w-40">
             <Label htmlFor="agendamento-duracao">Duração (min)</Label>
             <Input
