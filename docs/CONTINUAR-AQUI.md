@@ -5,7 +5,7 @@
 > - Nicholson aprovou a landing com agendamento. Pedido dele aplicado: faixa de números sem "770+ aparelhos conectados" e com "200 mil+" colaboradores (`~/marketinghs-phoebus-numeros.sh`, rodado).
 > - **Virada:** Erick clica "Usar este ambiente" em Produção (Configurações → Integrações → GrowthHS). Conferido antes: nenhum lead real da `phoebus` desde 28/10 14:12 UTC; produção completa (lista 22).
 > - Em andamento: frente `agendamento-robustez` (M4 idempotência tarefa/sala, M5 alerta sem Resend, M6 token fora da URL).
-> - Ainda pendentes: pedido ao HSGrowth do nome "Health & Safety" (sessão no `hsgrowth-sistema`); Karolaine (`sdr30@`) fora do grupo do Exchange e da roleta — confirmar com o Erick.
+> - Nome "Health & Safety" no convite: em andamento numa sessão do `hsgrowth-sistema`. Karolaine **não** entra na roleta (Erick, 29/10).
 
 > ## ▶️ 29/10 (manhã) — perguntas só do agendamento
 >
