@@ -1,5 +1,13 @@
 # Continuar aqui
 
+> ## ▶️ 29/10 (tarde) — vídeo próprio na landing
+>
+> - Frente `video-proprio` ✅ mergeada: upload de vídeo no editor (seção `video`, `arquivo_url` + capa), `GET/HEAD /publico/video/{id}` com Range (206/416, ETag, imutável), `<video playsinline>` com os controles do player fechado; bytea em `landing_videos` (037, `STORAGE EXTERNAL`); nginx 64M só no upload; balde próprio 600/min.
+> - **Achado e corrigido na coordenadora:** `/publico/imagem/` estava no balde comum de 30/min — medido em produção, a 31ª imagem dava 429 (a `phoebus` carrega ~25). Balde próprio de 600/min. Portão local **1408 passed, 9 skipped**, `tsc` 0, node 77, builds ok, guarda 0.
+> - Vídeo: `~/Downloads/video promo phoebus.mp4` (animação, 1080p, 34 MB) → `~/projetos/landing-phoebus/material/phoebus-promo-1080p.mp4` (8,3 MB, faststart), `-720p` (3,6 MB) e `phoebus-promo-capa.jpg`.
+> - **Falta:** Erick roda `bash ~/marketinghs-migration-037.sh` + Deploy de api e sistema; sobe o vídeo e a capa no editor da `phoebus` (formato horizontal); conferir no iPhone.
+> - Backlog (de `docs/frentes/video-proprio.md`): régua do servidor para `arquivo_url` em `captura/urls.py`; rota para apagar vídeo; descrição "Vídeo do YouTube…" no `SecoesEditor.tsx`; HEVC só com aviso.
+
 > ## ▶️ 29/10 — Nicholson aprovou; GrowthHS de volta em produção
 >
 > - Nicholson aprovou a landing com agendamento. Pedido dele aplicado: faixa de números sem "770+ aparelhos conectados" e com "200 mil+" colaboradores (`~/marketinghs-phoebus-numeros.sh`, rodado).
