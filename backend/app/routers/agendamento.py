@@ -14,8 +14,8 @@ contra a config da página, consentimento. O `token` (24 bytes aleatórios) é a
 acesso do proxy (EasyPanel/Traefik, nginx), e quem lê o log retomaria o
 rascunho (e veria os dados da etapa 1). As rotas antigas
 (`/{token}/empresa`, `/horarios/{token}`, `/{token}/confirmar`,
-`/{token}/ligar`) ficam SÓ para a aba aberta antes do deploy, com
-`deprecated=True`; saem no deploy seguinte (docs/frentes/agendamento-robustez.md).
+`/{token}/ligar`) ficaram só para a aba aberta antes do deploy de 29/10 e
+saíram no seguinte (docs/frentes/agendamento-painel.md): não as traga de volta.
 
 ⚠️ `/horarios/consultar` (e não `/horarios`) porque o limite de taxa casa por
 PREFIXO (`/publico/agendamento/horarios/`, em `main.py`): assim os horários
@@ -202,11 +202,6 @@ async def etapa_empresa(dados: EmpresaComToken):
     return await _empresa(dados.token, dados)
 
 
-@router.post("/{token}/empresa", deprecated=True)
-async def etapa_empresa_antiga(token: str, dados: EmpresaIn):
-    return await _empresa(token, dados)
-
-
 async def _empresa(token: str, dados: EmpresaIn):
     try:
         async with sessao(role="service_role") as conn:
@@ -238,11 +233,6 @@ async def _empresa(token: str, dados: EmpresaIn):
 @router.post("/horarios/consultar")
 async def etapa_horarios(dados: ComToken):
     return await _horarios(dados.token)
-
-
-@router.get("/horarios/{token}", deprecated=True)
-async def etapa_horarios_antiga(token: str):
-    return await _horarios(token)
 
 
 async def _horarios(token: str):
@@ -285,11 +275,6 @@ async def etapa_confirmar(dados: ConfirmarComToken):
     return await _confirmar(dados.token, dados)
 
 
-@router.post("/{token}/confirmar", deprecated=True)
-async def etapa_confirmar_antiga(token: str, dados: ConfirmarIn):
-    return await _confirmar(token, dados)
-
-
 async def _confirmar(token: str, dados: ConfirmarIn):
     inicio = _ler_inicio(dados.inicio)
     cfg = await _ambiente_ativo()
@@ -314,11 +299,6 @@ async def _confirmar(token: str, dados: ConfirmarIn):
 @router.post("/ligar")
 async def etapa_ligar(dados: ComToken):
     return await _ligar(dados.token)
-
-
-@router.post("/{token}/ligar", deprecated=True)
-async def etapa_ligar_antiga(token: str):
-    return await _ligar(token)
 
 
 async def _ligar(token: str):

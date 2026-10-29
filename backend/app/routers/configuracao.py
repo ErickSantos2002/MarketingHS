@@ -1017,6 +1017,7 @@ async def _estado_do_ambiente(ambiente: str, ativo: str | None) -> dict:
 
 
 async def _estado_growthhs() -> dict:
+    from app.agendamento import execucao
     from app.crm import entrega, growthhs
 
     cfg = await growthhs.ler_config()
@@ -1049,6 +1050,10 @@ async def _estado_growthhs() -> dict:
                  "ultimas_falhas": [dict(l) for l in ultimas],
                  "pausada": ({"motivo": pausa["motivo"], "desde": pausa["desde"]}
                              if pausa and pausa["motivo"] else None)},
+        # M5 (agendamento-robustez): as reuniões que o lead viu "confirmado" e
+        # não ficaram prontas — o par da fila. Só admin (todas as rotas que
+        # servem este estado são `admin_atual`; `leitura` leva 403).
+        "agendamentos": await execucao.pendencias(),
     }
 
 
