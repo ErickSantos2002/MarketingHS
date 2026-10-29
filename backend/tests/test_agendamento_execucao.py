@@ -629,3 +629,69 @@ async def test_m4_sala_sem_o_convite_ainda_adia_sem_pedir_outra(cenario, falso, 
     await _liberar(ag_id)
     assert (await _rodar(falso, ag_id))["criadas"] == 1
     assert (await _linha(ag_id))["public_link"] == "https://app.exemplo.invalid/entrar/tok-x"
+
+
+# ── M5: alerta que não saiu por e-mail (frente agendamento-robustez, 29/10) ──
+
+async def _falhar(ag_id, erro="422: recusado"):
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE reuniao_agendamentos SET status = 'falhou', erro = $2 WHERE id = $1::uuid",
+            ag_id, erro)
+
+
+async def test_m5_sem_resend_loga_erro_e_nao_marca_o_alerta(cenario, falso, monkeypatch,
+                                                            caplog):
+    async def sem_segredo(nome):
+        return None
+    monkeypatch.setattr(execucao.integracoes, "ler_segredo", sem_segredo)
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    with caplog.at_level("ERROR", logger="app.agendamento.execucao"):
+        await execucao.alertar_admins(dict(await _linha(ag_id)), "motivo x")
+    (registro,) = [r for r in caplog.records if "ALERTA NÃO ENVIADO" in r.getMessage()]
+    assert registro.levelname == "ERROR"
+    assert ag_id in registro.getMessage() and "motivo x" in registro.getMessage()
+    assert "Resend" in registro.getMessage()
+    assert (await _linha(ag_id))["alerta_em"] is None
+
+
+async def test_m5_resend_fora_para_todos_nao_marca_o_alerta(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    resend_falso["levantar"] = RuntimeError("fora")
+    await execucao.alertar_admins(dict(await _linha(ag_id)), "motivo")
+    assert (await _linha(ag_id))["alerta_em"] is None
+    resend_falso["levantar"] = None
+    await execucao.alertar_admins(dict(await _linha(ag_id)), "motivo")
+    assert (await _linha(ag_id))["alerta_em"] is not None
+
+
+async def test_m5_varredura_reenvia_o_alerta_que_nao_saiu(cenario, falso, resend_falso):
+    """Reserva `falhou` sem `alerta_em` (o alerta não saiu: Resend sem chave
+    ou fora): a fila não volta a ela, então a varredura tenta de novo — o
+    admin fica sabendo assim que o Resend estiver de pé."""
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    await _falhar(ag_id, "422: card recusado")
+    r = await execucao.varrer(datetime.now(UTC), somente_paginas=[cenario.slug])
+    assert r["alertas"] == 1
+    alertas = [e for e in resend_falso["enviados"] if "Agendamento com falha" in e["assunto"]]
+    assert alertas and "422: card recusado" in alertas[0]["texto"]
+    assert (await _linha(ag_id))["alerta_em"] is not None
+    n = len(resend_falso["enviados"])
+    r = await execucao.varrer(datetime.now(UTC), somente_paginas=[cenario.slug])
+    assert r["alertas"] == 0 and len(resend_falso["enviados"]) == n
+
+
+async def test_m5_pendencias_para_o_painel(cenario, falso, resend_falso):
+    """O que o card do GrowthHS em Configurações pode mostrar (a ligação
+    fica com a coordenadora: `routers/configuracao.py` não é desta frente)."""
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    await _falhar(ag_id, "422: card recusado")
+    p = await execucao.pendencias(somente_paginas=[cenario.slug])
+    assert p["falhas"] == 1 and p["sem_alerta"] == 1
+    (ultima,) = p["ultimas"]
+    assert ultima["id"] == ag_id and ultima["erro"] == "422: card recusado"
+    assert ultima["page_slug"] == cenario.slug and "token" not in ultima

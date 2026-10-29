@@ -190,11 +190,16 @@ async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
                  JOIN auth.users u ON u.id = r.user_id
                 WHERE r.role = 'admin' AND u.email IS NOT NULL""")]
     chave, de, responder = await _remetente()
-    if not chave or not admins:
-        logger.error("[agendamento] alerta da reserva %s sem como enviar (Resend/admin): %s",
-                     ag["id"], motivo)
-        return
     dia, hora = _quando(ag)
+    if not chave or not admins:
+        # M5: sem e-mail, o log é o único rastro — nível de erro e um texto
+        # fixo para achar (`ALERTA NÃO ENVIADO`). `alerta_em` fica vazio: a
+        # fila (reservada) ou a varredura (falhou) tenta de novo.
+        logger.error("[agendamento] ALERTA NÃO ENVIADO (%s) — reserva %s, %s %s, página %s, "
+                     "vendedor %s: %s",
+                     "Resend sem RESEND_API_KEY" if not chave else "nenhum admin com e-mail",
+                     ag["id"], dia, hora, ag.get("page_slug"), ag.get("vendedor_id"), motivo)
+        return
     e = html.escape
     linha = growthhs.uma_linha
     itens = [("Motivo", linha(motivo)), ("Lead", linha(ag.get("email"))),
@@ -210,6 +215,7 @@ async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
                 "confira no GrowthHS e fale com o lead.</p><ul>")
     corpo = (abertura
              + "".join(f"<li>{e(r)}: {e(str(v))}</li>" for r, v in itens) + "</ul>")
+    enviados = 0
     for email in admins:
         try:
             await resend.enviar(chave=chave, de=de, para=email,
@@ -218,9 +224,16 @@ async def alertar_admins(ag: dict, motivo: str, *, aviso: bool = False) -> None:
                                          f"[MarketingHS] Agendamento com falha — {dia} {hora}"),
                                 html=corpo, texto=html_para_texto(corpo), cabecalhos={},
                                 responder_para=responder)
+            enviados += 1
         except Exception:  # noqa: BLE001 — o alerta tenta os outros admins
             logger.exception("[agendamento] alerta da reserva %s não saiu", ag["id"])
     if aviso:
+        return
+    if not enviados:
+        # M5: o Resend recusou para todos — ninguém soube. Sem `alerta_em`, a
+        # próxima passada (ou a varredura) tenta de novo.
+        logger.error("[agendamento] ALERTA NÃO ENVIADO (Resend falhou para todos os admins) "
+                     "— reserva %s, %s %s: %s", ag["id"], dia, hora, motivo)
         return
     async with sessao(role="service_role") as conn:
         await conn.execute(
@@ -614,15 +627,58 @@ async def rodar_agendamentos(*, limite: int = 10, cfg: growthhs.Config | None = 
     return contagem
 
 
+# ── Painel ───────────────────────────────────────────────────────────────────
+
+async def pendencias(*, somente_paginas: list[str] | None = None) -> dict:
+    """M5: as reuniões que o lead acha confirmadas e não ficaram prontas, para
+    o painel (o card do GrowthHS em Configurações já mostra a fila de
+    entrega; este é o par dele). `falhou` cuja reunião não passou há mais de
+    7 dias; `sem_alerta` = nem o e-mail aos admins saiu. Nunca o token."""
+    filtro = ("page_slug = ANY($1::text[])" if somente_paginas is not None
+              else f"NOT ({AGENDAMENTO_DE_TESTE}) AND $1::text[] IS NULL")
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            f"""SELECT id::text, page_slug, inicio, vendedor_id, card_id, erro,
+                       alerta_em, atualizado_em
+                  FROM reuniao_agendamentos
+                 WHERE status = 'falhou' AND fim > now() - interval '7 days' AND {filtro}
+                 ORDER BY atualizado_em DESC""",
+            somente_paginas)
+    return {"falhas": len(linhas),
+            "sem_alerta": sum(1 for l in linhas if l["alerta_em"] is None),
+            "ultimas": [{**dict(l), "inicio": l["inicio"].isoformat(),
+                         "alerta_em": l["alerta_em"] and l["alerta_em"].isoformat(),
+                         "atualizado_em": l["atualizado_em"].isoformat()}
+                        for l in linhas[:5]]}
+
+
 # ── Varredura ────────────────────────────────────────────────────────────────
 
 async def varrer(agora: datetime, *, somente_paginas: list[str] | None = None) -> dict:
     """Rascunho parado há mais de `abandono_min` (30) vira lead comum (o lead desistiu no
     meio); se nem isso der, `abandonada`. Reunião criada/falhada que já
     passou vira `realizada` (sai dos índices únicos)."""
-    resumo = {"lead_comum": 0, "abandonadas": 0, "realizadas": 0}
+    resumo = {"lead_comum": 0, "abandonadas": 0, "realizadas": 0, "alertas": 0}
     filtro = ("page_slug = ANY($2::text[])" if somente_paginas is not None
               else f"NOT ({AGENDAMENTO_DE_TESTE}) AND $2::text[] IS NULL")
+    async with sessao(role="service_role") as conn:
+        # M5: `falhou` sem `alerta_em` = o alerta não saiu (Resend sem chave
+        # ou fora). A fila não volta a ela; daqui sai assim que o Resend
+        # estiver de pé. ANTES do `realizada` abaixo: a reunião que já passou
+        # também precisa do alerta (o lead ficou esperando).
+        sem_alerta = [dict(l) for l in await conn.fetch(
+            f"""SELECT * FROM reuniao_agendamentos
+                 WHERE status = 'falhou' AND alerta_em IS NULL
+                   AND fim > $1::timestamptz - interval '7 days' AND {filtro}
+                 ORDER BY inicio LIMIT 20""",
+            agora, somente_paginas)]
+    for ag in sem_alerta:
+        await alertar_admins(ag, ag.get("erro") or "falha sem motivo registrado")
+        async with sessao(role="service_role") as conn:
+            if await conn.fetchval(
+                    "SELECT alerta_em IS NOT NULL FROM reuniao_agendamentos WHERE id = $1",
+                    ag["id"]):
+                resumo["alertas"] += 1
     async with sessao(role="service_role") as conn:
         # M1: o relógio é a ÚLTIMA mexida do lead (`atualizado_em` — toda
         # chamada pública do token o toca), não a criação: quem está na etapa
