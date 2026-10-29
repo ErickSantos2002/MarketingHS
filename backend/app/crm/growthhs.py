@@ -983,6 +983,31 @@ class Cliente:
         resposta = await self._chamar("POST", CAMINHO_TAREFAS, json=corpo)
         return _corpo_depois_do_2xx(resposta)
 
+    async def reunioes_do_card(self, card_id: int) -> list[dict]:
+        """As tarefas `meeting` do card (`GET /card-tasks?card_id=&task_type=`,
+        paginado). Leitura: corpo torto é transitório. M4: o retry de uma
+        tarefa cuja resposta se perdeu procura aqui a marca do pedido em
+        `notes` antes de criar outra."""
+        tarefas: list[dict] = []
+        for pagina in range(1, MAX_PAGINAS_TAREFAS + 1):
+            corpo = _objeto(await self._chamar(
+                "GET", CAMINHO_TAREFAS,
+                params={"card_id": int(card_id), "task_type": "meeting",
+                        "page_size": TAMANHO_PAGINA_TAREFAS, "page": pagina}))
+            tarefas.extend(t for t in corpo.get("tasks") or [] if isinstance(t, dict))
+            try:
+                total = int(corpo.get("total_pages") or 1)
+            except (TypeError, ValueError):
+                total = 1
+            if pagina >= total:
+                break
+        return tarefas
+
+    async def ler_tarefa(self, task_id: int) -> dict:
+        """`GET /card-tasks/{id}` — traz `daily_room_url`,
+        `public_access_token` e `teams_event_id` (M4: a sala já existe?)."""
+        return _objeto(await self._chamar("GET", f"{CAMINHO_TAREFAS}/{int(task_id)}"))
+
     async def atribuir_vendedor(self, card_id: int, user_id: int) -> None:
         """PUT SÓ com `assigned_to_id` — o card aberto sem vendedor ganha o
         da roleta de reunião. Nada mais do card muda."""
@@ -1011,6 +1036,10 @@ CAMINHO_AGENDA = "/api/v1/integration/agenda"
 CAMINHO_TAREFAS = "/api/v1/card-tasks"
 # Limite da `/integration/agenda` (422 acima disso).
 MAX_IDS_AGENDA = 30
+# `GET /card-tasks` aceita até 500 por página; um card com mais de 10 mil
+# reuniões não existe — o teto só impede laço sem fim com `total_pages` torto.
+TAMANHO_PAGINA_TAREFAS = 500
+MAX_PAGINAS_TAREFAS = 20
 
 
 def _utc_z(data: datetime) -> str:

@@ -10,8 +10,12 @@ nunca refaz o card (molde `crm/entrega.py`):
        `Pedido MarketingHS: <id da reserva>`; o retry depois de um 201
        perdido o reconhece pela assinatura                → card_id
     3. nota de abertura + "Reunião agendada pelo lead…"   → dados.nota_enviada
-    4. tarefa `meeting` com o lead convidado             → task_id
-    5. sala de vídeo (evento no Outlook do vendedor)     → public_link
+    4. tarefa `meeting` com o lead convidado, assinada em `notes`
+       `Pedido MarketingHS: <id>`; `dados.tarefa_pedida` ANTES do POST, e o
+       retry com a marca procura nas reuniões do card (M4)  → task_id
+    5. sala de vídeo (evento no Outlook do vendedor); `dados.sala_pedida`
+       ANTES do POST, e o retry lê a tarefa: sala + evento = pronta (M4)
+                                                          → public_link
        ⚠️ `convidados_removidos > 0` num 2xx é o convite CORTADO em silêncio
        (`DAILY_DEV_MODE` de lá): falha que alerta, não sucesso
     6. e-mail ao vendedor                                 → email_vendedor_em,
@@ -413,6 +417,68 @@ AVISAR_ANTES = timedelta(hours=3)
 MAX_TITULO_TAREFA = 255
 
 
+LINHA_DA_TAREFA = "Reunião agendada pelo lead na landing (MarketingHS)."
+
+
+def _corpo_da_tarefa(ag: dict, lead: dict) -> dict:
+    nome = growthhs._cortar(lead.get("nome"), growthhs.MAX_NOME_PESSOA) or ag["email"]
+    empresa = growthhs.uma_linha(lead.get("empresa"))
+    titulo = (f"Reunião: {nome}" + (f" — {empresa}" if empresa else ""))[:MAX_TITULO_TAREFA]
+    return {
+        "card_id": int(ag["card_id"]),
+        "title": titulo,
+        "task_type": "meeting", "meeting_kind": ag["_meeting_kind"],
+        "assigned_to_id": int(ag["vendedor_id"]),
+        "due_date": reserva.iso_z(ag["inicio"]),
+        "duration_minutes": int((ag["fim"] - ag["inicio"]).total_seconds() // 60),
+        "invited_emails": [ag["email"]],
+        # M4: a marca vai em `notes`, NUNCA em `description` — lá a
+        # `description` é a "Pauta" do convite que o lead recebe; `notes` só
+        # aparece no CRM.
+        "notes": f"{LINHA_DA_TAREFA}\n{growthhs.marca_de_criacao(ag['id'])}"}
+
+
+async def _tarefa_do_pedido(ag: dict, cliente) -> int | None:
+    """A tarefa desta reserva, se já existe no card (marca exata, numa linha
+    própria de `notes` — `card_do_pedido`)."""
+    for t in await cliente.reunioes_do_card(int(ag["card_id"])):
+        if growthhs.card_do_pedido(t.get("notes"), ag["id"]):
+            achada = entrega._id_inteiro(t.get("id"))
+            if achada is not None:
+                logger.info("[agendamento] reserva %s: tarefa %s já existia (resposta perdida)",
+                            ag["id"], achada)
+                return achada
+    return None
+
+
+async def _sala_ja_criada(ag: dict, cfg: growthhs.Config, cliente) -> dict | None:
+    """M4: a sala de uma tentativa anterior, lida da tarefa. A rota de lá
+    (`POST /card-tasks/{id}/daily-room`) cria a sala, DEPOIS o evento no
+    Outlook, e desfaz a sala se o evento falhar. Então:
+
+    - nem sala → a anterior não ficou: `None`, pede de novo;
+    - sala e evento → pronta: o link público é `<app_url>/entrar/<token>`,
+      o mesmo que a rota devolve;
+    - sala sem evento → a anterior ainda está rodando (ou caiu no meio):
+      transitório, sem pedir outra — o Daily recusaria o nome repetido.
+
+    ⚠️ O `convidados_removidos` não fica gravado lá: na sala recuperada ele
+    é 0 por falta de como saber (pedido ao GrowthHS, 29/10)."""
+    tarefa = await cliente.ler_tarefa(int(ag["task_id"]))
+    url, token = tarefa.get("daily_room_url"), tarefa.get("public_access_token")
+    if not url:
+        return None
+    if not tarefa.get("teams_event_id"):
+        raise growthhs.ErroTransitorio(
+            "sala de vídeo criada sem o convite no Outlook (ainda): confira a tarefa "
+            f"{ag['task_id']} no GrowthHS")
+    link = f"{cfg.app_url.rstrip('/')}/entrar/{token}" if cfg.app_url and token else ""
+    logger.info("[agendamento] reserva %s: sala da tarefa %s já existia (resposta perdida)",
+                ag["id"], ag["task_id"])
+    return {"room_url": url, "public_link": link, "public_access_token": token,
+            "convidados_removidos": 0}
+
+
 async def _executar(ag: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -> str:
     if ag["inicio"] <= datetime.now(UTC):
         # I2: nem card, nem convite, nem e-mail para uma reunião que já
@@ -433,24 +499,28 @@ async def _executar(ag: dict, cfg: growthhs.Config, cliente: growthhs.Cliente) -
         await cliente.anotar(int(ag["card_id"]), _nota(ag, lead, conversao, consentimento))
         await asyncio.shield(_marcar_dado(ag["id"], "nota_enviada"))
     if ag.get("task_id") is None:
-        nome = growthhs._cortar(lead.get("nome"), growthhs.MAX_NOME_PESSOA) or ag["email"]
-        empresa = growthhs.uma_linha(lead.get("empresa"))
-        titulo = (f"Reunião: {nome}" + (f" — {empresa}" if empresa else ""))[:MAX_TITULO_TAREFA]
-        tarefa = await cliente.criar_tarefa({
-            "card_id": int(ag["card_id"]),
-            "title": titulo,
-            "task_type": "meeting", "meeting_kind": ag["_meeting_kind"],
-            "assigned_to_id": int(ag["vendedor_id"]),
-            "due_date": reserva.iso_z(ag["inicio"]),
-            "duration_minutes": int((ag["fim"] - ag["inicio"]).total_seconds() // 60),
-            "invited_emails": [ag["email"]]})
-        if entrega._id_inteiro(tarefa.get("id")) is None:
-            # Criou lá sem id aqui: re-tentar criaria a segunda tarefa.
-            raise _Falha("o GrowthHS criou a tarefa da reunião sem devolver o id")
-        ag["task_id"] = int(tarefa["id"])
+        task_id = None
+        if _dados(ag).get("tarefa_pedida"):
+            # M4: uma tentativa anterior pediu a tarefa — a resposta pode ter
+            # se perdido com a tarefa criada lá.
+            task_id = await _tarefa_do_pedido(ag, cliente)
+        if task_id is None:
+            await asyncio.shield(_marcar_dado(ag["id"], "tarefa_pedida"))
+            tarefa = await cliente.criar_tarefa(_corpo_da_tarefa(ag, lead))
+            task_id = entrega._id_inteiro(tarefa.get("id"))
+            if task_id is None:
+                # Criou lá sem id aqui: o retry acha pela marca em `notes`.
+                raise growthhs.ErroTransitorio(
+                    "o GrowthHS criou a tarefa da reunião sem devolver o id")
+        ag["task_id"] = int(task_id)
         await asyncio.shield(_gravar(ag["id"], task_id=ag["task_id"]))
     if ag.get("public_link") is None:
-        sala = await cliente.criar_sala(int(ag["task_id"]))
+        sala = None
+        if _dados(ag).get("sala_pedida"):
+            sala = await _sala_ja_criada(ag, cfg, cliente)
+        if sala is None:
+            await asyncio.shield(_marcar_dado(ag["id"], "sala_pedida"))
+            sala = await cliente.criar_sala(int(ag["task_id"]))
         ag["public_link"] = sala.get("public_link") or sala.get("room_url") or ""
         await asyncio.shield(_gravar(ag["id"], public_link=ag["public_link"]))
         if sala["convidados_removidos"] > 0:

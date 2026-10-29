@@ -512,3 +512,120 @@ async def test_titulo_da_tarefa_cortado(cenario, falso, resend_falso):
     tarefa = next(iter(falso.tarefas.values()))
     assert len(tarefa["title"]) <= 255
     assert len(falso.cards[(await _linha(ag_id))["card_id"]]["title"]) <= growthhs.MAX_TITULO
+
+
+# ── M4: idempotência da tarefa e da sala (frente agendamento-robustez, 29/10) ──
+# A tarefa leva a marca `Pedido MarketingHS: <id da reserva>` em `notes` (o
+# `description` vira a "Pauta" do convite que o LEAD lê; `notes` não sai do
+# CRM). Antes de cada POST a reserva grava `tarefa_pedida`/`sala_pedida`; o
+# retry com a marca procura antes de criar.
+
+async def test_m4_tarefa_leva_a_marca_do_pedido_em_notes(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    linha = await _linha(ag_id)
+    tarefa = falso.tarefas[linha["task_id"]]
+    assert f"Pedido MarketingHS: {ag_id}" in tarefa["notes"].splitlines()
+    assert "Pedido MarketingHS" not in (tarefa.get("description") or "")
+    assert linha["public_link"] == f"https://app.exemplo.invalid/entrar/tok-{linha['task_id']}"
+
+
+async def test_m4_resposta_perdida_da_tarefa_nao_cria_a_segunda(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.perder[("POST", TAREFAS)] = 1
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    linha = await _linha(ag_id)
+    assert linha["task_id"] is None and len(falso.tarefas) == 1
+    assert reserva._dados(linha["dados"]).get("tarefa_pedida") is True
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    (tid,) = falso.tarefas
+    assert (await _linha(ag_id))["task_id"] == tid
+    assert len(falso.de("POST", TAREFAS)) == 1 and falso.salas == [tid]
+
+
+async def test_m4_tarefa_2xx_sem_id_adia_e_o_retry_acha_pela_marca(cenario, falso,
+                                                                    resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.corpo_do_post_tarefa = b""
+    resultado = await _rodar(falso, ag_id)
+    assert resultado["adiadas"] == 1 and resultado["falhas"] == 0
+    assert (await _linha(ag_id))["status"] == "reservada"
+    falso.corpo_do_post_tarefa = None
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    (tid,) = falso.tarefas
+    assert (await _linha(ag_id))["task_id"] == tid
+
+
+async def test_m4_tarefa_pedida_que_nao_chegou_e_criada_no_retry(cenario, falso,
+                                                                 resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.forcar[("POST", TAREFAS)] = [httpx.Response(503, json={"detail": "fora"})]
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    assert falso.tarefas == {}
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    assert len(falso.tarefas) == 1 and len(falso.salas) == 1
+
+
+async def test_m4_tarefa_de_outro_pedido_no_mesmo_card_nao_conta(cenario, falso,
+                                                                 resend_falso):
+    """Outra reunião no mesmo card (a do vendedor, ou de outra reserva) não é
+    a nossa: só a marca exata desta reserva, numa linha só dela."""
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.forcar[("POST", TAREFAS)] = [httpx.Response(503, json={"detail": "fora"})]
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    card_id = (await _linha(ag_id))["card_id"]
+    falso.tarefas[1] = {"id": 1, "card_id": card_id, "task_type": "meeting",
+                        "notes": f"Pedido MarketingHS: {ag_id}0"}
+    falso.tarefas[2] = {"id": 2, "card_id": card_id, "task_type": "meeting",
+                        "notes": f"vendedor escreveu Pedido MarketingHS: {ag_id}"}
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    assert (await _linha(ag_id))["task_id"] not in (1, 2) and len(falso.tarefas) == 3
+
+
+async def test_m4_resposta_perdida_da_sala_nao_pede_outra(cenario, falso, resend_falso):
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.perder[("POST", TAREFAS + "/")] = 1
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    linha = await _linha(ag_id)
+    assert linha["public_link"] is None and len(falso.salas) == 1
+    assert reserva._dados(linha["dados"]).get("sala_pedida") is True
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    linha = await _linha(ag_id)
+    assert falso.salas == [linha["task_id"]]
+    assert len(falso.de("POST", f"{TAREFAS}/{linha['task_id']}/daily-room")) == 1
+    assert linha["public_link"] == f"https://app.exemplo.invalid/entrar/tok-{linha['task_id']}"
+    (email,) = resend_falso["enviados"]
+    assert linha["public_link"] in email["texto"]
+
+
+async def test_m4_sala_sem_o_convite_ainda_adia_sem_pedir_outra(cenario, falso, resend_falso):
+    """A rota de lá cria a sala e DEPOIS o evento no Outlook (e desfaz a sala
+    se o evento falha). Sala sem evento = a primeira chamada ainda não acabou
+    (ou caiu no meio): espera, não pede de novo."""
+    await cenario.roleta(A)
+    ag_id = await _reservar(cenario, falso)
+    falso.forcar[("POST", TAREFAS + "/")] = [httpx.ReadTimeout("perdida")]
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    tid = (await _linha(ag_id))["task_id"]
+    falso.tarefas[tid].update({"daily_room_url": "https://hs.daily.co/x",
+                               "public_access_token": "tok-x"})
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["adiadas"] == 1
+    linha = await _linha(ag_id)
+    assert linha["public_link"] is None and "convite" in linha["erro"]
+    assert len(falso.de("POST", f"{TAREFAS}/{tid}/daily-room")) == 1
+    falso.tarefas[tid]["teams_event_id"] = "evento"
+    await _liberar(ag_id)
+    assert (await _rodar(falso, ag_id))["criadas"] == 1
+    assert (await _linha(ag_id))["public_link"] == "https://app.exemplo.invalid/entrar/tok-x"
