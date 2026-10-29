@@ -247,7 +247,7 @@ export function AdminSidebar({ mobileOpen, onMobileOpenChange }: AdminSidebarPro
       {!collapsed && (
         <div className="border-t border-border px-5 py-4 text-center">
           <p className="truncate text-xs font-medium text-conteudo-muted">MarketingHS</p>
-          <p className="truncate text-[11px] text-conteudo-faint">© 2026 Health &amp; Safety Tech</p>
+          <p className="truncate text-[11px] text-conteudo-faint">© 2026 Health &amp; Safety</p>
         </div>
       )}
     </div>
