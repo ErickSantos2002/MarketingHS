@@ -37,6 +37,7 @@ from app.routers.publico import router as publico_router
 from app.routers.rastreio import router as rastreio_router
 from app.routers.receptor_growthhs import router as receptor_growthhs_router
 from app.routers.ritmo_envio import router as ritmo_envio_router
+from app.routers.imagens import LIMITE_POR_MINUTO as LIMITE_IMAGEM_POR_MINUTO
 from app.routers.videos import LIMITE_POR_MINUTO as LIMITE_VIDEO_POR_MINUTO
 from app.routers.videos import router as videos_router
 from app.routers.webhook import router as webhook_router
@@ -110,7 +111,8 @@ app.add_middleware(
     isentos=("/publico/webhook/", "/publico/growthhs/webhook/", "/publico/validar-email",
              "/publico/ab/go", "/publico/ab/eventos",
              "/publico/descadastro/um-clique", "/publico/site/visita",
-             "/publico/agendamento/horarios/", "/publico/video/"),
+             "/publico/agendamento/horarios/", "/publico/video/",
+             "/publico/imagem/"),
 )
 
 # I1: balde próprio do coletor de eventos do A/B — bem mais generoso que o
@@ -158,6 +160,14 @@ app.add_middleware(
     LimiteTaxaMiddleware,
     por_minuto=LIMITE_VIDEO_POR_MINUTO,
     prefixos=("/publico/video/",),
+)
+
+# Balde próprio das imagens públicas (29/10): a landing carrega dezenas;
+# no balde comum a 31ª levava 429 e levava junto o formulário.
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=LIMITE_IMAGEM_POR_MINUTO,
+    prefixos=("/publico/imagem/",),
 )
 
 # ⚠️ Por último de propósito: é o mais de fora, e responde o preflight do

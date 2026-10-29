@@ -41,6 +41,12 @@ TIPOS_ACEITOS = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 # ser problema de armazenamento.
 TAMANHO_MAXIMO = 5 * 1024 * 1024
 
+# Balde próprio de `/publico/imagem/` (registrado no `main.py`, 29/10): a
+# landing da `phoebus` carrega ~25 imagens por aqui. No balde comum (30/min,
+# o mesmo de `/publico/captura`), quem recarregava a página levava 429 nas
+# imagens e no formulário — medido em produção.
+LIMITE_POR_MINUTO = 600
+
 # O arquivo da ficha técnica. Lista fechada pelo mesmo motivo da de imagem; o
 # tipo declarado sozinho não basta (é o navegador que diz), então os bytes
 # também precisam começar pela assinatura do PDF.
