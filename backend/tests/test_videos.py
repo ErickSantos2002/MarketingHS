@@ -256,3 +256,114 @@ async def test_rota_publica_nao_gasta_a_cota_do_formulario():
                          for m in comum)
     proprio = [m for m in baldes if m.kwargs["prefixos"] == ("/publico/video/",)]
     assert proprio and proprio[0].kwargs["por_minuto"] == rota.LIMITE_POR_MINUTO
+
+
+# ── Apagar (frente faxina-tecnica, 29/10) ────────────────────────────────────
+# Trocar o vídeo no editor deixava o anterior no banco (e no dump). Apagar é
+# só admin e nunca leva vídeo que alguma página ainda usa — a landing ficaria
+# com o player quebrado.
+
+@pytest_asyncio.fixture
+async def pagina_com():
+    """Cria página (rascunho) cuja config aponta para o vídeo; apaga no fim."""
+    import uuid as _uuid
+    slugs = []
+
+    async def _criar(video_id: str, maiusculo: bool = False):
+        slug = f"faxina-video-{_uuid.uuid4().hex[:8]}"
+        alvo = video_id.upper() if maiusculo else video_id
+        # Objeto, não texto: o pool codifica jsonb (texto viraria string JSON).
+        config = {"secoes": [{"tipo": "video", "arquivo_url": f"/publico/video/{alvo}"}]}
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute(
+                """INSERT INTO pages (name, slug, component_name, page_type, status, config)
+                   VALUES ('Faxina vídeo', $1, 'FaxinaVideo', 'landing', 'draft', $2::jsonb)""",
+                slug, config)
+        slugs.append(slug)
+
+    yield _criar
+    if slugs:
+        await db.init_db()
+        async with db.sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM pages WHERE slug = ANY($1::text[])", slugs)
+
+
+async def _existe(video_id: str) -> bool:
+    async with db.sessao(role="service_role") as conn:
+        return await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM landing_videos WHERE id = $1::uuid)", video_id)
+
+
+async def _criado_em(video_id: str):
+    async with db.sessao(role="service_role") as conn:
+        return await conn.fetchval(
+            "SELECT criado_em FROM landing_videos WHERE id = $1::uuid", video_id)
+
+
+async def test_apagar_orfao(cliente, token_admin, videos):
+    v = await _subido(cliente, token_admin, videos)
+    r = await cliente.delete(f"/videos/{v['id']}", headers=_auth(token_admin))
+    assert r.status_code == 204, r.text
+    assert not await _existe(v["id"])
+    assert (await cliente.get(f"/publico/video/{v['id']}")).status_code == 404
+
+
+async def test_apagar_referenciado_409(cliente, token_admin, videos, pagina_com):
+    v = await _subido(cliente, token_admin, videos)
+    await pagina_com(v["id"], maiusculo=True)  # o uuid em caixa alta também conta
+    r = await cliente.delete(f"/videos/{v['id']}", headers=_auth(token_admin))
+    assert r.status_code == 409
+    assert "página" in r.json()["detail"]
+    assert await _existe(v["id"])
+
+
+async def test_apagar_inexistente_404(cliente, token_admin):
+    for ident in ("00000000-0000-0000-0000-000000000000", "nao-e-uuid"):
+        r = await cliente.delete(f"/videos/{ident}", headers=_auth(token_admin))
+        assert r.status_code == 404
+
+
+async def test_apagar_exige_admin(cliente, token_admin, token_usuario, videos):
+    from conftest import _apagar_usuario_de_teste, _criar_usuario_de_teste
+    v = await _subido(cliente, token_admin, videos)
+    assert (await cliente.delete(f"/videos/{v['id']}")).status_code == 401
+    assert (await cliente.delete(f"/videos/{v['id']}",
+                                 headers=_auth(token_usuario))).status_code == 403
+    uid, token = await _criar_usuario_de_teste("usuario-teste-8c", "leitura")
+    try:
+        assert (await cliente.delete(f"/videos/{v['id']}",
+                                     headers=_auth(token))).status_code == 403
+        assert (await cliente.delete("/videos/orfaos",
+                                     headers=_auth(token))).status_code == 403
+    finally:
+        await _apagar_usuario_de_teste(uid)
+    assert (await cliente.delete("/videos/orfaos",
+                                 headers=_auth(token_usuario))).status_code == 403
+    assert await _existe(v["id"])
+
+
+def test_carencia_da_faxina_e_de_uma_hora():
+    from datetime import datetime, timedelta, timezone
+    corte = rota._corte()
+    agora = datetime.now(timezone.utc)
+    assert timedelta(minutes=59) < agora - corte < timedelta(minutes=61)
+
+
+async def test_faxina_dos_orfaos(cliente, token_admin, videos, pagina_com, monkeypatch):
+    """Apaga só o que nenhuma página usa E passou da carência — o vídeo
+    recém-subido de uma página que ainda não foi salva fica.
+
+    ⚠️ Sem UPDATE em `landing_videos` (a 037 só dá SELECT/INSERT/DELETE), o
+    teste não envelhece o vídeo: move o corte para o instante do `recente`."""
+    orfao = await _subido(cliente, token_admin, videos)
+    usado = await _subido(cliente, token_admin, videos)
+    recente = await _subido(cliente, token_admin, videos)
+    await pagina_com(usado["id"])
+    corte = await _criado_em(recente["id"])
+    monkeypatch.setattr(rota, "_corte", lambda: corte)
+    r = await cliente.delete("/videos/orfaos", headers=_auth(token_admin))
+    assert r.status_code == 200, r.text
+    assert r.json()["apagados"] >= 1
+    assert not await _existe(orfao["id"])
+    assert await _existe(usado["id"])
+    assert await _existe(recente["id"])

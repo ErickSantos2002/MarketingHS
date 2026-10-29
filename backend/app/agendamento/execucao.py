@@ -40,8 +40,8 @@ from zoneinfo import ZoneInfo
 from app import integracoes
 from app.agendamento import reserva
 from app.agendamento.config import definicoes_so_do_agendamento, ler_config
-from app.captura.campos import ler_definicoes
-from app.captura.informados import CAMPOS_INFORMADOS
+from app.captura.campos import rotulos_dos_campos as rotulos_da_pagina
+from app.captura.informados import CAMPOS_INFORMADOS, com_rotulos
 from app.config import settings
 from app.crm import entrega, growthhs
 from app.database import sessao
@@ -86,24 +86,12 @@ def rotulos_dos_campos(config) -> dict[str, str]:
     repetida fica com o rótulo da página."""
     config = reserva._dados(config)
     rotulos = {d.chave: d.rotulo for d in definicoes_so_do_agendamento(config) if d.rotulo}
-    rotulos.update({d.chave: d.rotulo for d in ler_definicoes(config) if d.rotulo})
+    rotulos.update(rotulos_da_pagina(config))
     return rotulos
 
 
 def _rotulo(chave: str, rotulos: dict[str, str] | None) -> str:
     return (rotulos or {}).get(chave) or chave
-
-
-def _trocar_chaves(respostas, rotulos: dict[str, str] | None):
-    """As respostas com o rótulo no lugar da chave. Rótulo que dois campos
-    dividem, ou que é a chave de outro campo, fica na chave: duas respostas
-    não podem virar uma."""
-    if not isinstance(respostas, dict):
-        return respostas
-    rotulos = rotulos or {}
-    valores = list(rotulos.values())
-    mapa = {c: r for c, r in rotulos.items() if valores.count(r) == 1 and r not in rotulos}
-    return {mapa.get(chave, chave): valor for chave, valor in respostas.items()}
 
 
 def _quando(ag) -> tuple[str, str]:
@@ -399,12 +387,7 @@ def _nota(ag, lead, conversao, consentimento) -> list[str]:
     # A nota padrão com o rótulo do campo, não a chave (ajuste da
     # homologação, 28/10) — nas "Respostas do formulário" e no "Informou
     # nesta conversão", que compara as duas pelo MESMO nome.
-    lead_rotulado = {**lead, "campos_extras": _trocar_chaves(extras, rotulos)}
-    if conversao and isinstance(conversao.get("dados_informados"), dict):
-        informados = conversao["dados_informados"]
-        conversao = {**conversao, "dados_informados": {
-            **informados, "campos_extras": _trocar_chaves(informados.get("campos_extras"),
-                                                          rotulos)}}
+    lead_rotulado, conversao = com_rotulos(lead, conversao, rotulos)
     linhas += growthhs.nota_de_abertura(lead_rotulado,
                                         conversao=conversao, consentimento=consentimento,
                                         frontend_url=settings.FRONTEND_URL,

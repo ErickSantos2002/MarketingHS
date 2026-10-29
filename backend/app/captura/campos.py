@@ -13,6 +13,7 @@ mandando; tirá-los é decisão de negócio, não de código, e está registrada
 pergunta no CONTINUAR-AQUI.
 """
 
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -271,3 +272,32 @@ def validar(definicoes: list[DefinicaoCampo], bruto: dict) -> CamposValidados:
         elif valor is not None and d.chave not in _NUNCA_EXTRA:
             saida.extras[d.chave] = valor
     return saida
+
+
+# ── Rótulo no lugar da chave (o que o vendedor lê) ───────────────────────────
+# Nasceu no agendamento (`agendamento-ajustes`, 28/10: o vendedor lia
+# `testes_por_dia` em vez da pergunta) e veio para cá na frente
+# faxina-tecnica (29/10), para a nota da captura normal usar o mesmo.
+
+def rotulos_dos_campos(config) -> dict[str, str]:
+    """chave -> rótulo dos campos da página (`ler_definicoes`, que já põe a
+    chave como rótulo de quem não tem). Aceita a config em texto (o `jsonb`
+    cru do asyncpg)."""
+    if isinstance(config, str):
+        try:
+            config = json.loads(config)
+        except ValueError:
+            config = {}
+    return {d.chave: d.rotulo for d in ler_definicoes(config) if d.rotulo}
+
+
+def trocar_chaves(respostas, rotulos: dict[str, str] | None):
+    """As respostas com o rótulo no lugar da chave. Rótulo que dois campos
+    dividem, ou que é a chave de outro campo, fica na chave: duas respostas
+    não podem virar uma."""
+    if not isinstance(respostas, dict):
+        return respostas
+    rotulos = rotulos or {}
+    valores = list(rotulos.values())
+    mapa = {c: r for c, r in rotulos.items() if valores.count(r) == 1 and r not in rotulos}
+    return {mapa.get(chave, chave): valor for chave, valor in respostas.items()}

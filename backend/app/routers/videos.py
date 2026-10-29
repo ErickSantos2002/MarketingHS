@@ -24,6 +24,7 @@ resto do sistema.
 
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import (APIRouter, Depends, File, HTTPException, Request, Response,
                      UploadFile, status)
@@ -55,6 +56,17 @@ PEDACO = 1024 * 1024
 LIMITE_POR_MINUTO = 600
 
 CACHE = "public, max-age=31536000, immutable"
+
+# Faxina dos órfãos (frente faxina-tecnica): vídeo mais novo que isto fica,
+# mesmo sem página. É o tempo de subir no editor e a página ser salva — sem
+# a carência, a faxina de um admin levaria o vídeo que outro acabou de subir.
+CARENCIA = timedelta(hours=1)
+
+# "Alguma página usa este vídeo": o caminho dele em qualquer lugar da config
+# (rascunho conta). Texto da config em minúsculas, porque a régua aceita o
+# uuid em qualquer caixa. Só `pages.config` guarda config de página.
+_USADO = """EXISTS (SELECT 1 FROM pages p
+                    WHERE lower(p.config::text) LIKE '%/publico/video/' || v.id::text || '%')"""
 
 
 def tipo_pelos_bytes(dados: bytes) -> str | None:
@@ -126,6 +138,56 @@ async def subir_video(arquivo: UploadFile = File(...),
             nome, tipo, len(dados), dados, admin.id)
     return {"id": str(novo), "url": f"/publico/video/{novo}", "nome": nome,
             "tipo": tipo, "tamanho": len(dados)}
+
+
+def _corte() -> datetime:
+    """Só vídeo criado antes disto entra na faxina dos órfãos."""
+    return datetime.now(timezone.utc) - CARENCIA
+
+
+@router.delete("/videos/orfaos")
+async def apagar_orfaos(admin: Usuario = Depends(admin_atual)):
+    """Apaga os vídeos que nenhuma página usa e passaram da carência;
+    devolve quantos. Declarada antes de `/videos/{video_id}`, senão
+    "orfaos" seria lido como id.
+
+    É a faxina que o editor oferece: trocar ou tirar o vídeo NÃO apaga o
+    anterior (a página ainda não foi salva, e desfazer precisa dele)."""
+    async with sessao(role="service_role") as conn:
+        apagados = await conn.fetch(
+            f"DELETE FROM landing_videos v WHERE v.criado_em < $1 AND NOT {_USADO} RETURNING v.id",
+            _corte())
+    return {"apagados": len(apagados)}
+
+
+@router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def apagar_video(video_id: str, admin: Usuario = Depends(admin_atual)):
+    """Apaga um vídeo — 409 se alguma página ainda o usa (a landing ficaria
+    com o player quebrado). Conferência e DELETE num comando só: não há
+    janela entre "ninguém usa" e apagar."""
+    try:
+        uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vídeo não encontrado.")
+    async with sessao(role="service_role") as conn:
+        apagado = await conn.fetchval(
+            f"DELETE FROM landing_videos v WHERE v.id = $1::uuid AND NOT {_USADO} RETURNING v.id",
+            video_id)
+        if apagado is None:
+            existe = await conn.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM landing_videos WHERE id = $1::uuid)", video_id)
+            if not existe:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Vídeo não encontrado.")
+            paginas = await conn.fetch(
+                """SELECT name FROM pages
+                   WHERE lower(config::text) LIKE '%/publico/video/' || $1 || '%'
+                   ORDER BY name LIMIT 5""", str(uuid.UUID(video_id)))
+            nomes = ", ".join(p["name"] for p in paginas)
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Este vídeo ainda está em uso na página: {nomes}. "
+                "Troque ou tire o vídeo lá e salve antes de apagar.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 async def _pedacos(video_id: str, inicio: int, fim: int):

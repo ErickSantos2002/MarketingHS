@@ -26,6 +26,12 @@ chaves) e `video`, cuja `url` não é imagem: só vale link de vídeo do YouTube
 (`id_do_youtube`). A página nunca usa a URL colada — monta a miniatura e o
 player a partir do id —, mas a régua é a mesma: recusa ao salvar
 (`secoes.2.url`) e descarta ao servir.
+
+**Vídeo hospedado (frente faxina-tecnica, 29/10).** A seção `video` ganhou
+`arquivo_url` (frente video-proprio), que só pode ser o caminho que o upload
+devolve: `/publico/video/<uuid>` — a mesma régua do cliente (`secoes.ts::
+idDoVideoHospedado`). Recusa ao salvar (`secoes.2.arquivo_url`) e descarta
+ao servir; sem o arquivo, a página volta ao YouTube da `url`.
 """
 
 import re
@@ -110,6 +116,21 @@ def id_do_youtube(valor) -> str | None:
     return achado if achado and _ID_DO_YOUTUBE.fullmatch(achado) else None
 
 
+# O caminho que `POST /videos` devolve — o mesmo `VIDEO_HOSPEDADO` de
+# `frontend/src/landing/secoes.ts` (sem diferença de caixa no uuid).
+_VIDEO_HOSPEDADO = re.compile(
+    r"/publico/video/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE)
+
+
+def video_hospedado(valor) -> str | None:
+    """O caminho aparado, se for `/publico/video/<uuid>`; `None` se não."""
+    if not isinstance(valor, str):
+        return None
+    caminho = valor.strip()
+    return caminho if _VIDEO_HOSPEDADO.fullmatch(caminho) else None
+
+
 def _ler(config: dict, caminho: tuple[str, ...]):
     atual = config
     for chave in caminho:
@@ -134,6 +155,14 @@ def _video_ruim(valor) -> bool:
     if valor is None or (isinstance(valor, str) and not valor.strip()):
         return False
     return id_do_youtube(valor) is None
+
+
+def _arquivo_ruim(valor) -> bool:
+    """Preenchido e não é o caminho do nosso vídeo. Vazio e ausente não
+    contam: "sem arquivo" é o vídeo do YouTube."""
+    if valor is None or (isinstance(valor, str) and not valor.strip()):
+        return False
+    return video_hospedado(valor) is None
 
 
 def _imagens_das_secoes(config: dict):
@@ -161,15 +190,20 @@ def _imagens_das_secoes(config: dict):
 
 
 def _videos_ruins(config: dict):
-    """Caminho (`secoes.2.url`) de cada `url` de seção `video` que não é
-    vídeo do YouTube. Só no tipo `video`: em outro tipo a chave não é lida."""
+    """Caminho (`secoes.2.url`, `secoes.2.arquivo_url`) de cada `url` de
+    seção `video` que não é vídeo do YouTube e de cada `arquivo_url` que não
+    é `/publico/video/<uuid>`. Só no tipo `video`: em outro tipo as chaves
+    não são lidas."""
     secoes = config.get("secoes")
     if not isinstance(secoes, list):
         return
     for i, secao in enumerate(secoes):
-        if (isinstance(secao, dict) and secao.get("tipo") == "video"
-                and _video_ruim(secao.get("url"))):
+        if not isinstance(secao, dict) or secao.get("tipo") != "video":
+            continue
+        if _video_ruim(secao.get("url")):
             yield f"secoes.{i}.url"
+        if _arquivo_ruim(secao.get("arquivo_url")):
+            yield f"secoes.{i}.arquivo_url"
 
 
 def urls_invalidas(config) -> list[str]:
@@ -209,6 +243,9 @@ def _secoes_seguras(secoes) -> list:
         # não desenha a seção.
         if tipo == "video" and _video_ruim(copia.get("url")):
             copia.pop("url")
+        # Arquivo que não é o nosso sai — e a página cai no YouTube, se houver.
+        if tipo == "video" and _arquivo_ruim(copia.get("arquivo_url")):
+            copia.pop("arquivo_url")
         if isinstance(copia.get("itens"), list):
             copia["itens"] = [_sem_imagem_ruim(item) if isinstance(item, dict) else item
                               for item in copia["itens"][:LIMITE_ITENS]]

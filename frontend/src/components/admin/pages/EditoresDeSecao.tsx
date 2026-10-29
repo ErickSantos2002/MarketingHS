@@ -15,7 +15,7 @@ import {
 } from '@/landing/secoes';
 import { CampoDeImagem } from './CampoDeImagem';
 import { enderecoDaImagem } from '@/landing/campos';
-import { BASE, ErroApi, lerToken, mensagemDoDetalhe } from '@/lib/api';
+import { BASE, ErroApi, api, lerToken, mensagemDoDetalhe } from '@/lib/api';
 
 // Um editor por tipo de seção (frente landing-secoes, 26/10). Tudo aqui grava
 // a forma CRUA (`SecaoDaConfig`) — a leitura defensiva é da landing
@@ -154,6 +154,21 @@ function subirVideo(arquivo: File, aoProgredir: (pct: number) => void): Promise<
   });
 }
 
+// Faxina explícita (frente faxina-tecnica, 29/10). "Trocar vídeo" e "Tirar"
+// NÃO apagam o anterior: a página ainda não foi salva, e o vídeo antigo pode
+// estar noutra página. O servidor apaga só o que nenhuma página usa e que
+// passou de 1 h (`DELETE /videos/orfaos`) — o recém-subido de outra aba fica.
+async function apagarVideosOrfaos() {
+  if (!window.confirm('Apagar do servidor os vídeos que nenhuma página usa? Não dá para desfazer.')) return;
+  try {
+    const { apagados } = await api.delete<{ apagados: number }>('/videos/orfaos');
+    toast.success(apagados === 0 ? 'Nenhum vídeo sem uso para apagar.'
+      : apagados === 1 ? '1 vídeo sem uso apagado.' : `${apagados} vídeos sem uso apagados.`);
+  } catch (e) {
+    toast.error(e instanceof ErroApi ? e.message : 'Erro ao apagar os vídeos sem uso');
+  }
+}
+
 function CampoDeVideo({ id, valor, onChange }: {
   id: string; valor: string; onChange: (url: string) => void;
 }) {
@@ -211,6 +226,13 @@ function CampoDeVideo({ id, valor, onChange }: {
       <p className="text-xs text-muted-foreground">
         MP4 (H.264, o padrão de exportação) ou WebM, até {TETO_DO_VIDEO_MB} MB. Com arquivo, a página toca o vídeo
         no nosso próprio player, sem nada do YouTube — e o link do YouTube abaixo deixa de ser usado.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Trocar ou tirar não apaga o vídeo anterior do servidor.{' '}
+        <button type="button" onClick={apagarVideosOrfaos}
+                className="underline underline-offset-2 hover:text-foreground">
+          Apagar vídeos que nenhuma página usa
+        </button>
       </p>
     </div>
   );

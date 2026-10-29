@@ -19,7 +19,7 @@ const NOMES_DE_SECAO: Record<TipoDeSecao, { nome: string; descricao: string }> =
   chamada: { nome: 'Chamada', descricao: 'Faixa final com lista e botão que leva ao formulário.' },
   certificacoes: { nome: 'Certificações', descricao: 'Selos de certificação (ISO, DOT) com um texto curto ao lado.' },
   depoimentos: { nome: 'Depoimentos', descricao: 'Citações de clientes com nome, cargo, empresa e logo.' },
-  video: { nome: 'Vídeo', descricao: 'Vídeo do YouTube, que só carrega quando a pessoa clica.' },
+  video: { nome: 'Vídeo', descricao: 'Vídeo subido aqui ou do YouTube; só carrega quando a pessoa clica.' },
 };
 
 function novoId(): string {
