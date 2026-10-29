@@ -1,9 +1,9 @@
 # Continuar aqui
 
-> ## ▶️ 29/10 — Nicholson aprovou; GrowthHS volta para produção
+> ## ▶️ 29/10 — Nicholson aprovou; GrowthHS de volta em produção
 >
 > - Nicholson aprovou a landing com agendamento. Pedido dele aplicado: faixa de números sem "770+ aparelhos conectados" e com "200 mil+" colaboradores (`~/marketinghs-phoebus-numeros.sh`, rodado).
-> - **Virada:** Erick clica "Usar este ambiente" em Produção (Configurações → Integrações → GrowthHS). Conferido antes: nenhum lead real da `phoebus` desde 28/10 14:12 UTC; produção completa (lista 22).
+> - ✅ **Virada feita** (29/10 09:42): GrowthHS ativo = **Produção**. Conferido antes: nenhum lead real da `phoebus` desde 28/10 14:12 UTC; produção completa (lista 22).
 > - Em andamento: frente `agendamento-robustez` (M4 idempotência tarefa/sala, M5 alerta sem Resend, M6 token fora da URL).
 > - Nome "Health & Safety" no convite: em andamento numa sessão do `hsgrowth-sistema`. Karolaine **não** entra na roleta (Erick, 29/10).
 
