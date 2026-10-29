@@ -69,7 +69,8 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from app.captura.informados import divergencias
+from app.captura.campos import rotulos_dos_campos
+from app.captura.informados import com_rotulos, divergencias
 from app.config import settings
 from app.crm import growthhs
 from app.database import sessao
@@ -178,6 +179,18 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
             ORDER BY criado_em DESC LIMIT 1""", lead_id)
     return (dict(conversao) if conversao else None,
             dict(consentimento) if consentimento else None)
+
+
+async def rotulos_da_conversao(conn, conversao: dict | None) -> dict[str, str]:
+    """chave -> rótulo dos campos da página da conversão, para a nota ao
+    vendedor mostrar a pergunta e não `ja_faz_testagem` (frente
+    faxina-tecnica, 29/10; o agendamento já fazia). Conversão sem página
+    (site, envio manual) ou página apagada: vazio — a nota fica na chave."""
+    slug = (conversao or {}).get("page_slug")
+    if not slug:
+        return {}
+    config = await conn.fetchval("SELECT config FROM pages WHERE slug = $1", slug)
+    return rotulos_dos_campos(config) if config is not None else {}
 
 
 def espera_transitoria(tentativas: int) -> timedelta:
@@ -484,7 +497,7 @@ async def _anotar_abertura(pedido: dict, lead: dict, card_id: int | None,
                            person_id: int | None, extra: dict, *, cfg: growthhs.Config,
                            cliente: growthhs.Cliente, conversao: dict | None,
                            consentimento: dict | None, frontend_url: str,
-                           quando: datetime) -> str:
+                           quando: datetime, rotulos: dict[str, str] | None = None) -> str:
     """Card novo (criado agora, ou reconhecido no retry): grava `entregue`,
     posta a nota de abertura e registra. Pergunta 79: a tela do card do
     GrowthHS não mostra a `description` — a nota é o que o vendedor lê.
@@ -503,7 +516,9 @@ async def _anotar_abertura(pedido: dict, lead: dict, card_id: int | None,
     if card_id is None:
         erro_da_nota = "nota de abertura não enviada: o GrowthHS não devolveu o id do card"
     else:
-        linhas = growthhs.nota_de_abertura(lead, conversao=conversao,
+        # Só a nota leva o rótulo; o `lead` original segue para o registro.
+        lead_da_nota, conversao_da_nota = com_rotulos(lead, conversao, rotulos)
+        linhas = growthhs.nota_de_abertura(lead_da_nota, conversao=conversao_da_nota,
                                            consentimento=consentimento,
                                            frontend_url=frontend_url, quando=quando)
         for tentativa in range(1, TENTATIVAS_DA_NOTA_DE_ABERTURA + 1):
@@ -532,6 +547,7 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
         lead = dict(lead) if lead else None
         conversao, consentimento = (await origem_do_card(conn, pedido["lead_id"])
                                     if lead else (None, None))
+        rotulos = await rotulos_da_conversao(conn, conversao) if lead else {}
         lista = await _lista_do_pedido(conn, pedido) if lead else None
 
     if lead is None or lead["deleted_at"] is not None:
@@ -588,7 +604,8 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
                 return await _anotar_abertura(
                     pedido, lead, candidato["id"], person_id, {"recuperado": True},
                     cfg=cfg, cliente=cliente, conversao=conversao,
-                    consentimento=consentimento, frontend_url=frontend_url, quando=quando)
+                    consentimento=consentimento, frontend_url=frontend_url, quando=quando,
+                    rotulos=rotulos)
         # ⚠️ Sem e-mail não há "a pessoa do lead" lá — só a que este pedido
         # criou. Atualizar card dela que não é nosso seria escrever no card
         # de um vendedor por um contato que nunca se provou o mesmo.
@@ -635,7 +652,7 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
         return await _anotar_abertura(
             pedido, lead, card_id, person_id, {}, cfg=cfg, cliente=cliente,
             conversao=conversao, consentimento=consentimento, frontend_url=frontend_url,
-            quando=quando)
+            quando=quando, rotulos=rotulos)
 
     # A descrição já está atualizada (agora ou numa tentativa anterior). A
     # nota é o aviso ao vendedor.
@@ -645,7 +662,8 @@ async def _entregar(pedido: dict, cfg: growthhs.Config, cliente: growthhs.Client
     # o lead. A descrição, essa, não repete (a marca do bloco).
     erro_da_nota = None
     try:
-        await cliente.anotar(card_id, texto_da_nota(conversao, quando, lead,
+        lead_da_nota, conversao_da_nota = com_rotulos(lead, conversao, rotulos)
+        await cliente.anotar(card_id, texto_da_nota(conversao_da_nota, quando, lead_da_nota,
                                                     frontend_url=frontend_url))
     except growthhs.ErroTransitorio as erro:
         if pedido["tentativas"] < MAX_TENTATIVAS:

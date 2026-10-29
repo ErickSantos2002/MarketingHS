@@ -17,7 +17,7 @@ Módulo puro: nada aqui fala com o banco.
 
 import json
 
-from app.captura.campos import normalizar_celular_br
+from app.captura.campos import normalizar_celular_br, trocar_chaves
 
 # Os campos de CONTATO da lista branca, na ordem em que aparecem. Fora, de
 # propósito: `status`/`tipo` (estado de CRM, a mesma razão do `_atualizar`),
@@ -124,3 +124,18 @@ def divergencias(contato: dict, informados) -> list[dict]:
             if _comparavel(valor) != _comparavel(atuais.get(chave)):
                 saida.append({"chave": chave, "rotulo": chave, "valor": valor})
     return saida
+
+
+def com_rotulos(lead: dict, conversao: dict | None,
+                rotulos: dict[str, str] | None) -> tuple[dict, dict | None]:
+    """Cópias do contato e da conversão com o rótulo do campo no lugar da
+    chave nos `campos_extras` — para a NOTA ao vendedor ("Já faz testagem?:
+    Sim", não "ja_faz_testagem: Sim"). Troca nos dois lados, senão o
+    "Informou nesta conversão" (`divergencias`, que compara pelo MESMO nome)
+    via diferença onde não há. As originais não mudam."""
+    lead = {**lead, CHAVE_EXTRAS: trocar_chaves(dict(lead.get(CHAVE_EXTRAS) or {}), rotulos)}
+    if conversao and isinstance(conversao.get("dados_informados"), dict):
+        informados = conversao["dados_informados"]
+        conversao = {**conversao, "dados_informados": {
+            **informados, CHAVE_EXTRAS: trocar_chaves(informados.get(CHAVE_EXTRAS), rotulos)}}
+    return lead, conversao

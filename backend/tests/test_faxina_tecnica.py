@@ -74,3 +74,54 @@ def test_servir_descarta_o_arquivo_ruim_e_mantem_o_youtube():
     assert config == original, "a original vem do cache da landing"
     assert boa["arquivo_url"] == BOM
     assert "arquivo_url" not in ruim and ruim["url"] == yt
+
+
+# ── 4. Rótulo do campo extra na nota da captura normal ───────────────────────
+# O agendamento já trocava a chave pelo rótulo (`agendamento-ajustes`, 28/10);
+# a captura normal ainda mostrava `ja_faz_testagem`. As peças saíram de
+# `agendamento/execucao.py` para `captura/` e servem às duas.
+
+CONFIG_ROTULADA = {"campos": [
+    {"chave": "email", "rotulo": "E-mail", "tipo": "email"},
+    {"chave": "ja_faz_testagem", "rotulo": "Já faz testagem?", "tipo": "texto"},
+    {"chave": "sem_rotulo", "rotulo": "", "tipo": "texto"},
+]}
+
+
+def test_rotulos_dos_campos_da_pagina():
+    import json
+
+    from app.captura.campos import rotulos_dos_campos
+    rotulos = rotulos_dos_campos(CONFIG_ROTULADA)
+    assert rotulos["ja_faz_testagem"] == "Já faz testagem?"
+    assert rotulos.get("sem_rotulo", "sem_rotulo") == "sem_rotulo"  # sem rótulo, a chave
+    # A config crua do asyncpg pode chegar em texto.
+    assert rotulos_dos_campos(json.dumps(CONFIG_ROTULADA)) == rotulos
+    assert rotulos_dos_campos(None).get("ja_faz_testagem") is None
+    assert rotulos_dos_campos("{nao json") == rotulos_dos_campos({})
+
+
+def test_trocar_chaves_nao_junta_duas_respostas():
+    from app.captura.campos import trocar_chaves
+    rotulos = {"a": "Pergunta A", "b": "Igual", "c": "Igual", "d": "a"}
+    assert trocar_chaves({"a": 1, "b": 2, "c": 3, "d": 4, "x": 5}, rotulos) == {
+        "Pergunta A": 1, "b": 2, "c": 3, "d": 4, "x": 5}
+    assert trocar_chaves(None, rotulos) is None
+
+
+def test_com_rotulos_troca_no_contato_e_no_informado():
+    from app.captura.informados import com_rotulos
+    lead = {"id": "x", "campos_extras": {"ja_faz_testagem": "Sim", "outra": "y"}}
+    conversao = {"page_slug": "p", "dados_informados": {
+        "empresa": "Acme", "campos_extras": {"ja_faz_testagem": "Não"}}}
+    rotulos = {"ja_faz_testagem": "Já faz testagem?"}
+    lead2, conv2 = com_rotulos(lead, conversao, rotulos)
+    assert lead2["campos_extras"] == {"Já faz testagem?": "Sim", "outra": "y"}
+    assert conv2["dados_informados"] == {"empresa": "Acme",
+                                         "campos_extras": {"Já faz testagem?": "Não"}}
+    # As originais não mudam (o lead ainda vai para o registro da entrega).
+    assert lead["campos_extras"] == {"ja_faz_testagem": "Sim", "outra": "y"}
+    assert conversao["dados_informados"]["campos_extras"] == {"ja_faz_testagem": "Não"}
+    assert com_rotulos(lead, None, rotulos)[1] is None
+    sem = {"id": "x"}
+    assert com_rotulos(sem, None, rotulos)[0] == {"id": "x", "campos_extras": {}}

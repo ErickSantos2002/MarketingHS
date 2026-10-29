@@ -1268,3 +1268,85 @@ async def test_pessoa_do_pedido_de_outro_ambiente_nao_e_reusada(lead_sem_email):
     assert pessoa != 4242 and len(api.de("POST", PESSOAS)) == 1
     pedido = await _pedido(lead)
     assert (pedido["person_id"], pedido["ambiente"]) == (pessoa, "homologacao")
+
+
+# ── Rótulo do campo extra na nota (frente faxina-tecnica, 29/10) ─────────────
+# O vendedor lia `ja_faz_testagem: Sim` na nota da captura normal; o
+# agendamento já mostrava a pergunta. A nota usa o rótulo da página da
+# conversão; sem definição, fica a chave.
+
+ROTULO_TESTAGEM = "Sua empresa já faz testagem?"
+
+
+@pytest_asyncio.fixture
+async def pagina_rotulada(lead_8d):
+    slug = f"faxina-rotulo-{uuid.uuid4().hex[:8]}"
+    config = {"campos": [
+        {"chave": "email", "rotulo": "E-mail", "tipo": "email"},
+        {"chave": "ja_faz_testagem", "rotulo": ROTULO_TESTAGEM, "tipo": "texto"}]}
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            """INSERT INTO pages (name, slug, component_name, page_type, status, config)
+               VALUES ('Faxina rótulo', $1, 'FaxinaRotulo', 'landing', 'draft', $2::jsonb)""",
+            slug, json.dumps(config))
+        await conn.execute(
+            """UPDATE leads SET campos_extras = '{"ja_faz_testagem": "Sim", "sem_definicao": "x"}'
+               WHERE id = $1::uuid""", lead_8d["lead_id"])
+    yield slug
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM pages WHERE slug = $1", slug)
+
+
+def _conversao_da(slug, extras=None):
+    return {"page_slug": slug, "form_id": None, "site_nome": None, "page_url": None,
+            "converted_at": "2026-10-29T13:00:00Z", "canal": "direto", "gclid": None,
+            "dados_informados": {"campos_extras": extras or {}}}
+
+
+async def test_nota_de_abertura_usa_o_rotulo_da_pagina(lead_8d, pagina_rotulada, monkeypatch):
+    async def origem(_conn, _lead_id):
+        return _conversao_da(pagina_rotulada), None
+
+    monkeypatch.setattr(entrega, "origem_do_card", origem)
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    [nota] = api.notas
+    linhas = nota["content"].split("\n")
+    assert f"- {ROTULO_TESTAGEM}: Sim" in linhas
+    assert "- sem_definicao: x" in linhas  # sem definição na página, a chave
+    assert not any(l.startswith("- ja_faz_testagem") for l in linhas)
+
+
+async def test_nota_de_atualizacao_usa_o_rotulo_no_informado(lead_8d, pagina_rotulada,
+                                                            monkeypatch):
+    async def origem(_conn, _lead_id):
+        return _conversao_da(pagina_rotulada, {"ja_faz_testagem": "Não"}), None
+
+    monkeypatch.setattr(entrega, "origem_do_card", origem)
+    api = GrowthHSFalso()
+    pessoa = api.pessoa(email=EMAIL)
+    aberto = api.card(pessoa, board=7, descricao="Anotação do vendedor")
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "atualizadas": 1}
+    [nota] = api.notas
+    assert nota["card_id"] == aberto
+    linhas = nota["content"].split("\n")
+    assert linhas[1:3] == ["Informou nesta conversão (não verificado):",
+                           f"- {ROTULO_TESTAGEM}: Não"], linhas
+
+
+async def test_nota_sem_pagina_fica_com_a_chave(lead_8d, monkeypatch):
+    async def origem(_conn, _lead_id):
+        return _conversao_da("pagina-que-nao-existe-faxina"), None
+
+    async with db.sessao(role="service_role") as conn:
+        await conn.execute(
+            """UPDATE leads SET campos_extras = '{"ja_faz_testagem": "Sim"}'
+               WHERE id = $1::uuid""", lead_8d["lead_id"])
+    monkeypatch.setattr(entrega, "origem_do_card", origem)
+    api = GrowthHSFalso()
+    await _enfileirar(lead_8d["lead_id"])
+    assert await _rodar(lead_8d["lead_id"], api) == {**ZERO, "entregues": 1}
+    [nota] = api.notas
+    assert "- ja_faz_testagem: Sim" in nota["content"].split("\n")
