@@ -64,6 +64,7 @@ export type SecaoDaConfig = {
   nota?: string;
   botao?: string;
   url?: string;                               // video (YouTube)
+  arquivo_url?: string;                       // video: /publico/video/<uuid> (subido no editor)
   formato?: "horizontal" | "vertical";        // video: 16:9 ou em pé (9:16)
 };
 
@@ -84,7 +85,10 @@ export type CorpoDaSecao =
   | { tipo: "certificacoes"; blocos: BlocoDoCorpo[]; itens: { nome: string; imagem: string }[] }
   | { tipo: "depoimentos";
       itens: { texto: string; nome: string; empresa: string; cargo: string; logo: string | null }[] }
-  | { tipo: "video"; video: string; vertical: boolean; blocos: BlocoDoCorpo[] };
+  // `video`: o id do YouTube, ou "" quando toca o arquivo nosso. `arquivo`:
+  // o endereço do vídeo hospedado (já com a base da API); `capa`: o poster.
+  | { tipo: "video"; video: string; arquivo: string | null; capa: string | null;
+      vertical: boolean; blocos: BlocoDoCorpo[] };
 
 export type Secao = Cabeca & CorpoDaSecao;
 
@@ -140,6 +144,19 @@ export function miniaturaDoYoutube(id: string, grande = true): string {
 }
 
 // O player (youtube-nocookie, fechado) mora em `player.ts`.
+
+// ── Vídeo hospedado (frente video-proprio, 29/10) ────────────────────────────
+// O editor sobe o arquivo e grava `arquivo_url` = o caminho publico/video/<uuid>. A
+// régua aceita SÓ isso — nem http(s), nem outro caminho: a página monta o
+// endereço a partir do id, como faz com o do YouTube.
+const VIDEO_HOSPEDADO = /^\/publico\/video\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/** O uuid do vídeo subido, ou `null` se não for o caminho da nossa rota. */
+export function idDoVideoHospedado(valor: unknown): string | null {
+  if (typeof valor !== "string") return null;
+  const m = VIDEO_HOSPEDADO.exec(valor.trim());
+  return m ? m[1].toLowerCase() : null;
+}
 
 // Aspas que a pessoa colou em volta do depoimento: quem desenha põe as
 // tipográficas, e duas de cada lado ficaria “"assim"”.
@@ -288,12 +305,19 @@ function lerCorpo(tipo: TipoDeSecao, s: Record<string, unknown>, ctx: Contexto):
       return itens.length ? { tipo, itens } : null;
     }
     case "video": {
-      const video = idDoYoutube(s.url);
-      if (!video) return null;
+      // O arquivo nosso vence o YouTube: com os dois, toca o hospedado.
+      const hospedado = idDoVideoHospedado(s.arquivo_url);
+      const video = hospedado ? "" : idDoYoutube(s.url);
+      if (!hospedado && !video) return null;
       const texto = textoDaConfig(s.texto);
       // Vídeo em pé (gravado no celular, Shorts) num quadro 16:9 vira uma
       // faixa no meio de duas tarjas; o formato é escolha do editor.
-      return { tipo, video, vertical: s.formato === "vertical", blocos: texto ? paragrafosDoCorpo(texto) : [] };
+      return {
+        tipo, video: video ?? "",
+        arquivo: hospedado ? `${ctx.base}/publico/video/${hospedado}` : null,
+        capa: hospedado ? imagemDe(s.imagem_url, ctx) : null,
+        vertical: s.formato === "vertical", blocos: texto ? paragrafosDoCorpo(texto) : [],
+      };
     }
   }
   return null;
@@ -349,6 +373,6 @@ export function secaoVazia(tipo: TipoDeSecao, id: string): SecaoDaConfig {
     case "certificacoes": return { ...base, texto: "", itens: [{ nome: "", imagem_url: "" }] };
     case "depoimentos":
       return { ...base, itens: [{ texto: "", nome: "", cargo: "", empresa: "", logo_url: "" }] };
-    case "video": return { ...base, url: "", texto: "", formato: "horizontal" };
+    case "video": return { ...base, url: "", arquivo_url: "", imagem_url: "", texto: "", formato: "horizontal" };
   }
 }

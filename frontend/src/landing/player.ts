@@ -59,6 +59,14 @@ export function alvoDoSeek(segundos: number, duracao: number): number {
   return Math.min(Math.max(0, alvo), Math.max(0, duracao - MARGEM_DO_SEEK));
 }
 
+/** Para onde o seek vai no vídeo HOSPEDADO (`VideoProprio.tsx`): entre 0 e
+ * a duração. Sem a margem do YouTube — o `<video>` nosso pode chegar ao fim
+ * (não há grade de recomendações para esconder). */
+export function alvoNoArquivo(segundos: number, duracao: number): number {
+  const alvo = Number.isFinite(segundos) ? Math.max(0, segundos) : 0;
+  return duracao > 0 ? Math.min(alvo, duracao) : alvo;
+}
+
 /** Se o vídeo já está na folga do fim (e deve virar fachada). */
 export function chegouAoFim(atual: number, duracao: number): boolean {
   return duracao > 0 && Number.isFinite(atual) && duracao - atual < FOLGA_DO_FIM;
