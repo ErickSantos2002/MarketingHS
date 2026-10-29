@@ -1,5 +1,12 @@
 # Continuar aqui
 
+> ## ▶️ 29/10 — Nicholson aprovou; GrowthHS volta para produção
+>
+> - Nicholson aprovou a landing com agendamento. Pedido dele aplicado: faixa de números sem "770+ aparelhos conectados" e com "200 mil+" colaboradores (`~/marketinghs-phoebus-numeros.sh`, rodado).
+> - **Virada:** Erick clica "Usar este ambiente" em Produção (Configurações → Integrações → GrowthHS). Conferido antes: nenhum lead real da `phoebus` desde 28/10 14:12 UTC; produção completa (lista 22).
+> - Em andamento: frente `agendamento-robustez` (M4 idempotência tarefa/sala, M5 alerta sem Resend, M6 token fora da URL).
+> - Ainda pendentes: pedido ao HSGrowth do nome "Health & Safety" (sessão no `hsgrowth-sistema`); Karolaine (`sdr30@`) fora do grupo do Exchange e da roleta — confirmar com o Erick.
+
 > ## ▶️ 29/10 (manhã) — perguntas só do agendamento
 >
 > - O Erick tirou funcionários/testes por dia/filiais do formulário da `phoebus` (11:09) e eles sumiram do modal também — sem `funcionarios`, ninguém agendava. Frente `agendamento-campos` ✅ mergeada (`0d65148`; portão local **1352 passed, 9 skipped**, `tsc` 0, node 69, builds ok): `config.agendamento.campos` = perguntas só do modal (etapa 2 = página + elas; validação, rótulos na nota e editor "Perguntas só do agendamento").
