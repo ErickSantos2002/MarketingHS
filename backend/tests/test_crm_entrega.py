@@ -1288,7 +1288,7 @@ async def pagina_rotulada(lead_8d):
         await conn.execute(
             """INSERT INTO pages (name, slug, component_name, page_type, status, config)
                VALUES ('Faxina rótulo', $1, 'FaxinaRotulo', 'landing', 'draft', $2::jsonb)""",
-            slug, json.dumps(config))
+            slug, config)  # objeto: o pool codifica jsonb
         await conn.execute(
             """UPDATE leads SET campos_extras = '{"ja_faz_testagem": "Sim", "sem_definicao": "x"}'
                WHERE id = $1::uuid""", lead_8d["lead_id"])

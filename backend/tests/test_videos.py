@@ -272,8 +272,8 @@ async def pagina_com():
     async def _criar(video_id: str, maiusculo: bool = False):
         slug = f"faxina-video-{_uuid.uuid4().hex[:8]}"
         alvo = video_id.upper() if maiusculo else video_id
-        config = ('{"secoes": [{"tipo": "video", "arquivo_url": "/publico/video/'
-                  + alvo + '"}]}')
+        # Objeto, não texto: o pool codifica jsonb (texto viraria string JSON).
+        config = {"secoes": [{"tipo": "video", "arquivo_url": f"/publico/video/{alvo}"}]}
         async with db.sessao(role="service_role") as conn:
             await conn.execute(
                 """INSERT INTO pages (name, slug, component_name, page_type, status, config)
