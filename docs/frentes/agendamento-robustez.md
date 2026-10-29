@@ -114,3 +114,6 @@ recriado antes da suíte); `tsc --noEmit` 0 (`frontend` e `tsconfig.app.json`);
 `test_agendamento_execucao.py` (7 M4, 4 M5), 3 em `test_agendamento_rotas.py`
 (M6) e as rotas de lá passaram a usar o token no corpo; 1 no
 `landing-agendamento.test.mjs`.
+
+
+> Atualização (coordenadora, 29/10): as rotas antigas saíram e o painel foi ligado na frente `agendamento-painel` — ver `docs/frentes/agendamento-painel.md`.
