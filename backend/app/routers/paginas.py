@@ -60,10 +60,14 @@ def recusar_urls_inseguras(config) -> None:
     """
     ruins = urls_invalidas(config)
     if ruins:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "URL inválida na config (use http(s):// ou um caminho /...): "
-            + ", ".join(ruins) + ".")
+        detalhe = ("URL inválida na config (use http(s):// ou um caminho /...): "
+                   + ", ".join(ruins) + ".")
+        # O vídeo subido tem régua própria (`urls.py::video_hospedado`): o
+        # "use http(s)://" de cima não serve para ele.
+        if any(r.endswith(".arquivo_url") for r in ruins):
+            detalhe += (" O arquivo de vídeo só aceita o caminho que o upload"
+                        " devolve (/publico/video/<id>): suba o vídeo pelo editor.")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detalhe)
 
 
 class PaginaIn(BaseModel):
