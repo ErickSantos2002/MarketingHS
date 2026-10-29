@@ -1,19 +1,26 @@
 """As rotas públicas do agendamento de reunião (frente agendamento, 28/10).
 
-O modal da landing em etapas: `/dados` (etapa 1, grava o rascunho) →
-`/{token}/empresa` (etapa 2; quem não passa do corte vira lead comum na hora)
-→ `/horarios/{token}` (etapa 3) → `/{token}/confirmar`. `/{token}/ligar` é o
-"deixe que a gente liga" (GrowthHS fora, sem horário).
+O modal da landing em etapas: `/dados` (etapa 1, grava o rascunho e devolve o
+token) → `/empresa` (etapa 2; quem não passa do corte vira lead comum na hora)
+→ `/horarios/consultar` (etapa 3) → `/confirmar`. `/ligar` é o "deixe que a
+gente liga" (GrowthHS fora, sem horário). Todas POST, com o token no CORPO.
 
 ⚠️ Sem autenticação, como `/publico/captura` — e pelas mesmas travas: honeypot
 (resposta de sucesso, nada gravado), domínio do e-mail, campos validados
 contra a config da página, consentimento. O `token` (24 bytes aleatórios) é a
 única chave do rascunho; token desconhecido é 404 e nada mais.
 
-⚠️ `/horarios/{token}` (e não `/{token}/horarios`, como o plano escrevia)
-porque o limite de taxa casa por PREFIXO: assim os horários têm balde próprio
-(`LIMITE_HORARIOS_POR_MINUTO`) — o lead navega entre os dias, e cada abertura
-da etapa 3 não pode gastar a cota do formulário.
+⚠️ M6 (29/10): o token NUNCA no caminho da URL — o caminho fica no log de
+acesso do proxy (EasyPanel/Traefik, nginx), e quem lê o log retomaria o
+rascunho (e veria os dados da etapa 1). As rotas antigas
+(`/{token}/empresa`, `/horarios/{token}`, `/{token}/confirmar`,
+`/{token}/ligar`) ficam SÓ para a aba aberta antes do deploy, com
+`deprecated=True`; saem no deploy seguinte (docs/frentes/agendamento-robustez.md).
+
+⚠️ `/horarios/consultar` (e não `/horarios`) porque o limite de taxa casa por
+PREFIXO (`/publico/agendamento/horarios/`, em `main.py`): assim os horários
+têm balde próprio (`LIMITE_HORARIOS_POR_MINUTO`) — o lead navega entre os
+dias, e cada abertura da etapa 3 não pode gastar a cota do formulário.
 """
 
 import logging
@@ -173,14 +180,34 @@ async def etapa_dados(dados: DadosIn, request: Request):
     return {"token": token}
 
 
+# ── O token, no corpo (M6) ──────────────────────────────────────────────────
+
+class ComToken(BaseModel):
+    # `token_urlsafe(24)` = 32 caracteres; a folga não abre nada.
+    token: str = Field(min_length=1, max_length=100)
+
+
 # ── Etapa 2 ──────────────────────────────────────────────────────────────────
 
 class EmpresaIn(BaseModel):
     fields: dict = Field(default_factory=dict)
 
 
-@router.post("/{token}/empresa")
-async def etapa_empresa(token: str, dados: EmpresaIn):
+class EmpresaComToken(EmpresaIn, ComToken):
+    pass
+
+
+@router.post("/empresa")
+async def etapa_empresa(dados: EmpresaComToken):
+    return await _empresa(dados.token, dados)
+
+
+@router.post("/{token}/empresa", deprecated=True)
+async def etapa_empresa_antiga(token: str, dados: EmpresaIn):
+    return await _empresa(token, dados)
+
+
+async def _empresa(token: str, dados: EmpresaIn):
     try:
         async with sessao(role="service_role") as conn:
             slug = await conn.fetchval(
@@ -208,8 +235,17 @@ async def etapa_empresa(token: str, dados: EmpresaIn):
 
 # ── Etapa 3 ──────────────────────────────────────────────────────────────────
 
-@router.get("/horarios/{token}")
-async def etapa_horarios(token: str):
+@router.post("/horarios/consultar")
+async def etapa_horarios(dados: ComToken):
+    return await _horarios(dados.token)
+
+
+@router.get("/horarios/{token}", deprecated=True)
+async def etapa_horarios_antiga(token: str):
+    return await _horarios(token)
+
+
+async def _horarios(token: str):
     cfg = await _ambiente_ativo()
     try:
         if cfg is None:
@@ -229,6 +265,10 @@ class ConfirmarIn(BaseModel):
     inicio: str = Field(min_length=10, max_length=40)
 
 
+class ConfirmarComToken(ConfirmarIn, ComToken):
+    pass
+
+
 def _ler_inicio(texto: str) -> datetime:
     try:
         data = datetime.fromisoformat(texto.strip().replace("Z", "+00:00"))
@@ -240,8 +280,17 @@ def _ler_inicio(texto: str) -> datetime:
     return data
 
 
-@router.post("/{token}/confirmar")
-async def etapa_confirmar(token: str, dados: ConfirmarIn):
+@router.post("/confirmar")
+async def etapa_confirmar(dados: ConfirmarComToken):
+    return await _confirmar(dados.token, dados)
+
+
+@router.post("/{token}/confirmar", deprecated=True)
+async def etapa_confirmar_antiga(token: str, dados: ConfirmarIn):
+    return await _confirmar(token, dados)
+
+
+async def _confirmar(token: str, dados: ConfirmarIn):
     inicio = _ler_inicio(dados.inicio)
     cfg = await _ambiente_ativo()
     if cfg is None:
@@ -262,8 +311,17 @@ async def etapa_confirmar(token: str, dados: ConfirmarIn):
     return resultado
 
 
-@router.post("/{token}/ligar")
-async def etapa_ligar(token: str):
+@router.post("/ligar")
+async def etapa_ligar(dados: ComToken):
+    return await _ligar(dados.token)
+
+
+@router.post("/{token}/ligar", deprecated=True)
+async def etapa_ligar_antiga(token: str):
+    return await _ligar(token)
+
+
+async def _ligar(token: str):
     try:
         await reserva.virar_lead_comum(token)
     except reserva.TokenDesconhecido:
