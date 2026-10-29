@@ -1,5 +1,12 @@
 # Continuar aqui
 
+> ## ▶️ 29/10 (fim da tarde) — faxina técnica e lista para o grupo
+>
+> - Levantamento em `docs/arrumar-a-casa.md`. Barra do player corrigida (`d6d9adf`: `step="any"` + `progressoDaBarra`).
+> - Frente `faxina-tecnica` ✅ mergeada (`8de88d1`; portão local **1437 passed, 9 skipped**, `tsc` 0, node 79, builds ok, guarda 0): régua do servidor para `arquivo_url` (400 ao salvar, descarte ao servir); `DELETE /videos/{id}` (409 se em uso) e `DELETE /videos/orfaos` (carência 1 h) com botão no editor; texto do tipo vídeo; rótulo no lugar da chave nas notas da captura normal (`rotulos_dos_campos` em `captura/campos.py`).
+> - **Falta:** deploy de api e sistema. Erick manda ao grupo (Sergio/Nicholson) o pedido: Pixel ID + token CAPI, domínio verificado, GA4 `G-` + conversão Ads; decisões de indexar a página, Resend Pro, LGPD do leitor, redes sociais.
+> - Depois: Erick tira `DATACORE_*` do env da api/worker → aí sai do `config.py`.
+
 > ## ▶️ 29/10 (tarde) — vídeo próprio na landing
 >
 > - Frente `video-proprio` ✅ mergeada: upload de vídeo no editor (seção `video`, `arquivo_url` + capa), `GET/HEAD /publico/video/{id}` com Range (206/416, ETag, imutável), `<video playsinline>` com os controles do player fechado; bytea em `landing_videos` (037, `STORAGE EXTERNAL`); nginx 64M só no upload; balde próprio 600/min.
