@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Loader2, Wifi, WifiOff, CheckCircle2, Eye, EyeOff, Save, PauseCircle, RotateCcw, Copy,
-  AlertTriangle, ArrowRightLeft,
+  AlertTriangle, ArrowRightLeft, CalendarX,
 } from 'lucide-react';
 import { api, ErroApi } from '@/lib/api';
 import { toast } from 'sonner';
@@ -26,6 +26,32 @@ import { toast } from 'sonner';
 type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error' | 'unconfigured';
 
 type Falha = { lead_id: string; erro: string; atualizado_em: string };
+
+// M5 (agendamento): reunião que o lead viu "confirmado" e não ficou pronta.
+// O backend nunca manda o token nem o e-mail do lead — como a fila acima.
+type ReuniaoPendente = {
+  id: string;
+  page_slug: string;
+  inicio: string;
+  vendedor_id: number | null;
+  vendedor_nome: string | null;
+  card_id: number | null;
+  erro: string | null;
+  alerta_em: string | null;
+  atualizado_em: string;
+};
+
+// A reunião é marcada no horário de Brasília (a agenda do vendedor e o
+// convite falam nele), qualquer que seja o fuso de quem abre a tela.
+const quandoEmBrasilia = (iso: string) =>
+  new Date(iso).toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 // Desde a migration 030 (23/10) o GrowthHS tem DOIS ambientes salvos lado a
 // lado — homologação e produção —, e só o ATIVO recebe lead.
@@ -68,6 +94,8 @@ type EstadoGrowthHS = {
     // (401/403/404) — a fila inteira espera, sem gastar tentativa.
     pausada: { motivo: string; desde: string } | null;
   };
+  // Falhas das últimas reservas (7 dias), `ultimas` = as 5 mais recentes.
+  agendamentos?: { falhas: number; sem_alerta: number; ultimas: ReuniaoPendente[] };
 };
 
 type RespostaTeste =
@@ -795,6 +823,31 @@ export default function GrowthHSCard() {
                     </li>
                   ))}
                 </ul>
+              )}
+              {estado.agendamentos && estado.agendamentos.falhas > 0 && (
+                <div className="flex items-start gap-2 rounded-md border border-danger/30 bg-[--tint-danger] p-2">
+                  <CalendarX className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-[--on-tint-danger]" />
+                  <div className="text-xs leading-relaxed text-[--on-tint-danger] space-y-1">
+                    <p className="font-medium">
+                      Reuniões agendadas que não ficaram prontas: {estado.agendamentos.falhas}
+                      {estado.agendamentos.sem_alerta > 0 &&
+                        ` · ${estado.agendamentos.sem_alerta} sem alerta por e-mail`}
+                    </p>
+                    <p>
+                      O lead viu "confirmado" e o horário segue reservado para o vendedor. Confira
+                      no GrowthHS e fale com o lead.
+                    </p>
+                    <ul className="space-y-1">
+                      {estado.agendamentos.ultimas.map((a) => (
+                        <li key={a.id}>
+                          {quandoEmBrasilia(a.inicio)} (Brasília) · página {a.page_slug} ·{' '}
+                          {a.vendedor_nome ?? `vendedor ${a.vendedor_id ?? '?'}`} —{' '}
+                          {a.erro ?? 'falha sem motivo registrado'}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               )}
             </div>
           </>

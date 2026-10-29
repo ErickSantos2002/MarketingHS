@@ -664,3 +664,45 @@ async def test_ativar_solta_a_pausa_do_ambiente_anterior(cliente, banco_growthhs
         "SELECT erro, visivel_em <= now() AS visivel FROM crm_handoffs "
         "WHERE lead_id = $1::uuid", lead)
     assert (linha["erro"], linha["visivel"]) == (None, True)
+
+
+async def _reuniao_que_falhou(conn, email, *, inicio_em="1 day"):
+    return await conn.fetchval(
+        f"""INSERT INTO reuniao_agendamentos
+                (token, ambiente, page_slug, email, status, vendedor_id, vendedor_nome,
+                 inicio, fim, card_id, erro, atualizado_em)
+            VALUES ('tok-painel-' || gen_random_uuid(), 'homologacao', 'pagina-painel', $1,
+                    'falhou', 7, 'Vendedora Painel', now() + interval '{inicio_em}',
+                    now() + interval '{inicio_em}' + interval '30 minutes', 4821,
+                    '422: card recusado', clock_timestamp() + interval '1 hour')
+            RETURNING id::text""", email)
+
+
+async def test_mostra_as_reunioes_que_nao_ficaram_prontas(cliente, banco_growthhs, token_admin,
+                                                         monkeypatch):
+    """M5: o par da fila de entrega no card — a reunião que o lead acha
+    confirmada e não ficou pronta. Nunca o token nem o e-mail do lead (a faixa
+    da fila também não mostra dado pessoal)."""
+    from app.agendamento import execucao
+
+    conn = banco_growthhs
+    await _zerar(conn, monkeypatch)
+    # A leitura das pendências também precisa cair na transação revertida.
+    monkeypatch.setattr(execucao, "sessao", configuracao.sessao)
+    antes = (await cliente.get(ROTA, headers=_auth(token_admin))).json()["agendamentos"]
+    assert set(antes) == {"falhas", "sem_alerta", "ultimas"}
+
+    ag = await _reuniao_que_falhou(conn, "lead-painel@empresa-painel.com.br")
+    # Reunião que já passou há mais de 7 dias não é mais pendência.
+    await _reuniao_que_falhou(conn, "lead-antigo@empresa-painel.com.br",
+                              inicio_em="-10 days")
+    r = await cliente.get(ROTA, headers=_auth(token_admin))
+    agendamentos = r.json()["agendamentos"]
+    assert agendamentos["falhas"] == antes["falhas"] + 1
+    assert agendamentos["sem_alerta"] == antes["sem_alerta"] + 1
+    ultima = agendamentos["ultimas"][0]
+    assert ultima["id"] == ag and ultima["erro"] == "422: card recusado"
+    assert ultima["page_slug"] == "pagina-painel"
+    assert ultima["vendedor_nome"] == "Vendedora Painel" and ultima["inicio"]
+    assert "token" not in ultima and "email" not in ultima
+    assert "tok-painel-" not in r.text and "@empresa-painel" not in r.text

@@ -633,13 +633,14 @@ async def pendencias(*, somente_paginas: list[str] | None = None) -> dict:
     """M5: as reuniões que o lead acha confirmadas e não ficaram prontas, para
     o painel (o card do GrowthHS em Configurações já mostra a fila de
     entrega; este é o par dele). `falhou` cuja reunião não passou há mais de
-    7 dias; `sem_alerta` = nem o e-mail aos admins saiu. Nunca o token."""
+    7 dias; `sem_alerta` = nem o e-mail aos admins saiu. Nunca o token nem o
+    e-mail do lead (a faixa da fila, ao lado, também não mostra dado pessoal)."""
     filtro = ("page_slug = ANY($1::text[])" if somente_paginas is not None
               else f"NOT ({AGENDAMENTO_DE_TESTE}) AND $1::text[] IS NULL")
     async with sessao(role="service_role") as conn:
         linhas = await conn.fetch(
-            f"""SELECT id::text, page_slug, inicio, vendedor_id, card_id, erro,
-                       alerta_em, atualizado_em
+            f"""SELECT id::text, page_slug, inicio, vendedor_id, vendedor_nome, card_id,
+                       erro, alerta_em, atualizado_em
                   FROM reuniao_agendamentos
                  WHERE status = 'falhou' AND fim > now() - interval '7 days' AND {filtro}
                  ORDER BY atualizado_em DESC""",
