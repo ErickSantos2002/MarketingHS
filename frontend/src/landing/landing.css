@@ -1986,6 +1986,47 @@ img {
   }
 }
 
+/* ---- o vídeo hospedado (video-proprio, 29/10) ----
+ * O `<video>` nosso no lugar do iframe: mesmo quadro, mesmos controles. A
+ * capa (poster) aparece por baixo da fachada, que aqui é só o botão de play
+ * por cima do vídeo. Tela cheia leva o palco inteiro (quadro + controles). */
+.video-arquivo {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--marinho-fundo);
+}
+
+.video-palco-ativo .video-arquivo {
+  cursor: pointer;
+}
+
+.video-fachada-arquivo {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.video-play-sobre {
+  pointer-events: none;
+}
+
+.video-palco:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 0;
+}
+
+.video-palco:fullscreen .video-quadro {
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
 /* ---- depoimentos ----
  * Tipografia, não caixa: a primeira citação em corpo grande, de ponta a
  * ponta; as outras em colunas embaixo, cada uma com um fio em cima. As aspas

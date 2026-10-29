@@ -37,6 +37,8 @@ from app.routers.publico import router as publico_router
 from app.routers.rastreio import router as rastreio_router
 from app.routers.receptor_growthhs import router as receptor_growthhs_router
 from app.routers.ritmo_envio import router as ritmo_envio_router
+from app.routers.videos import LIMITE_POR_MINUTO as LIMITE_VIDEO_POR_MINUTO
+from app.routers.videos import router as videos_router
 from app.routers.webhook import router as webhook_router
 from app.routers.segmentos import router as segmentos_router
 from app.routers.sites import router as sites_router
@@ -108,7 +110,7 @@ app.add_middleware(
     isentos=("/publico/webhook/", "/publico/growthhs/webhook/", "/publico/validar-email",
              "/publico/ab/go", "/publico/ab/eventos",
              "/publico/descadastro/um-clique", "/publico/site/visita",
-             "/publico/agendamento/horarios/"),
+             "/publico/agendamento/horarios/", "/publico/video/"),
 )
 
 # I1: balde próprio do coletor de eventos do A/B — bem mais generoso que o
@@ -147,6 +149,15 @@ app.add_middleware(
     LimiteTaxaMiddleware,
     por_minuto=settings.LIMITE_HORARIOS_POR_MINUTO,
     prefixos=("/publico/agendamento/horarios/",),
+)
+
+# Balde próprio do vídeo hospedado (frente video-proprio, 29/10): o `<video>`
+# pede o arquivo em trechos (Range) — o Safari, dezenas por minuto. No balde
+# comum, quem assistisse levaria 429 ao mandar o formulário.
+app.add_middleware(
+    LimiteTaxaMiddleware,
+    por_minuto=LIMITE_VIDEO_POR_MINUTO,
+    prefixos=("/publico/video/",),
 )
 
 # ⚠️ Por último de propósito: é o mais de fora, e responde o preflight do
@@ -191,6 +202,7 @@ app.include_router(automacoes_router)
 app.include_router(crm_router)
 app.include_router(ia_router)
 app.include_router(imagens_router)
+app.include_router(videos_router)
 app.include_router(painel_router)
 app.include_router(paginas_router)
 app.include_router(captura_router)

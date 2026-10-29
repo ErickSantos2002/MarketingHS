@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import type { BlocoDoCorpo } from "./campos";
 import { miniaturaDoYoutube, type Secao } from "./secoes";
 import {
-  ESTADO, SALTO, alvoDoSeek, carregarApiDoYoutube, chegouAoFim, formatarTempo, opcoesDoPlayer,
+  ESTADO, SALTO, alvoDoSeek, alvoNoArquivo, carregarApiDoYoutube, chegouAoFim, formatarTempo, opcoesDoPlayer,
   tempoPorExtenso, type PlayerDoYoutube,
 } from "./player";
 
@@ -327,6 +327,8 @@ const ICONES = {
   pausa: "M7 5h3.5v14H7zM13.5 5H17v14h-3.5z",
   voltar: "M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z",
   avancar: "M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z",
+  telaCheia: "M5 5h5v2H7v3H5zm9 0h5v5h-2V7h-3zM5 14h2v3h3v2H5zm12 0h2v5h-5v-2h3z",
+  sairDaTelaCheia: "M8 5h2v5H5V8h3zm6 0h2v3h3v2h-5zM5 14h5v5H8v-3H5zm9 0h5v2h-3v3h-2z",
 } as const;
 
 // `numero`: o "10" dentro da seta dos saltos.
@@ -647,6 +649,227 @@ function Video({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string 
   );
 }
 
+// ── O vídeo hospedado (frente video-proprio, 29/10/2026) ─────────────────────
+//
+// Quando a seção tem arquivo subido no editor, a página toca num `<video>`
+// nosso, servido pelo nosso domínio com Range (o Safari do iPhone exige):
+// nada do YouTube — nem cromo de título e "mais vídeos", nem id no HTML,
+// nem recomendações no fim. Os controles são os MESMOS do player fechado
+// (mesmas classes do landing.css): play/pausa, ±10 s, barra de tempo, tempo
+// — mais tela cheia, que aqui é segura (é o nosso quadro, não o YouTube).
+//
+// - `preload="metadata"` + `poster` (a capa do editor): antes do play, só o
+//   cabeçalho do arquivo desce, não o vídeo.
+// - `playsInline`: no iPhone, toca na página e não pula para tela cheia.
+// - Sem autoplay: o primeiro play é o clique da pessoa (que também é o gesto
+//   que o Safari exige para tocar com som).
+// - Tela cheia: o palco inteiro (quadro + nossos controles) onde o navegador
+//   deixa; no iPhone, que só põe o próprio `<video>` em tela cheia, a do
+//   sistema (`webkitEnterFullscreen`), com os controles nativos.
+type FaseDoArquivo = "parado" | "tocando" | "pausado" | "fim" | "erro";
+
+type VideoDoSafari = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+
+function VideoHospedado({ secao, idTitulo }: { secao: DaSecao<"video">; idTitulo: string }) {
+  const [fase, setFase] = useState<FaseDoArquivo>("parado");
+  const [esperando, setEsperando] = useState(false);
+  const [atual, setAtual] = useState(0);
+  const [duracao, setDuracao] = useState(0);
+  const [cheia, setCheia] = useState(false);
+  const video = useRef<VideoDoSafari>(null);
+  const palco = useRef<HTMLDivElement>(null);
+  const botaoPlay = useRef<HTMLButtonElement>(null);
+  const botaoTentar = useRef<HTMLButtonElement>(null);
+  // Arrastando a barra, o `timeupdate` não mexe no `atual` (o botão pularia).
+  const arrastando = useRef(false);
+  const iniciado = fase !== "parado";
+
+  const rotulo = secao.titulo ? `Assistir ao vídeo: ${secao.titulo}` : "Assistir ao vídeo";
+  const temTexto = !!(secao.titulo || secao.subtitulo || secao.blocos.length);
+
+  useEffect(() => {
+    const mudou = () => setCheia(!!palco.current && document.fullscreenElement === palco.current);
+    document.addEventListener("fullscreenchange", mudou);
+    return () => document.removeEventListener("fullscreenchange", mudou);
+  }, []);
+
+  useEffect(() => {
+    if (fase === "erro") botaoTentar.current?.focus({ preventScroll: true });
+  }, [fase]);
+
+  const tocar = () => {
+    const v = video.current;
+    if (!v) return;
+    if (v.ended) v.currentTime = 0;
+    // Recusado (economia de dados, política do navegador): fica pausado, e o
+    // nosso play continua lá para a próxima tentativa.
+    // Arquivo que não carrega (404, formato que o navegador não toca) também
+    // rejeita o play: aí é erro, com "tentar de novo".
+    v.play().catch(() => setFase((f) => (v.error || f === "erro" ? "erro" : "pausado")));
+  };
+
+  const comecar = () => {
+    setFase("pausado");
+    tocar();
+    // O botão da fachada some; o foco vai para o play/pausa, de onde a
+    // pessoa controla o vídeo (como no player do YouTube).
+    window.setTimeout(() => botaoPlay.current?.focus({ preventScroll: true }), 0);
+  };
+
+  const alternar = () => {
+    const v = video.current;
+    if (!v) return;
+    if (v.paused || v.ended) tocar();
+    else v.pause();
+  };
+
+  const irPara = (segundos: number) => {
+    const v = video.current;
+    if (!v) return;
+    const alvo = alvoNoArquivo(segundos, duracao);
+    v.currentTime = alvo;
+    setAtual(alvo);
+    if (fase === "fim") setFase("pausado");
+  };
+
+  const soltarBarra = (valor: number) => {
+    if (!arrastando.current) return;
+    arrastando.current = false;
+    irPara(valor);
+  };
+
+  const telaCheia = () => {
+    const v = video.current;
+    const p = palco.current;
+    if (!v || !p) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else if (typeof p.requestFullscreen === "function" && document.fullscreenEnabled) {
+      p.requestFullscreen().catch(() => v.webkitEnterFullscreen?.());
+    } else {
+      v.webkitEnterFullscreen?.();
+    }
+  };
+
+  const tentarDeNovo = () => {
+    const v = video.current;
+    if (!v) return;
+    setFase("pausado");
+    v.load();
+    tocar();
+  };
+
+  const lerDuracao = () => {
+    const d = video.current?.duration ?? 0;
+    if (Number.isFinite(d) && d > 0) setDuracao(d);
+  };
+
+  const ativo = iniciado && fase !== "erro";
+  const posicao = Math.min(atual, duracao || 0);
+  const progresso = duracao ? `${(posicao / duracao) * 100}%` : "0%";
+  const pausaria = fase === "tocando";
+  const rotuloDoPlay = pausaria ? "Pausar" : fase === "fim" ? "Assistir de novo" : "Reproduzir";
+
+  return (
+    <div className={["video", temTexto && "video-com-texto", secao.vertical && "video-vertical"]
+                    .filter(Boolean).join(" ")}>
+      {temTexto && (
+        <div className="video-texto">
+          <Cabeca secao={secao} idTitulo={idTitulo} />
+          <Blocos blocos={secao.blocos} />
+        </div>
+      )}
+      <div ref={palco} className={iniciado ? "video-palco video-palco-ativo" : "video-palco"}>
+        <div className="video-quadro">
+          {/* Sem `controls`: os controles são os nossos, embaixo. O clique no
+              quadro é play/pausa, como no player do YouTube. */}
+          <video ref={video} className="video-arquivo" src={secao.arquivo ?? undefined}
+                 poster={secao.capa ?? undefined} preload="metadata" playsInline
+                 aria-label={secao.titulo || "Vídeo"} tabIndex={-1}
+                 onClick={iniciado && fase !== "erro" && fase !== "fim" ? alternar : undefined}
+                 onContextMenu={(e) => e.preventDefault()}
+                 onLoadedMetadata={lerDuracao} onDurationChange={lerDuracao}
+                 onTimeUpdate={(e) => { if (!arrastando.current) setAtual(e.currentTarget.currentTime); }}
+                 onPlay={() => setFase("tocando")}
+                 onPause={(e) => { if (!e.currentTarget.ended) setFase((f) => (f === "erro" || f === "parado" ? f : "pausado")); }}
+                 onEnded={(e) => { setAtual(e.currentTarget.duration || 0); setFase("fim"); }}
+                 onWaiting={() => setEsperando(true)}
+                 onPlaying={() => setEsperando(false)}
+                 onCanPlay={() => setEsperando(false)}
+                 onError={() => { if (iniciado) setFase("erro"); }} />
+          {!iniciado ? (
+            <button type="button" className="video-fachada video-fachada-arquivo" aria-label={rotulo}
+                    onClick={comecar}>
+              <span className="video-play" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" focusable="false">
+                  <path fill="currentColor" d={ICONES.play} />
+                </svg>
+              </span>
+            </button>
+          ) : (
+            <>
+              {esperando && fase === "tocando" && <span className="video-carregando" aria-hidden="true" />}
+              {fase === "pausado" && (
+                <span className="video-play video-play-sobre" aria-hidden="true"><IconeDoVideo tipo="play" /></span>
+              )}
+              {fase === "fim" && (
+                <button type="button" className="video-de-novo" onClick={tocar}>
+                  <IconeDoVideo tipo="voltar" />
+                  Assistir de novo
+                </button>
+              )}
+              {fase === "erro" && (
+                <div className="video-erro" role="alert">
+                  <p>Não foi possível carregar o vídeo agora.</p>
+                  <button type="button" ref={botaoTentar} onClick={tentarDeNovo}>Tentar de novo</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {iniciado && (
+          <div className="video-controles" role="group" aria-label="Controles do vídeo">
+            <input type="range" className="video-barra" min={0} max={duracao > 0 ? duracao : 1} step={1}
+                   value={posicao} disabled={!ativo || !duracao}
+                   aria-label="Posição no vídeo"
+                   aria-valuetext={`${tempoPorExtenso(posicao)} de ${tempoPorExtenso(duracao)}`}
+                   style={{ "--progresso": progresso } as CSSProperties}
+                   onPointerDown={() => { arrastando.current = true; }}
+                   onPointerUp={(e) => soltarBarra(Number(e.currentTarget.value))}
+                   onPointerCancel={(e) => soltarBarra(Number(e.currentTarget.value))}
+                   onChange={(e) => {
+                     const t = Number(e.currentTarget.value);
+                     if (arrastando.current) setAtual(t);
+                     else irPara(t);
+                   }} />
+            <div className="video-botoes">
+              <button type="button" className="video-botao" onClick={() => irPara(atual - SALTO)}
+                      disabled={!ativo} aria-label={`Voltar ${SALTO} segundos`}>
+                <IconeDoVideo tipo="voltar" numero={SALTO} />
+              </button>
+              <button type="button" ref={botaoPlay} className="video-botao video-botao-play"
+                      onClick={alternar} disabled={!ativo} aria-label={rotuloDoPlay}>
+                <IconeDoVideo tipo={pausaria ? "pausa" : "play"} />
+              </button>
+              <button type="button" className="video-botao" onClick={() => irPara(atual + SALTO)}
+                      disabled={!ativo} aria-label={`Avançar ${SALTO} segundos`}>
+                <IconeDoVideo tipo="avancar" numero={SALTO} />
+              </button>
+              <span className="video-tempo" aria-hidden="true">
+                {formatarTempo(posicao)} <span className="video-tempo-total">/ {formatarTempo(duracao)}</span>
+              </span>
+              <button type="button" className="video-botao" onClick={telaCheia} disabled={!ativo}
+                      aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"}>
+                <IconeDoVideo tipo={cheia ? "sairDaTelaCheia" : "telaCheia"} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Corpo({ secao, idTitulo }: { secao: Secao; idTitulo: string }) {
   switch (secao.tipo) {
     case "numeros": return <Numeros secao={secao} />;
@@ -661,7 +884,11 @@ function Corpo({ secao, idTitulo }: { secao: Secao; idTitulo: string }) {
     case "depoimentos": return <Depoimentos secao={secao} />;
     // `key` pelo id do vídeo: trocou o link, a fachada recomeça (miniatura
     // grande, sem tocar).
-    case "video": return <Video key={secao.video} secao={secao} idTitulo={idTitulo} />;
+    // Com arquivo subido, o `<video>` nosso; senão, o YouTube fechado.
+    case "video":
+      return secao.arquivo
+        ? <VideoHospedado key={secao.arquivo} secao={secao} idTitulo={idTitulo} />
+        : <Video key={secao.video} secao={secao} idTitulo={idTitulo} />;
   }
   return null;
 }

@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, Film, Loader2, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,10 +10,12 @@ import {
 } from '@/components/ui/select';
 import {
   BOTAO_DA_CHAMADA_PADRAO, COLUNA_A_PADRAO, COLUNA_B_PADRAO,
-  LIMITE_ITENS, LIMITE_LINHAS, LIMITE_NUMEROS, idDoYoutube,
+  LIMITE_ITENS, LIMITE_LINHAS, LIMITE_NUMEROS, idDoVideoHospedado, idDoYoutube,
   type ItemDaConfig, type LinhaDaConfig, type SecaoDaConfig,
 } from '@/landing/secoes';
 import { CampoDeImagem } from './CampoDeImagem';
+import { enderecoDaImagem } from '@/landing/campos';
+import { BASE, ErroApi, lerToken, mensagemDoDetalhe } from '@/lib/api';
 
 // Um editor por tipo de seção (frente landing-secoes, 26/10). Tudo aqui grava
 // a forma CRUA (`SecaoDaConfig`) — a leitura defensiva é da landing
@@ -113,6 +116,102 @@ function LinhasDeTexto({ id, rotulo, valores, onChange, placeholder }: {
                   setCru(e.target.value);
                   onChange(e.target.value.split('\n').map((v) => v.trim()).filter(Boolean).slice(0, LIMITE_ITENS));
                 }} />
+    </div>
+  );
+}
+
+// ── Vídeo hospedado (frente video-proprio, 29/10) ────────────────────────────
+// O mesmo teto do servidor (`app/routers/videos.py::TAMANHO_MAXIMO`): avisar
+// aqui poupa subir 200 MB para levar 413 no fim.
+const TETO_DO_VIDEO_MB = 60;
+
+// Multipart com progresso: um vídeo de dezenas de MB leva tempo, e sem a
+// porcentagem o botão parece travado. XHR porque o `fetch` não dá progresso
+// de envio. ⚠️ Mesma autenticação de `subirImagemDeEmail` (Bearer).
+function subirVideo(arquivo: File, aoProgredir: (pct: number) => void): Promise<{ url: string }> {
+  return new Promise((resolver, rejeitar) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE}/videos`);
+    const token = lerToken();
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) aoProgredir(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      let corpo: unknown = null;
+      try { corpo = JSON.parse(xhr.responseText); } catch { /* sem corpo */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolver(corpo as { url: string });
+      else {
+        const detalhe = corpo && typeof corpo === 'object' ? (corpo as { detail?: unknown }).detail : null;
+        // O 413 do nginx vem em HTML, sem `detail`.
+        const padrao = xhr.status === 413
+          ? `O vídeo passa de ${TETO_DO_VIDEO_MB} MB.` : `Erro ${xhr.status}`;
+        rejeitar(new ErroApi(xhr.status, mensagemDoDetalhe(detalhe, padrao)));
+      }
+    };
+    xhr.onerror = () => rejeitar(new ErroApi(0, 'Sem conexão com o servidor.'));
+    const corpo = new FormData();
+    corpo.append('arquivo', arquivo);
+    xhr.send(corpo);
+  });
+}
+
+function CampoDeVideo({ id, valor, onChange }: {
+  id: string; valor: string; onChange: (url: string) => void;
+}) {
+  const [progresso, setProgresso] = useState<number | null>(null);
+  const arquivoRef = useRef<HTMLInputElement>(null);
+  // ⚠️ O upload termina bem depois do clique: o `onChange` daquela
+  // renderização gravaria a seção velha por cima do que se digitou enquanto
+  // isso (mesma armadilha do `CampoDeImagem`).
+  const onChangeAtual = useRef(onChange);
+  onChangeAtual.current = onChange;
+
+  const subir = async (arquivo: File) => {
+    if (arquivo.size > TETO_DO_VIDEO_MB * 1024 * 1024) {
+      toast.error(`O vídeo tem ${Math.ceil(arquivo.size / (1024 * 1024))} MB; o limite é ${TETO_DO_VIDEO_MB} MB.`);
+      if (arquivoRef.current) arquivoRef.current.value = '';
+      return;
+    }
+    setProgresso(0);
+    try {
+      const { url } = await subirVideo(arquivo, setProgresso);
+      onChangeAtual.current(url);
+      toast.success('Vídeo subido.');
+    } catch (e) {
+      toast.error(e instanceof ErroApi ? e.message : 'Erro ao subir o vídeo');
+    } finally {
+      setProgresso(null);
+      if (arquivoRef.current) arquivoRef.current.value = '';
+    }
+  };
+
+  const subido = !!idDoVideoHospedado(valor);
+  const subindo = progresso !== null;
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-xs">Arquivo de vídeo</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input ref={arquivoRef} id={id} type="file" accept="video/mp4,video/webm,.mp4,.webm" className="hidden"
+               onChange={(e) => { const f = e.target.files?.[0]; if (f) subir(f); }} />
+        <Button type="button" variant="outline" size="sm" disabled={subindo}
+                onClick={() => arquivoRef.current?.click()}>
+          {subindo ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Film className="h-4 w-4 mr-1" />}
+          {subindo ? `Subindo… ${progresso}%` : subido ? 'Trocar vídeo' : 'Subir vídeo'}
+        </Button>
+        {subido && !subindo && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => onChange('')}>
+            Tirar
+          </Button>
+        )}
+      </div>
+      {subido && (
+        <video src={enderecoDaImagem(valor, BASE)} controls preload="metadata" playsInline
+               aria-label="Prévia do vídeo subido"
+               className="max-h-48 rounded-lg border border-borda bg-surface" />
+      )}
+      <p className="text-xs text-muted-foreground">
+        MP4 (H.264, o padrão de exportação) ou WebM, até {TETO_DO_VIDEO_MB} MB. Com arquivo, a página toca o vídeo
+        no nosso próprio player, sem nada do YouTube — e o link do YouTube abaixo deixa de ser usado.
+      </p>
     </div>
   );
 }
@@ -334,10 +433,20 @@ export function EditorDeSecao({ secao, prefixo, onChange }: {
     case 'video': {
       const url = texto(secao.url);
       const invalida = !!url.trim() && !idDoYoutube(url);
+      const temArquivo = !!idDoVideoHospedado(secao.arquivo_url);
       corpo = (
         <div className="space-y-3">
+          <CampoDeVideo id={id('arquivo')} valor={texto(secao.arquivo_url)}
+                        onChange={(v) => mudar({ arquivo_url: v })} />
+          {temArquivo && (
+            <CampoDeImagem id={id('capa')} rotulo="Capa do vídeo (opcional)" valor={texto(secao.imagem_url)}
+                           onChange={(v) => mudar({ imagem_url: v })}
+                           ajuda="A imagem que aparece antes do play. Sem capa, o navegador mostra o primeiro quadro (no iPhone, o quadro fica escuro até o play)." />
+          )}
           <div className="space-y-1">
-            <Label htmlFor={id('url')} className="text-xs">Link do YouTube</Label>
+            <Label htmlFor={id('url')} className="text-xs">
+              {temArquivo ? 'Link do YouTube (não usado: o arquivo acima vale)' : 'Link do YouTube'}
+            </Label>
             <Input id={id('url')} value={url} placeholder="https://www.youtube.com/watch?v=…"
                    aria-invalid={invalida || undefined}
                    aria-describedby={invalida ? id('url-erro') : undefined}
@@ -350,7 +459,9 @@ export function EditorDeSecao({ secao, prefixo, onChange }: {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Na página aparece só a miniatura; o vídeo carrega quando a pessoa clica.
+                {temArquivo
+                  ? 'Fica guardado: ao tirar o arquivo, a página volta a tocar este link.'
+                  : 'Na página aparece só a miniatura; o vídeo carrega quando a pessoa clica.'}
               </p>
             )}
           </div>
