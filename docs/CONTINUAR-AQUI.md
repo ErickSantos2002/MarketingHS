@@ -4,7 +4,8 @@
 >
 > - Levantamento em `docs/arrumar-a-casa.md`. Barra do player corrigida (`d6d9adf`: `step="any"` + `progressoDaBarra`).
 > - Frente `faxina-tecnica` ✅ mergeada (`8de88d1`; portão local **1437 passed, 9 skipped**, `tsc` 0, node 79, builds ok, guarda 0): régua do servidor para `arquivo_url` (400 ao salvar, descarte ao servir); `DELETE /videos/{id}` (409 se em uso) e `DELETE /videos/orfaos` (carência 1 h) com botão no editor; texto do tipo vídeo; rótulo no lugar da chave nas notas da captura normal (`rotulos_dos_campos` em `captura/campos.py`).
-> - **Falta:** deploy de api e sistema. Erick manda ao grupo (Sergio/Nicholson) o pedido: Pixel ID + token CAPI, domínio verificado, GA4 `G-` + conversão Ads; decisões de indexar a página, Resend Pro, LGPD do leitor, redes sociais.
+> - ✅ Deploy de api e sistema (29/10 14:31). ✅ Mensagem enviada ao grupo (30/10): Pixel ID + token CAPI, GA4 `G-` + conversão Ads, erro de certificado do `gtm.healthsafety.com.br`; decisões de indexar a página, Resend pago, dados que a conta de leitura vê, redes sociais.
+> - **▶️ Aguardando o grupo.** Domínio: `healthsafetytech.com` é provisório — quando o `healthsafety.com.br` for para a Cloudflare, mover landings (e remetente) para o domínio oficial.
 > - Depois: Erick tira `DATACORE_*` do env da api/worker → aí sai do `config.py`.
 
 > ## ▶️ 29/10 (tarde) — vídeo próprio na landing
