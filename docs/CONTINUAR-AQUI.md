@@ -1,5 +1,11 @@
 # Continuar aqui
 
+> ## ▶️ 16/11 — páginas da agência passam pelo MarketingHS
+>
+> - Decisão do Erick: as páginas da agência do Leão param de mandar lead direto ao CRM; mandam **só ao MarketingHS** (snippet `rastreio.js`, Configurações → Sites) e a jornada leva ao GrowthHS (nó `handoff_growthhs`) + fluxos de e-mail da RD. Mensagem enviada ao Sergio pedindo domínios/URLs e formulários.
+> - Virada: cadastrar o site, jornada com handoff + nutrição, conferir os primeiros leads chegando; **só então** o Sergio tira o envio direto ao CRM e desliga os fluxos da RD (senão card e e-mail em dobro).
+> - Risco aceito pelo Erick ("vamos ajustando"): o `sendBeacon` é sem retorno — lead que não chega (sem `Origin`, bloqueador) também não vira card. Saída futura: rota de captura com resposta para o formulário da página postar direto.
+
 > ## ▶️ 29/10 (fim da tarde) — faxina técnica e lista para o grupo
 >
 > - Levantamento em `docs/arrumar-a-casa.md`. Barra do player corrigida (`d6d9adf`: `step="any"` + `progressoDaBarra`).
