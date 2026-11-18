@@ -10,6 +10,7 @@ import LeadScoringSettings from '@/components/admin/settings/LeadScoringSettings
 import GrowthHSCard from '@/components/admin/settings/GrowthHSCard';
 import RoletaReuniaoCard from '@/components/admin/settings/RoletaReuniaoCard';
 import ResendConfigCard from '@/components/admin/settings/ResendConfigCard';
+import AvisoDeLeadCard from '@/components/admin/settings/AvisoDeLeadCard';
 import MetaCard from '@/components/admin/settings/MetaCard';
 import IACard from '@/components/admin/settings/IACard';
 
@@ -153,6 +154,9 @@ export default function SettingsPage() {
 
             {/* Resend Card */}
             <ResendConfigCard />
+
+            {/* Aviso de lead a vendas */}
+            <AvisoDeLeadCard />
 
             {/* ⚠️ O PingbackCard saiu no lote 5D. Pingback é o rastreador da
                 dn.ia e a spec o DESCARTA (seção 9) — a HS não usa. O card
