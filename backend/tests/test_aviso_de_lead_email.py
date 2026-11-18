@@ -118,3 +118,14 @@ def test_contato_utms_e_whatsapp():
     assert "Canal: Pago" in texto
     assert "Contato: Já existia — converteu de novo" in texto
     assert "Contato: Novo" in _montar()[2]
+
+
+def test_data_sem_fuso_vale_utc():
+    conv = _conv(converted_at=datetime(2026, 11, 18, 13, 5))
+    assert "Quando: 18/11/2026 às 10:05" in _montar(conv=conv)[2]
+
+
+def test_chaves_de_controle_iguais_a_da_execucao():
+    from app.agendamento import execucao
+    from app.avisos import email as aviso_email
+    assert aviso_email.CHAVES_DE_CONTROLE == execucao.CHAVES_DE_CONTROLE

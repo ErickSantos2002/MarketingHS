@@ -46,6 +46,9 @@ AGENDADOR_INTERVALO = 60
 JORNADAS_INTERVALO = 20
 # A fila do agendamento de reunião (frente agendamento, 28/10).
 AGENDAMENTOS_INTERVALO = 15
+# O aviso de lead a vendas (frente aviso-de-lead, 18/11): nasce 60 s depois da
+# captura, então varrer a cada 15 s basta.
+AVISOS_INTERVALO = 15
 JORNADAS_LOTE = 25
 JORNADAS_LEASE = 300
 EVENTOS_LOTE = 50
@@ -560,6 +563,31 @@ async def _laco_agendamentos() -> None:
             pass
 
 
+async def _laco_avisos() -> None:
+    """O aviso de lead a vendas, num laço PRÓPRIO (o Resend lento não atrasa o
+    resto). O `_compasso` é o MESMO do laço principal: um 429 segura os dois.
+    Sem `RESEND_API_KEY` não reivindica; loga na falta e na volta, não a cada
+    passada."""
+    from app.avisos import fila as fila_avisos
+
+    nome = "RESEND_API_KEY (aviso de lead)"
+    while not _parar.is_set():
+        try:
+            resultado = await fila_avisos.rodar_avisos(parar=_parar, compasso=_compasso)
+            if not resultado.get("desligado"):
+                _registrar_presenca(
+                    nome, not resultado.get("sem_chave"),
+                    "O aviso de lead a vendas espera a chave.")
+            if any(v is not True and v for v in resultado.values()):
+                logger.info("[aviso-de-lead] fila: %s", resultado)
+        except Exception:  # noqa: BLE001 — este laço não pode morrer
+            logger.exception("falha na passada do aviso de lead")
+        try:
+            await asyncio.wait_for(_parar.wait(), timeout=AVISOS_INTERVALO)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def _laco_saidas() -> None:
     """A caixa de saída das jornadas (aviso por e-mail e webhook, prova do
     RD), num laço PRÓPRIO pelo mesmo motivo do `_laco_entregas`: um webhook
@@ -592,6 +620,7 @@ async def principal() -> None:
     tarefa_entregas = asyncio.create_task(_laco_entregas())
     tarefa_saidas = asyncio.create_task(_laco_saidas())
     tarefa_agendamentos = asyncio.create_task(_laco_agendamentos())
+    tarefa_avisos = asyncio.create_task(_laco_avisos())
     proximo_agendador = 0.0
     proximo_jornadas = 0.0
     try:
@@ -644,7 +673,8 @@ async def principal() -> None:
         # inofensivo (idempotente) e cobre o caso raro do laço principal
         # sair por outro motivo que não o sinal de parada.
         _parar.set()
-        for tarefa in (tarefa_entregas, tarefa_saidas, tarefa_agendamentos):
+        for tarefa in (tarefa_entregas, tarefa_saidas, tarefa_agendamentos,
+                       tarefa_avisos):
             try:
                 await asyncio.wait_for(tarefa, timeout=30)
             except asyncio.TimeoutError:

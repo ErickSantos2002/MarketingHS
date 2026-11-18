@@ -7,7 +7,7 @@ IP nem user-agent: só os campos listados aqui são lidos de `dados_informados`.
 
 import html
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from app.crm.growthhs import uma_linha
@@ -44,6 +44,8 @@ def _quando(valor) -> str:
             return uma_linha(valor)
     if not isinstance(valor, datetime):
         return ""
+    if valor.tzinfo is None:  # sem fuso: o banco guarda em UTC
+        valor = valor.replace(tzinfo=timezone.utc)
     return valor.astimezone(FUSO).strftime("%d/%m/%Y às %H:%M")
 
 
