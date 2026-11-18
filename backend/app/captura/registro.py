@@ -19,6 +19,7 @@ import logging
 from dataclasses import dataclass
 
 from app.ab.costura import Ab, registrar_conversao_ab
+from app.avisos import fila as fila_de_avisos
 from app.captura.evento import marcar_agendamento, marcar_pagina, publicar_conversao
 from app.captura.informados import dados_informados, divergencias
 
@@ -126,6 +127,11 @@ async def _registrar(conn, *, email, campos, extras, origem, session_id, consent
     existente = await conn.fetchrow(
         "SELECT id::text AS id, session_id, deleted_at, deleted_by, dnia_id::text "
         "AS dnia_id FROM leads WHERE lower(email) = $1", email)
+    # Aviso de lead: contato NOVO só se este INSERT gravou. Na corrida perdida
+    # quem venceu já enfileirou o aviso daquele envio (duplo clique), então
+    # aqui não se enfileira.
+    contato_novo = False
+    corrida_perdida = False
 
     if existente is None:
         # O `form_submitted` do gatilho de INSERT leva a origem (026/027).
@@ -148,6 +154,9 @@ async def _registrar(conn, *, email, campos, extras, origem, session_id, consent
             await _atualizar(conn, existente, session_id, campos, extras=extras)
             # ⚠️ Sem `publicar_conversao` aqui: quem venceu a corrida já
             # publicou o `form_submitted` desta origem (duplo clique).
+            corrida_perdida = True
+        else:
+            contato_novo = True
     else:
         lead_id = existente["id"]
         await _atualizar(conn, existente, session_id, campos, extras=extras)
@@ -183,6 +192,12 @@ async def _registrar(conn, *, email, campos, extras, origem, session_id, consent
     await _gravar_informados(conn, conversao_id, informados)
     if consentimento is not None:
         await gravar_consentimento(conn, lead_id, conversao_id, consentimento, origem)
+
+    # O aviso de lead por e-mail (038). Nunca levanta; ver `avisos/fila.py`.
+    if not corrida_perdida:
+        await fila_de_avisos.enfileirar(conn, conversao_id=conversao_id,
+                                        lead_id=lead_id, contato_novo=contato_novo,
+                                        agendamento=agendamento)
 
     # `lead_criado` no teste A/B: a landing lê `ab_*` da URL e manda aqui.
     await registrar_conversao_ab(
