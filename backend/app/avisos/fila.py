@@ -62,7 +62,8 @@ def espera(tentativas: int) -> timedelta:
     return min(ESPERA_BASE * (2 ** max(tentativas - 1, 0)), ESPERA_MAXIMA)
 
 
-async def _reivindicar(limite: int, somente: list[str] | None) -> list[dict]:
+async def _reivindicar(limite: int, somente: list[str] | None,
+                       escopo: list[str] | None = None) -> list[dict]:
     """Os avisos vencidos, escondidos por `PRAZO_DA_REIVINDICACAO` e com a
     tentativa somada (se o worker morrer no meio, volta sozinho)."""
     async with sessao(role="service_role") as conn:
@@ -75,10 +76,11 @@ async def _reivindicar(limite: int, somente: list[str] | None) -> list[dict]:
                          LEFT JOIN leads l ON l.id = a.lead_id
                         WHERE a.status = 'pendente' AND a.visivel_em <= now()
                           AND ($2::uuid[] IS NULL OR a.id = ANY($2::uuid[]))
+                          AND ($4::uuid[] IS NULL OR a.id = ANY($4::uuid[]))
                           AND ($2::uuid[] IS NOT NULL OR NOT coalesce({LEAD_DE_TESTE}, false))
                         ORDER BY a.visivel_em LIMIT $3
                           FOR UPDATE OF a SKIP LOCKED)
-             RETURNING *""", PRAZO_DA_REIVINDICACAO, somente, limite)
+             RETURNING *""", PRAZO_DA_REIVINDICACAO, somente, limite, escopo)
     return [dict(r) for r in sorted(linhas, key=lambda r: r["criado_em"])]
 
 
@@ -162,6 +164,7 @@ async def _falhou(aviso: dict, erro: Exception) -> bool:
 
 async def rodar_avisos(*, parar: asyncio.Event | None = None, compasso=None,
                        somente: list[str] | None = None,
+                       escopo: list[str] | None = None,
                        por_segundo: float = 2.0) -> dict:
     """Uma passada: envia os avisos vencidos, um e-mail por destinatário.
 
@@ -182,7 +185,7 @@ async def rodar_avisos(*, parar: asyncio.Event | None = None, compasso=None,
         return resultado
     de = (await integracoes.ler_segredo("EMAIL_FROM")) or REMETENTE_PADRAO
 
-    avisos = await _reivindicar(LOTE, somente)
+    avisos = await _reivindicar(LOTE, somente, escopo)
     for i, aviso in enumerate(avisos):
         if parar is not None and parar.is_set():
             await _devolver([a["id"] for a in avisos[i:]])

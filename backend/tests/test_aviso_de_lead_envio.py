@@ -5,6 +5,7 @@ Dado COMITADO (o laço abre `sessao()` própria), apagado no teardown com
 e-mail real.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import timedelta
@@ -28,6 +29,8 @@ class Cenario:
         self.email = None
         self.aviso_id = None
         self.chamadas: list[dict] = []
+        self.extras: list[str] = []  # leads criados à parte (limpeza)
+        self.apos_envio = None
         self.levantar = None  # exceção, ou função (kw) -> exceção | None
         self.segredos = {"RESEND_API_KEY": "re_teste",
                          "EMAIL_FROM": "MHS <a@exemplo.invalid>",
@@ -44,6 +47,19 @@ class Cenario:
             await conn.execute(
                 "UPDATE avisos_de_lead SET visivel_em = now() WHERE id = $1::uuid",
                 self.aviso_id)
+
+    async def novo_aviso(self, tipo: str, email: str) -> str:
+        async with db.sessao(role="service_role") as conn:
+            lead = str(await conn.fetchval(
+                "INSERT INTO leads (tipo, email, nome) VALUES ($1, $2, 'Beltrano') "
+                "RETURNING id", tipo, email))
+            self.extras.append(lead)
+            conv = await conn.fetchval(
+                "INSERT INTO lead_conversions (lead_id) VALUES ($1::uuid) RETURNING id",
+                lead)
+            return str(await conn.fetchval(
+                "INSERT INTO avisos_de_lead (conversao_id, lead_id, visivel_em) "
+                "VALUES ($1, $2::uuid, now()) RETURNING id", conv, lead))
 
     async def rodar(self, **kw):
         return await fila.rodar_avisos(somente=[self.aviso_id], **kw)
@@ -78,13 +94,15 @@ async def cen(monkeypatch):
         elif c.levantar is not None:
             raise c.levantar
         c.chamadas.append(kw)
+        if c.apos_envio:
+            c.apos_envio()
         return f"re_{len(c.chamadas)}"
 
     monkeypatch.setattr("app.integracoes.ler_segredo", segredo)
     monkeypatch.setattr(fila.resend, "enviar", enviar)
     yield c
     async with db.sessao(role="service_role") as conn:
-        await apagar_leads(conn, [c.lead_id])
+        await apagar_leads(conn, [c.lead_id, *c.extras])
 
 
 def _erro_500():
@@ -106,10 +124,35 @@ async def test_envia_para_cada_destinatario_com_reply_to_do_lead(cen):
 
 
 async def test_lead_de_teste_nao_sai_sem_somente(cen):
-    await fila.rodar_avisos()
+    # ⚠️ `escopo` só limita os candidatos: não levanta a exclusão de lead de
+    # teste, e a passada nunca vê aviso real (a suíte pode rodar em produção).
+    await fila.rodar_avisos(escopo=[cen.aviso_id])
     assert cen.chamadas == []
     a = await cen.aviso()
     assert a["status"] == "pendente" and a["tentativas"] == 0
+
+
+async def test_lead_real_sai_com_escopo(cen):
+    aviso_id = await cen.novo_aviso("lead", f"aviso-{uuid.uuid4().hex[:8]}@hs-teste.com.br")
+    assert (await fila.rodar_avisos(escopo=[aviso_id]))["enviados"] == 1
+    assert len(cen.chamadas) == 2
+    assert (await cen.aviso())["tentativas"] == 0  # o aviso do lead de teste não foi tocado
+
+
+async def test_parar_devolve_os_nao_tentados(cen):
+    cen.segredos["AVISO_LEAD_PARA"] = "a@hs.invalid"
+    outro = await cen.novo_aviso("teste", f"aviso-{uuid.uuid4().hex[:8]}@exemplo.invalid")
+    parar = asyncio.Event()
+    cen.apos_envio = parar.set
+    resultado = await fila.rodar_avisos(parar=parar, somente=[cen.aviso_id, outro])
+    assert resultado["enviados"] == 1 and len(cen.chamadas) == 1
+    async with db.sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT status, tentativas, visivel_em <= now() AS vencido "
+            "FROM avisos_de_lead WHERE id = ANY($1::uuid[])", [cen.aviso_id, outro])
+    pendente = [r for r in linhas if r["status"] == "pendente"]
+    assert len(pendente) == 1 and len(linhas) == 2
+    assert pendente[0]["tentativas"] == 0 and pendente[0]["vencido"]
 
 
 async def test_falha_adia_com_espera_crescente(cen):
