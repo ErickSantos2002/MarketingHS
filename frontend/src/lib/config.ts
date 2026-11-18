@@ -159,3 +159,24 @@ export async function subirArquivo(arquivo: File): Promise<Arquivo> {
   }
   return resposta.json();
 }
+
+// Aviso de lead a vendas (frente aviso-de-lead). `padrao` = nada gravado em
+// "para": vale o endereço padrão do servidor.
+export interface ConfigAvisoLead {
+  ligado: boolean;
+  para: string[];
+  padrao: boolean;
+}
+
+export interface ResultadoTesteAviso {
+  enviados: string[];
+  falhas: { para: string; erro: string }[];
+}
+
+export const lerConfigAvisoLead = () => api.get<ConfigAvisoLead>('/config/aviso-lead');
+
+export const gravarConfigAvisoLead = (dados: { ligado: boolean; para: string }) =>
+  api.put<ConfigAvisoLead>('/config/aviso-lead', dados);
+
+export const testarAvisoLead = () =>
+  api.post<ResultadoTesteAviso>('/config/aviso-lead/testar', {});
