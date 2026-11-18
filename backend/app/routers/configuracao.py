@@ -657,6 +657,99 @@ async def ligar_rastreamento_resend(dominio_id: str, dados: RastreamentoIn,
             "tracking_subdomain": info["tracking_subdomain"] or dados.subdominio}
 
 
+# ── Aviso de lead a vendas ───────────────────────────────────────────────────
+# Quem recebe e se está ligado moram em `integration_secrets` (ver
+# `app/avisos/config.py`). Sem nada gravado: ligado, para o endereço padrão.
+
+LIMITE_DESTINATARIOS_AVISO = 10
+
+
+class AvisoLeadIn(BaseModel):
+    ligado: bool
+    para: str = Field(max_length=2000)
+
+
+async def _config_do_aviso() -> dict:
+    from app.avisos.config import ler_config
+
+    config = await ler_config()
+    return {"ligado": config.ligado, "para": config.para,
+            "padrao": not (await ler_segredo("AVISO_LEAD_PARA") or "").strip()}
+
+
+@router.get("/config/aviso-lead")
+async def ler_config_aviso_lead(_: str = Depends(admin_ou_maquina("read"))):
+    return await _config_do_aviso()
+
+
+@router.put("/config/aviso-lead")
+async def gravar_config_aviso_lead(dados: AvisoLeadIn,
+                                   _: str = Depends(admin_ou_maquina("write"))):
+    from app.avisos.config import separar_enderecos
+
+    enderecos = separar_enderecos(dados.para)
+    # Tudo validado antes de gravar qualquer coisa.
+    if len(enderecos) > LIMITE_DESTINATARIOS_AVISO:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"No máximo {LIMITE_DESTINATARIOS_AVISO} destinatários.")
+    for endereco in enderecos:
+        if not responder_para_valido(endereco):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                f'Endereço inválido: "{endereco}".')
+    await gravar_segredo("AVISO_LEAD_LIGADO", "1" if dados.ligado else "0")
+    if enderecos:
+        await gravar_segredo("AVISO_LEAD_PARA", ", ".join(enderecos))
+    else:
+        await apagar_segredo("AVISO_LEAD_PARA")  # volta ao padrão
+    return await _config_do_aviso()
+
+
+@router.post("/config/aviso-lead/testar")
+async def testar_aviso_lead(_: str = Depends(admin_ou_maquina("write"))):
+    """Manda um aviso de exemplo (assunto `[TESTE] …`) a cada destinatário.
+
+    Não grava nada e funciona com o aviso desligado. Um destinatário que falha
+    vai para `falhas` e os outros seguem.
+
+    ⚠️ Sem `reply_to`: o e-mail do lead de exemplo é `.invalid`.
+    """
+    from datetime import datetime, timezone
+
+    from app.avisos.config import ler_config
+    from app.avisos.email import montar_aviso
+
+    chave = await ler_segredo("RESEND_API_KEY")
+    if not chave:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "RESEND_API_KEY não configurada — salve a chave antes.")
+    config = await ler_config()
+    de = (await ler_segredo("EMAIL_FROM")) or "MarketingHS <noreply@localhost>"
+    lead = {"nome": "Lead de exemplo", "email": "exemplo@exemplo.invalid",
+            "empresa": "Empresa Exemplo"}
+    conversao = {"page_slug": "exemplo", "canal": "organico",
+                 "converted_at": datetime.now(timezone.utc)}
+    assunto, html, texto = montar_aviso(
+        lead, conversao, contato_novo=True, agendamento=False,
+        url_contato=f"{settings.FRONTEND_URL}/contacts")
+    assunto = f"[TESTE] {assunto}"
+
+    enviados: list[str] = []
+    falhas: list[dict] = []
+    for para in config.para:
+        try:
+            await cliente_resend.enviar(chave, de, para, assunto, html, texto,
+                                        {}, responder_para="")
+            enviados.append(para)
+        except cliente_resend.LimiteDoResend:
+            falhas.append({"para": para, "erro":
+                           "O Resend pediu para esperar (limite de envios). "
+                           "Tente de novo em instantes."})
+        except Exception as e:
+            falhas.append({"para": para, "erro": str(e) or type(e).__name__})
+    return {"enviados": enviados, "falhas": falhas}
+
+
 # ── Configuração do Meta ─────────────────────────────────────────────────────
 # Mesmo desenho do Resend: os segredos moram em `integration_secrets`, e a
 # leitura NUNCA devolve o valor.
