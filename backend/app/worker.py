@@ -17,6 +17,8 @@ import logging
 import signal
 from datetime import datetime, timezone
 
+import asyncpg
+
 from app import fila, integracoes, ritmo
 from app.config import settings
 from app.crm import entrega
@@ -571,15 +573,20 @@ async def _laco_avisos() -> None:
     from app.avisos import fila as fila_avisos
 
     nome = "RESEND_API_KEY (aviso de lead)"
+    tabela = "tabela avisos_de_lead (038)"
     while not _parar.is_set():
         try:
             resultado = await fila_avisos.rodar_avisos(parar=_parar, compasso=_compasso)
+            _registrar_presenca(tabela, True)
             if not resultado.get("desligado"):
                 _registrar_presenca(
                     nome, not resultado.get("sem_chave"),
                     "O aviso de lead a vendas espera a chave.")
             if any(v is not True and v for v in resultado.values()):
                 logger.info("[aviso-de-lead] fila: %s", resultado)
+        except asyncpg.exceptions.UndefinedTableError:
+            # Migration 038 ainda não aplicada: avisa uma vez, não a cada passada.
+            _registrar_presenca(tabela, False, "Aplique a migration 038.")
         except Exception:  # noqa: BLE001 — este laço não pode morrer
             logger.exception("falha na passada do aviso de lead")
         try:

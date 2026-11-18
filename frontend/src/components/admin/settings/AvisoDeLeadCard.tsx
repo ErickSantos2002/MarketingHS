@@ -19,6 +19,8 @@ export default function AvisoDeLeadCard() {
   const [testando, setTestando] = useState(false);
   const [ligado, setLigado] = useState(true);
   const [para, setPara] = useState('');
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
 
   const aplicar = (c: ConfigAvisoLead) => {
     setLigado(c.ligado);
@@ -27,14 +29,16 @@ export default function AvisoDeLeadCard() {
 
   useEffect(() => {
     let vivo = true;
+    setCarregando(true);
+    setErroCarga(null);
     (async () => {
       try {
         const c = await lerConfigAvisoLead();
         if (vivo) aplicar(c);
       } catch (e) {
-        toast.error('Falha ao carregar o aviso de lead', {
-          description: e instanceof ErroApi ? e.message : undefined,
-        });
+        // Sem a config carregada não há formulário: salvar os padrões por cima
+        // do que está gravado seria pior que não mostrar nada.
+        if (vivo) setErroCarga(e instanceof ErroApi ? e.message : 'Falha ao carregar o aviso de lead.');
       } finally {
         if (vivo) setCarregando(false);
       }
@@ -42,7 +46,7 @@ export default function AvisoDeLeadCard() {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [tentativa]);
 
   const salvar = async () => {
     setSalvando(true);
@@ -91,6 +95,13 @@ export default function AvisoDeLeadCard() {
         {carregando ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+          </div>
+        ) : erroCarga !== null ? (
+          <div className="space-y-3">
+            <p className="text-sm text-destructive">Não foi possível carregar o aviso de lead. {erroCarga}</p>
+            <Button variant="outline" onClick={() => setTentativa((n) => n + 1)}>
+              Tentar de novo
+            </Button>
           </div>
         ) : (
           <>

@@ -132,8 +132,13 @@ async def test_lead_de_teste_nao_sai_sem_somente(cen):
     assert a["status"] == "pendente" and a["tentativas"] == 0
 
 
-async def test_lead_real_sai_com_escopo(cen):
-    aviso_id = await cen.novo_aviso("lead", f"aviso-{uuid.uuid4().hex[:8]}@hs-teste.com.br")
+async def test_lead_real_sai_com_escopo(cen, monkeypatch):
+    # ⚠️ Nenhum lead real comitado: o lead é 'teste' com e-mail .invalid (o
+    # worker de produção nunca o reivindica) e o predicado de "teste" é trocado
+    # por um que nada considera de teste, só para provar que um lead NÃO de
+    # teste sai com `escopo`.
+    monkeypatch.setattr(fila, "LEAD_DE_TESTE", "false")
+    aviso_id = await cen.novo_aviso("teste", f"aviso-{uuid.uuid4().hex[:8]}@exemplo.invalid")
     assert (await fila.rodar_avisos(escopo=[aviso_id]))["enviados"] == 1
     assert len(cen.chamadas) == 2
     assert (await cen.aviso())["tentativas"] == 0  # o aviso do lead de teste não foi tocado
@@ -200,12 +205,14 @@ async def test_oitava_falha_vira_falhou_e_loga(cen, caplog):
     assert "AVISO DE LEAD NÃO ENVIADO" in caplog.text
 
 
-async def test_falha_ao_ler_conta_como_erro_comum(cen):
-    """Defeito nosso (aviso sem lead) também adia, e não derruba a passada."""
-    async with db.sessao(role="service_role") as conn:
-        await conn.execute(
-            "UPDATE avisos_de_lead SET lead_id = gen_random_uuid() WHERE id = $1::uuid",
-            cen.aviso_id)
+async def test_falha_ao_ler_conta_como_erro_comum(cen, monkeypatch):
+    """Defeito nosso (aviso sem lead) também adia, e não derruba a passada.
+    O lead continua de teste (nada reivindicável pelo worker de produção); a
+    falha de leitura vem de um falso em `_montar`."""
+    async def sem_lead(aviso):
+        raise LookupError("lead não existe mais")
+
+    monkeypatch.setattr(fila, "_montar", sem_lead)
     assert (await cen.rodar())["adiados"] == 1
     a = await cen.aviso()
     assert a["status"] == "pendente" and a["tentativas"] == 1 and a["erro"]

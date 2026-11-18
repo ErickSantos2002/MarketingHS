@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from datetime import timedelta
 
 from app import integracoes, ritmo
@@ -31,11 +32,20 @@ async def enfileirar(conn, *, conversao_id: str, lead_id: str, contato_novo: boo
                      agendamento: bool) -> None:
     """Põe o aviso da conversão na fila. ⚠️ NUNCA levanta: nenhum caminho de
     falha do aviso pode recusar um lead real. O INSERT roda num SAVEPOINT para
-    que um erro de banco não aborte a transação da captura."""
+    que um erro de banco não aborte a transação da captura.
+
+    ⚠️ Lê `AVISO_LEAD_LIGADO` pela PRÓPRIA `conn`: `ler_config()` abriria uma
+    segunda conexão do pool enquanto a captura segura a primeira (pool
+    esgotado travaria a api)."""
     try:
-        if not (await config_aviso.ler_config()).ligado:
-            return
         async with conn.transaction():
+            valor = await conn.fetchval(
+                "SELECT value FROM public.integration_secrets "
+                "WHERE name = 'AVISO_LEAD_LIGADO'")
+            if valor is None:
+                valor = os.environ.get("AVISO_LEAD_LIGADO")
+            if not config_aviso.ligado_de(valor):
+                return
             await conn.execute(SQL_ENFILEIRAR, conversao_id, lead_id, contato_novo,
                                agendamento, ATRASO_INICIAL)
     except Exception:  # noqa: BLE001 — o aviso é secundário à captura
@@ -194,7 +204,7 @@ async def rodar_avisos(*, parar: asyncio.Event | None = None, compasso=None,
             lead, assunto, corpo, texto = await _montar(aviso)
             enviados = list(aviso["enviados"] or [])
             for destino in cfg.para:
-                if destino in enviados:
+                if destino.lower() in {e.lower() for e in enviados}:
                     continue
                 await compasso.esperar_vez(por_segundo)
                 resend_id = await resend.enviar(

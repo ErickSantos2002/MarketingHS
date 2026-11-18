@@ -2,8 +2,8 @@
 configuração e o enfileirar no fim de `registrar_captura`.
 
 Os de BANCO rodam na transação revertida da fixture `conexao` e pulam sem a
-038 aplicada. ⚠️ `ler_config` abre outra sessão (lê segredo), por isso os
-testes a trocam por um falso — nada de segredo real.
+038 aplicada. ⚠️ `enfileirar` lê `AVISO_LEAD_LIGADO` pela própria conexão da
+captura; o "desligado" grava o segredo DENTRO da transação revertida.
 """
 
 import pathlib
@@ -17,7 +17,7 @@ from app.avisos import fila
 from app.avisos.config import PARA_PADRAO, ConfigAviso, separar_enderecos
 from app.captura.registro import Origem, registrar_captura
 
-LER_CONFIG_REAL = config_aviso.ler_config  # a autouse abaixo a troca nos outros testes
+LER_CONFIG_REAL = config_aviso.ler_config
 ARQUIVO = (pathlib.Path(__file__).resolve().parent.parent
            / "migrations" / "038_avisos_de_lead.sql")
 
@@ -60,13 +60,9 @@ async def test_ler_config_padrao(monkeypatch):
 
 # ── Banco (transação revertida) ──────────────────────────────────────────────
 
-async def _ligada():
-    return ConfigAviso(True, list(PARA_PADRAO))
-
-
 @pytest.fixture(autouse=True)
-def _config_ligada(monkeypatch):
-    monkeypatch.setattr(config_aviso, "ler_config", _ligada)
+def _sem_ambiente(monkeypatch):
+    monkeypatch.delenv("AVISO_LEAD_LIGADO", raising=False)
 
 
 async def _exigir_038(conexao):
@@ -140,13 +136,14 @@ async def test_reconversao_enfileira_como_voltou(conexao):
 
 
 @pytest.mark.asyncio
-async def test_desligado_nao_enfileira(conexao, monkeypatch):
+async def test_desligado_nao_enfileira(conexao):
     await _exigir_038(conexao)
 
-    async def desligada():
-        return ConfigAviso(False, list(PARA_PADRAO))
-
-    monkeypatch.setattr(config_aviso, "ler_config", desligada)
+    # Revertido junto com a transação da fixture: nada vaza para o banco.
+    await conexao.execute(
+        "INSERT INTO public.integration_secrets (name, value, updated_at) "
+        "VALUES ('AVISO_LEAD_LIGADO', '0', now()) "
+        "ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value")
     lead = await _capturar(conexao, _email())
     assert await _avisos(conexao, lead) == []
 

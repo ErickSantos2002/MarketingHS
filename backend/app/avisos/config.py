@@ -32,7 +32,12 @@ def separar_enderecos(texto: str | None) -> list[str]:
     return saida
 
 
+def ligado_de(valor: str | None) -> bool:
+    """Só `"0"` desliga; ausente ou qualquer outro valor liga."""
+    return valor != "0"
+
+
 async def ler_config() -> ConfigAviso:
     ligado = await integracoes.ler_segredo("AVISO_LEAD_LIGADO")
     para = separar_enderecos(await integracoes.ler_segredo("AVISO_LEAD_PARA"))
-    return ConfigAviso(ligado=ligado != "0", para=para or list(PARA_PADRAO))
+    return ConfigAviso(ligado=ligado_de(ligado), para=para or list(PARA_PADRAO))
