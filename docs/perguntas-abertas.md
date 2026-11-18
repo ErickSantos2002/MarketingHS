@@ -194,3 +194,10 @@ dia no `CONTINUAR-AQUI.md`.
     API, e o envio ao CRM recusa contato de origem `datacore` como segunda
     linha. Só vai ao CRM o que veio de landing, formulário de site ou
     import manual. Isso também encerra a questão D4 (e-mail de nota fiscal).
+81. **Aviso de lead por e-mail** (Erick, 18/11 — spec
+    `2026-11-18-aviso-de-lead-design.md`). **Assumido:** avisa toda conversão
+    de formulário (landing, site de fora, agendamento), contato novo e
+    reconversão; importação e API de contato não avisam. `reply_to` = e-mail
+    do lead. Destino padrão `vendas@healthsafetytech.com`, editável em
+    Configurações. Se vendas preferir só contato novo, ou só certas origens,
+    é uma condição no enfileirar.
