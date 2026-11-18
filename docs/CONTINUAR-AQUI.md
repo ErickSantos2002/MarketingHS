@@ -1,5 +1,11 @@
 # Continuar aqui
 
+> ## ▶️ 18/11 — aviso de lead por e-mail a vendas
+>
+> - Conferência das páginas da agência (16–18/11): os 9 leads que foram ao CRM direto chegaram também ao MarketingHS, com todos os campos (setor desde 16/11 14h35); só a Graziela (16/11, antes do snippet) ficou de fora. ⚠️ Na virada o `origin` do card vira `Captura pelo site [<form_id>]` em vez de `site-institucional-<página>` — decidir se replica o nome da agência. Sergio vai testar nas LPs: falta a URL/domínio delas para incluir no site "Páginas da agência".
+> - Frente `aviso-de-lead` ✅ mergeada (`1ba7272`; portão local **1483 passed, 9 skipped**, `tsc` 0, guarda 0): toda conversão de formulário (landing, site, agendamento) enfileira `avisos_de_lead` (038) na transação; o worker manda pelo Resend a `vendas@healthsafetytech.com` (editável no card "Aviso de lead" em Configurações → Integrações, com "Enviar teste"), `reply_to` = lead, sai ~60 s depois. Spec `docs/superpowers/specs/2026-11-18-aviso-de-lead-design.md`; pergunta 81; pendências em `docs/frentes/aviso-de-lead.md` (8 tentativas ≈ 2 h; ritmo não conta os avisos).
+> - **Falta:** Erick roda `bash ~/marketinghs-migration-038.sh` + Deploy de api, worker e sistema; "Enviar teste" no card; conferir a 1ª conversão real chegando em vendas. Homo sem worker e com segredos vazios → não envia.
+
 > ## ▶️ 16/11 — páginas da agência passam pelo MarketingHS
 >
 > - Decisão do Erick: as páginas da agência do Leão param de mandar lead direto ao CRM; mandam **só ao MarketingHS** (snippet `rastreio.js`, Configurações → Sites) e a jornada leva ao GrowthHS (nó `handoff_growthhs`) + fluxos de e-mail da RD. Mensagem enviada ao Sergio pedindo domínios/URLs e formulários.
