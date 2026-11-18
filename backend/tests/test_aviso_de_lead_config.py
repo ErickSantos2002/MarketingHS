@@ -13,7 +13,7 @@ from app.email import resend as cliente_resend
 from app.routers import configuracao
 
 ROTA = "/config/aviso-lead"
-NOMES = ["AVISO_LEAD_PARA", "AVISO_LEAD_LIGADO", "RESEND_API_KEY"]
+NOMES = ["AVISO_LEAD_PARA", "AVISO_LEAD_LIGADO"]
 
 
 def _auth(token: str) -> dict:
@@ -22,7 +22,7 @@ def _auth(token: str) -> dict:
 
 @pytest_asyncio.fixture
 async def segredos_aviso(monkeypatch):
-    """Começa sem os segredos do aviso e sem a chave do Resend; devolve no fim."""
+    """Começa sem os segredos do aviso; devolve no fim. Não toca na RESEND_API_KEY."""
     await db.init_db()
     if db._pool is None:
         pytest.skip("sem DATABASE_URL")
@@ -47,8 +47,20 @@ async def segredos_aviso(monkeypatch):
         integracoes.esquecer(nome)
 
 
-def _resend_falso(monkeypatch, erros: dict | None = None):
+def _resend_falso(monkeypatch, erros: dict | None = None,
+                  chave: str | None = "re_teste_aviso"):
+    """Resend falso. A chave vem só de monkeypatch de `ler_segredo` (a
+    `RESEND_API_KEY` real da tabela nunca é tocada); os outros segredos passam
+    para a função real."""
     chamadas = []
+    ler_real = configuracao.ler_segredo
+
+    async def ler_segredo(nome):
+        if nome == "RESEND_API_KEY":
+            return chave
+        return await ler_real(nome)
+
+    monkeypatch.setattr(configuracao, "ler_segredo", ler_segredo)
 
     async def enviar(chave, de, para, assunto, html, texto, cabecalhos,
                      tags=None, responder_para=None):
@@ -62,12 +74,12 @@ def _resend_falso(monkeypatch, erros: dict | None = None):
     return chamadas
 
 
-async def test_sem_credencial_401(cliente):
+async def test_sem_credencial_401(cliente, segredos_aviso):
     assert (await cliente.get(ROTA)).status_code == 401
     assert (await cliente.post(ROTA + "/testar")).status_code == 401
 
 
-async def test_put_recusa_chave_de_api(cliente, chave_de):
+async def test_put_recusa_chave_de_api(cliente, chave_de, segredos_aviso):
     r = await cliente.put(ROTA, json={"ligado": True, "para": ""},
                           headers=_auth(await chave_de("write")))
     assert r.status_code == 401
@@ -124,7 +136,6 @@ async def test_put_para_vazio_volta_ao_padrao(cliente, token_admin, segredos_avi
 
 async def test_testar_envia_para_cada_endereco(cliente, token_admin,
                                                segredos_aviso, monkeypatch):
-    await integracoes.gravar_segredo("RESEND_API_KEY", "re_teste_aviso")
     await cliente.put(ROTA, json={"ligado": False,
                                   "para": "a@hs.com.br, b@hs.com.br"},
                       headers=_auth(token_admin))
@@ -139,7 +150,6 @@ async def test_testar_envia_para_cada_endereco(cliente, token_admin,
 
 async def test_testar_falha_de_um_nao_derruba_os_outros(cliente, token_admin,
                                                         segredos_aviso, monkeypatch):
-    await integracoes.gravar_segredo("RESEND_API_KEY", "re_teste_aviso")
     await cliente.put(ROTA, json={"ligado": True,
                                   "para": "a@hs.com.br, b@hs.com.br, c@hs.com.br"},
                       headers=_auth(token_admin))
@@ -156,7 +166,7 @@ async def test_testar_falha_de_um_nao_derruba_os_outros(cliente, token_admin,
 
 async def test_testar_sem_chave_400(cliente, token_admin, segredos_aviso,
                                     monkeypatch):
-    chamadas = _resend_falso(monkeypatch)
+    chamadas = _resend_falso(monkeypatch, chave=None)
     r = await cliente.post(ROTA + "/testar", headers=_auth(token_admin))
     assert r.status_code == 400
     assert chamadas == []
