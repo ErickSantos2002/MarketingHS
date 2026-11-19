@@ -1,5 +1,11 @@
 # Continuar aqui
 
+> ## ▶️ 19/11 — LP da agência (`contatos.healthsafety.com.br`) fora do MarketingHS
+>
+> - Conferido (só leitura): a LP é um SPA React **sem `<form>`** (modal em 2 passos; campos com `id`, sem `name`; setor é Select do Radix). O envio é `fetch` para o n8n do Leão (`/webhook/health-safety-pipedrive`) e o Make; só o loader do RD está na página, nada do MarketingHS. O `rastreio.js` não enxergaria esse envio mesmo instalado (ouve `submit` e lê `FormData` por `name`).
+> - Domínio **não** cadastrado: preflight de `contatos.healthsafety.com.br` em `/api/publico/site/conversao` volta sem `Access-Control-Allow-Origin`.
+> - Saída (sem código nosso — o aviso a vendas já sai de toda conversão de site): (1) Erick inclui `contatos.healthsafety.com.br` no site "Páginas da agência" (Configurações → Sites); (2) Sergio põe um 3º `fetch` no envio da LP, ao lado do n8n/Make, para `POST https://marketinghs.healthsafetytech.com/api/publico/site/conversao` (`text/plain`, `{token, form_id, url, campos{nome,email,whatsapp,empresa,setor}, toque{utm, gclid, fbclid, referrer, url}}`, mesmo token do snippet). Conferir o 1º lead: card, campos, UTMs e `avisos_de_lead.status = enviado`.
+
 > ## ▶️ 18/11 — aviso de lead por e-mail a vendas
 >
 > - Conferência das páginas da agência (16–18/11): os 9 leads que foram ao CRM direto chegaram também ao MarketingHS, com todos os campos (setor desde 16/11 14h35); só a Graziela (16/11, antes do snippet) ficou de fora. ⚠️ Na virada o `origin` do card vira `Captura pelo site [<form_id>]` em vez de `site-institucional-<página>` — **decidido (Erick, 18/11): fica no nosso estilo**; muda só se o Sergio pedir. Sergio vai testar nas LPs: URLs chegam 19/11 → incluir o domínio no site "Páginas da agência" e conferir campos, UTMs e gclid do 1º lead.
