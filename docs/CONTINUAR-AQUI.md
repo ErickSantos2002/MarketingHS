@@ -5,6 +5,8 @@
 > - Conferido (só leitura): a LP é um SPA React **sem `<form>`** (modal em 2 passos; campos com `id`, sem `name`; setor é Select do Radix). O envio é `fetch` para o n8n do Leão (`/webhook/health-safety-pipedrive`) e o Make; só o loader do RD está na página, nada do MarketingHS. O `rastreio.js` não enxergaria esse envio mesmo instalado (ouve `submit` e lê `FormData` por `name`).
 > - Domínio **não** cadastrado: preflight de `contatos.healthsafety.com.br` em `/api/publico/site/conversao` volta sem `Access-Control-Allow-Origin`.
 > - Saída (sem código nosso — o aviso a vendas já sai de toda conversão de site): (1) Erick inclui `contatos.healthsafety.com.br` no site "Páginas da agência" (Configurações → Sites); (2) Sergio põe um 3º `fetch` no envio da LP, ao lado do n8n/Make, para `POST https://marketinghs.healthsafetytech.com/api/publico/site/conversao` (`text/plain`, `{token, form_id, url, campos{nome,email,whatsapp,empresa,setor}, toque{utm, gclid, fbclid, referrer, url}}`, mesmo token do snippet). Conferir o 1º lead: card, campos, UTMs e `avisos_de_lead.status = enviado`.
+> - ✅ 19/11 (tarde): domínio cadastrado pelo Erick; o Sergio pôs o 3º `fetch` na LP (bundle `index-CXaaboeY.js`, `form_id` `lp-contatos`). Conferido: POST sem e-mail da origem da LP volta 400 "E-mail ausente" (token e domínio aceitos). Banco externo em timeout — 1º lead real **não** conferido.
+> - **▶️ Segunda (23/11):** conferir conversões `form_id = 'lp-contatos'`, campos/UTMs/setor e `avisos_de_lead.status = enviado`; se o Make do Leão ainda cria card no GrowthHS, combinar a retirada (card em dobro).
 
 > ## ▶️ 18/11 — aviso de lead por e-mail a vendas
 >
