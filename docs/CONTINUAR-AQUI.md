@@ -1,5 +1,12 @@
 # Continuar aqui
 
+> ## ▶️ 23/11 — jornada por site (para a virada do n8n da agência)
+>
+> - Frente `jornada-por-site` ✅ mergeada (`daa5cd8`; portão local **1512 passed, 9 skipped**, `tsc` 0, node 129, build ok, guarda 0): `entry_config.site_ids` = qualquer formulário do site, inclusive página nova; reconversão entra; regra 028 e a do agendamento (036) intactas. Migration **039** (só `CREATE OR REPLACE`). Seletor de site no criar/editar jornada — **não visto no navegador** (fica atrás de "Editar"); conferir quando o Erick montar a jornada.
+> - **Falta (Erick):** `bash ~/marketinghs-migration-039.sh` **antes** do deploy de api e sistema (sem a 039, fluxo só com site vira "qualquer origem" e mandaria todo lead novo ao GrowthHS); montar a jornada "Páginas da agência → comercial" (Formulário enviado + site "Páginas da agência" + nó Enviar ao GrowthHS) e deixá-la **pausada**.
+> - **Virada (dia/hora a combinar com o Sergio):** Erick ativa a jornada, Sergio desliga o n8n/Make no mesmo minuto; conferir o 1º card (origem `Captura pelo site [<form_id>]` — avisar o Sergio). Leads da janela conferidos à mão.
+> - Sobras (`docs/frentes/jornada-por-site.md`): texto do `EntryFormIdsCampo` em `ModoTesteCampo.tsx` ainda diz "só pelo identificador"; leitor vê id do site sem nome (`GET /sites` é admin).
+
 > ## ▶️ 19/11 — LP da agência (`contatos.healthsafety.com.br`) fora do MarketingHS
 >
 > - Conferido (só leitura): a LP é um SPA React **sem `<form>`** (modal em 2 passos; campos com `id`, sem `name`; setor é Select do Radix). O envio é `fetch` para o n8n do Leão (`/webhook/health-safety-pipedrive`) e o Make; só o loader do RD está na página, nada do MarketingHS. O `rastreio.js` não enxergaria esse envio mesmo instalado (ouve `submit` e lê `FormData` por `name`).
