@@ -211,6 +211,48 @@ def _normalizar_delays(nos: list[dict] | None) -> list[dict] | None:
     return saida
 
 
+_MSG_SITES = ("\"Sites\" do filtro de entrada precisa ser uma lista de ids de site "
+              "(uuid em texto).")
+
+
+def _normalizar_sites(entry_config: dict | None) -> dict | None:
+    """`entry_config.site_ids` (039): a jornada aceita qualquer formulário
+    desses sites, inclusive o de página nova. Só lista de uuid em texto; sai
+    na forma canônica (minúscula, com hífens, sem repetidos) — a
+    `journey_enroll_event` compara com `?` contra o `sites.id::text` do
+    metadata, texto exato. Ausente ou `[]` = sem filtro de site.
+
+    Não confere se o site existe: um site desligado depois continua sendo
+    filtro válido (só não manda conversão)."""
+    from uuid import UUID
+
+    if entry_config is None or "site_ids" not in entry_config:
+        return entry_config
+    lista = entry_config["site_ids"]
+    if not isinstance(lista, list):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _MSG_SITES)
+    canonica: list[str] = []
+    for bruto in lista:
+        if not isinstance(bruto, str):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, _MSG_SITES)
+        try:
+            site = str(UUID(bruto.strip()))
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                f"{_MSG_SITES} Inválido: {bruto!r}.") from None
+        if site not in canonica:
+            canonica.append(site)
+    if not lista:
+        return entry_config
+    if entry_config.get("event_type") != "form_submitted":
+        # Só o "Formulário enviado" traz `site_id`: em outro evento o filtro
+        # nunca casaria e o fluxo ficaria vazio em silêncio.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "O filtro por site só vale para o evento \"Formulário enviado\".")
+    return {**entry_config, "site_ids": canonica}
+
+
 async def _normalizar_saida(conn, entry_config: dict | None) -> dict | None:
     """`entry_config.saida_status`: lista de status do contato que encerram a
     jornada (molde da saída "Venda" do RD). Cada item precisa existir em
@@ -294,6 +336,7 @@ async def criar(dados: JornadaIn, usuario: Usuario = Depends(admin_atual)):
     _conferir_avisos_no_modo_teste(dados.allowed_emails, dados.nodes)
     campos = dados.model_dump()
     campos["nodes"] = _normalizar_delays(campos["nodes"])
+    campos["entry_config"] = _normalizar_sites(campos["entry_config"])
     if campos["allowed_emails"] is None:
         # Sem lista, a coluna fica fora do INSERT (o NULL do DEFAULT vale): a
         # criação de jornada sem modo teste não depende da 027 estar aplicada.
@@ -329,6 +372,8 @@ async def editar(jornada_id: str, dados: JornadaPatch,
     _conferir_webhooks(campos.get("nodes"))
     if "nodes" in campos:
         campos["nodes"] = _normalizar_delays(campos["nodes"])
+    if "entry_config" in campos:
+        campos["entry_config"] = _normalizar_sites(campos["entry_config"])
 
     try:
         async with sessao(role="authenticated", user_id=usuario.id) as conn:

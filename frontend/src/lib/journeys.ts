@@ -127,22 +127,31 @@ export const EVENTO_COM_PAGINA = 'form_submitted';
  * `entry_config` de um fluxo por evento. Só o `form_submitted` filtra:
  * `page_slug` (a página da casa) e `form_ids` (formulários de site de fora,
  * migration 027) valem em OU — entra quem converter na página OU em qualquer
- * um dos formulários. Sem nenhum dos dois = qualquer origem, MENOS conversão de
- * site de fora (`site_id`), que só entra em fluxo que nomeia o formulário
- * (migration 028, pergunta 62).
+ * um dos formulários. `site_ids` (migration 039) entra no mesmo OU: qualquer
+ * formulário desses sites, inclusive o de página nova. Sem nenhum dos três =
+ * qualquer origem, MENOS conversão de site de fora (`site_id`), que só entra
+ * em fluxo que nomeia o formulário ou o site (migration 028, pergunta 62).
  */
-export function buildEntryConfig(eventType: string, pageSlug?: string, formIds?: string[]): Record<string, any> {
+export function buildEntryConfig(eventType: string, pageSlug?: string, formIds?: string[],
+                                 siteIds?: string[]): Record<string, any> {
   const cfg: Record<string, any> = { event_type: eventType };
   if (eventType !== EVENTO_COM_PAGINA) return cfg;
   if (pageSlug) cfg.page_slug = pageSlug;
   const ids = (formIds ?? []).map((f) => f.trim()).filter(Boolean);
   if (ids.length) cfg.form_ids = [...new Set(ids)];
+  const sites = (siteIds ?? []).map((s) => s.trim()).filter(Boolean);
+  if (sites.length) cfg.site_ids = [...new Set(sites)];
   return cfg;
 }
 
 /** Os `form_ids` gravados, aceitando só lista de texto (como o banco). */
 export function readEntryFormIds(cfg: any): string[] {
   return Array.isArray(cfg?.form_ids) ? cfg.form_ids.filter((f: unknown) => typeof f === 'string') : [];
+}
+
+/** Os `site_ids` gravados (039), aceitando só lista de texto. */
+export function readEntrySiteIds(cfg: any): string[] {
+  return Array.isArray(cfg?.site_ids) ? cfg.site_ids.filter((s: unknown) => typeof s === 'string') : [];
 }
 
 // Mesmo critério de formato do servidor (é ele quem decide; aqui é só para

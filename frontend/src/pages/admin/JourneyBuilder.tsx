@@ -28,7 +28,7 @@ import { useSegments } from '@/hooks/useSegments';
 import { useTemplates } from '@/hooks/useTemplates';
 import {
   NODE_LABELS, NODE_NAO_LIGADO, STATUS_LABELS, EVENT_OPTIONS, EVENTO_COM_PAGINA, buildEntryConfig,
-  isBranch, newNodeId, readEntrySegments, readEntryFormIds, lerListaDeEmails,
+  isBranch, newNodeId, readEntrySegments, readEntryFormIds, readEntrySiteIds, lerListaDeEmails,
   type Journey, type JourneyNode, type JourneyNodeType,
 } from '@/lib/journeys';
 import { JourneyNodeCard } from '@/components/admin/automations/JourneyNodeCard';
@@ -38,7 +38,7 @@ import {
   ModoTesteCampo, SeloModoTeste, EntryFormIdsCampo, lerFormIds,
 } from '@/components/admin/automations/ModoTesteCampo';
 import {
-  SaidaStatusCampo, lerSaidaStatus, comSaidaStatus,
+  SaidaStatusCampo, lerSaidaStatus, comSaidaStatus, EntrySitesCampo, useSitesDaEntrada,
 } from '@/components/admin/automations/JourneyCreateDialog';
 import { EmailTemplatePreviewDialog } from '@/components/admin/campaigns/EmailTemplatePreviewDialog';
 import { usePodeEditar } from '@/hooks/useAuth';
@@ -91,6 +91,16 @@ export default function JourneyBuilder() {
   const [entryEventType, setEntryEventType] = useState('');
   const [entryPageSlug, setEntryPageSlug] = useState('');
   const [entryFormIds, setEntryFormIds] = useState('');
+  const [entrySiteIds, setEntrySiteIds] = useState<string[]>([]);
+  // 039: o resumo do card de entrada mostra o NOME do site (o id é ilegível).
+  // Só busca quando há site no filtro: fluxo sem site (e o usuário leitura,
+  // para quem `/sites` é 403) não pede a lista à toa. O diálogo da entrada
+  // monta o campo, que busca sozinho.
+  const { data: sitesCadastrados = [] } = useSitesDaEntrada(
+    entryEventType === EVENTO_COM_PAGINA && entrySiteIds.length > 0);
+  const resumoSites = entryEventType === EVENTO_COM_PAGINA && entrySiteIds.length
+    ? entrySiteIds.map((s) => sitesCadastrados.find((c) => c.id === s)?.nome ?? s).join(', ')
+    : '';
   const [saidaStatus, setSaidaStatus] = useState<string[]>([]);
   // Modo teste: o texto digitado; a lista sai de lerListaDeEmails na hora de
   // salvar. `modoTesteSalvo` (abaixo) é a lista como está no banco — é com
@@ -129,6 +139,7 @@ export default function JourneyBuilder() {
     setEntryEventType(journey.entry_type === 'event' ? (journey.entry_config?.event_type || '') : '');
     setEntryPageSlug(journey.entry_type === 'event' ? (journey.entry_config?.page_slug || '') : '');
     setEntryFormIds(journey.entry_type === 'event' ? readEntryFormIds(journey.entry_config).join(', ') : '');
+    setEntrySiteIds(journey.entry_type === 'event' ? readEntrySiteIds(journey.entry_config) : []);
     setSaidaStatus(lerSaidaStatus(journey.entry_config));
     setModoTeste((journey.allowed_emails ?? []).join('\n'));
     setReentry(journey.reentry);
@@ -335,7 +346,7 @@ export default function JourneyBuilder() {
       entry_type: entryType,
       entry_config: comSaidaStatus(entryType === 'segment'
         ? { segment_ids: entrySegmentIds, excluded_segment_ids: entryExcludedSegmentIds }
-        : buildEntryConfig(entryEventType, entryPageSlug, lerFormIds(entryFormIds)), saidaStatus),
+        : buildEntryConfig(entryEventType, entryPageSlug, lerFormIds(entryFormIds), entrySiteIds), saidaStatus),
       reentry,
       reentry_cooldown_hours: Math.max(1, Math.round(reentryCooldownDays * 24)),
     });
@@ -582,7 +593,7 @@ export default function JourneyBuilder() {
             <p className="text-sm font-medium truncate">
               {entryType === 'segment'
                 ? `Segmentos: ${entrySegmentIds.length === 0 ? '(selecione)' : entrySegmentIds.length}${entryExcludedSegmentIds.length > 0 ? ` — exceto ${entryExcludedSegmentIds.length}` : ''}`
-                : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}${entryEventType === EVENTO_COM_PAGINA && entryPageSlug ? ` — página ${entryPageSlug}` : ''}${entryEventType === EVENTO_COM_PAGINA && lerFormIds(entryFormIds).length ? `${entryPageSlug ? ' ou' : ' —'} formulário ${lerFormIds(entryFormIds).join(', ')}` : ''}`}
+                : `Evento: ${EVENT_OPTIONS.find((e) => e.value === entryEventType)?.label || '(selecione)'}${entryEventType === EVENTO_COM_PAGINA && entryPageSlug ? ` — página ${entryPageSlug}` : ''}${entryEventType === EVENTO_COM_PAGINA && lerFormIds(entryFormIds).length ? `${entryPageSlug ? ' ou' : ' —'} formulário ${lerFormIds(entryFormIds).join(', ')}` : ''}${resumoSites ? `${entryPageSlug || lerFormIds(entryFormIds).length ? ' ou' : ' —'} site ${resumoSites}` : ''}`}
             </p>
             <p className="text-xs text-muted-foreground">
               Reentrada: {reentry === 'once' ? 'uma vez por contato' : `pode entrar de novo (mín. ${reentryCooldownDays}d)`}
@@ -697,6 +708,7 @@ export default function JourneyBuilder() {
                   <>
                     <EntryPageSelect value={entryPageSlug} onChange={(v) => { setEntryPageSlug(v); setDirty(true); }} />
                     <EntryFormIdsCampo value={entryFormIds} onChange={(v) => { setEntryFormIds(v); setDirty(true); }} />
+                    <EntrySitesCampo value={entrySiteIds} onChange={(v) => { setEntrySiteIds(v); setDirty(true); }} />
                   </>
                 )}
               </div>
