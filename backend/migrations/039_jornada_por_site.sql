@@ -20,7 +20,9 @@
 --     página e formulário;
 --   - "qualquer origem" exige também `NOT f_site` (e continua sem incluir
 --     site de fora — 028);
---   - fluxo por site conta como filtrado: a reconversão entra nele (026).
+--   - fluxo por site conta como filtrado: a reconversão entra nele (026);
+--   - `v_site` em minúsculas (o `site_ids` gravado é canônico) e o
+--     `context` da execução diz por qual site entrou (`site_id`).
 -- O resto (036: agendamento confirmado não entra em fluxo com
 -- `handoff_growthhs`) fica igual.
 --
@@ -41,7 +43,9 @@ DECLARE
   v_count  integer := 0;
   v_pagina text := NULLIF(btrim(coalesce(p_metadata->>'page_slug', '')), '');
   v_form   text := NULLIF(btrim(coalesce(p_metadata->>'form_id', '')), '');  -- 027
-  v_site   text := NULLIF(btrim(coalesce(p_metadata->>'site_id', '')), '');  -- 028
+  -- 028; 039: `lower` — o `site_ids` gravado é canônico (minúsculo) e o `?`
+  -- compara texto exato.
+  v_site   text := lower(NULLIF(btrim(coalesce(p_metadata->>'site_id', '')), ''));
   -- 036: a marca vem como texto 'true' do gatilho de INSERT e como boolean
   -- da reconversão — `->>` dá 'true' nos dois.
   v_agendamento boolean := coalesce(p_metadata->>'agendamento', '') = 'true';
@@ -133,6 +137,9 @@ BEGIN
            -- 027: por qual formulário entrou.
            || CASE WHEN v_form IS NULL THEN '{}'::jsonb
                    ELSE jsonb_build_object('form_id', v_form) END
+           -- 039: e por qual site.
+           || CASE WHEN v_site IS NULL THEN '{}'::jsonb
+                   ELSE jsonb_build_object('site_id', v_site) END
     FROM cand c
     ON CONFLICT DO NOTHING
     RETURNING 1

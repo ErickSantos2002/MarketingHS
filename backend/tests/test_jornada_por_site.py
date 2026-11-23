@@ -261,6 +261,38 @@ def test_sem_site_ids_fica_como_esta(entrada):
                                    {"a": SITE}, [SITE, ""], True])
 def test_site_ids_invalido_e_400(valor):
     with pytest.raises(HTTPException) as exc:
-        rota._normalizar_sites({"site_ids": valor})
+        rota._normalizar_sites({"event_type": "form_submitted", "site_ids": valor})
     assert exc.value.status_code == 400
-    assert "site" in exc.value.detail.lower()
+    assert "uuid" in exc.value.detail.lower()
+
+
+# ── Correções da revisão ─────────────────────────────────────────────────────
+
+async def test_contexto_da_matricula_diz_o_site(conexao):
+    await _exigir_039(conexao)
+    por_site = await _jornada(conexao, "039 — site", site_ids=[SITE])
+    lead = await _lead(conexao, "jps-contexto@exemplo.invalid")
+
+    await _matricular(conexao, lead, {"form_id": "/#form1", "site_id": SITE})
+
+    assert (await _matriculas(conexao, lead, [por_site]))[por_site]["site_id"] == SITE
+
+
+async def test_site_id_maiusculo_no_metadata_casa(conexao):
+    await _exigir_039(conexao)
+    por_site = await _jornada(conexao, "039 — site", site_ids=[SITE])
+    lead = await _lead(conexao, "jps-maiusculo@exemplo.invalid")
+
+    await _matricular(conexao, lead, {"form_id": "/#form1", "site_id": SITE.upper()})
+
+    assert set(await _matriculas(conexao, lead, [por_site])) == {por_site}
+
+
+@pytest.mark.parametrize("cfg", [{"event_type": "email_opened"}, {"segment_ids": ["x"]}])
+def test_site_ids_fora_do_formulario_enviado_e_400(cfg):
+    """Só o `form_submitted` traz `site_id`: em outro evento o filtro nunca
+    casaria, e o fluxo ficaria vazio em silêncio."""
+    with pytest.raises(HTTPException) as exc:
+        rota._normalizar_sites({**cfg, "site_ids": [SITE]})
+    assert exc.value.status_code == 400
+    assert "formulário enviado" in exc.value.detail.lower()

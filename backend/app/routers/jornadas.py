@@ -244,6 +244,12 @@ def _normalizar_sites(entry_config: dict | None) -> dict | None:
             canonica.append(site)
     if not lista:
         return entry_config
+    if entry_config.get("event_type") != "form_submitted":
+        # Só o "Formulário enviado" traz `site_id`: em outro evento o filtro
+        # nunca casaria e o fluxo ficaria vazio em silêncio.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "O filtro por site só vale para o evento \"Formulário enviado\".")
     return {**entry_config, "site_ids": canonica}
 
 

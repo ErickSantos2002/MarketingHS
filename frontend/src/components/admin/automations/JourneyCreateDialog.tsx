@@ -65,8 +65,8 @@ export function SaidaStatusCampo({ id = 'saida-status', value, onChange }: {
 /** Os sites cadastrados (Configurações → Sites), no mesmo cache da tela de
  *  Sites. `/sites` é só de admin: para quem não é, a lista falha e o campo
  *  mostra os ids gravados sem nome. */
-export function useSitesDaEntrada() {
-  return useQuery({ queryKey: ['sites'], queryFn: listarSites, retry: false });
+export function useSitesDaEntrada(ligado = true) {
+  return useQuery({ queryKey: ['sites'], queryFn: listarSites, retry: false, enabled: ligado });
 }
 
 /**

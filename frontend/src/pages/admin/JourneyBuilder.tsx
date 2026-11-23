@@ -93,7 +93,11 @@ export default function JourneyBuilder() {
   const [entryFormIds, setEntryFormIds] = useState('');
   const [entrySiteIds, setEntrySiteIds] = useState<string[]>([]);
   // 039: o resumo do card de entrada mostra o NOME do site (o id é ilegível).
-  const { data: sitesCadastrados = [] } = useSitesDaEntrada();
+  // Só busca quando há site no filtro: fluxo sem site (e o usuário leitura,
+  // para quem `/sites` é 403) não pede a lista à toa. O diálogo da entrada
+  // monta o campo, que busca sozinho.
+  const { data: sitesCadastrados = [] } = useSitesDaEntrada(
+    entryEventType === EVENTO_COM_PAGINA && entrySiteIds.length > 0);
   const resumoSites = entryEventType === EVENTO_COM_PAGINA && entrySiteIds.length
     ? entrySiteIds.map((s) => sitesCadastrados.find((c) => c.id === s)?.nome ?? s).join(', ')
     : '';
