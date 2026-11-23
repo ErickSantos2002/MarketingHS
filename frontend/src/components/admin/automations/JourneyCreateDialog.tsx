@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useLeadStatuses } from '@/hooks/useLeadStatuses';
 import { SegmentMultiSelect } from '@/components/admin/segments/SegmentMultiSelect';
 import { EVENT_OPTIONS, EVENTO_COM_PAGINA, buildEntryConfig, lerListaDeEmails, type Journey } from '@/lib/journeys';
+import { listarSites } from '@/lib/sites';
 import { EntryPageSelect } from './EntryPageSelect';
 import { ModoTesteCampo, EntryFormIdsCampo, lerFormIds } from './ModoTesteCampo';
 
@@ -60,6 +62,73 @@ export function SaidaStatusCampo({ id = 'saida-status', value, onChange }: {
   );
 }
 
+/** Os sites cadastrados (Configurações → Sites), no mesmo cache da tela de
+ *  Sites. `/sites` é só de admin: para quem não é, a lista falha e o campo
+ *  mostra os ids gravados sem nome. */
+export function useSitesDaEntrada() {
+  return useQuery({ queryKey: ['sites'], queryFn: listarSites, retry: false });
+}
+
+/**
+ * "Ou em qualquer formulário destes sites" (migration 039). O site da agência
+ * cria um formulário por página; filtrar pelos identificadores deixaria a
+ * página nova de fora em silêncio. Com o site marcado, toda conversão dele
+ * entra — inclusive de página que ainda não existe.
+ */
+export function EntrySitesCampo({ id = 'entrada-sites', value, onChange }: {
+  id?: string; value: string[]; onChange: (v: string[]) => void;
+}) {
+  const { data: sites = [], isLoading, error } = useSitesDaEntrada();
+  // Site gravado que não veio na lista continua visível (e desmarcável).
+  const desconhecidos = isLoading ? [] : value.filter((v) => !sites.some((s) => s.id === v));
+  const alternar = (siteId: string, marcado: boolean) =>
+    onChange(marcado ? [...value, siteId] : value.filter((v) => v !== siteId));
+  return (
+    <div className="space-y-1.5">
+      <Label>Ou em qualquer formulário destes sites</Label>
+      <div className="grid grid-cols-1 gap-2 rounded-md border border-borda p-2.5">
+        {isLoading && <p className="text-xs text-muted-foreground">Carregando os sites…</p>}
+        {!isLoading && !error && sites.length === 0 && desconhecidos.length === 0 && (
+          <p className="text-xs text-muted-foreground">Nenhum site cadastrado em Configurações → Sites.</p>
+        )}
+        {sites.map((site) => (
+          <div key={site.id} className="flex items-center gap-2">
+            <Checkbox
+              id={`${id}-${site.id}`}
+              checked={value.includes(site.id)}
+              onCheckedChange={(c) => alternar(site.id, c === true)}
+            />
+            <Label htmlFor={`${id}-${site.id}`} className="font-normal">
+              {site.nome}
+              {site.dominios.length > 0 && (
+                <span className="text-muted-foreground"> ({site.dominios.join(', ')})</span>
+              )}
+              {!site.ativo && <span className="text-muted-foreground"> — desligado</span>}
+            </Label>
+          </div>
+        ))}
+        {desconhecidos.map((siteId) => (
+          <div key={siteId} className="flex items-center gap-2">
+            <Checkbox
+              id={`${id}-${siteId}`}
+              checked
+              onCheckedChange={(c) => alternar(siteId, c === true)}
+            />
+            <Label htmlFor={`${id}-${siteId}`} className="font-normal font-mono text-xs">
+              {siteId} {error ? '' : '(site não encontrado)'}
+            </Label>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Qualquer formulário deste site, inclusive páginas novas: não é preciso listar os identificadores. Junto
+        com página ou formulários, entra quem converter em qualquer um deles.
+        {error ? ' Não foi possível carregar os nomes dos sites.' : ''}
+      </p>
+    </div>
+  );
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -75,6 +144,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
   const [eventType, setEventType] = useState('');
   const [pageSlug, setPageSlug] = useState('');
   const [formIds, setFormIds] = useState('');
+  const [siteIds, setSiteIds] = useState<string[]>([]);
   const [modoTeste, setModoTeste] = useState('');
   const [saidaStatus, setSaidaStatus] = useState<string[]>([]);
   const [reentry, setReentry] = useState<'once' | 'allowed'>('once');
@@ -95,7 +165,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
       entry_type: entryType,
       entry_config: comSaidaStatus(entryType === 'segment'
         ? { segment_ids: segmentIds, excluded_segment_ids: excludedSegmentIds }
-        : buildEntryConfig(eventType, pageSlug, lerFormIds(formIds)), saidaStatus),
+        : buildEntryConfig(eventType, pageSlug, lerFormIds(formIds), siteIds), saidaStatus),
       // Vazia na criação = sem modo teste (o campo nunca foi preenchido).
       allowed_emails: listaTeste.validos.length ? listaTeste.validos : null,
       reentry,
@@ -170,6 +240,7 @@ export function JourneyCreateDialog({ open, onOpenChange, onCreate, onCreated }:
                 <>
                   <EntryPageSelect value={pageSlug} onChange={setPageSlug} />
                   <EntryFormIdsCampo id="novo-form-ids" value={formIds} onChange={setFormIds} />
+                  <EntrySitesCampo id="novo-sites" value={siteIds} onChange={setSiteIds} />
                 </>
               )}
             </div>

@@ -83,6 +83,25 @@ test("readEntryFormIds só aceita lista de texto", () => {
   assert.deepEqual(journeys.readEntryFormIds(null), []);
 });
 
+// Jornada por site (migration 039): `site_ids` = qualquer formulário do site.
+const SITE = "e42d5d70-4124-46b5-a937-a7299625d425";
+
+test("buildEntryConfig: sites só no form_submitted, sem vazio nem repetido", () => {
+  const { buildEntryConfig } = journeys;
+  assert.deepEqual(buildEntryConfig("form_submitted", "", [], [SITE, "", SITE]),
+    { event_type: "form_submitted", site_ids: [SITE] });
+  assert.deepEqual(buildEntryConfig("form_submitted", "phoebus-prova", ["x"], [SITE]),
+    { event_type: "form_submitted", page_slug: "phoebus-prova", form_ids: ["x"], site_ids: [SITE] });
+  assert.deepEqual(buildEntryConfig("form_submitted", "", [], []), { event_type: "form_submitted" });
+  assert.deepEqual(buildEntryConfig("email_opened", "", [], [SITE]), { event_type: "email_opened" });
+});
+
+test("readEntrySiteIds só aceita lista de texto", () => {
+  assert.deepEqual(journeys.readEntrySiteIds({ site_ids: [SITE, 3, null] }), [SITE]);
+  assert.deepEqual(journeys.readEntrySiteIds({ site_ids: SITE }), []);
+  assert.deepEqual(journeys.readEntrySiteIds(undefined), []);
+});
+
 test("lista do modo teste: apara, minúscula, sem repetido, e não engole inválido", () => {
   const { validos, invalidos } = journeys.lerListaDeEmails(
     " Erick@HealthSafety.com.br \n erick@healthsafety.com.br, outro@x.com; nao-e-email ",
