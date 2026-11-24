@@ -868,3 +868,87 @@ async def test_o_falso_compartilhado_serve_as_rotas_novas():
         tarefa = await cli.criar_tarefa({"card_id": cid, "task_type": "meeting"})
         sala = await cli.criar_sala(tarefa["id"])
     assert sala["convidados_removidos"] == 0 and sala["public_link"]
+
+
+# ── UTMs e gclid da conversão (frente utm-no-card, 24/11) ─────────────────────
+# Lead nascido de conversão de site/LP tem `leads.utm_*` NULL: as UTMs estão em
+# `lead_conversions`. O 1º card da virada do n8n (13088) chegou sem nenhuma.
+
+CONVERSAO_DA_LP = {"page_slug": None, "form_id": "lp-contatos",
+                   "site_nome": "Páginas da agência",
+                   "page_url": "https://contatos.exemplo.invalid/?utm_source=google"
+                               "&gclid=EAIa-gclid_123",
+                   "converted_at": "2026-11-24T18:51:00Z", "canal": "pago",
+                   "gclid": None, "utm_source": "google", "utm_medium": "cpc",
+                   "utm_campaign": "20577789788", "utm_term": "etilometro profissional",
+                   "utm_content": None}
+LEAD_SEM_UTM = {**LEAD, **{c: None for c in growthhs.UTMS}}
+
+
+def test_card_leva_as_utms_da_conversao_quando_o_lead_nao_tem():
+    card = montar_card(LEAD_SEM_UTM, CFG, conversao=CONVERSAO_DA_LP, person_id=1,
+                       frontend_url=FRONT, pedido_id=1)
+    assert (card["utm_source"], card["utm_campaign"], card["utm_term"]) == (
+        "google", "20577789788", "etilometro profissional")
+    assert card["utm_params"] == ("utm_source=google&utm_medium=cpc&utm_campaign=20577789788"
+                                  "&utm_term=etilometro+profissional")
+    assert "Campanha: 20577789788" in card["description"].split("\n")
+
+
+def test_utms_da_conversao_tem_precedencia_e_nao_se_misturam_com_as_do_lead():
+    # O lead tem source/medium/campaign de outro toque; a conversão traz só
+    # source e term. Vai o conjunto DA CONVERSÃO inteiro — misturar o
+    # `utm_campaign` de um toque com o `utm_source` de outro inventaria uma
+    # campanha (mesma regra de `captura/registro.py`).
+    conversao = {**CONVERSAO, "utm_source": "bing", "utm_term": "bafometro"}
+    card = montar_card(LEAD, CFG, conversao=conversao, person_id=1, frontend_url=FRONT,
+                       pedido_id=1)
+    assert (card["utm_source"], card["utm_campaign"], card["utm_term"]) == (
+        "bing", None, "bafometro")
+    assert card["utm_params"] == "utm_source=bing&utm_term=bafometro"
+    assert not any(l.startswith("Campanha:") for l in card["description"].split("\n"))
+
+
+def test_conversao_sem_utm_cai_nas_do_lead():
+    vazia = {**CONVERSAO, **{c: "  " for c in growthhs.UTMS}}
+    for conversao in (CONVERSAO, vazia, None):
+        card = montar_card(LEAD, CFG, conversao=conversao, person_id=1,
+                           frontend_url=FRONT, pedido_id=1)
+        assert card["utm_params"] == ("utm_source=google&utm_medium=cpc"
+                                      "&utm_campaign=black-friday"), conversao
+        assert "Campanha: black-friday" in card["description"].split("\n")
+
+
+def test_nota_de_abertura_e_bloco_usam_as_utms_da_conversao():
+    quando = datetime(2026, 11, 24, 18, 51, tzinfo=timezone.utc)
+    linhas = growthhs.nota_de_abertura(LEAD_SEM_UTM, conversao=CONVERSAO_DA_LP,
+                                       consentimento=None, frontend_url=FRONT,
+                                       quando=quando)
+    assert ("UTMs: utm_source=google · utm_medium=cpc · utm_campaign=20577789788 · "
+            "utm_term=etilometro profissional") in linhas
+    assert "Campanha: 20577789788" in linhas
+    bloco = bloco_de_atualizacao(LEAD, conversao=CONVERSAO_DA_LP, consentimento=None,
+                                 frontend_url=FRONT, pedido_id=3, quando=quando)
+    assert "Campanha: 20577789788" in bloco.split("\n")
+    assert growthhs.linha_de_utms(LEAD) == (
+        "UTMs: utm_source=google · utm_medium=cpc · utm_campaign=black-friday")
+
+
+@pytest.mark.parametrize("url,esperado", [
+    ("https://x.invalid/?utm_source=google&gclid=EAIa-gclid_123", "EAIa-gclid_123"),
+    ("https://x.invalid/p?gclid=abc&gclid=def", "abc"),
+    ("https://x.invalid/p?gclid=&gclid=def", "def"),
+    ("https://x.invalid/p?gclid=", None),
+    ("https://x.invalid/p?gclid=%20%20", None),
+    ("https://x.invalid/p?utm_source=google", None),
+    ("https://x.invalid/p#gclid=abc", None),
+    ("gclid=abc", None),
+    ("https://x.invalid/p?gclid=a%0Ab", None),
+    ("https://x.invalid/p?gclid=a<b>", None),
+    ("https://x.invalid/p?gclid=" + "g" * 501, None),
+    ("https://x.invalid/p?gclid=" + "g" * 500, "g" * 500),
+    ("http://[::1?gclid=abc", None),
+    ("", None), (None, None), (123, None),
+])
+def test_gclid_da_url(url, esperado):
+    assert growthhs.gclid_da_url(url) == esperado

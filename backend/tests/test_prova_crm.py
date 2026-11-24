@@ -499,3 +499,46 @@ async def test_entrega_le_ultima_conversao_e_consentimento(conexao):
         "VALUES ($1::uuid, 'lead', 'contato', now())", sem_visitante)
     conversao, _ = await entrega.origem_do_card(conexao, sem_visitante)
     assert conversao["form_id"] == "contato" and conversao["gclid"] is None
+
+
+async def test_origem_do_card_traz_utms_e_gclid_da_url_da_conversao(conexao):
+    """Frente utm-no-card (24/11): a LP da agência posta direto em
+    `/api/publico/site/conversao`, sem `rastreio.js` — não há visita, e o
+    gclid só existe na `page_url`. As UTMs estão na conversão, não no lead."""
+    from app.crm import entrega
+    lead = await conexao.fetchval(
+        "INSERT INTO leads (email, tipo) VALUES ($1, 'teste') RETURNING id::text",
+        "prova-crm-utm@exemplo.invalid")
+    await conexao.execute(
+        "INSERT INTO lead_conversions (lead_id, tipo, form_id, converted_at, page_url, "
+        "utm_source, utm_medium, utm_campaign, utm_term) VALUES ($1::uuid, 'lead', "
+        "'lp-contatos', now(), $2, 'google', 'cpc', '20577789788', "
+        "'etilometro profissional')", lead,
+        "https://contatos.exemplo.invalid/?utm_source=google&gclid=EAIa-url")
+    conversao, _ = await entrega.origem_do_card(conexao, lead)
+    assert (conversao["utm_source"], conversao["utm_medium"], conversao["utm_campaign"],
+            conversao["utm_term"], conversao["utm_content"]) == (
+        "google", "cpc", "20577789788", "etilometro profissional", None)
+    assert conversao["gclid"] == "EAIa-url"
+    linha = dict(await conexao.fetchrow(
+        f"SELECT {entrega._COLUNAS_LEAD} FROM leads WHERE id = $1::uuid", lead))
+    cfg = growthhs.Config(base_url="https://x.invalid", client_id="c", client_secret="s",
+                          list_id=22, boards_conferidos=(6, 7), app_url=None)
+    card = growthhs.montar_card(linha, cfg, conversao=conversao, consentimento=None,
+                                person_id=1, frontend_url=FRONT, pedido_id=1)
+    assert card["gclid"] == "EAIa-url" and card["utm_campaign"] == "20577789788"
+
+    # Com visita com gclid, o da visita vence o da URL.
+    visitante = f"vis-prova-utm-{uuid.uuid4()}"
+    com_visita = await conexao.fetchval(
+        "INSERT INTO leads (email, tipo) VALUES ($1, 'teste') RETURNING id::text",
+        "prova-crm-utm-2@exemplo.invalid")
+    await conexao.execute(
+        "INSERT INTO visitas (visitor_id, page_slug, canal, gclid, criado_em) VALUES "
+        "($1, 'lp', 'pago', 'gclid-da-visita', now() - interval '1 hour')", visitante)
+    await conexao.execute(
+        "INSERT INTO lead_conversions (lead_id, tipo, form_id, converted_at, page_url, "
+        "visitor_id) VALUES ($1::uuid, 'lead', 'lp', now(), $2, $3)", com_visita,
+        "https://x.exemplo.invalid/?gclid=gclid-da-url", visitante)
+    conversao, _ = await entrega.origem_do_card(conexao, com_visita)
+    assert conversao["gclid"] == "gclid-da-visita"
