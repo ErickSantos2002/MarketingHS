@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, LogOut, Eye } from 'lucide-react';
 import { AdminSidebar } from './AdminSidebar';
-import { AIDataChat } from './AIDataChat';
 import { ChaveDeTema } from './ChaveDeTema';
 import { Button } from '@/components/ui/button';
 import { AdminDataProvider, useAdminData } from '@/hooks/useAdminData';
@@ -147,12 +146,8 @@ function AdminLayoutInner() {
           </LimiteDeErro>
         </main>
       </div>
-      {/* O chat de IA usa /ia/conversas*, que é admin-only: some para o leitor. */}
-      {!isLeitura && (
-        <LimiteDeErro area="AIDataChat">
-          <AIDataChat />
-        </LimiteDeErro>
-      )}
+      {/* Chat de IA flutuante (AIDataChat) desligado em 24/11 a pedido do Erick:
+          não estava em uso e cobria os números. O componente segue no repo. */}
     </div>
   );
 }
