@@ -26,7 +26,7 @@ import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -309,6 +309,50 @@ def criado_em_utc(card: dict) -> datetime | None:
     return _ler_iso((card or {}).get("created_at"))
 
 
+def utms_do_card(lead: dict, conversao: dict | None) -> dict[str, str]:
+    """As UTMs que o card mostra, já cortadas: só as que têm valor.
+
+    Frente utm-no-card (24/11): o lead criado por conversão de site/LP tem
+    `leads.utm_*` NULL — as UTMs ficam em `lead_conversions`. O 1º card da
+    virada do n8n da agência (13088) chegou sem nenhuma. Por isso as da
+    CONVERSÃO vencem; sem nenhuma lá, valem as do contato (o de antes).
+
+    ⚠️ É o conjunto inteiro de um lado OU do outro, nunca campo a campo:
+    misturar o `utm_source` de um toque com o `utm_campaign` de outro
+    inventaria uma campanha (mesma regra de `captura/registro.py`)."""
+    for origem in (conversao or {}, lead or {}):
+        utms = {c: _cortar(origem.get(c), MAX_UTM) for c in UTMS if _tem(origem.get(c))}
+        if utms:
+            return utms
+    return {}
+
+
+_GCLID_VALIDO = re.compile(r"[A-Za-z0-9_\-.~]+")
+
+
+def gclid_da_url(url) -> str | None:
+    """O `gclid` da query de uma URL de conversão, ou `None`.
+
+    A LP da agência posta direto em `/api/publico/site/conversao`, sem
+    `rastreio.js`: não há visita, e o clique do Google Ads só sobrevive na
+    `page_url`. O primeiro `gclid` não vazio; o que não é texto de gclid
+    (espaço, quebra, `<`…) ou passa de `MAX_GCLID` é descartado inteiro —
+    gclid cortado não atribui nada. URL torta vira `None`, nunca exceção."""
+    if not isinstance(url, str) or not url.strip():
+        return None
+    try:
+        query = urlsplit(url.strip()).query
+    except ValueError:
+        return None
+    for chave, valor in parse_qsl(query):
+        valor = valor.strip()
+        if chave == "gclid" and valor:
+            if len(valor) <= MAX_GCLID and _GCLID_VALIDO.fullmatch(valor):
+                return valor
+            return None
+    return None
+
+
 def origem_do_card_texto(conversao: dict | None) -> str:
     """O `origin` do card (decisão 2 do Erick, 22/10): `Landing Page <slug>`
     para landing, `Captura pelo site [<form_id>]` para formulário de site de
@@ -378,7 +422,7 @@ def montar_descricao(lead: dict, *, conversao: dict | None, consentimento: dict 
          or lead.get("funcionarios"))
     item("Lead score", lead.get("lead_score"))
     item("Etiqueta", lead.get("etiqueta"))
-    item("Campanha", lead.get("utm_campaign"))
+    item("Campanha", utms_do_card(lead, conversao).get("utm_campaign"))
     item("Desafios", _cortar(lead.get("desafios"), MAX_DESAFIOS))
     # Fora da lista da spec §2, mas estava na descrição do contrato antigo:
     # não sai sem alguém decidir.
@@ -424,9 +468,10 @@ def link_da_ficha(frontend_url: str | None, lead_id) -> str | None:
     return f"Ver no MarketingHS: {frontend_url.rstrip('/')}/contacts?contato={lead_id}"
 
 
-def linha_de_utms(lead: dict) -> str | None:
-    """`UTMs: utm_source=… · utm_medium=…` — só as que têm valor."""
-    pares = [f"{c}={_cortar(lead.get(c), MAX_UTM)}" for c in UTMS if _tem(lead.get(c))]
+def linha_de_utms(lead: dict, conversao: dict | None = None) -> str | None:
+    """`UTMs: utm_source=… · utm_medium=…` — só as que têm valor, com a
+    precedência de `utms_do_card`."""
+    pares = [f"{c}={v}" for c, v in utms_do_card(lead, conversao).items()]
     return f"UTMs: {' · '.join(pares)}" if pares else None
 
 
@@ -447,7 +492,8 @@ def nota_de_abertura(lead: dict, *, conversao: dict | None, consentimento: dict 
     corpo = montar_descricao(lead, conversao=conversao, consentimento=consentimento,
                              frontend_url="")
     linhas.extend(l for l in corpo.split("\n") if l)
-    for extra in (linha_de_utms(lead), link_da_ficha(frontend_url, lead.get("id"))):
+    for extra in (linha_de_utms(lead, conversao),
+                  link_da_ficha(frontend_url, lead.get("id"))):
         if extra:
             linhas.append(extra)
     return linhas
@@ -470,7 +516,7 @@ def montar_card(lead: dict, cfg: Config, *, conversao: dict | None = None,
     na empresa e o formulário não tem (§5 de lá) — o vendedor vincula depois.
     Sem `source`/`external_id`: o card comercial não tem (a idempotência é
     nossa, ver `entrega.py`): a descrição leva `Pedido MarketingHS: <id>`."""
-    utms = {c: _cortar(lead.get(c), MAX_UTM) for c in UTMS if _tem(lead.get(c))}
+    utms = utms_do_card(lead, conversao)
     return {
         "list_id": cfg.list_id,
         "title": _titulo(lead),

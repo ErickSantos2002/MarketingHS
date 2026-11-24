@@ -153,7 +153,13 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
     última visita costuma ser a volta direta, sem clique pago — pegar a
     última de todas apagaria a atribuição do anúncio. Conversão sem
     visitante (envio manual, base importada) → `None`. Visita DEPOIS da
-    conversão não conta: não foi o clique que trouxe o lead.
+    conversão não conta: não foi o clique que trouxe o lead. Sem visita com
+    gclid, vale o `gclid` da query da `page_url` (frente utm-no-card, 24/11):
+    a LP da agência posta direto, sem `rastreio.js`, e o clique só sobrevive
+    na URL — o card que o n8n criava levava, o nosso chegou sem.
+
+    `utm_*` da conversão (mesma frente): lead nascido de site/LP tem as do
+    contato NULL; `growthhs.utms_do_card` dá precedência a estas.
 
     `dados_informados` (031, pergunta 73): o que o lead digitou NESTA
     conversão. ⚠️ Lido por `to_jsonb(lc) -> 'dados_informados'`, não pela
@@ -163,6 +169,8 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
         """SELECT lc.page_slug, lc.form_id, s.nome AS site_nome, lc.page_url,
                   to_char(lc.converted_at AT TIME ZONE 'UTC',
                           'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS converted_at, lc.canal,
+                  lc.utm_source, lc.utm_medium, lc.utm_campaign, lc.utm_term,
+                  lc.utm_content,
                   (SELECT v.gclid FROM visitas v
                     WHERE lc.visitor_id IS NOT NULL AND v.visitor_id = lc.visitor_id
                       AND v.gclid IS NOT NULL AND v.criado_em <= lc.converted_at
@@ -177,7 +185,11 @@ async def origem_do_card(conn, lead_id: str) -> tuple[dict | None, dict | None]:
                           'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS criado_em
              FROM lead_consents WHERE lead_id = $1::uuid
             ORDER BY criado_em DESC LIMIT 1""", lead_id)
-    return (dict(conversao) if conversao else None,
+    if conversao:
+        conversao = dict(conversao)
+        if not conversao["gclid"]:
+            conversao["gclid"] = growthhs.gclid_da_url(conversao.get("page_url"))
+    return (conversao or None,
             dict(consentimento) if consentimento else None)
 
 
