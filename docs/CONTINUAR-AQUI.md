@@ -1,5 +1,10 @@
 # Continuar aqui
 
+> ## ▶️ 26/11 — captação da LP fechada; próximo: outro provedor de e-mail
+>
+> - ✅ **Funcionando (Erick, 26/11):** desde a virada (24/11 15:51) 4 conversões → 4 cards entregues no GrowthHS (sem dobro), avisos de lead `enviado`, UTM/gclid no card desde o deploy (13096). Só 13088 e 13089 sem UTM (anteriores ao deploy; correção opcional).
+> - **▶️ Próximo (outro dia, com o Erick):** trocar o envio de e-mail **para a base** por outro provedor. O **Resend fica só para e-mail interno** (aviso de lead a vendas@ etc.). Começar por brainstorming: provedor, domínio/remetente (`healthsafety.com.br` na Cloudflare), o que hoje passa pelo Resend (campanhas, jornadas, aviso de lead) e como separar os dois caminhos.
+
 > ## ▶️ 23/11 — jornada por site (para a virada do n8n da agência)
 >
 > - Frente `jornada-por-site` ✅ mergeada (`daa5cd8`; portão local **1512 passed, 9 skipped**, `tsc` 0, node 129, build ok, guarda 0): `entry_config.site_ids` = qualquer formulário do site, inclusive página nova; reconversão entra; regra 028 e a do agendamento (036) intactas. Migration **039** (só `CREATE OR REPLACE`). Seletor de site no criar/editar jornada — **não visto no navegador** (fica atrás de "Editar"); conferir quando o Erick montar a jornada.
